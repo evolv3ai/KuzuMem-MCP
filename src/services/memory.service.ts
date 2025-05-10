@@ -430,14 +430,16 @@ export class MemoryService {
   async getItemContextualHistory(
     repositoryName: string,
     branch: string,
-    itemId: string
+    itemId: string,
+    itemType: "Component" | "Decision" | "Rule"
   ): Promise<any> {
     return graphOps.getItemContextualHistoryOp(
       repositoryName,
       branch,
       itemId,
+      itemType,
       this.repositoryRepo,
-      this.componentRepo // Or other relevant repos
+      this.componentRepo
     );
   }
 
@@ -452,7 +454,7 @@ export class MemoryService {
       branch,
       componentId,
       this.repositoryRepo,
-      this.componentRepo // Or other relevant repos
+      this.componentRepo
     );
   }
 
@@ -461,7 +463,11 @@ export class MemoryService {
     repositoryName: string,
     branch: string,
     itemId: string,
-    params: { relationshipTypes?: string[]; depth?: number; direction?: string }
+    params: {
+      relationshipTypes?: string[];
+      depth?: number;
+      direction?: "OUTGOING" | "INCOMING" | "BOTH";
+    }
   ): Promise<any> {
     return graphOps.getRelatedItemsOp(
       repositoryName,
@@ -469,7 +475,7 @@ export class MemoryService {
       itemId,
       params,
       this.repositoryRepo,
-      this.componentRepo // Or other relevant repos
+      this.componentRepo
     );
   }
 
@@ -484,7 +490,7 @@ export class MemoryService {
       branch,
       k,
       this.repositoryRepo,
-      this.componentRepo // Or a GraphRepository
+      this.componentRepo
     );
   }
 
@@ -497,7 +503,7 @@ export class MemoryService {
       repositoryName,
       branch,
       this.repositoryRepo,
-      this.componentRepo // Or a GraphRepository
+      this.componentRepo
     );
   }
 
@@ -514,7 +520,7 @@ export class MemoryService {
       dampingFactor,
       iterations,
       this.repositoryRepo,
-      this.componentRepo // Or a GraphRepository
+      this.componentRepo
     );
   }
 
@@ -527,7 +533,7 @@ export class MemoryService {
       repositoryName,
       branch,
       this.repositoryRepo,
-      this.componentRepo // Or a GraphRepository
+      this.componentRepo
     );
   }
 
@@ -540,7 +546,7 @@ export class MemoryService {
       repositoryName,
       branch,
       this.repositoryRepo,
-      this.componentRepo // Or a GraphRepository
+      this.componentRepo
     );
   }
 
@@ -552,7 +558,7 @@ export class MemoryService {
     endNodeId: string,
     params: {
       relationshipTypes?: string[];
-      direction?: string;
+      direction?: "OUTGOING" | "INCOMING" | "BOTH";
       algorithm?: string;
     }
   ): Promise<any> {
@@ -563,7 +569,7 @@ export class MemoryService {
       endNodeId,
       params,
       this.repositoryRepo,
-      this.componentRepo // Or a GraphRepository
+      this.componentRepo
     );
   }
 }

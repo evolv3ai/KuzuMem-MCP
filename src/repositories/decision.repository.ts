@@ -96,4 +96,35 @@ export class DecisionRepository {
     if (!rows || rows.length === 0) return null;
     return rows[0].d ?? rows[0]["d"] ?? rows[0];
   }
+
+  /**
+   * Get all decisions for a repository and branch.
+   * @param repositoryId The synthetic ID of the repository (name + ':' + branch).
+   * @param branch The branch name.
+   * @returns A promise that resolves to an array of Decision objects.
+   */
+  async getAllDecisions(
+    repositoryId: string,
+    branch: string
+  ): Promise<Decision[]> {
+    // The repositoryId already includes the branch, but Decision nodes are also directly tagged with a branch.
+    const safeRepositoryId = repositoryId.replace(/'/g, "\\'");
+    const safeBranch = branch.replace(/'/g, "\\'");
+
+    const query = `
+      MATCH (repo:Repository {id: '${safeRepositoryId}'})-[:HAS_DECISION]->(d:Decision {branch: '${safeBranch}'})
+      RETURN d
+      ORDER BY d.date DESC, d.name ASC
+    `;
+    // console.log("Executing getAllDecisions query:", query);
+    const result = await KuzuDBClient.executeQuery(query);
+    if (!result || typeof result.getAll !== "function") {
+      return [];
+    }
+    const rows = await result.getAll();
+    if (!rows || rows.length === 0) {
+      return [];
+    }
+    return rows.map((row: any) => row.d ?? row["d"] ?? row);
+  }
 }

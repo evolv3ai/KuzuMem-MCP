@@ -116,17 +116,9 @@ export async function getComponentDependentsOp(
     return [];
   }
 
-  // This method is not yet in ComponentRepository from the provided snippets
-  // Assuming a similar signature to getComponentDependencies if it were to be added.
-  if (typeof componentRepo.getComponentDependents !== "function") {
-    console.error(
-      "ComponentRepository.getComponentDependents method is not implemented."
-    );
-    throw new Error(
-      "ComponentRepository.getComponentDependents method is not implemented."
-    );
-    // return []; // Or throw error
-  }
-  // return componentRepo.getComponentDependents(String(repository.id!), componentId);
-  return []; // Return empty until actual implementation in repo
+  // Call the actual repository method
+  return componentRepo.getComponentDependents(
+    String(repository.id!),
+    componentId
+  );
 }

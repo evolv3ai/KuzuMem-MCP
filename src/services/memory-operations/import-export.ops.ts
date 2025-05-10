@@ -65,15 +65,15 @@ export async function exportMemoryBankOp(
       yamlService.serializeComponent(component);
   }
 
-  // Export decisions
-  const decisions = await decisionRepo.getAllDecisions(repoId, branch); // Assuming getAllDecisions
+  // Re-enabled decision export
+  const decisions = await decisionRepo.getAllDecisions(repoId, branch);
   for (const decision of decisions) {
     files[`memory/graph/decisions/${decision.yaml_id}.yaml`] =
       yamlService.serializeDecision(decision);
   }
 
-  // Export rules
-  const rules = await ruleRepo.getAllRules(repoId, branch); // Assuming getAllRules
+  // Re-enabled rule export
+  const rules = await ruleRepo.getAllRules(repoId, branch);
   for (const rule of rules) {
     files[`memory/graph/rules/${rule.yaml_id}.yaml`] =
       yamlService.serializeRule(rule);
@@ -140,7 +140,7 @@ export async function importMemoryBankOp(
     const { data } = yamlService.parseYaml(yamlContent);
 
     switch (type) {
-      case MemoryType.METADATA:
+      case "metadata":
         await metadataRepo.upsertMetadata({
           repository: repoId,
           yaml_id: id,
@@ -149,7 +149,7 @@ export async function importMemoryBankOp(
           branch,
         });
         break;
-      case MemoryType.CONTEXT:
+      case "context":
         await contextRepo.upsertContext({
           repository: repoId,
           yaml_id: id,
@@ -162,7 +162,7 @@ export async function importMemoryBankOp(
           branch,
         });
         break;
-      case MemoryType.COMPONENT:
+      case "component":
         await componentRepo.upsertComponent({
           repository: repoId,
           yaml_id: id,
@@ -173,7 +173,7 @@ export async function importMemoryBankOp(
           branch,
         });
         break;
-      case MemoryType.DECISION:
+      case "decision":
         await decisionRepo.upsertDecision({
           repository: repoId,
           yaml_id: id,
@@ -183,7 +183,7 @@ export async function importMemoryBankOp(
           branch,
         });
         break;
-      case MemoryType.RULE:
+      case "rule":
         await ruleRepo.upsertRule({
           repository: repoId,
           yaml_id: id,

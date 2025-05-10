@@ -58,9 +58,11 @@ export class RuleRepository {
           rule.repository
         )}'})-[:HAS_RULE]->(r:Rule {yaml_id: '${String(
           rule.yaml_id
-        )}', branch: '${String(rule.branch)}'}) SET r.name = '${rule.name}', r.triggers = '${
-          rule.triggers
-        }', r.content = '${rule.content}', r.status = '${rule.status}' RETURN r`
+        )}', branch: '${String(rule.branch)}'}) SET r.name = '${
+          rule.name
+        }', r.triggers = '${rule.triggers}', r.content = '${
+          rule.content
+        }', r.status = '${rule.status}' RETURN r`
       );
       return {
         ...existing,
@@ -78,10 +80,16 @@ export class RuleRepository {
           rule.yaml_id
         )}', name: '${rule.name}', triggers: '${rule.triggers}', content: '${
           rule.content
-        }', status: '${rule.status}', branch: '${String(rule.branch)}', created: timestamp('${now}')}) RETURN r`
+        }', status: '${rule.status}', branch: '${String(
+          rule.branch
+        )}', created: timestamp('${now}')}) RETURN r`
       );
       // Return the newly created rule
-      return this.findByYamlId(String(rule.repository), String(rule.yaml_id), String(rule.branch));
+      return this.findByYamlId(
+        String(rule.repository),
+        String(rule.yaml_id),
+        String(rule.branch)
+      );
     }
   }
 
@@ -100,5 +108,32 @@ export class RuleRepository {
     const rows = await result.getAll();
     if (!rows || rows.length === 0) return null;
     return rows[0].r ?? rows[0]["r"] ?? rows[0];
+  }
+
+  /**
+   * Get all rules for a repository and branch.
+   * @param repositoryId The synthetic ID of the repository (name + ':' + branch).
+   * @param branch The branch name.
+   * @returns A promise that resolves to an array of Rule objects.
+   */
+  async getAllRules(repositoryId: string, branch: string): Promise<Rule[]> {
+    const safeRepositoryId = repositoryId.replace(/'/g, "\\'");
+    const safeBranch = branch.replace(/'/g, "\\'");
+
+    const query = `
+      MATCH (repo:Repository {id: '${safeRepositoryId}'})-[:HAS_RULE]->(r:Rule {branch: '${safeBranch}'})
+      RETURN r
+      ORDER BY r.created DESC, r.name ASC
+    `;
+    // console.log("Executing getAllRules query:", query);
+    const result = await KuzuDBClient.executeQuery(query);
+    if (!result || typeof result.getAll !== "function") {
+      return [];
+    }
+    const rows = await result.getAll();
+    if (!rows || rows.length === 0) {
+      return [];
+    }
+    return rows.map((row: any) => row.r ?? row["r"] ?? row);
   }
 }
