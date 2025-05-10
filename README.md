@@ -18,8 +18,8 @@ A TypeScript implementation of a distributed YAML memory bank as an MCP (Model C
 
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd memory-bank-mcp
+git clone https://github.com/solita-internal/advanced-memory-tool-mcp
+cd advanced-memory-tool-mcp
 
 # Install dependencies
 npm install
@@ -118,34 +118,18 @@ DEBUG=2   # Verbose with request/response details
 DEBUG=3   # Full data logging (development only)
 ```
 
-### Using with Windsurf
+### Using with Coding IDEs
 
-You can use this MCP server as a provider in [Windsurf](https://github.com/windsurf-ai/windsurf), the open-source AI coding agent platform.
+You can use this MCP server as a provider in f.ex. [Windsurf](https://github.com/windsurf-ai/windsurf), the open-source AI coding agent platform.
 
-#### Prerequisites
+#### 1. Register the MCP Server with this configuration
 
-- Node.js and npm installed
-- Windsurf CLI installed (`npm install -g windsurf`)
-- This server running locally or accessible from your Windsurf instance
-
-#### 1. Start the MCP Server
-
-```bash
-npm start
-```
-
-By default, the server runs on `http://localhost:3000` (configurable via `.env`).
-
-#### 2. Register the MCP Server with Windsurf
-
-In your Windsurf project, register the MCP server as a provider in your configuration file (e.g., `windsurf.json` or `windsurf.config.json`).
-
-Example configuration for a local memory-bank MCP server:
+In your IDE, add this MCP server configuration to your workspace or global MCP config file:
 
 ```json
 {
   "mcpServers": {
-    "memory-bank-mcp": {
+    "advanced-memory-bank-mcp": {
       "command": "npx",
       "args": [
         "-y",
@@ -164,21 +148,21 @@ Example configuration for a local memory-bank MCP server:
 }
 ```
 
-- The `command` and `args` fields tell Windsurf how to start your MCP server process.
+- The `command` and `args` fields tell IDE how to start your MCP server process.
 - The `env` block configures environment variables for your server.
 - Adjust the `args` if your entry point is different (e.g., `dist/server.js` after build).
 
-For more details, see the Windsurf documentation.
+For more details, see the documentation of the IDE you use.
 
-#### 3. Use Windsurf with the MCP Server
+#### 2. Use MCP Server with the IDE
 
-Once registered, you can:
+Once registered, the coding Agent can:
 
-- Query memories: `windsurf memory list --server memory-bank-mcp`
-- Add new context, components, decisions, or rules via Windsurf's UI or CLI
-- Integrate the memory bank into your agent workflows
+- Query memories: `<IDE> memory list --server advanced-memory-bank-mcp`
+- Add new context, components, decisions, or rules via IDE's UI or CLI
+- Automatically integrate the memory bank into your agent workflows using the rules available in the repository.
 
-#### 4. Environment Variables
+### 3. Environment Variables
 
 Ensure your `.env` is configured for your database and server settings. Example:
 
@@ -189,17 +173,9 @@ PORT=3000
 HOST=localhost
 ```
 
-#### 5. Example Windsurf Command
+### 4. Using the CLI
 
-```bash
-windsurf memory list --server memory-bank-mcp --repository my-repo
-```
-
-For more details, see [Windsurf documentation](https://github.com/windsurf-ai/windsurf) and the API section below.
-
-### Using the CLI
-
-The memory-bank-mcp tool provides a command-line interface for all operations:
+The advanced-memory-bank-mcp tool provides a command-line interface for all operations:
 
 ```bash
 # Initialize a memory bank for a repository
@@ -224,9 +200,9 @@ npm run cli add-decision my-repo dec-20250510-pattern -n "Decision Name" -d "202
 npm run cli add-rule my-repo rule-logging-v1 -n "Logging Rule" -c "2025-05-10" -t "trigger1,trigger2" -o "Rule content"
 ```
 
-### Using the API
+### 5. Using the API
 
-The memory-bank-mcp tool provides a REST API for all operations:
+The advanced-memory-bank-mcp tool provides a REST API for all operations:
 
 #### Initialize a Memory Bank
 
@@ -277,18 +253,18 @@ GET /api/memory/repositories/:repository/export
 POST /api/memory/repositories/:repository/import
 ```
 
-## Architecture
+### 6. Architecture
 
 This project follows a clean architecture with separation of concerns:
 
-### Database Layer
+### 7. Database Layer
 
 Uses Knex.js to provide a database-agnostic interface with support for:
 
 - SQLite (default for simplicity)
 - PostgreSQL (for production environments)
 
-### Repository Layer
+### 8. Repository Layer
 
 Thread-safe singleton repositories for each memory type:
 
@@ -299,16 +275,16 @@ Thread-safe singleton repositories for each memory type:
 - DecisionRepository
 - RuleRepository
 
-### Service Layer
+### 9. Service Layer
 
 - MemoryService - Core business logic for memory operations
 - YamlService - Serialization/deserialization of YAML content
 
-### API Layer
+### 10. API Layer
 
 Express-based REST API with validation using Zod
 
-## Database Schema
+### 11. Database Schema
 
 The Memory Bank system uses a relational database with the following structure:
 
@@ -400,7 +376,7 @@ The database schema follows these design principles:
 ### MCP Layer
 
 - **Tool Definitions** - Modular tool definitions with full MCP schema compatibility
-- **Server Implementations** - Both HTTP and stdio-based servers for different integration types
+- **Server Implementations** - Both HTTP, HTTPStream and stdio-based servers for different integration types
 - **Protocol Compliance** - Full support for the MCP specification including resources and tools endpoints
 
 ### CLI Layer
@@ -427,95 +403,6 @@ src/mcp/
 └── index.ts               # Main entry point
 ```
 
-## Memory Structure
-
-The memory bank follows this structure:
-
-```text
-/   # project root
-├── memory/
-│   ├── metadata.yaml            # one‑off project metadata
-│   ├── context/                 # short‑term notes (rotating)
-│   │   └── ctx-<ISO>.yaml
-│   ├── graph/                   # durable knowledge graph
-│   │   ├── components/
-│   │   │   └── comp-*.yaml
-│   │   ├── decisions/
-│   │   │   └── dec-*.yaml
-│   │   └── rules/
-│   │       └── rule-*.yaml
-│   └── README.md                # how to interact (optional)
-└── …
-```
-
-## YAML File Schemas
-
-### Metadata
-
-```yaml
---- !Metadata
-id: meta
-project:
-  name: AwesomeApp
-  created: 2024-03-12
-tech_stack:
-  language: TypeScript
-  framework: Next.js 15
-  datastore: PostgreSQL 16
-architecture: modular_monolith
-memory_spec_version: 3.0.0
-```
-
-### Context
-
-```yaml
---- !Context
-id: ctx-2025-04-30T11-42
-iso_date: 2025-04-30T11:42:00+03:00
-agent: cline
-related_issue: 123
-summary: Improve auth flow error handling
-decisions:
-  - Added centralised `handleAuthError()` wrapper.    #promote
-observations:
-  - External API intermittently returns 429.
-```
-
-### Component
-
-```yaml
---- !Component
-id: comp-AuthService
-name: AuthService
-kind: service
-depends_on: [lib-JwtVerifier]
-status: active
-```
-
-### Decision
-
-```yaml
---- !Decision
-id: dec-20241201-repo-pattern
-name: Adopt Repository Pattern
-context: Repository abstraction for testability.
-date: 2024-12-01
-```
-
-### Rule
-
-```yaml
---- !Rule
-id: rule-logging-v1.1.0
-name: Centralised Logging Wrapper Required
-created: 2025-02-11
-triggers:
-  - misused logger pattern detected thrice in Sprint 14
-content: |
-  Every new module must call `core/log.ts#log()`; direct `console.*` calls are banned.
-status: active
-```
-
 ## License
 
 MIT
@@ -523,3 +410,114 @@ MIT
 ## Contributing
 
 Please read the contributing guidelines before submitting a pull request.
+
+## Table Schema Definitions
+
+This section provides detailed information about the database tables used in the Memory Bank system.
+
+### Table: repositories
+
+The central table that stores information about each repository.
+
+| Column | Type | Constraints | Description |
+| ------ | ---- | ----------- | ----------- |
+| id | INTEGER | PRIMARY KEY | Unique identifier for the repository |
+| name | TEXT | NOT NULL, UNIQUE | Name of the repository |
+| created_at | TIMESTAMP | DEFAULT NOW() | When the repository was created |
+| updated_at | TIMESTAMP | DEFAULT NOW() | When the repository was last updated |
+
+### Table: metadata
+
+Stores metadata information associated with repositories.
+
+| Column | Type | Constraints | Description |
+| ------ | ---- | ----------- | ----------- |
+| id | INTEGER | PRIMARY KEY | Unique identifier for the metadata |
+| repository_id | INTEGER | NOT NULL, FOREIGN KEY | Reference to the repository |
+| yaml_id | TEXT | NOT NULL | Identifier in the YAML structure |
+| content | JSON | NOT NULL | Structured metadata content |
+| created_at | TIMESTAMP | DEFAULT NOW() | When the metadata was created |
+| updated_at | TIMESTAMP | DEFAULT NOW() | When the metadata was last updated |
+
+Unique constraint: (repository_id, yaml_id)
+
+### Table: contexts
+
+Stores context information, typically associated with a specific date.
+
+| Column | Type | Constraints | Description |
+| ------ | ---- | ----------- | ----------- |
+| id | INTEGER | PRIMARY KEY | Unique identifier for the context |
+| repository_id | INTEGER | NOT NULL, FOREIGN KEY | Reference to the repository |
+| yaml_id | TEXT | NOT NULL | Identifier in the YAML structure |
+| iso_date | DATE | NOT NULL | Date associated with the context |
+| agent | TEXT | NULL | Agent that generated the context |
+| related_issue | TEXT | NULL | Issue reference related to the context |
+| summary | TEXT | NULL | Summary of the context |
+| decisions | JSON | NULL | Array of decisions made |
+| observations | JSON | NULL | Array of observations made |
+| created_at | TIMESTAMP | DEFAULT NOW() | When the context was created |
+| updated_at | TIMESTAMP | DEFAULT NOW() | When the context was last updated |
+
+Unique constraint: (repository_id, yaml_id)
+Index: iso_date
+
+### Table: components
+
+Stores architectural component information.
+
+| Column | Type | Constraints | Description |
+| ------ | ---- | ----------- | ----------- |
+| id | INTEGER | PRIMARY KEY | Unique identifier for the component |
+| repository_id | INTEGER | NOT NULL, FOREIGN KEY | Reference to the repository |
+| yaml_id | TEXT | NOT NULL | Identifier in the YAML structure |
+| name | TEXT | NOT NULL | Name of the component |
+| kind | TEXT | NULL | Type/kind of the component |
+| depends_on | JSON | NULL | Array of dependencies |
+| status | TEXT | DEFAULT 'active' | Status of the component |
+| created_at | TIMESTAMP | DEFAULT NOW() | When the component was created |
+| updated_at | TIMESTAMP | DEFAULT NOW() | When the component was last updated |
+
+Unique constraint: (repository_id, yaml_id)
+
+### Table: decisions
+
+Stores architectural decision records.
+
+| Column | Type | Constraints | Description |
+| ------ | ---- | ----------- | ----------- |
+| id | INTEGER | PRIMARY KEY | Unique identifier for the decision |
+| repository_id | INTEGER | NOT NULL, FOREIGN KEY | Reference to the repository |
+| yaml_id | TEXT | NOT NULL | Identifier in the YAML structure |
+| name | TEXT | NOT NULL | Name/title of the decision |
+| context | TEXT | NULL | Context surrounding the decision |
+| date | DATE | NOT NULL | Date when the decision was made |
+| created_at | TIMESTAMP | DEFAULT NOW() | When the decision was created |
+| updated_at | TIMESTAMP | DEFAULT NOW() | When the decision was last updated |
+
+Unique constraint: (repository_id, yaml_id)
+
+### Table: rules
+
+Stores agent rules and guidelines.
+
+| Column | Type | Constraints | Description |
+| ------ | ---- | ----------- | ----------- |
+| id | INTEGER | PRIMARY KEY | Unique identifier for the rule |
+| repository_id | INTEGER | NOT NULL, FOREIGN KEY | Reference to the repository |
+| yaml_id | TEXT | NOT NULL | Identifier in the YAML structure |
+| name | TEXT | NOT NULL | Name/title of the rule |
+| created | DATE | NOT NULL | Date when the rule was created |
+| triggers | JSON | NULL | Array of events that triggered the rule |
+| content | TEXT | NULL | The actual rule content/description |
+| status | TEXT | DEFAULT 'active' | Status of the rule |
+| created_at | TIMESTAMP | DEFAULT NOW() | When the rule record was created |
+| updated_at | TIMESTAMP | DEFAULT NOW() | When the rule record was last updated |
+
+Unique constraint: (repository_id, yaml_id)
+
+### Relationships
+
+- All tables have a foreign key relationship to `repositories(id)` with `ON DELETE CASCADE` behavior
+- Each entity type (metadata, context, component, decision, rule) has a unique constraint on `(repository_id, yaml_id)` to prevent duplicates
+- The `contexts` table has an additional index on `iso_date` to optimize date-based queries
