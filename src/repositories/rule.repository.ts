@@ -29,9 +29,9 @@ export class RuleRepository {
   /**
    * Get all active rules for a repository (status = 'active'), ordered by created descending
    */
-  async getActiveRules(repositoryId: string): Promise<Rule[]> {
+  async getActiveRules(repository: string): Promise<Rule[]> {
     const result = await KuzuDBClient.executeQuery(
-      `MATCH (repo:Repository {id: '${repositoryId}'})-[:HAS_RULE]->(r:Rule {status: 'active'}) RETURN r ORDER BY r.created DESC`
+      `MATCH (repo:Repository {id: '${repository}'})-[:HAS_RULE]->(r:Rule {status: 'active'}) RETURN r ORDER BY r.created DESC`
     );
     if (!result || typeof result.getAll !== "function") return [];
     const rows = await result.getAll();
@@ -40,7 +40,7 @@ export class RuleRepository {
   }
 
   /**
-   * Upsert a rule by repository_id and yaml_id
+   * Upsert a rule by repository and yaml_id
    */
   /**
    * Creates or updates a rule for a repository
@@ -48,13 +48,13 @@ export class RuleRepository {
    */
   async upsertRule(rule: Rule): Promise<Rule | null> {
     const existing = await this.findByYamlId(
-      String(rule.repository_id),
+      String(rule.repository),
       String(rule.yaml_id)
     );
     if (existing) {
       await KuzuDBClient.executeQuery(
         `MATCH (repo:Repository {id: '${String(
-          rule.repository_id
+          rule.repository
         )}'})-[:HAS_RULE]->(r:Rule {yaml_id: '${String(
           rule.yaml_id
         )}'}) SET r.name = '${rule.name}', r.triggers = '${
@@ -72,7 +72,7 @@ export class RuleRepository {
       const now = new Date().toISOString();
       await KuzuDBClient.executeQuery(
         `MATCH (repo:Repository {id: '${String(
-          rule.repository_id
+          rule.repository
         )}'}) CREATE (repo)-[:HAS_RULE]->(r:Rule {yaml_id: '${String(
           rule.yaml_id
         )}', name: '${rule.name}', triggers: '${rule.triggers}', content: '${
@@ -80,22 +80,19 @@ export class RuleRepository {
         }', status: '${rule.status}', created: timestamp('${now}')}) RETURN r`
       );
       // Return the newly created rule
-      return this.findByYamlId(
-        String(rule.repository_id),
-        String(rule.yaml_id)
-      );
+      return this.findByYamlId(String(rule.repository), String(rule.yaml_id));
     }
   }
 
   /**
-   * Find a rule by repository_id and yaml_id
+   * Find a rule by repository and yaml_id
    */
   async findByYamlId(
-    repositoryId: string,
+    repository: string,
     yaml_id: string
   ): Promise<Rule | null> {
     const result = await KuzuDBClient.executeQuery(
-      `MATCH (repo:Repository {id: '${repositoryId}'})-[:HAS_RULE]->(r:Rule {yaml_id: '${yaml_id}'}) RETURN r LIMIT 1`
+      `MATCH (repo:Repository {id: '${repository}'})-[:HAS_RULE]->(r:Rule {yaml_id: '${yaml_id}'}) RETURN r LIMIT 1`
     );
     if (!result || typeof result.getAll !== "function") return null;
     const rows = await result.getAll();

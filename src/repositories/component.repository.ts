@@ -48,12 +48,12 @@ export class ComponentRepository {
    */
   async upsertComponent(component: Component): Promise<Component | null> {
     const existing = await this.findByYamlId(
-      String(component.repository_id),
+      String(component.repository),
       String(component.yaml_id)
     );
     if (existing) {
       await KuzuDBClient.executeQuery(
-        `MATCH (r:Repository {id: '${component.repository_id}'})-[:HAS_COMPONENT]->(c:Component {yaml_id: '${component.yaml_id}'}) SET c.name = '${component.name}', c.kind = '${component.kind}', c.depends_on = '${component.depends_on}', c.status = '${component.status}' RETURN c`
+        `MATCH (r:Repository {id: '${component.repository}'})-[:HAS_COMPONENT]->(c:Component {yaml_id: '${component.yaml_id}'}) SET c.name = '${component.name}', c.kind = '${component.kind}', c.depends_on = '${component.depends_on}', c.status = '${component.status}' RETURN c`
       );
       return {
         ...existing,
@@ -64,11 +64,11 @@ export class ComponentRepository {
       };
     } else {
       await KuzuDBClient.executeQuery(
-        `MATCH (r:Repository {id: '${component.repository_id}'}) CREATE (r)-[:HAS_COMPONENT]->(c:Component {yaml_id: '${component.yaml_id}', name: '${component.name}', kind: '${component.kind}', depends_on: '${component.depends_on}', status: '${component.status}'}) RETURN c`
+        `MATCH (r:Repository {id: '${component.repository}'}) CREATE (r)-[:HAS_COMPONENT]->(c:Component {yaml_id: '${component.yaml_id}', name: '${component.name}', kind: '${component.kind}', depends_on: '${component.depends_on}', status: '${component.status}'}) RETURN c`
       );
       // Return the newly created component
       return this.findByYamlId(
-        String(component.repository_id),
+        String(component.repository),
         String(component.yaml_id)
       );
     }

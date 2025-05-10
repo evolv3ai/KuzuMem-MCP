@@ -32,12 +32,10 @@ export class MetadataRepository {
   /**
    * Get metadata node for a repository by synthetic id (id = name + ':' + branch)
    */
-  async getMetadataForRepository(
-    repositoryId: string
-  ): Promise<Metadata | null> {
+  async getMetadataForRepository(repository: string): Promise<Metadata | null> {
     const result = await KuzuDBClient.executeQuery(
-      `MATCH (repo:Repository {id: $repositoryId})-[:HAS_METADATA]->(m:Metadata) RETURN m LIMIT 1`,
-      { repositoryId }
+      `MATCH (repo:Repository {id: $repository})-[:HAS_METADATA]->(m:Metadata) RETURN m LIMIT 1`,
+      { repository }
     );
     if (!result || typeof result.getAll !== "function") return null;
     const rows = await result.getAll();
@@ -59,15 +57,15 @@ export class MetadataRepository {
   async upsertMetadata(metadata: Metadata): Promise<Metadata | null> {
     // Try to update existing metadata node and relationship
     const existing = await this.getMetadataForRepository(
-      String(metadata.repository_id)
+      String(metadata.repository)
     );
     if (existing) {
       await KuzuDBClient.executeQuery(
-        `MATCH (repo:Repository {id: $repositoryId})-[:HAS_METADATA]->(m:Metadata)
+        `MATCH (repo:Repository {id: $repository})-[:HAS_METADATA]->(m:Metadata)
          SET m.content = $content
          RETURN m`,
         {
-          repositoryId: String(metadata.repository_id),
+          repository: String(metadata.repository),
           content: metadata.content,
         }
       );
@@ -79,7 +77,7 @@ export class MetadataRepository {
       // Create Metadata node and relationship
       const now = new Date().toISOString();
       await KuzuDBClient.executeQuery(
-        `MATCH (repo:Repository {id: $repositoryId})
+        `MATCH (repo:Repository {id: $repository})
          CREATE (repo)-[:HAS_METADATA]->(m:Metadata {
            yaml_id: $yamlId,
            name: $name,
@@ -89,13 +87,13 @@ export class MetadataRepository {
          })
          RETURN m`,
         {
-          repositoryId: String(metadata.repository_id),
+          repository: String(metadata.repository),
           yamlId: metadata.yaml_id,
           name: metadata.name,
           content: metadata.content,
         }
       );
-      return this.getMetadataForRepository(String(metadata.repository_id));
+      return this.getMetadataForRepository(String(metadata.repository));
     }
   }
 }

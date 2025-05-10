@@ -30,12 +30,12 @@ export class DecisionRepository {
    * Get all decisions for a repository in a date range, ordered by date descending
    */
   async getDecisionsByDateRange(
-    repositoryId: string,
+    repository: string,
     startDate: string,
     endDate: string
   ): Promise<Decision[]> {
     const result = await KuzuDBClient.executeQuery(
-      `MATCH (repo:Repository {id: '${repositoryId}'})-[:HAS_DECISION]->(d:Decision) WHERE d.date >= '${startDate}' AND d.date <= '${endDate}' RETURN d ORDER BY d.date DESC`
+      `MATCH (repo:Repository {id: '${repository}'})-[:HAS_DECISION]->(d:Decision) WHERE d.date >= '${startDate}' AND d.date <= '${endDate}' RETURN d ORDER BY d.date DESC`
     );
     if (!result || typeof result.getAll !== "function") return [];
     const rows = await result.getAll();
@@ -44,7 +44,7 @@ export class DecisionRepository {
   }
 
   /**
-   * Upsert a decision by repository_id and yaml_id
+   * Upsert a decision by repository and yaml_id
    */
   /**
    * Creates or updates a decision for a repository
@@ -52,12 +52,12 @@ export class DecisionRepository {
    */
   async upsertDecision(decision: Decision): Promise<Decision | null> {
     const existing = await this.findByYamlId(
-      String(decision.repository_id),
+      String(decision.repository),
       String(decision.yaml_id)
     );
     if (existing) {
       await KuzuDBClient.executeQuery(
-        `MATCH (repo:Repository {id: '${decision.repository_id}'})-[:HAS_DECISION]->(d:Decision {yaml_id: '${decision.yaml_id}'}) SET d.name = '${decision.name}', d.context = '${decision.context}', d.date = '${decision.date}' RETURN d`
+        `MATCH (repo:Repository {id: '${decision.repository}'})-[:HAS_DECISION]->(d:Decision {yaml_id: '${decision.yaml_id}'}) SET d.name = '${decision.name}', d.context = '${decision.context}', d.date = '${decision.date}' RETURN d`
       );
       return {
         ...existing,
@@ -67,25 +67,25 @@ export class DecisionRepository {
       };
     } else {
       await KuzuDBClient.executeQuery(
-        `MATCH (repo:Repository {id: '${decision.repository_id}'}) CREATE (repo)-[:HAS_DECISION]->(d:Decision {yaml_id: '${decision.yaml_id}', name: '${decision.name}', context: '${decision.context}', date: '${decision.date}'}) RETURN d`
+        `MATCH (repo:Repository {id: '${decision.repository}'}) CREATE (repo)-[:HAS_DECISION]->(d:Decision {yaml_id: '${decision.yaml_id}', name: '${decision.name}', context: '${decision.context}', date: '${decision.date}'}) RETURN d`
       );
       // Return the newly created decision
       return this.findByYamlId(
-        String(decision.repository_id),
+        String(decision.repository),
         String(decision.yaml_id)
       );
     }
   }
 
   /**
-   * Find a decision by repository_id and yaml_id
+   * Find a decision by repository and yaml_id
    */
   async findByYamlId(
-    repositoryId: string,
+    repository: string,
     yaml_id: string
   ): Promise<Decision | null> {
     const result = await KuzuDBClient.executeQuery(
-      `MATCH (repo:Repository {id: '${repositoryId}'})-[:HAS_DECISION]->(d:Decision {yaml_id: '${yaml_id}'}) RETURN d LIMIT 1`
+      `MATCH (repo:Repository {id: '${repository}'})-[:HAS_DECISION]->(d:Decision {yaml_id: '${yaml_id}'}) RETURN d LIMIT 1`
     );
     if (!result || typeof result.getAll !== "function") return null;
     const rows = await result.getAll();

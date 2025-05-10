@@ -78,12 +78,12 @@ export class ContextRepository {
    */
   async upsertContext(context: Context): Promise<Context | null> {
     const existing = await this.findByYamlId(
-      String(context.repository_id),
+      String(context.repository),
       String(context.yaml_id)
     );
     if (existing) {
       await KuzuDBClient.executeQuery(
-        `MATCH (repo:Repository {id: '${context.repository_id}'})-[:HAS_CONTEXT]->(c:Context {yaml_id: '${context.yaml_id}'})
+        `MATCH (repo:Repository {id: '${context.repository}'})-[:HAS_CONTEXT]->(c:Context {yaml_id: '${context.yaml_id}'})
          SET c.agent = '${context.agent}', c.related_issue = '${context.related_issue}', c.summary = '${context.summary}', c.decisions = '${context.decisions}', c.observations = '${context.observations}'
          RETURN c`
       );
@@ -97,9 +97,9 @@ export class ContextRepository {
       };
     } else {
       await KuzuDBClient.executeQuery(
-        `MATCH (repo:Repository {id: '${context.repository_id}'})
+        `MATCH (repo:Repository {id: '${context.repository}'})
          CREATE (repo)-[:HAS_CONTEXT]->(c:Context {
-           repository_id: '${context.repository_id}',
+           repository: '${context.repository}',
            yaml_id: '${context.yaml_id}',
            iso_date: '${context.iso_date}',
            agent: '${context.agent}',
@@ -111,7 +111,7 @@ export class ContextRepository {
          RETURN c`
       );
       return this.findByYamlId(
-        String(context.repository_id),
+        String(context.repository),
         String(context.yaml_id)
       );
     }

@@ -2,11 +2,11 @@ import { z } from 'zod';
 
 // Base entity type
 export interface BaseEntity {
-  id?: number;
-  repository_id: number;
   yaml_id: string;
   created_at?: Date;
   updated_at?: Date;
+  repository: string;
+  branch: string;
 }
 
 // Repository type
@@ -20,7 +20,6 @@ export interface Repository {
 
 // Metadata type
 export interface Metadata extends BaseEntity {
-  yaml_id: string;
   name: string;
   content: {
     id: string;
@@ -79,10 +78,14 @@ export type MemoryItem = Metadata | Context | Component | Decision | Rule;
 // Zod schemas for validation
 export const repositorySchema = z.object({
   name: z.string().min(1),
+  branch: z.string().min(1),
 });
 
 export const metadataSchema = z.object({
   yaml_id: z.string().min(1),
+  repository: z.string().min(1),
+  branch: z.string().min(1),
+  name: z.string().min(1),
   content: z.object({
     id: z.string().min(1),
     project: z.object({
@@ -97,6 +100,8 @@ export const metadataSchema = z.object({
 
 export const contextSchema = z.object({
   yaml_id: z.string().min(1),
+  repository: z.string().min(1),
+  branch: z.string().min(1),
   iso_date: z.string(),
   agent: z.string().optional(),
   related_issue: z.string().optional(),
@@ -107,6 +112,8 @@ export const contextSchema = z.object({
 
 export const componentSchema = z.object({
   yaml_id: z.string().min(1),
+  repository: z.string().min(1),
+  branch: z.string().min(1),
   name: z.string().min(1),
   kind: z.string().optional(),
   depends_on: z.array(z.string()).optional(),
@@ -115,6 +122,8 @@ export const componentSchema = z.object({
 
 export const decisionSchema = z.object({
   yaml_id: z.string().min(1),
+  repository: z.string().min(1),
+  branch: z.string().min(1),
   name: z.string().min(1),
   context: z.string().optional(),
   date: z.string(),
@@ -122,6 +131,8 @@ export const decisionSchema = z.object({
 
 export const ruleSchema = z.object({
   yaml_id: z.string().min(1),
+  repository: z.string().min(1),
+  branch: z.string().min(1),
   name: z.string().min(1),
   created: z.string(),
   triggers: z.array(z.string()).optional(),
