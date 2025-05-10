@@ -351,8 +351,10 @@ program
   .option("-t, --triggers <triggers>", "Comma-separated list of triggers")
   .option("-o, --content <content>", "Rule content")
   .option("-s, --status <status>", "Rule status (active, deprecated)", "active")
+  .option("-b, --branch <branch>", "Branch name", "main")
   .action(async (repository: string, id: string, options) => {
     try {
+      const branch = options.branch || "main";
       const rule = {
         name: options.name,
         created: options.created,
@@ -360,10 +362,10 @@ program
         content: options.content,
         status: options.status as "active" | "deprecated",
         repository,
-        branch: "main",
+        branch,
       };
-      await memoryService.upsertRule(repository, id, rule, "main");
-      console.log(`✅ Rule ${id} added to repository: ${repository}`);
+      await memoryService.upsertRule(repository, id, rule, branch);
+      console.log(`✅ Rule ${id} added to repository: ${repository} (branch: ${branch})`);
     } catch (error) {
       console.error("❌ Failed to add rule:", error);
       process.exit(1);

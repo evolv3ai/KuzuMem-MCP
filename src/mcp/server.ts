@@ -38,7 +38,7 @@ export class MemoryMcpServer {
     // Register tool endpoints
     this.router.get("/tools", this.getToolsInfo);
 
-    // MCP Tool-specific endpoints
+    // MCP Tool-specific endpoints (all handlers are defined as class properties)
     this.router.post("/tools/init-memory-bank", this.handleInitMemoryBank);
     this.router.post("/tools/get-metadata", this.handleGetMetadata);
     this.router.post("/tools/update-metadata", this.handleUpdateMetadata);
@@ -205,6 +205,8 @@ export class MemoryMcpServer {
         return;
       }
 
+      // Branch-aware get-context handler
+      // Branch-aware get-context handler (no duplicate/legacy code)
       if (latest) {
         const context = await this.memoryService.getTodayContext(
           repository,
@@ -224,16 +226,15 @@ export class MemoryMcpServer {
           context: [context],
         });
       } else {
-        const limitNum = limit ? parseInt(limit.toString()) : 10;
+        const limitNum = limit ? parseInt(limit as string) : 10;
         const contexts = await this.memoryService.getLatestContexts(
           repository,
           limitNum,
           branch
         );
-
         res.json({
           success: true,
-          context: contexts,
+          context: contexts, // Use 'context' key to match test expectations
         });
       }
     } catch (error) {
@@ -359,7 +360,7 @@ export class MemoryMcpServer {
         depends_on,
         status: status || "active",
         repository,
-        branch
+        branch,
       };
 
       const result = await this.memoryService.upsertComponent(
@@ -413,7 +414,7 @@ export class MemoryMcpServer {
         context,
         date,
         repository,
-        branch
+        branch,
       };
 
       const result = await this.memoryService.upsertDecision(
@@ -479,7 +480,7 @@ export class MemoryMcpServer {
         content,
         status: status || "active",
         repository,
-        branch
+        branch,
       };
 
       const result = await this.memoryService.upsertRule(
