@@ -2,7 +2,7 @@ import { McpTool } from '../types';
 
 /**
  * Get Context Tool
- * Used to retrieve context for a repository
+ * Used to retrieve context for a repository (branch-aware for KuzuDB)
  */
 export const getContextTool: McpTool = {
   name: "get-context",
@@ -14,6 +14,10 @@ export const getContextTool: McpTool = {
         type: "string",
         description: "Repository name",
       },
+      branch: {
+        type: "string",
+        description: "Repository branch (defaults to 'main')",
+      },
       latest: {
         type: "boolean",
         description: "Whether to get only the latest context (true) or all contexts (false)",
@@ -23,7 +27,7 @@ export const getContextTool: McpTool = {
         description: "Number of contexts to return when latest is false",
       },
     },
-    required: ["repository"],
+    required: ["repository", "branch"],
   },
   annotations: {
     title: "Get Context",
@@ -45,7 +49,7 @@ export const getContextTool: McpTool = {
 
 /**
  * Update Context Tool
- * Used to update context for a repository
+ * Used to update context for a repository (branch-aware for KuzuDB)
  */
 export const updateContextTool: McpTool = {
   name: "update-context",
@@ -56,6 +60,10 @@ export const updateContextTool: McpTool = {
       repository: {
         type: "string",
         description: "Repository name",
+      },
+      branch: {
+        type: "string",
+        description: "Repository branch (defaults to 'main')",
       },
       agent: {
         type: "string",
@@ -78,7 +86,7 @@ export const updateContextTool: McpTool = {
         description: "Observation to add",
       },
     },
-    required: ["repository"],
+    required: ["repository", "branch"],
   },
   annotations: {
     title: "Update Context",

@@ -2,7 +2,7 @@ import { McpTool } from '../types';
 
 /**
  * Add Rule Tool
- * Used to add a rule to a repository's memory bank
+ * Used to add a rule to a repository's memory bank (branch-aware for KuzuDB)
  */
 export const addRuleTool: McpTool = {
   name: "add-rule",
@@ -13,6 +13,10 @@ export const addRuleTool: McpTool = {
       repository: {
         type: "string",
         description: "Repository name",
+      },
+      branch: {
+        type: "string",
+        description: "Repository branch (defaults to 'main')",
       },
       id: {
         type: "string",
@@ -43,7 +47,7 @@ export const addRuleTool: McpTool = {
         enum: ["active", "deprecated"],
       },
     },
-    required: ["repository", "id", "name", "created"],
+    required: ["repository", "branch", "id", "name", "created"],
   },
   annotations: {
     title: "Add Rule",

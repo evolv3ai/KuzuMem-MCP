@@ -19,7 +19,7 @@ export const initMemoryBankTool: McpTool = {
         description: "Branch name for repository isolation (default: 'main')",
       },
     },
-    required: ["repository"],
+    required: ["repository", "branch"],
   },
   annotations: {
     title: "Initialize Memory Bank",

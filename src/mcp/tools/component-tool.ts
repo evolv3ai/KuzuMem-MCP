@@ -1,8 +1,8 @@
-import { McpTool } from '../types';
+import { McpTool } from "../types";
 
 /**
  * Add Component Tool
- * Used to add a component to a repository
+ * Used to add a component to a repository (branch-aware for KuzuDB)
  */
 export const addComponentTool: McpTool = {
   name: "add-component",
@@ -13,6 +13,10 @@ export const addComponentTool: McpTool = {
       repository: {
         type: "string",
         description: "Repository name",
+      },
+      branch: {
+        type: "string",
+        description: "Repository branch (defaults to 'main')",
       },
       id: {
         type: "string",
@@ -39,7 +43,7 @@ export const addComponentTool: McpTool = {
         enum: ["active", "deprecated", "planned"],
       },
     },
-    required: ["repository", "id", "name"],
+    required: ["repository", "branch", "id", "name"],
   },
   annotations: {
     title: "Add Component",

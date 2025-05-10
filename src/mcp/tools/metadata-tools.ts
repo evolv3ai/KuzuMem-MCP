@@ -2,7 +2,7 @@ import { McpTool } from '../types';
 
 /**
  * Get Metadata Tool
- * Used to retrieve metadata for a repository
+ * Used to retrieve metadata for a repository (branch-aware for KuzuDB)
  */
 export const getMetadataTool: McpTool = {
   name: "get-metadata",
@@ -14,8 +14,12 @@ export const getMetadataTool: McpTool = {
         type: "string",
         description: "Repository name",
       },
+      branch: {
+        type: "string",
+        description: "Repository branch (defaults to 'main')",
+      },
     },
-    required: ["repository"],
+    required: ["repository", "branch"],
   },
   annotations: {
     title: "Get Metadata",
@@ -37,7 +41,7 @@ export const getMetadataTool: McpTool = {
 
 /**
  * Update Metadata Tool
- * Used to update metadata for a repository
+ * Used to update metadata for a repository (branch-aware for KuzuDB)
  */
 export const updateMetadataTool: McpTool = {
   name: "update-metadata",
@@ -49,12 +53,16 @@ export const updateMetadataTool: McpTool = {
         type: "string",
         description: "Repository name",
       },
+      branch: {
+        type: "string",
+        description: "Repository branch (defaults to 'main')",
+      },
       metadata: {
         type: "object",
         description: "Metadata content to update",
       },
     },
-    required: ["repository", "metadata"],
+    required: ["repository", "branch", "metadata"],
   },
   annotations: {
     title: "Update Metadata",

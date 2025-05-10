@@ -2,7 +2,7 @@ import { McpTool } from '../types';
 
 /**
  * Add Decision Tool
- * Used to add a decision to a repository's memory bank
+ * Used to add a decision to a repository's memory bank (branch-aware for KuzuDB)
  */
 export const addDecisionTool: McpTool = {
   name: "add-decision",
@@ -13,6 +13,10 @@ export const addDecisionTool: McpTool = {
       repository: {
         type: "string",
         description: "Repository name",
+      },
+      branch: {
+        type: "string",
+        description: "Repository branch (defaults to 'main')",
       },
       id: {
         type: "string",
@@ -31,7 +35,7 @@ export const addDecisionTool: McpTool = {
         description: "Decision date (YYYY-MM-DD)",
       },
     },
-    required: ["repository", "id", "name", "date"],
+    required: ["repository", "branch", "id", "name", "date"],
   },
   annotations: {
     title: "Add Decision",
