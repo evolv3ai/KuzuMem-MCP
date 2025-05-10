@@ -223,6 +223,108 @@ rl.on('line', async (line) => {
         break;
       }
       
+      case 'tools/call': {
+        // MCP-compliant tool execution handler
+        const toolName = request.params?.name;
+        const toolArgs = request.params?.arguments || {};
+        debugLog(1, `Handling tools/call for tool: ${toolName}`);
+
+        const tool = MEMORY_BANK_MCP_TOOLS.find(t => t.name === toolName);
+        if (!tool) {
+          sendResponse({
+            jsonrpc: '2.0',
+            id: request.id,
+            result: {
+              content: [
+                { type: 'text', text: `Tool '${toolName}' not found.` }
+              ],
+              isError: true
+            }
+          });
+          break;
+        }
+
+        try {
+          // You may want to route to the correct implementation based on toolName
+          // For demo: handle init-memory-bank, get-metadata, etc. via MemoryService
+          const memoryService = await MemoryService.getInstance();
+          let toolResult: any = null;
+          switch (toolName) {
+            case 'init-memory-bank': {
+              const { repository } = toolArgs;
+              if (!repository) {
+                sendResponse({
+                  jsonrpc: '2.0',
+                  id: request.id,
+                  result: {
+                    content: [
+                      { type: 'text', text: 'Missing repository parameter' }
+                    ],
+                    isError: true
+                  }
+                });
+                break;
+              }
+              await memoryService.initMemoryBank(repository);
+              toolResult = { success: true, message: 'Memory bank initialized' };
+              break;
+            }
+            case 'get-metadata': {
+              const { repository } = toolArgs;
+              if (!repository) {
+                sendResponse({
+                  jsonrpc: '2.0',
+                  id: request.id,
+                  result: {
+                    content: [
+                      { type: 'text', text: 'Missing repository parameter' }
+                    ],
+                    isError: true
+                  }
+                });
+                break;
+              }
+              const metadata = await memoryService.getMetadata(repository);
+              if (!metadata) {
+                toolResult = { error: 'Metadata not found' };
+              } else {
+                toolResult = { metadata };
+              }
+              break;
+            }
+            // Add more tool implementations here as needed
+            default: {
+              toolResult = { error: `Tool execution not implemented for '${toolName}'` };
+            }
+          }
+
+          // Format result according to MCP tools/call spec
+          sendResponse({
+            jsonrpc: '2.0',
+            id: request.id,
+            result: {
+              content: [
+                { type: 'text', text: JSON.stringify(toolResult, null, 2) }
+              ],
+              isError: !!toolResult?.error
+            }
+          });
+        } catch (err: any) {
+          debugLog(0, `ERROR (tools/call): ${err.message || String(err)}`, err);
+          sendResponse({
+            jsonrpc: '2.0',
+            id: request.id,
+            result: {
+              content: [
+                { type: 'text', text: `Internal error: ${err.message || String(err)}` }
+              ],
+              isError: true
+            }
+          });
+        }
+        break;
+      }
+
       default: {
         if (!initialized) {
           sendResponse({
