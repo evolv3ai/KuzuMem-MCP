@@ -205,310 +205,163 @@ export async function configureServer(app: express.Application): Promise<void> {
     });
   });
 
-  // Implement streamed tool calls
-  app.post('/tools/:toolName/stream', (req, res) => {
-    const toolName = req.params.toolName;
-    const params = req.body;
-    
-    log(LogLevel.INFO, `Received stream request for tool: ${toolName}`, params, req.requestId);
-    
-    // Set headers for streaming response
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    
-    // Handler for sending stream events
-    const sendEvent = (event: string, data: any) => {
-      res.write(`event: ${event}\n`);
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
-    };
-    
-    // Process the tool call asynchronously
-    (async () => {
+  // MCP-compliant unified /mcp endpoint
+  app.post('/mcp', async (req, res) => {
+    // Validate Origin header (DNS rebinding protection)
+    const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost').split(',');
+    const origin = req.get('Origin');
+    if (!origin || !allowedOrigins.includes(origin)) {
+      log(LogLevel.WARN, `Rejected connection due to invalid Origin: ${origin}`, {}, req.requestId);
+      res.status(403).json({ error: 'Forbidden: Invalid Origin header' });
+      return;
+    }
+
+    const sessionId = req.get('Mcp-Session-Id');
+    const body = req.body;
+    log(LogLevel.INFO, `Received /mcp POST`, body, req.requestId);
+
+    // Batch support
+    const isBatch = Array.isArray(body);
+    const messages = isBatch ? body : [body];
+    const responses: any[] = [];
+
+    // Handle POST: notifications/responses only
+    const onlyNotificationsOrResponses = messages.every(msg => !msg.method);
+    if (onlyNotificationsOrResponses) {
+      // Accept and return 202
+      res.status(202).end();
+      return;
+    }
+
+    // If any requests, respond with SSE or JSON
+    const wantsSSE = req.get('Accept') && req.get('Accept')!.includes('text/event-stream');
+    if (wantsSSE) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      let eventCounter = 0;
+      const sendEvent = (event: string, data: any) => {
+        const eventId = `${Date.now()}-${eventCounter++}`;
+        res.write(`id: ${eventId}\n`);
+        res.write(`event: ${event}\n`);
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      };
+      const lastEventId = req.get('Last-Event-ID');
+      if (lastEventId) {
+        log(LogLevel.INFO, `Client requested stream resume from Last-Event-ID: ${lastEventId}`, {}, req.requestId);
+        // TODO: Implement replay logic if required
+      }
       try {
         const memoryService = await MemoryService.getInstance();
-        
-        // Send start event
-        sendEvent('start', { toolName });
-        
-        switch (toolName) {
-          case 'init-memory-bank': {
-            const { repository } = params || {};
-            if (!repository) {
-              sendEvent('error', { message: 'Missing repository parameter' });
-              res.end();
-              return;
-            }
-            
-            await memoryService.initMemoryBank(repository);
-            sendEvent('progress', { percentage: 100, message: 'Memory bank initialized' });
-            sendEvent('result', { success: true, message: 'Memory bank initialized' });
-            res.end();
-            break;
+        for (const msg of messages) {
+          // Strict JSON-RPC 2.0 validation
+          if (!msg || msg.jsonrpc !== '2.0' || !msg.method) {
+            sendEvent('error', { code: -32600, message: 'Invalid Request: Must be JSON-RPC 2.0 with method', id: msg && msg.id !== undefined ? msg.id : null });
+            continue;
           }
-          
-          case 'get-metadata': {
-            const { repository } = params || {};
-            if (!repository) {
-              sendEvent('error', { message: 'Missing repository parameter' });
-              res.end();
-              return;
+          // Dispatch tool/resource logic by method
+          const { method, params, id } = msg;
+          let result, error;
+          try {
+            switch (method) {
+              case 'init-memory-bank':
+                if (!params || !params.repository) throw new Error('Missing repository parameter');
+                await memoryService.initMemoryBank(params.repository);
+                result = { success: true, message: 'Memory bank initialized' };
+                break;
+              case 'get-metadata':
+                if (!params || !params.repository) throw new Error('Missing repository parameter');
+                result = await memoryService.getMetadata(params.repository);
+                if (!result) throw new Error('Metadata not found');
+                break;
+              // Add more MCP methods as needed
+              default:
+                throw new Error(`Method not implemented: ${method}`);
             }
-            
-            const metadata = await memoryService.getMetadata(repository);
-            if (!metadata) {
-              sendEvent('error', { message: 'Metadata not found' });
-              res.end();
-              return;
-            }
-            
-            sendEvent('progress', { percentage: 100, message: 'Metadata retrieved' });
-            sendEvent('result', { metadata });
-            res.end();
-            break;
+          } catch (err: any) {
+            error = { code: -32603, message: err.message };
           }
-          
-          case 'update-metadata': {
-            const { repository, metadata } = params || {};
-            if (!repository || !metadata) {
-              sendEvent('error', { message: 'Missing repository or metadata parameter' });
-              res.end();
-              return;
-            }
-            
-            const updated = await memoryService.updateMetadata(repository, metadata);
-            if (!updated) {
-              sendEvent('error', { message: 'Failed to update metadata' });
-              res.end();
-              return;
-            }
-            
-            sendEvent('progress', { percentage: 100, message: 'Metadata updated' });
-            sendEvent('result', { success: true, metadata: updated });
-            res.end();
-            break;
-          }
-          
-          case 'get-context': {
-            const { repository, latest = true, limit = 10 } = params || {};
-            if (!repository) {
-              sendEvent('error', { message: 'Missing repository parameter' });
-              res.end();
-              return;
-            }
-            
-            let context;
-            if (latest) {
-              context = await memoryService.getTodayContext(repository);
-              sendEvent('progress', { percentage: 100, message: 'Latest context retrieved' });
-              sendEvent('result', { context: [context] });
-            } else {
-              const contexts = await memoryService.getLatestContexts(repository, limit);
-              sendEvent('progress', { percentage: 100, message: `Retrieved ${contexts.length} contexts` });
-              sendEvent('result', { context: contexts });
-            }
-            
-            res.end();
-            break;
-          }
-          
-          case 'update-context': {
-            const { repository, ...contextUpdate } = params || {};
-            if (!repository) {
-              sendEvent('error', { message: 'Missing repository parameter' });
-              res.end();
-              return;
-            }
-            
-            const updated = await memoryService.updateTodayContext(repository, contextUpdate);
-            if (!updated) {
-              sendEvent('error', { message: 'Failed to update context' });
-              res.end();
-              return;
-            }
-            
-            sendEvent('progress', { percentage: 100, message: 'Context updated' });
-            sendEvent('result', { success: true, context: updated });
-            res.end();
-            break;
-          }
-          
-          case 'add-component': {
-            const { repository, id, ...component } = params || {};
-            if (!repository || !id) {
-              sendEvent('error', { message: 'Missing repository or id parameter' });
-              res.end();
-              return;
-            }
-            
-            const updated = await memoryService.upsertComponent(repository, id, component);
-            if (!updated) {
-              sendEvent('error', { message: 'Failed to add component' });
-              res.end();
-              return;
-            }
-            
-            sendEvent('progress', { percentage: 100, message: 'Component added' });
-            sendEvent('result', { success: true, component: updated });
-            res.end();
-            break;
-          }
-          
-          case 'add-decision': {
-            const { repository, id, ...decision } = params || {};
-            if (!repository || !id) {
-              sendEvent('error', { message: 'Missing repository or id parameter' });
-              res.end();
-              return;
-            }
-            
-            const updated = await memoryService.upsertDecision(repository, id, decision);
-            if (!updated) {
-              sendEvent('error', { message: 'Failed to add decision' });
-              res.end();
-              return;
-            }
-            
-            sendEvent('progress', { percentage: 100, message: 'Decision added' });
-            sendEvent('result', { success: true, decision: updated });
-            res.end();
-            break;
-          }
-          
-          case 'add-rule': {
-            const { repository, id, ...rule } = params || {};
-            if (!repository || !id) {
-              sendEvent('error', { message: 'Missing repository or id parameter' });
-              res.end();
-              return;
-            }
-            
-            const updated = await memoryService.upsertRule(repository, id, rule);
-            if (!updated) {
-              sendEvent('error', { message: 'Failed to add rule' });
-              res.end();
-              return;
-            }
-            
-            sendEvent('progress', { percentage: 100, message: 'Rule added' });
-            sendEvent('result', { success: true, rule: updated });
-            res.end();
-            break;
-          }
-          
-          case 'export-memory-bank': {
-            const { repository } = params || {};
-            if (!repository) {
-              sendEvent('error', { message: 'Missing repository parameter' });
-              res.end();
-              return;
-            }
-            
-            sendEvent('progress', { percentage: 50, message: 'Exporting memory bank' });
-            const files = await memoryService.exportMemoryBank(repository);
-            
-            sendEvent('progress', { percentage: 100, message: 'Export complete' });
-            sendEvent('result', { files });
-            res.end();
-            break;
-          }
-          
-          case 'import-memory-bank': {
-            const { repository, content, type, id: itemId } = params || {};
-            if (!repository || !content || !type || !itemId) {
-              sendEvent('error', { message: 'Missing repository, content, type, or id parameter' });
-              res.end();
-              return;
-            }
-            
-            sendEvent('progress', { percentage: 50, message: 'Importing memory bank' });
-            const success = await memoryService.importMemoryBank(repository, content, type, itemId);
-            
-            if (!success) {
-              sendEvent('error', { message: 'Failed to import memory bank' });
-              res.end();
-              return;
-            }
-            
-            sendEvent('progress', { percentage: 100, message: 'Import complete' });
-            sendEvent('result', { success: true });
-            res.end();
-            break;
-          }
-          
-          default: {
-            sendEvent('error', { message: `Tool not implemented: ${toolName}` });
-            res.end();
+          // Send JSON-RPC response
+          if (error) {
+            sendEvent('result', { jsonrpc: '2.0', error, id });
+          } else {
+            sendEvent('result', { jsonrpc: '2.0', result, id });
           }
         }
-        
+        res.end();
       } catch (err: any) {
         log(LogLevel.ERROR, `ERROR: ${err.message || String(err)}`, err, req.requestId);
         sendEvent('error', { message: `Internal error: ${err.message || String(err)}` });
         res.end();
       }
-    })();
-  });
-
-  // Regular (non-streaming) tool calls
-  app.post('/tools/:toolName', async (req, res) => {
-    const toolName = req.params.toolName;
-    const params = req.body;
-    
-    log(LogLevel.INFO, `Received request for tool: ${toolName}`, params, req.requestId);
-    
-    try {
-      const memoryService = await MemoryService.getInstance();
-      
-      switch (toolName) {
-        case 'init-memory-bank': {
-          const { repository } = params || {};
-          if (!repository) {
-            res.json(createToolError('Missing repository parameter'));
-            return;
+    } else {
+      // Non-streaming JSON response
+      try {
+        const memoryService = await MemoryService.getInstance();
+        for (const msg of messages) {
+          // Strict JSON-RPC 2.0 validation
+          if (!msg || msg.jsonrpc !== '2.0' || !msg.method) {
+            responses.push({ jsonrpc: '2.0', error: { code: -32600, message: 'Invalid Request: Must be JSON-RPC 2.0 with method' }, id: msg && msg.id !== undefined ? msg.id : null });
+            continue;
           }
-          
-          await memoryService.initMemoryBank(repository);
-          res.json({ success: true, message: 'Memory bank initialized' });
-          break;
+          // Dispatch tool/resource logic by method
+          const { method, params, id } = msg;
+          let result, error;
+          try {
+            switch (method) {
+              case 'init-memory-bank':
+                if (!params || !params.repository) throw new Error('Missing repository parameter');
+                await memoryService.initMemoryBank(params.repository);
+                result = { success: true, message: 'Memory bank initialized' };
+                break;
+              case 'get-metadata':
+                if (!params || !params.repository) throw new Error('Missing repository parameter');
+                result = await memoryService.getMetadata(params.repository);
+                if (!result) throw new Error('Metadata not found');
+                break;
+              // Add more MCP methods as needed
+              default:
+                throw new Error(`Method not implemented: ${method}`);
+            }
+          } catch (err: any) {
+            error = { code: -32603, message: err.message };
+          }
+          if (error) {
+            responses.push({ jsonrpc: '2.0', error, id });
+          } else {
+            responses.push({ jsonrpc: '2.0', result, id });
+          }
         }
-        
-        case 'get-metadata': {
-          const { repository } = params || {};
-          if (!repository) {
-            res.json(createToolError('Missing repository parameter'));
-            return;
-          }
-          
-          const metadata = await memoryService.getMetadata(repository);
-          if (!metadata) {
-            res.json(createToolError('Metadata not found'));
-            return;
-          }
-          
-          res.json({ metadata });
-          break;
+        if (isBatch) {
+          res.json(responses);
+        } else {
+          res.json(responses[0]);
         }
-        
-        // Add implementations for other tools similar to the streaming version
-        // but without the streaming events
-        
-        default:
-          res.status(404).json({ error: `Tool not implemented: ${toolName}` });
+      } catch (err: any) {
+        log(LogLevel.ERROR, `ERROR: ${err.message || String(err)}`, err, req.requestId);
+        res.status(500).json({ error: `Internal error: ${err.message || String(err)}` });
       }
-      
-    } catch (err: any) {
-      log(LogLevel.ERROR, `ERROR: ${err.message || String(err)}`, err, req.requestId);
-      res.status(500).json(createToolError(`Internal error: ${err.message || String(err)}`));
     }
   });
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok' });
-});
+  // DELETE /mcp for session termination
+  app.delete('/mcp', (req, res) => {
+    const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost').split(',');
+    const origin = req.get('Origin');
+    if (!origin || !allowedOrigins.includes(origin)) {
+      log(LogLevel.WARN, `Rejected DELETE /mcp due to invalid Origin: ${origin}`, {}, req.requestId);
+      res.status(403).json({ error: 'Forbidden: Invalid Origin header' });
+      return;
+    }
+    // Invalidate session (stub)
+    log(LogLevel.INFO, `Session termination requested via DELETE /mcp`, {}, req.requestId);
+    res.status(200).json({ success: true, message: 'Session terminated (stub)' });
+  });
 
-// Close the configureServer function
+  // Health check endpoint
+  app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok' });
+  });
 }
 
 // Graceful shutdown handling
@@ -557,5 +410,3 @@ if (require.main === module) {
     process.exit(1);
   });
 }
-
-export default app;
