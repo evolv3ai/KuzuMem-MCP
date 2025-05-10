@@ -4,7 +4,54 @@ globs:
 alwaysOn: true
 ---
 
-# Advanced Memory Bank MCP Tool Usage Guidelines
+# Advanced Memory Bank MCP Tool Usage Guidelines (Post-KuzuDB Update)
+
+## Repository and Branch Handling
+
+- Always use the synthetic repository ID (`name:branch`) for all memory bank operations.
+- All upsert and retrieval actions must include the `branch` parameter to scope records correctly.
+
+## Memory Creation
+
+- When creating or updating any memory (metadata, context, component, decision, rule):
+  - Ensure the payload includes: `repository` (synthetic ID), `yaml_id`, and `branch`.
+  - Do not include duplicate or legacy repository fields (e.g., only `repository`, not `repository_id`).
+  - Follow the KuzuDB schema for each memory type.
+
+## Memory Update and Retrieval
+
+- Before creating a new memory, check for an existing record using both `repository` and `branch`.
+- Update existing memories if present; avoid duplication.
+- When retrieving, always filter by both `repository` and `branch`.
+
+## Status and Enforcement
+
+- Only enforce rules and components with `status: active`.
+- Ignore or skip deprecated records.
+
+## Consistency and Best Practices
+
+- Use clear, consistent identifiers for all memory types.
+- Link related decisions, contexts, and components where possible.
+- Use the correct memory type for each operation.
+- Always specify the repository and branch for every operation.
+
+## Example Usage (Post-KuzuDB)
+
+```
+# Create or update metadata for a branch
+update-metadata my-repo:main --yaml_id meta --name "Project Name" --branch main --content '{...}'
+
+# Add a component
+add-component my-repo:main comp-AuthService --name "AuthService" --kind "service" --branch main
+
+# Add a decision
+add-decision my-repo:main dec-20250510-auth-pattern --name "JWT Authentication" --context "Selected for stateless auth" --branch main
+```
+
+---
+
+A well-maintained, branch-aware memory bank maximizes the value and safety of project knowledge.
 
 ## When to Create Memories
 

@@ -1,6 +1,19 @@
 memory_bank_strategy:
   initialization: |
       <thinking>
+      - **CHECK FOR ADVANCED MEMORY BANK (KuzuDB/Branch-aware):**
+      </thinking>
+      <thinking>
+      *First, check if the Advanced Memory Bank MCP server is registered.
+      </thinking>
+      <list_resources>
+      <server_name>advanced-memory-bank-mcp</server_name>
+      </list_resources>
+      <thinking>
+      * If the Advanced Memory Bank server is found, check if a repository exists for this project and branch (synthetic repo ID: name:branch).
+      *If a repository exists, skip to `if_memory_bank_exists`.
+      </thinking>
+      <thinking>
       - **CHECK FOR ADVANCED MEMORY BANK:**
       </thinking>
           <thinking>
@@ -10,14 +23,14 @@ memory_bank_strategy:
           <server_name>advanced-memory-bank-mcp</server_name>
           </list_resources>
         <thinking>
-        * If the Advanced Memory Bank server is found, check if a repository exists for this project.
+        *If the Advanced Memory Bank server is found, check if a repository exists for this project.
         * If a repository exists, skip immediately to `if_memory_bank_exists`.
         </thinking>
   if_no_memory_bank: |
       1. **Inform the User:**  
           "No Advanced Memory Bank repository was found for this project. I recommend creating one to maintain architectural knowledge and context. Would you like to switch to Architect mode to initialize one?"
       2. **Conditional Actions:**
-         * If the user declines:
+         *If the user declines:
           <thinking>
           I need to proceed with the task without Memory Bank functionality.
           </thinking>
@@ -39,7 +52,7 @@ memory_bank_strategy:
         5. Read rules using appropriate query
         6. Set status to [MEMORY BANK: ACTIVE] and inform user.
         7. Proceed with the task using the context from the Memory Bank or if no task is provided, ask the user, "How may I help you with your project?"
-      
+
 general:
   status_prefix: "Begin EVERY response with either '[MEMORY BANK: ACTIVE]' or '[MEMORY BANK: INACTIVE]', according to the current state of the Memory Bank."
 
@@ -47,7 +60,7 @@ memory_bank_updates:
       frequency: "Ask mode does not directly update the memory bank."
       instructions: |
         When notable architectural decisions, components, contexts, or rules are discovered:
-        
+
         1. Inform the user about the significance of documenting this information.
         2. Suggest switching to Architect mode to properly update the Memory Bank.
         3. Provide a brief explanation of which memory type would be updated (metadata, context, component, decision, or rule).

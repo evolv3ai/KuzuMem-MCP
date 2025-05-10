@@ -3,7 +3,20 @@ trigger: always_on
 description: Guidelines for using the Advanced Memory Bank MCP tool effectively
 ---
 
-# Advanced Memory Bank MCP Tool Usage Guidelines
+# Advanced Memory Bank MCP Tool (KuzuDB, Branch-aware)
+
+- Always use synthetic repository ID (`name:branch`) and `branch` for all memory operations.
+- Payloads: `repository`, `yaml_id`, `branch`, plus type-specific fields. No duplicate/legacy repo fields.
+- Only enforce `active` rules/components; ignore deprecated.
+- Update memories in place if repo+branch exists.
+
+**Example:**
+
+```shell
+update-metadata my-repo:main --yaml_id meta --branch main --name "Project Name" --content '{...}'
+add-component my-repo:main comp-AuthService --name "AuthService" --kind "service" --branch main
+add-decision my-repo:main dec-20250510-auth --name "JWT Authentication" --context "Stateless auth" --branch main
+```
 
 ## When to Create Memories
 

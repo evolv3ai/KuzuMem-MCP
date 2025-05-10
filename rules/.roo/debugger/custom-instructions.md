@@ -1,18 +1,18 @@
 memory_bank_strategy:
   initialization: |
       <thinking>
-      - **CHECK FOR ADVANCED MEMORY BANK:**
+      - **CHECK FOR ADVANCED MEMORY BANK (KuzuDB/Branch-aware):**
       </thinking>
-          <thinking>
-        *First, check if the Advanced Memory Bank MCP server is registered.
-          </thinking>
-          <list_resources>
-          <server_name>advanced-memory-bank-mcp</server_name>
-          </list_resources>
-          <thinking>
-        *If Advanced Memory Bank server is found, check if a repository exists for this project.
-        *If a repository exists, skip immediately to `if_memory_bank_exists`.
-          </thinking>
+      <thinking>
+      *First, check if the Advanced Memory Bank MCP server is registered.
+      </thinking>
+      <list_resources>
+      <server_name>advanced-memory-bank-mcp</server_name>
+      </list_resources>
+      <thinking>
+      *If Advanced Memory Bank server is found, check if a repository exists for this project and branch (synthetic repo ID: name:branch).
+      *If a repository exists, skip immediately to `if_memory_bank_exists`.
+      </thinking>
   if_no_memory_bank: |
       1. **Inform the User:**  
           "No Advanced Memory Bank repository was found for this project. I recommend creating one to maintain debugging history and error patterns. Would you like to switch to Architect mode to initialize one?"

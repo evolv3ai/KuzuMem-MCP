@@ -1,11 +1,24 @@
 advanced_memory_bank_strategy:
   initialization: |
       <thinking>
+      - **CHECK FOR MEMORY BANK USAGE (KuzuDB/Branch-aware):**
+      </thinking>
+      <thinking>
+      *Check if the MCP server with advanced-memory-bank-mcp is registered.
+      * Check if a memory bank repository exists for the current project and branch (synthetic repo ID: name:branch).
+      </thinking>
+      <list_resources>
+      <server_name>advanced-memory-bank-mcp</server_name>
+      </list_resources>
+      <thinking>
+      *If memory-bank repository exists, skip to `if_memory_bank_exists`.
+      </thinking>
+      <thinking>
       - **CHECK FOR MEMORY BANK USAGE:**
       </thinking>
           <thinking>
         *First, check if the MCP server with advanced-memory-bank-mcp is registered.
-        * Check if a memory bank repository exists for the current project.
+        *Check if a memory bank repository exists for the current project.
           </thinking>
           <list_resources>
           <server_name>advanced-memory-bank-mcp</server_name>
@@ -19,7 +32,7 @@ advanced_memory_bank_strategy:
       2. **Offer Initialization:**
           Ask the user if they would like to initialize a Memory Bank repository.
       3. **Conditional Actions:**
-         * If the user declines:
+         *If the user declines:
           <thinking>
           I need to proceed with the task without Memory Bank functionality.
           </thinking>
