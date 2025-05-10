@@ -74,3 +74,6 @@ debug/
 
 # Memory Bank database file
 memory-bank.sqlite
+
+# Task Master AI MCP Tool
+tasks/

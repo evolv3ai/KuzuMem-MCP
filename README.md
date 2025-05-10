@@ -154,7 +154,31 @@ In your IDE, add this MCP server configuration to your workspace or global MCP c
 
 For more details, see the documentation of the IDE you use.
 
-#### 2. Use MCP Server with the IDE
+#### 2. Agent Rules for IDE Integration
+
+The repository includes custom rules for different AI agent modes to optimize memory management:
+
+```text
+rules/
+├── .windsurf/rules/      # Rules for Windsurf AI
+│   └── advanced-memory-bank.md    # Memory bank usage guide
+└── .roo/                 # Rules for RooCode AI
+    ├── architect/        # Architecture mode instructions
+    ├── ask/              # Q&A mode instructions
+    ├── code/             # Coding mode instructions
+    └── debugger/         # Debugging mode instructions
+```
+
+These rules guide AI agents on when to:
+
+- Create different types of memories (decisions, components, contexts, rules)
+- Read from the memory bank to inform responses
+- Follow consistent naming conventions
+- Cross-reference between different memory types
+
+The rules are specialized for different AI operational modes to ensure appropriate memory management throughout the development lifecycle.
+
+#### 3. Use MCP Server with the IDE
 
 Once registered, the coding Agent can:
 
@@ -521,3 +545,7 @@ Unique constraint: (repository_id, yaml_id)
 - All tables have a foreign key relationship to `repositories(id)` with `ON DELETE CASCADE` behavior
 - Each entity type (metadata, context, component, decision, rule) has a unique constraint on `(repository_id, yaml_id)` to prevent duplicates
 - The `contexts` table has an additional index on `iso_date` to optimize date-based queries
+
+## Future Improvements
+
+Add support for GraphLayer in the SQLite database to create proper graph representation of the memories.
