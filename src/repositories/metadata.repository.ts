@@ -32,10 +32,10 @@ export class MetadataRepository {
   /**
    * Get metadata node for a repository by synthetic id (id = name + ':' + branch)
    */
-  async getMetadataForRepository(repository: string): Promise<Metadata | null> {
+  async getMetadataForRepository(repository: string, branch: string): Promise<Metadata | null> {
     const result = await KuzuDBClient.executeQuery(
-      `MATCH (repo:Repository {id: $repository})-[:HAS_METADATA]->(m:Metadata) RETURN m LIMIT 1`,
-      { repository }
+      `MATCH (repo:Repository {id: $repository})-[:HAS_METADATA]->(m:Metadata {branch: $branch}) RETURN m LIMIT 1`,
+      { repository, branch }
     );
     if (!result || typeof result.getAll !== "function") return null;
     const rows = await result.getAll();
@@ -57,15 +57,17 @@ export class MetadataRepository {
   async upsertMetadata(metadata: Metadata): Promise<Metadata | null> {
     // Try to update existing metadata node and relationship
     const existing = await this.getMetadataForRepository(
-      String(metadata.repository)
+      String(metadata.repository),
+      String(metadata.branch)
     );
     if (existing) {
       await KuzuDBClient.executeQuery(
-        `MATCH (repo:Repository {id: $repository})-[:HAS_METADATA]->(m:Metadata)
+        `MATCH (repo:Repository {id: $repository})-[:HAS_METADATA]->(m:Metadata {branch: $branch})
          SET m.content = $content
          RETURN m`,
         {
           repository: String(metadata.repository),
+          branch: String(metadata.branch),
           content: metadata.content,
         }
       );
@@ -82,6 +84,7 @@ export class MetadataRepository {
            yaml_id: $yamlId,
            name: $name,
            content: $content,
+           branch: $branch,
            created_at: timestamp('${now}'),
            updated_at: timestamp('${now}')
          })
@@ -91,9 +94,10 @@ export class MetadataRepository {
           yamlId: metadata.yaml_id,
           name: metadata.name,
           content: metadata.content,
+          branch: String(metadata.branch),
         }
       );
-      return this.getMetadataForRepository(String(metadata.repository));
+      return this.getMetadataForRepository(String(metadata.repository), String(metadata.branch));
     }
   }
 }

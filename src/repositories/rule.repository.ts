@@ -29,9 +29,9 @@ export class RuleRepository {
   /**
    * Get all active rules for a repository (status = 'active'), ordered by created descending
    */
-  async getActiveRules(repository: string): Promise<Rule[]> {
+  async getActiveRules(repository: string, branch: string): Promise<Rule[]> {
     const result = await KuzuDBClient.executeQuery(
-      `MATCH (repo:Repository {id: '${repository}'})-[:HAS_RULE]->(r:Rule {status: 'active'}) RETURN r ORDER BY r.created DESC`
+      `MATCH (repo:Repository {id: '${repository}'})-[:HAS_RULE]->(r:Rule {status: 'active', branch: '${branch}'}) RETURN r ORDER BY r.created DESC`
     );
     if (!result || typeof result.getAll !== "function") return [];
     const rows = await result.getAll();
@@ -49,7 +49,8 @@ export class RuleRepository {
   async upsertRule(rule: Rule): Promise<Rule | null> {
     const existing = await this.findByYamlId(
       String(rule.repository),
-      String(rule.yaml_id)
+      String(rule.yaml_id),
+      String(rule.branch)
     );
     if (existing) {
       await KuzuDBClient.executeQuery(
@@ -57,7 +58,7 @@ export class RuleRepository {
           rule.repository
         )}'})-[:HAS_RULE]->(r:Rule {yaml_id: '${String(
           rule.yaml_id
-        )}'}) SET r.name = '${rule.name}', r.triggers = '${
+        )}', branch: '${String(rule.branch)}'}) SET r.name = '${rule.name}', r.triggers = '${
           rule.triggers
         }', r.content = '${rule.content}', r.status = '${rule.status}' RETURN r`
       );
@@ -77,10 +78,10 @@ export class RuleRepository {
           rule.yaml_id
         )}', name: '${rule.name}', triggers: '${rule.triggers}', content: '${
           rule.content
-        }', status: '${rule.status}', created: timestamp('${now}')}) RETURN r`
+        }', status: '${rule.status}', branch: '${String(rule.branch)}', created: timestamp('${now}')}) RETURN r`
       );
       // Return the newly created rule
-      return this.findByYamlId(String(rule.repository), String(rule.yaml_id));
+      return this.findByYamlId(String(rule.repository), String(rule.yaml_id), String(rule.branch));
     }
   }
 
@@ -89,10 +90,11 @@ export class RuleRepository {
    */
   async findByYamlId(
     repository: string,
-    yaml_id: string
+    yaml_id: string,
+    branch: string
   ): Promise<Rule | null> {
     const result = await KuzuDBClient.executeQuery(
-      `MATCH (repo:Repository {id: '${repository}'})-[:HAS_RULE]->(r:Rule {yaml_id: '${yaml_id}'}) RETURN r LIMIT 1`
+      `MATCH (repo:Repository {id: '${repository}'})-[:HAS_RULE]->(r:Rule {yaml_id: '${yaml_id}', branch: '${branch}'}) RETURN r LIMIT 1`
     );
     if (!result || typeof result.getAll !== "function") return null;
     const rows = await result.getAll();

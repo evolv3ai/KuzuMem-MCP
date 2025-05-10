@@ -113,16 +113,18 @@ export class MemoryService {
 
     // Check if metadata exists
     const existingMetadata = await this.metadataRepo.getMetadataForRepository(
-      String(repository.id!)
+      String(repository.id!),
+      branch
     );
 
     if (!existingMetadata) {
       // Create stub metadata using upsert
       const today = new Date().toISOString().split("T")[0];
       await this.metadataRepo.upsertMetadata({
-        repository_id: repository.id!,
+        repository: String(repository.id!),
         yaml_id: "meta",
         name: repositoryName,
+        branch,
         content: {
           id: "meta",
           project: {
@@ -156,7 +158,8 @@ export class MemoryService {
       return null;
     }
     const metadata = await this.metadataRepo.getMetadataForRepository(
-      String(repository.id!)
+      String(repository.id!),
+      branch
     );
     return metadata ?? null;
   }
@@ -177,16 +180,18 @@ export class MemoryService {
       return null;
     }
     const existing = await this.metadataRepo.getMetadataForRepository(
-      String(repository.id!)
+      String(repository.id!),
+      branch
     );
     if (!existing) {
       return null;
     }
     const updated = await this.metadataRepo.upsertMetadata({
-      repository_id: repository.id!,
+      repository: String(repository.id!),
       yaml_id: "meta",
       name: repositoryName,
       content: { ...existing.content, ...metadata },
+      branch,
     });
     return updated ?? null;
   }
@@ -208,6 +213,7 @@ export class MemoryService {
     const today = new Date().toISOString().split("T")[0];
     const context = await this.contextRepo.getTodayContext(
       String(repository.id!),
+      branch,
       today
     );
     return context ?? null;
@@ -233,13 +239,22 @@ export class MemoryService {
     const today = new Date().toISOString().split("T")[0];
     const context = await this.contextRepo.getTodayContext(
       String(repository.id!),
+      branch,
       today
     );
     if (!context) {
       return null;
     }
     const updated = await this.contextRepo.upsertContext({
-      ...context,
+      repository: String(repository.id!),
+      yaml_id: context.yaml_id,
+      iso_date: context.iso_date,
+      agent: context.agent,
+      related_issue: context.related_issue,
+      summary: context.summary,
+      decisions: context.decisions,
+      observations: context.observations,
+      branch,
       ...contextUpdate,
     });
     return updated ?? null;
@@ -260,7 +275,11 @@ export class MemoryService {
     if (!repository) {
       return [];
     }
-    return this.contextRepo.getLatestContexts(String(repository.id!), limit);
+    return this.contextRepo.getLatestContexts(
+      String(repository.id!),
+      branch,
+      limit
+    );
   }
 
   /**
@@ -281,7 +300,6 @@ export class MemoryService {
     }
 
     return this.componentRepo.upsertComponent({
-      repository_id: repository.id!,
       yaml_id: componentId,
       ...component,
     });
@@ -321,7 +339,6 @@ export class MemoryService {
       return null;
     }
     return this.decisionRepo.upsertDecision({
-      repository_id: repository.id!,
       yaml_id: decisionId,
       ...decision,
     });
@@ -346,7 +363,8 @@ export class MemoryService {
     return this.decisionRepo.getDecisionsByDateRange(
       String(repository.id!),
       startDate,
-      endDate
+      endDate,
+      branch
     );
   }
 
@@ -367,7 +385,6 @@ export class MemoryService {
       return null;
     }
     return this.ruleRepo.upsertRule({
-      repository_id: repository.id!,
       yaml_id: ruleId,
       ...rule,
     });
@@ -387,7 +404,7 @@ export class MemoryService {
     if (!repository) {
       return [];
     }
-    return this.ruleRepo.getActiveRules(String(repository.id!));
+    return this.ruleRepo.getActiveRules(String(repository.id!), branch);
   }
 
   /**
@@ -409,7 +426,8 @@ export class MemoryService {
     const files: Record<string, string> = {};
     // Export metadata
     const metadata = await this.metadataRepo.getMetadataForRepository(
-      String(repository.id!)
+      String(repository.id!),
+      branch
     );
     if (metadata) {
       files["memory/metadata.yaml"] =
@@ -418,6 +436,7 @@ export class MemoryService {
     // Export contexts
     const contexts = await this.contextRepo.getLatestContexts(
       String(repository.id!),
+      branch,
       1000
     ); // Use a large limit for export
     for (const context of contexts) {
@@ -436,14 +455,18 @@ export class MemoryService {
     const decisions = await this.decisionRepo.getDecisionsByDateRange(
       String(repository.id!),
       "1900-01-01",
-      "2100-01-01"
+      "2100-01-01",
+      branch
     );
     for (const decision of decisions) {
       files[`memory/graph/decisions/${decision.yaml_id}.yaml`] =
         this.yamlService.serializeDecision(decision);
     }
     // Export rules
-    const rules = await this.ruleRepo.getActiveRules(String(repository.id!));
+    const rules = await this.ruleRepo.getActiveRules(
+      String(repository.id!),
+      branch
+    );
     for (const rule of rules) {
       files[`memory/graph/rules/${rule.yaml_id}.yaml`] =
         this.yamlService.serializeRule(rule);
@@ -471,16 +494,17 @@ export class MemoryService {
       switch (type) {
         case "metadata":
           await this.metadataRepo.upsertMetadata({
-            repository_id: repository.id!,
+            repository: String(repository.id!),
             yaml_id: id,
             name: repositoryName,
             content: data,
+            branch,
           });
           break;
 
         case "context":
           await this.contextRepo.upsertContext({
-            repository_id: repository.id!,
+            repository: String(repository.id!),
             yaml_id: id,
             iso_date: data.iso_date,
             agent: data.agent,
@@ -488,39 +512,43 @@ export class MemoryService {
             summary: data.summary,
             decisions: data.decisions,
             observations: data.observations,
+            branch,
           });
           break;
 
         case "component":
           await this.componentRepo.upsertComponent({
-            repository_id: repository.id!,
+            repository: String(repository.id!),
             yaml_id: id,
             name: data.name,
             kind: data.kind,
             depends_on: data.depends_on,
             status: data.status || "active",
+            branch,
           });
           break;
 
         case "decision":
           await this.decisionRepo.upsertDecision({
-            repository_id: repository.id!,
+            repository: String(repository.id!),
             yaml_id: id,
             name: data.name,
             context: data.context,
             date: data.date,
+            branch,
           });
           break;
 
         case "rule":
           await this.ruleRepo.upsertRule({
-            repository_id: repository.id!,
+            repository: String(repository.id!),
             yaml_id: id,
             name: data.name,
             created: data.created,
             triggers: data.triggers,
             content: data.content,
             status: data.status || "active",
+            branch,
           });
           break;
 
