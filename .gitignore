@@ -78,3 +78,6 @@ memory-bank.sqlite
 
 # Task Master AI MCP Tool
 tasks/
+
+# KuzuDB
+memory-bank.kuzu/

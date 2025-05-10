@@ -1,5 +1,5 @@
-import { Rule } from '../types';
-import { Mutex } from '../utils/mutex';
+import { Rule } from "../types";
+import { Mutex } from "../utils/mutex";
 import { KuzuDBClient } from "../db/kuzu";
 
 /**
@@ -29,13 +29,14 @@ export class RuleRepository {
   /**
    * Get all active rules for a repository (status = 'active'), ordered by created descending
    */
-  async getActiveRules(repositoryId: number): Promise<Rule[]> {
-    const result = await this.conn.query(
-      'MATCH (r:Rule {repository_id: $repositoryId, status: "active"}) RETURN r ORDER BY r.created DESC',
-      { repositoryId }, () => {}
+  async getActiveRules(repositoryId: string): Promise<Rule[]> {
+    const result = await KuzuDBClient.executeQuery(
+      `MATCH (repo:Repository {id: '${repositoryId}'})-[:HAS_RULE]->(r:Rule {status: 'active'}) RETURN r ORDER BY r.created DESC`
     );
-    if (!result) return [];
-    return result.map((row: any) => row.get('r'));
+    if (!result || typeof result.getAll !== "function") return [];
+    const rows = await result.getAll();
+    if (!rows || rows.length === 0) return [];
+    return rows.map((row: any) => row.r ?? row["r"] ?? row);
   }
 
   /**
@@ -46,55 +47,59 @@ export class RuleRepository {
    * Returns the upserted Rule or null if not found
    */
   async upsertRule(rule: Rule): Promise<Rule | null> {
-    const existing = await this.findByYamlId(rule.repository_id, rule.yaml_id);
+    const existing = await this.findByYamlId(
+      String(rule.repository_id),
+      String(rule.yaml_id)
+    );
     if (existing) {
-      await this.conn.query(
-        'MATCH (r:Rule {repository_id: $repository_id, yaml_id: $yaml_id}) SET r.name = $name, r.triggers = $triggers, r.content = $content, r.status = $status RETURN r',
-        {
-          repository_id: rule.repository_id,
-          yaml_id: rule.yaml_id,
-          name: rule.name,
-          triggers: rule.triggers,
-          content: rule.content,
-          status: rule.status
-        }
+      await KuzuDBClient.executeQuery(
+        `MATCH (repo:Repository {id: '${String(
+          rule.repository_id
+        )}'})-[:HAS_RULE]->(r:Rule {yaml_id: '${String(
+          rule.yaml_id
+        )}'}) SET r.name = '${rule.name}', r.triggers = '${
+          rule.triggers
+        }', r.content = '${rule.content}', r.status = '${rule.status}' RETURN r`
       );
       return {
         ...existing,
         name: rule.name,
         triggers: rule.triggers,
         content: rule.content,
-        status: rule.status
+        status: rule.status,
       };
     } else {
-      await this.conn.query(
-        'CREATE (r:Rule {repository_id: $repository_id, yaml_id: $yaml_id, name: $name, triggers: $triggers, content: $content, status: $status, created: datetime()}) RETURN r',
-        {
-          repository_id: rule.repository_id,
-          yaml_id: rule.yaml_id,
-          name: rule.name,
-          triggers: rule.triggers,
-          content: rule.content,
-          status: rule.status
-        }
+      const now = new Date().toISOString();
+      await KuzuDBClient.executeQuery(
+        `MATCH (repo:Repository {id: '${String(
+          rule.repository_id
+        )}'}) CREATE (repo)-[:HAS_RULE]->(r:Rule {yaml_id: '${String(
+          rule.yaml_id
+        )}', name: '${rule.name}', triggers: '${rule.triggers}', content: '${
+          rule.content
+        }', status: '${rule.status}', created: timestamp('${now}')}) RETURN r`
       );
       // Return the newly created rule
-      return this.findByYamlId(rule.repository_id, rule.yaml_id);
+      return this.findByYamlId(
+        String(rule.repository_id),
+        String(rule.yaml_id)
+      );
     }
   }
 
   /**
    * Find a rule by repository_id and yaml_id
    */
-  async findByYamlId(repository_id: number, yaml_id: string): Promise<Rule | null> {
-    const result = await this.conn.query(
-      'MATCH (r:Rule {repository_id: $repository_id, yaml_id: $yaml_id}) RETURN r LIMIT 1',
-      { repository_id, yaml_id }, () => {}
+  async findByYamlId(
+    repositoryId: string,
+    yaml_id: string
+  ): Promise<Rule | null> {
+    const result = await KuzuDBClient.executeQuery(
+      `MATCH (repo:Repository {id: '${repositoryId}'})-[:HAS_RULE]->(r:Rule {yaml_id: '${yaml_id}'}) RETURN r LIMIT 1`
     );
-    if (!result || typeof result.getAll !== 'function') return null;
+    if (!result || typeof result.getAll !== "function") return null;
     const rows = await result.getAll();
     if (!rows || rows.length === 0) return null;
-    return rows[0].get('r');
+    return rows[0].r ?? rows[0]["r"] ?? rows[0];
   }
 }
-

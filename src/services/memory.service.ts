@@ -4,9 +4,9 @@ import {
   ContextRepository,
   ComponentRepository,
   DecisionRepository,
-  RuleRepository
-} from '../repositories';
-import { YamlService } from './yaml.service';
+  RuleRepository,
+} from "../repositories";
+import { YamlService } from "./yaml.service";
 import {
   Repository,
   Metadata,
@@ -14,9 +14,9 @@ import {
   Component,
   Decision,
   Rule,
-  MemoryType
-} from '../types';
-import { Mutex } from '../utils/mutex';
+  MemoryType,
+} from "../types";
+import { Mutex } from "../utils/mutex";
 
 /**
  * Service for memory bank operations
@@ -53,13 +53,13 @@ export class MemoryService {
   static async getInstance(): Promise<MemoryService> {
     // Acquire lock for thread safety
     const release = await MemoryService.lock.acquire();
-    
+
     try {
       if (!MemoryService.instance) {
         MemoryService.instance = new MemoryService();
         await MemoryService.instance.initialize();
       }
-      
+
       return MemoryService.instance;
     } finally {
       // Always release the lock
@@ -76,18 +76,21 @@ export class MemoryService {
    * @param branch Repository branch (defaults to 'main')
    * @returns Repository or null if creation fails
    */
-  async getOrCreateRepository(name: string, branch: string = 'main'): Promise<Repository | null> {
+  async getOrCreateRepository(
+    name: string,
+    branch: string = "main"
+  ): Promise<Repository | null> {
     // First try to find existing repository with name and branch
     const existingRepo = await this.repositoryRepo.findByName(name, branch);
     if (existingRepo) {
       return existingRepo;
     }
-    
+
     // Create new repository with specified branch if it doesn't exist
     try {
       return await this.repositoryRepo.create({
         name,
-        branch
+        branch,
       });
     } catch (error) {
       console.error(`Failed to create repository ${name}/${branch}:`, error);
@@ -99,35 +102,41 @@ export class MemoryService {
    * Initialize memory bank for a repository
    * Creates metadata with stub values if it doesn't exist
    */
-  async initMemoryBank(repositoryName: string, branch: string = 'main'): Promise<void> {
+  async initMemoryBank(
+    repositoryName: string,
+    branch: string = "main"
+  ): Promise<void> {
     const repository = await this.getOrCreateRepository(repositoryName, branch);
     if (!repository) {
-      throw new Error('Repository not found');
+      throw new Error("Repository not found");
     }
-    
+
     // Check if metadata exists
-    const existingMetadata = await this.metadataRepo.getMetadataForRepository(repository.id!);
-    
+    const existingMetadata = await this.metadataRepo.getMetadataForRepository(
+      String(repository.id!)
+    );
+
     if (!existingMetadata) {
       // Create stub metadata using upsert
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date().toISOString().split("T")[0];
       await this.metadataRepo.upsertMetadata({
         repository_id: repository.id!,
-        yaml_id: 'meta',
+        yaml_id: "meta",
+        name: repositoryName,
         content: {
-          id: 'meta',
+          id: "meta",
           project: {
             name: repositoryName,
-            created: today
+            created: today,
           },
           tech_stack: {
-            language: 'Unknown',
-            framework: 'Unknown',
-            datastore: 'Unknown'
+            language: "Unknown",
+            framework: "Unknown",
+            datastore: "Unknown",
           },
-          architecture: 'unknown',
-          memory_spec_version: '3.0.0'
-        }
+          architecture: "unknown",
+          memory_spec_version: "3.0.0",
+        },
       });
     }
   }
@@ -135,31 +144,49 @@ export class MemoryService {
   /**
    * Get metadata for a repository
    */
-  async getMetadata(repositoryName: string, branch: string = 'main'): Promise<Metadata | null> {
-    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
+  async getMetadata(
+    repositoryName: string,
+    branch: string = "main"
+  ): Promise<Metadata | null> {
+    const repository = await this.repositoryRepo.findByName(
+      repositoryName,
+      branch
+    );
     if (!repository) {
       return null;
     }
-    const metadata = await this.metadataRepo.getMetadataForRepository(repository.id!);
+    const metadata = await this.metadataRepo.getMetadataForRepository(
+      String(repository.id!)
+    );
     return metadata ?? null;
   }
 
   /**
    * Update metadata for a repository
    */
-  async updateMetadata(repositoryName: string, metadata: Partial<Metadata['content']>, branch: string = 'main'): Promise<Metadata | null> {
-    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
+  async updateMetadata(
+    repositoryName: string,
+    metadata: Partial<Metadata["content"]>,
+    branch: string = "main"
+  ): Promise<Metadata | null> {
+    const repository = await this.repositoryRepo.findByName(
+      repositoryName,
+      branch
+    );
     if (!repository) {
       return null;
     }
-    const existing = await this.metadataRepo.getMetadataForRepository(repository.id!);
+    const existing = await this.metadataRepo.getMetadataForRepository(
+      String(repository.id!)
+    );
     if (!existing) {
       return null;
     }
     const updated = await this.metadataRepo.upsertMetadata({
       repository_id: repository.id!,
-      yaml_id: 'meta',
-      content: { ...existing.content, ...metadata }
+      yaml_id: "meta",
+      name: repositoryName,
+      content: { ...existing.content, ...metadata },
     });
     return updated ?? null;
   }
@@ -167,13 +194,22 @@ export class MemoryService {
   /**
    * Get today's context or create it if it doesn't exist
    */
-  async getTodayContext(repositoryName: string, branch: string = 'main'): Promise<Context | null> {
-    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
+  async getTodayContext(
+    repositoryName: string,
+    branch: string = "main"
+  ): Promise<Context | null> {
+    const repository = await this.repositoryRepo.findByName(
+      repositoryName,
+      branch
+    );
     if (!repository) {
       return null;
     }
-    const today = new Date().toISOString().split('T')[0];
-    const context = await this.contextRepo.getTodayContext(repository.id!, today);
+    const today = new Date().toISOString().split("T")[0];
+    const context = await this.contextRepo.getTodayContext(
+      String(repository.id!),
+      today
+    );
     return context ?? null;
   }
 
@@ -181,22 +217,30 @@ export class MemoryService {
    * Update today's context
    */
   async updateTodayContext(
-    repositoryName: string, 
-    contextUpdate: Partial<Omit<Context, 'repository_id' | 'yaml_id' | 'iso_date'>>,
-    branch: string = 'main'
+    repositoryName: string,
+    contextUpdate: Partial<
+      Omit<Context, "repository_id" | "yaml_id" | "iso_date">
+    >,
+    branch: string = "main"
   ): Promise<Context | null> {
-    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
+    const repository = await this.repositoryRepo.findByName(
+      repositoryName,
+      branch
+    );
     if (!repository) {
       return null;
     }
-    const today = new Date().toISOString().split('T')[0];
-    const context = await this.contextRepo.getTodayContext(repository.id!, today);
+    const today = new Date().toISOString().split("T")[0];
+    const context = await this.contextRepo.getTodayContext(
+      String(repository.id!),
+      today
+    );
     if (!context) {
       return null;
     }
     const updated = await this.contextRepo.upsertContext({
       ...context,
-      ...contextUpdate
+      ...contextUpdate,
     });
     return updated ?? null;
   }
@@ -204,12 +248,19 @@ export class MemoryService {
   /**
    * Get latest contexts
    */
-  async getLatestContexts(repositoryName: string, limit: number = 10, branch: string = 'main'): Promise<Context[]> {
-    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
+  async getLatestContexts(
+    repositoryName: string,
+    limit: number = 10,
+    branch: string = "main"
+  ): Promise<Context[]> {
+    const repository = await this.repositoryRepo.findByName(
+      repositoryName,
+      branch
+    );
     if (!repository) {
       return [];
     }
-    return this.contextRepo.getLatestContexts(repository.id!, limit);
+    return this.contextRepo.getLatestContexts(String(repository.id!), limit);
   }
 
   /**
@@ -218,30 +269,39 @@ export class MemoryService {
   async upsertComponent(
     repositoryName: string,
     componentId: string,
-    component: Omit<Component, 'repository_id' | 'yaml_id'>,
-    branch: string = 'main'
+    component: Omit<Component, "repository_id" | "yaml_id">,
+    branch: string = "main"
   ): Promise<Component | null> {
-    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
+    const repository = await this.repositoryRepo.findByName(
+      repositoryName,
+      branch
+    );
     if (!repository) {
       return null;
     }
-    
+
     return this.componentRepo.upsertComponent({
       repository_id: repository.id!,
       yaml_id: componentId,
-      ...component
+      ...component,
     });
   }
 
   /**
    * Get all active components
    */
-  async getActiveComponents(repositoryName: string, branch: string = 'main'): Promise<Component[]> {
-    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
+  async getActiveComponents(
+    repositoryName: string,
+    branch: string = "main"
+  ): Promise<Component[]> {
+    const repository = await this.repositoryRepo.findByName(
+      repositoryName,
+      branch
+    );
     if (!repository) {
       return [];
     }
-    return this.componentRepo.getActiveComponents(repository.id!);
+    return this.componentRepo.getActiveComponents(String(repository.id!));
   }
 
   /**
@@ -250,17 +310,20 @@ export class MemoryService {
   async upsertDecision(
     repositoryName: string,
     decisionId: string,
-    decision: Omit<Decision, 'repository_id' | 'yaml_id'>,
-    branch: string = 'main'
+    decision: Omit<Decision, "repository_id" | "yaml_id">,
+    branch: string = "main"
   ): Promise<Decision | null> {
-    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
+    const repository = await this.repositoryRepo.findByName(
+      repositoryName,
+      branch
+    );
     if (!repository) {
       return null;
     }
     return this.decisionRepo.upsertDecision({
       repository_id: repository.id!,
       yaml_id: decisionId,
-      ...decision
+      ...decision,
     });
   }
 
@@ -271,13 +334,20 @@ export class MemoryService {
     repositoryName: string,
     startDate: string,
     endDate: string,
-    branch: string = 'main'
+    branch: string = "main"
   ): Promise<Decision[]> {
-    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
+    const repository = await this.repositoryRepo.findByName(
+      repositoryName,
+      branch
+    );
     if (!repository) {
       return [];
     }
-    return this.decisionRepo.getDecisionsByDateRange(repository.id!, startDate, endDate);
+    return this.decisionRepo.getDecisionsByDateRange(
+      String(repository.id!),
+      startDate,
+      endDate
+    );
   }
 
   /**
@@ -286,66 +356,97 @@ export class MemoryService {
   async upsertRule(
     repositoryName: string,
     ruleId: string,
-    rule: Omit<Rule, 'repository_id' | 'yaml_id'>,
-    branch: string = 'main'
+    rule: Omit<Rule, "repository_id" | "yaml_id">,
+    branch: string = "main"
   ): Promise<Rule | null> {
-    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
+    const repository = await this.repositoryRepo.findByName(
+      repositoryName,
+      branch
+    );
     if (!repository) {
       return null;
     }
     return this.ruleRepo.upsertRule({
       repository_id: repository.id!,
       yaml_id: ruleId,
-      ...rule
+      ...rule,
     });
   }
 
   /**
    * Get all active rules
    */
-  async getActiveRules(repositoryName: string, branch: string = 'main'): Promise<Rule[]> {
-    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
+  async getActiveRules(
+    repositoryName: string,
+    branch: string = "main"
+  ): Promise<Rule[]> {
+    const repository = await this.repositoryRepo.findByName(
+      repositoryName,
+      branch
+    );
     if (!repository) {
       return [];
     }
-    return this.ruleRepo.getActiveRules(repository.id!);
+    return this.ruleRepo.getActiveRules(String(repository.id!));
   }
 
   /**
    * Export memory bank as YAML files
    * Returns an object with file paths and content
    */
-  async exportMemoryBank(repositoryName: string, branch: string = 'main'): Promise<Record<string, string>> {
-    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
+  async exportMemoryBank(
+    repositoryName: string,
+    branch: string = "main"
+  ): Promise<Record<string, string>> {
+    const repository = await this.repositoryRepo.findByName(
+      repositoryName,
+      branch
+    );
     if (!repository) {
       return {};
     }
-    
+
     const files: Record<string, string> = {};
     // Export metadata
-    const metadata = await this.metadataRepo.getMetadataForRepository(repository.id!);
+    const metadata = await this.metadataRepo.getMetadataForRepository(
+      String(repository.id!)
+    );
     if (metadata) {
-      files['memory/metadata.yaml'] = this.yamlService.serializeMetadata(metadata);
+      files["memory/metadata.yaml"] =
+        this.yamlService.serializeMetadata(metadata);
     }
     // Export contexts
-    const contexts = await this.contextRepo.getLatestContexts(repository.id!, 1000); // Use a large limit for export
+    const contexts = await this.contextRepo.getLatestContexts(
+      String(repository.id!),
+      1000
+    ); // Use a large limit for export
     for (const context of contexts) {
-      files[`memory/context/${context.yaml_id}.yaml`] = this.yamlService.serializeContext(context);
+      files[`memory/context/${context.yaml_id}.yaml`] =
+        this.yamlService.serializeContext(context);
     }
     // Export components
-    const components = await this.componentRepo.getActiveComponents(repository.id!);
+    const components = await this.componentRepo.getActiveComponents(
+      String(repository.id!)
+    );
     for (const component of components) {
-      files[`memory/graph/components/${component.yaml_id}.yaml`] = this.yamlService.serializeComponent(component);
+      files[`memory/graph/components/${component.yaml_id}.yaml`] =
+        this.yamlService.serializeComponent(component);
     }
     // Export decisions
-    const decisions = await this.decisionRepo.getDecisionsByDateRange(repository.id!, '1900-01-01', '2100-01-01');
+    const decisions = await this.decisionRepo.getDecisionsByDateRange(
+      String(repository.id!),
+      "1900-01-01",
+      "2100-01-01"
+    );
     for (const decision of decisions) {
-      files[`memory/graph/decisions/${decision.yaml_id}.yaml`] = this.yamlService.serializeDecision(decision);
+      files[`memory/graph/decisions/${decision.yaml_id}.yaml`] =
+        this.yamlService.serializeDecision(decision);
     }
     // Export rules
-    const rules = await this.ruleRepo.getActiveRules(repository.id!);
+    const rules = await this.ruleRepo.getActiveRules(String(repository.id!));
     for (const rule of rules) {
-      files[`memory/graph/rules/${rule.yaml_id}.yaml`] = this.yamlService.serializeRule(rule);
+      files[`memory/graph/rules/${rule.yaml_id}.yaml`] =
+        this.yamlService.serializeRule(rule);
     }
     return files;
   }
@@ -353,24 +454,31 @@ export class MemoryService {
   /**
    * Import memory bank from YAML content
    */
-  async importMemoryBank(repositoryName: string, yamlContent: string, type: MemoryType, id: string, branch: string = 'main'): Promise<boolean> {
+  async importMemoryBank(
+    repositoryName: string,
+    yamlContent: string,
+    type: MemoryType,
+    id: string,
+    branch: string = "main"
+  ): Promise<boolean> {
     const repository = await this.getOrCreateRepository(repositoryName, branch);
     if (!repository) {
       return false;
     }
     try {
       const { data } = this.yamlService.parseYaml(yamlContent);
-      
+
       switch (type) {
-        case 'metadata':
+        case "metadata":
           await this.metadataRepo.upsertMetadata({
             repository_id: repository.id!,
             yaml_id: id,
-            content: data
+            name: repositoryName,
+            content: data,
           });
           break;
-          
-        case 'context':
+
+        case "context":
           await this.contextRepo.upsertContext({
             repository_id: repository.id!,
             yaml_id: id,
@@ -379,32 +487,32 @@ export class MemoryService {
             related_issue: data.related_issue,
             summary: data.summary,
             decisions: data.decisions,
-            observations: data.observations
+            observations: data.observations,
           });
           break;
-          
-        case 'component':
+
+        case "component":
           await this.componentRepo.upsertComponent({
             repository_id: repository.id!,
             yaml_id: id,
             name: data.name,
             kind: data.kind,
             depends_on: data.depends_on,
-            status: data.status || 'active'
+            status: data.status || "active",
           });
           break;
-          
-        case 'decision':
+
+        case "decision":
           await this.decisionRepo.upsertDecision({
             repository_id: repository.id!,
             yaml_id: id,
             name: data.name,
             context: data.context,
-            date: data.date
+            date: data.date,
           });
           break;
-          
-        case 'rule':
+
+        case "rule":
           await this.ruleRepo.upsertRule({
             repository_id: repository.id!,
             yaml_id: id,
@@ -412,17 +520,17 @@ export class MemoryService {
             created: data.created,
             triggers: data.triggers,
             content: data.content,
-            status: data.status || 'active'
+            status: data.status || "active",
           });
           break;
-          
+
         default:
           return false;
       }
-      
+
       return true;
     } catch (error) {
-      console.error('Error importing memory bank:', error);
+      console.error("Error importing memory bank:", error);
       return false;
     }
   }

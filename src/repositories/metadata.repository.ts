@@ -1,5 +1,5 @@
-import { Metadata } from '../types';
-import { Mutex } from '../utils/mutex';
+import { Metadata } from "../types";
+import { Mutex } from "../utils/mutex";
 const { KuzuDBClient } = require("../db/kuzu");
 
 /**
@@ -29,47 +29,73 @@ export class MetadataRepository {
   /**
    * Get metadata node for a repository
    */
-  async getMetadataForRepository(repositoryId: number): Promise<Metadata | null> {
-    const result = await this.conn.query(
-      'MATCH (m:Metadata {repository_id: $repositoryId}) RETURN m LIMIT 1',
+  /**
+   * Get metadata node for a repository by synthetic id (id = name + ':' + branch)
+   */
+  async getMetadataForRepository(
+    repositoryId: string
+  ): Promise<Metadata | null> {
+    const result = await KuzuDBClient.executeQuery(
+      `MATCH (repo:Repository {id: $repositoryId})-[:HAS_METADATA]->(m:Metadata) RETURN m LIMIT 1`,
       { repositoryId }
     );
-    if (!result || result.length === 0) return null;
-    return result[0].get('m');
+    if (!result || typeof result.getAll !== "function") return null;
+    const rows = await result.getAll();
+    if (!rows || rows.length === 0) return null;
+    return rows[0].m ?? rows[0]["m"] ?? rows[0];
   }
 
   /**
    * Creates or updates metadata for a repository (only one metadata per repository)
    */
   /**
- * Creates or updates metadata for a repository (only one metadata per repository)
- * Returns the upserted Metadata or null if not found
- */
-async upsertMetadata(metadata: Metadata): Promise<Metadata | null> {
-    const existing = await this.getMetadataForRepository(metadata.repository_id);
+   * Creates or updates metadata for a repository (only one metadata per repository)
+   * Returns the upserted Metadata or null if not found
+   */
+  /**
+   * Creates or updates metadata for a repository (only one metadata per repository)
+   * Uses the synthetic repository id (id = name + ':' + branch)
+   */
+  async upsertMetadata(metadata: Metadata): Promise<Metadata | null> {
+    // Try to update existing metadata node and relationship
+    const existing = await this.getMetadataForRepository(
+      String(metadata.repository_id)
+    );
     if (existing) {
-      await this.conn.query(
-        'MATCH (m:Metadata {repository_id: $repository_id}) SET m.content = $content RETURN m',
+      await KuzuDBClient.executeQuery(
+        `MATCH (repo:Repository {id: $repositoryId})-[:HAS_METADATA]->(m:Metadata)
+         SET m.content = $content
+         RETURN m`,
         {
-          repository_id: metadata.repository_id,
-          content: metadata.content
+          repositoryId: String(metadata.repository_id),
+          content: metadata.content,
         }
       );
       return {
         ...existing,
-        content: metadata.content
+        content: metadata.content,
       };
     } else {
-      await this.conn.query(
-        'CREATE (m:Metadata {repository_id: $repository_id, content: $content}) RETURN m',
+      // Create Metadata node and relationship
+      const now = new Date().toISOString();
+      await KuzuDBClient.executeQuery(
+        `MATCH (repo:Repository {id: $repositoryId})
+         CREATE (repo)-[:HAS_METADATA]->(m:Metadata {
+           yaml_id: $yamlId,
+           name: $name,
+           content: $content,
+           created_at: timestamp('${now}'),
+           updated_at: timestamp('${now}')
+         })
+         RETURN m`,
         {
-          repository_id: metadata.repository_id,
-          content: metadata.content
+          repositoryId: String(metadata.repository_id),
+          yamlId: metadata.yaml_id,
+          name: metadata.name,
+          content: metadata.content,
         }
       );
-      // Return the newly created metadata
-      return this.getMetadataForRepository(metadata.repository_id);
+      return this.getMetadataForRepository(String(metadata.repository_id));
     }
   }
 }
-

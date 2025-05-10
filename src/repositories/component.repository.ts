@@ -1,5 +1,5 @@
-import { Component } from '../types';
-import { Mutex } from '../utils/mutex';
+import { Component } from "../types";
+import { Mutex } from "../utils/mutex";
 import { KuzuDBClient } from "../db/kuzu";
 
 /**
@@ -29,13 +29,14 @@ export class ComponentRepository {
   /**
    * Get all active components for a repository (status = 'active'), ordered by name
    */
-  async getActiveComponents(repositoryId: number): Promise<Component[]> {
-    const result = await this.conn.query(
-      'MATCH (c:Component {repository_id: $repositoryId, status: "active"}) RETURN c ORDER BY c.name ASC',
-      { repositoryId }, () => {}
+  async getActiveComponents(repositoryId: string): Promise<Component[]> {
+    const result = await KuzuDBClient.executeQuery(
+      `MATCH (r:Repository {id: '${repositoryId}'})-[:HAS_COMPONENT]->(c:Component {status: 'active'}) RETURN c ORDER BY c.name ASC`
     );
-    if (!result) return [];
-    return result.map((row: any) => row.get('c'));
+    if (!result || typeof result.getAll !== "function") return [];
+    const rows = await result.getAll();
+    if (!rows || rows.length === 0) return [];
+    return rows.map((row: any) => row.c ?? row["c"] ?? row);
   }
 
   /**
@@ -46,55 +47,46 @@ export class ComponentRepository {
    * Returns the upserted Component or null if not found
    */
   async upsertComponent(component: Component): Promise<Component | null> {
-    const existing = await this.findByYamlId(component.repository_id, component.yaml_id);
+    const existing = await this.findByYamlId(
+      String(component.repository_id),
+      String(component.yaml_id)
+    );
     if (existing) {
-      await this.conn.query(
-        'MATCH (c:Component {repository_id: $repository_id, yaml_id: $yaml_id}) SET c.name = $name, c.kind = $kind, c.depends_on = $depends_on, c.status = $status RETURN c',
-        {
-          repository_id: component.repository_id,
-          yaml_id: component.yaml_id,
-          name: component.name,
-          kind: component.kind,
-          depends_on: component.depends_on,
-          status: component.status
-        }
+      await KuzuDBClient.executeQuery(
+        `MATCH (r:Repository {id: '${component.repository_id}'})-[:HAS_COMPONENT]->(c:Component {yaml_id: '${component.yaml_id}'}) SET c.name = '${component.name}', c.kind = '${component.kind}', c.depends_on = '${component.depends_on}', c.status = '${component.status}' RETURN c`
       );
       return {
         ...existing,
         name: component.name,
         kind: component.kind,
         depends_on: component.depends_on,
-        status: component.status
+        status: component.status,
       };
     } else {
-      await this.conn.query(
-        'CREATE (c:Component {repository_id: $repository_id, yaml_id: $yaml_id, name: $name, kind: $kind, depends_on: $depends_on, status: $status}) RETURN c',
-        {
-          repository_id: component.repository_id,
-          yaml_id: component.yaml_id,
-          name: component.name,
-          kind: component.kind,
-          depends_on: component.depends_on,
-          status: component.status
-        }
+      await KuzuDBClient.executeQuery(
+        `MATCH (r:Repository {id: '${component.repository_id}'}) CREATE (r)-[:HAS_COMPONENT]->(c:Component {yaml_id: '${component.yaml_id}', name: '${component.name}', kind: '${component.kind}', depends_on: '${component.depends_on}', status: '${component.status}'}) RETURN c`
       );
       // Return the newly created component
-      return this.findByYamlId(component.repository_id, component.yaml_id);
+      return this.findByYamlId(
+        String(component.repository_id),
+        String(component.yaml_id)
+      );
     }
   }
 
   /**
    * Find a component by repository_id and yaml_id
    */
-  async findByYamlId(repository_id: number, yaml_id: string): Promise<Component | null> {
-    const result = await this.conn.query(
-      'MATCH (c:Component {repository_id: $repository_id, yaml_id: $yaml_id}) RETURN c LIMIT 1',
-      { repository_id, yaml_id }, () => {}
+  async findByYamlId(
+    repositoryId: string,
+    yaml_id: string
+  ): Promise<Component | null> {
+    const result = await KuzuDBClient.executeQuery(
+      `MATCH (r:Repository {id: '${repositoryId}'})-[:HAS_COMPONENT]->(c:Component {yaml_id: '${yaml_id}'}) RETURN c LIMIT 1`
     );
-    if (!result || typeof result.getAll !== 'function') return null;
+    if (!result || typeof result.getAll !== "function") return null;
     const rows = await result.getAll();
     if (!rows || rows.length === 0) return null;
-    return rows[0].get('c');
+    return rows[0].c ?? rows[0]["c"] ?? rows[0];
   }
 }
-

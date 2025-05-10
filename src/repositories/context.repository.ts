@@ -1,5 +1,5 @@
-import { Context } from '../types';
-import { Mutex } from '../utils/mutex';
+import { Context } from "../types";
+import { Mutex } from "../utils/mutex";
 import { KuzuDBClient } from "../db/kuzu";
 
 /**
@@ -29,27 +29,40 @@ export class ContextRepository {
   /**
    * Get the latest N contexts for a repository, ordered by iso_date descending
    */
-  async getLatestContexts(repositoryId: number, limit: number = 10): Promise<Context[]> {
-    const result = await this.conn.query(
-      'MATCH (c:Context {repository_id: $repositoryId}) RETURN c ORDER BY c.iso_date DESC LIMIT $limit',
-      { repositoryId, limit }, () => {}
+  /**
+   * Get the latest N contexts for a repository, ordered by created_at descending
+   */
+  async getLatestContexts(
+    repositoryId: string,
+    limit: number = 10
+  ): Promise<Context[]> {
+    const result = await KuzuDBClient.executeQuery(
+      `MATCH (repo:Repository {id: '${repositoryId}'})-[:HAS_CONTEXT]->(c:Context)
+       RETURN c ORDER BY c.created_at DESC LIMIT ${limit}`
     );
-    if (!result) return [];
-    return result.map((row: any) => row.get('c'));
+    if (!result || typeof result.getAll !== "function") return [];
+    const rows = await result.getAll();
+    if (!rows || rows.length === 0) return [];
+    return rows.map((row: any) => row.c ?? row["c"] ?? row);
   }
 
   /**
    * Get the context for a repository for a specific iso_date
    */
-  async getTodayContext(repositoryId: number, today: string): Promise<Context | null> {
-    const result = await this.conn.query(
-      'MATCH (c:Context {repository_id: $repositoryId, iso_date: $today}) RETURN c LIMIT 1',
-      { repositoryId, today }
+  /**
+   * Get the context for a repository for a specific iso_date
+   */
+  async getTodayContext(
+    repositoryId: string,
+    today: string
+  ): Promise<Context | null> {
+    const result = await KuzuDBClient.executeQuery(
+      `MATCH (repo:Repository {id: '${repositoryId}'})-[:HAS_CONTEXT]->(c:Context {iso_date: '${today}'}) RETURN c LIMIT 1`
     );
-    if (!result || typeof result.getAll !== 'function') return null;
+    if (!result || typeof result.getAll !== "function") return null;
     const rows = await result.getAll();
     if (!rows || rows.length === 0) return null;
-    return rows[0].get('c');
+    return rows[0].c ?? rows[0]["c"] ?? rows[0];
   }
 
   /**
@@ -59,20 +72,20 @@ export class ContextRepository {
    * Creates or updates context for a repository
    * Returns the upserted Context or null if not found
    */
+  /**
+   * Creates or updates context for a repository (only one context per repository/yaml_id)
+   * Uses the synthetic repository id (id = name + ':' + branch)
+   */
   async upsertContext(context: Context): Promise<Context | null> {
-    const existing = await this.findByYamlId(context.repository_id, context.yaml_id);
+    const existing = await this.findByYamlId(
+      String(context.repository_id),
+      String(context.yaml_id)
+    );
     if (existing) {
-      await this.conn.query(
-        'MATCH (c:Context {repository_id: $repository_id, yaml_id: $yaml_id}) SET c.agent = $agent, c.related_issue = $related_issue, c.summary = $summary, c.decisions = $decisions, c.observations = $observations RETURN c',
-        {
-          repository_id: context.repository_id,
-          yaml_id: context.yaml_id,
-          agent: context.agent,
-          related_issue: context.related_issue,
-          summary: context.summary,
-          decisions: context.decisions,
-          observations: context.observations
-        }
+      await KuzuDBClient.executeQuery(
+        `MATCH (repo:Repository {id: '${context.repository_id}'})-[:HAS_CONTEXT]->(c:Context {yaml_id: '${context.yaml_id}'})
+         SET c.agent = '${context.agent}', c.related_issue = '${context.related_issue}', c.summary = '${context.summary}', c.decisions = '${context.decisions}', c.observations = '${context.observations}'
+         RETURN c`
       );
       return {
         ...existing,
@@ -80,39 +93,46 @@ export class ContextRepository {
         related_issue: context.related_issue,
         summary: context.summary,
         decisions: context.decisions,
-        observations: context.observations
+        observations: context.observations,
       };
     } else {
-      await this.conn.query(
-        'CREATE (c:Context {repository_id: $repository_id, yaml_id: $yaml_id, iso_date: $iso_date, agent: $agent, related_issue: $related_issue, summary: $summary, decisions: $decisions, observations: $observations}) RETURN c',
-        {
-          repository_id: context.repository_id,
-          yaml_id: context.yaml_id,
-          iso_date: context.iso_date,
-          agent: context.agent,
-          related_issue: context.related_issue,
-          summary: context.summary,
-          decisions: context.decisions,
-          observations: context.observations
-        }
+      await KuzuDBClient.executeQuery(
+        `MATCH (repo:Repository {id: '${context.repository_id}'})
+         CREATE (repo)-[:HAS_CONTEXT]->(c:Context {
+           repository_id: '${context.repository_id}',
+           yaml_id: '${context.yaml_id}',
+           iso_date: '${context.iso_date}',
+           agent: '${context.agent}',
+           related_issue: '${context.related_issue}',
+           summary: '${context.summary}',
+           decisions: '${context.decisions}',
+           observations: '${context.observations}'
+         })
+         RETURN c`
       );
-      // Return the newly created context
-      return this.findByYamlId(context.repository_id, context.yaml_id);
+      return this.findByYamlId(
+        String(context.repository_id),
+        String(context.yaml_id)
+      );
     }
   }
 
   /**
    * Find a context by repository_id and yaml_id
    */
-  async findByYamlId(repository_id: number, yaml_id: string): Promise<Context | null> {
-    const result = await this.conn.query(
-      'MATCH (c:Context {repository_id: $repository_id, yaml_id: $yaml_id}) RETURN c LIMIT 1',
-      { repository_id, yaml_id }, () => {}
+  /**
+   * Find a context by repository_id and yaml_id using synthetic id
+   */
+  async findByYamlId(
+    repositoryId: string,
+    yaml_id: string
+  ): Promise<Context | null> {
+    const result = await KuzuDBClient.executeQuery(
+      `MATCH (repo:Repository {id: '${repositoryId}'})-[:HAS_CONTEXT]->(c:Context {yaml_id: '${yaml_id}'}) RETURN c LIMIT 1`
     );
-    if (!result || typeof result.getAll !== 'function') return null;
+    if (!result || typeof result.getAll !== "function") return null;
     const rows = await result.getAll();
     if (!rows || rows.length === 0) return null;
-    return rows[0].get('c');
+    return rows[0].c ?? rows[0]["c"] ?? rows[0];
   }
 }
-

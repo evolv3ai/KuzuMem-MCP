@@ -20,6 +20,8 @@ export interface Repository {
 
 // Metadata type
 export interface Metadata extends BaseEntity {
+  yaml_id: string;
+  name: string;
   content: {
     id: string;
     project: {
@@ -30,6 +32,8 @@ export interface Metadata extends BaseEntity {
     architecture: string;
     memory_spec_version: string;
   };
+  created_at?: Date;
+  updated_at?: Date;
 }
 
 // Context type
