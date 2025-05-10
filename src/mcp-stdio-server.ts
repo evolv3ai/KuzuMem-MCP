@@ -5,13 +5,19 @@ import { MEMORY_BANK_MCP_TOOLS } from './mcp';
 import { MemoryService } from './services/memory.service';
 
 // Ensure database directory and file exists
-let dbPath = process.env.DB_FILENAME || path.join(__dirname, '../memory-bank.sqlite');
+// Always use the project root for consistency
+const projectRoot = path.resolve(__dirname, '..');
+let dbPath = process.env.DB_FILENAME || path.join(projectRoot, 'memory-bank.sqlite');
 const dbDir = path.dirname(dbPath);
 
 // Make absolute path if relative
 if (!path.isAbsolute(dbPath)) {
-  dbPath = path.resolve(process.cwd(), dbPath);
+  dbPath = path.resolve(projectRoot, dbPath);
 }
+
+// Set the environment variable for other components
+process.env.DB_FILENAME = dbPath;
+console.error(`MCP server using database path: ${dbPath}`);
 
 // Create database directory if it doesn't exist
 if (!fs.existsSync(dbDir)) {
@@ -20,8 +26,20 @@ if (!fs.existsSync(dbDir)) {
 
 // Create empty database file if it doesn't exist
 if (!fs.existsSync(dbPath)) {
-  fs.writeFileSync(dbPath, '');
-  console.error(`Created database file at: ${dbPath}`);
+  // Create with explicit permissions (read/write for user, group, others)
+  fs.writeFileSync(dbPath, '', { mode: 0o666 });
+  console.error(`Created database file at: ${dbPath} with read/write permissions`);
+}
+
+// Ensure the file is writable even if it already exists
+if (fs.existsSync(dbPath)) {
+  try {
+    // Set permissions to read/write for user, group, and others
+    fs.chmodSync(dbPath, 0o666);
+    console.error(`Ensured database file at: ${dbPath} has proper permissions`);
+  } catch (err) {
+    console.error(`Failed to set permissions on database file: ${err}`);
+  }
 }
 
 // Initialize memory service early
