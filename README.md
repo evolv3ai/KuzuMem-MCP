@@ -1,4 +1,4 @@
-# Memory Bank MCP Tool
+# Advanced Memory Bank MCP Tool
 
 A TypeScript implementation of a distributed YAML memory bank as an MCP (Model Context Protocol) tool, storing memories in a database with repository filtering capabilities. Fully compliant with MCP specification for seamless integration with IDEs and AI agents.
 
