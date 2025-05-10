@@ -43,10 +43,7 @@ const initializeMcpServer = async (): Promise<void> => {
 // Start server
 const startServer = async () => {
   try {
-    // Run migrations
-    await db.migrate.latest();
-    
-    // Initialize MCP server
+    // Initialize MCP server (KuzuDB handles schema dynamically)
     await initializeMcpServer();
     
     app.listen(port, () => {

@@ -1,6 +1,6 @@
 import { Rule } from '../types';
 import { Mutex } from '../utils/mutex';
-const { KuzuDBClient } = require("../db/kuzu");
+import { KuzuDBClient } from "../db/kuzu";
 
 /**
  * Thread-safe singleton repository for Rule, using KuzuDB and Cypher queries
@@ -32,7 +32,7 @@ export class RuleRepository {
   async getActiveRules(repositoryId: number): Promise<Rule[]> {
     const result = await this.conn.query(
       'MATCH (r:Rule {repository_id: $repositoryId, status: "active"}) RETURN r ORDER BY r.created DESC',
-      { repositoryId }
+      { repositoryId }, () => {}
     );
     if (!result) return [];
     return result.map((row: any) => row.get('r'));
@@ -89,10 +89,12 @@ export class RuleRepository {
   async findByYamlId(repository_id: number, yaml_id: string): Promise<Rule | null> {
     const result = await this.conn.query(
       'MATCH (r:Rule {repository_id: $repository_id, yaml_id: $yaml_id}) RETURN r LIMIT 1',
-      { repository_id, yaml_id }
+      { repository_id, yaml_id }, () => {}
     );
-    if (!result || result.length === 0) return null;
-    return result[0].get('r');
+    if (!result || typeof result.getAll !== 'function') return null;
+    const rows = await result.getAll();
+    if (!rows || rows.length === 0) return null;
+    return rows[0].get('r');
   }
 }
 

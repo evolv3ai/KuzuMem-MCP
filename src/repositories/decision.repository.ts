@@ -1,6 +1,6 @@
 import { Decision } from '../types';
 import { Mutex } from '../utils/mutex';
-const { KuzuDBClient } = require("../db/kuzu");
+import { KuzuDBClient } from "../db/kuzu";
 
 /**
  * Thread-safe singleton repository for Decision, using KuzuDB and Cypher queries
@@ -90,10 +90,12 @@ export class DecisionRepository {
   async findByYamlId(repository_id: number, yaml_id: string): Promise<Decision | null> {
     const result = await this.conn.query(
       'MATCH (d:Decision {repository_id: $repository_id, yaml_id: $yaml_id}) RETURN d LIMIT 1',
-      { repository_id, yaml_id }
+      { repository_id, yaml_id }, () => {}
     );
-    if (!result || result.length === 0) return null;
-    return result[0].get('d');
+    if (!result || typeof result.getAll !== 'function') return null;
+    const rows = await result.getAll();
+    if (!rows || rows.length === 0) return null;
+    return rows[0].get('d');
   }
 }
 

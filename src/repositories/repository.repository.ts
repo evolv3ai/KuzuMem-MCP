@@ -1,4 +1,4 @@
-const { KuzuDBClient } = require("../db/kuzu");
+import { KuzuDBClient } from "../db/kuzu";
 import { Repository } from "../types";
 import { Mutex } from "../utils/mutex";
 
@@ -35,12 +35,13 @@ export class RepositoryRepository {
   // Find repository by name and branch using Cypher
   async findByName(name: string, branch: string = 'main'): Promise<Repository | null> {
     const result = await KuzuDBClient.executeQuery(
-      "MATCH (r:Repository {name: $name, branch: $branch}) RETURN r LIMIT 1",
-      { name, branch }
+      `MATCH (r:Repository {name: '${name}', branch: '${branch}'}) RETURN r LIMIT 1`
     );
-    if (!result || result.length === 0) return null;
+    if (!result || typeof result.getAll !== 'function') return null;
+    const rows = await result.getAll();
+    if (!rows || rows.length === 0) return null;
     // Map KuzuDB node to Repository type
-    const node = result[0].get("r");
+    const node = rows[0].get("r");
     return node
       ? ({
           name: node.name,
@@ -62,8 +63,7 @@ export class RepositoryRepository {
   ): Promise<Repository | null> {
     const branch = repository.branch || 'main';
     await KuzuDBClient.executeQuery(
-      "CREATE (r:Repository {name: $name, branch: $branch, created_at: datetime(), updated_at: datetime()}) RETURN r",
-      { name: repository.name, branch }
+      `CREATE (r:Repository {name: '${repository.name}', branch: '${branch}', created_at: datetime(), updated_at: datetime()}) RETURN r`
     );
     // Return the created repository
     return this.findByName(repository.name, branch);
@@ -73,12 +73,14 @@ export class RepositoryRepository {
   async findAll(branch?: string): Promise<Repository[]> {
     let result;
     if (branch) {
-      result = await KuzuDBClient.executeQuery("MATCH (r:Repository {branch: $branch}) RETURN r", { branch });
+      result = await KuzuDBClient.executeQuery(`MATCH (r:Repository {branch: '${branch}'}) RETURN r`);
     } else {
       result = await KuzuDBClient.executeQuery("MATCH (r:Repository) RETURN r");
     }
-    if (!result) return [];
-    return result.map((row: any) => {
+    if (!result || typeof result.getAll !== 'function') return [];
+    const rows = await result.getAll();
+    if (!rows || rows.length === 0) return [];
+    return rows.map((row: any) => {
       const node = row.get("r");
       return {
         name: node.name,

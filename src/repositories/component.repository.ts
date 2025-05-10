@@ -1,6 +1,6 @@
 import { Component } from '../types';
 import { Mutex } from '../utils/mutex';
-const { KuzuDBClient } = require("../db/kuzu");
+import { KuzuDBClient } from "../db/kuzu";
 
 /**
  * Thread-safe singleton repository for Component, using KuzuDB and Cypher queries
@@ -32,7 +32,7 @@ export class ComponentRepository {
   async getActiveComponents(repositoryId: number): Promise<Component[]> {
     const result = await this.conn.query(
       'MATCH (c:Component {repository_id: $repositoryId, status: "active"}) RETURN c ORDER BY c.name ASC',
-      { repositoryId }
+      { repositoryId }, () => {}
     );
     if (!result) return [];
     return result.map((row: any) => row.get('c'));
@@ -89,10 +89,12 @@ export class ComponentRepository {
   async findByYamlId(repository_id: number, yaml_id: string): Promise<Component | null> {
     const result = await this.conn.query(
       'MATCH (c:Component {repository_id: $repository_id, yaml_id: $yaml_id}) RETURN c LIMIT 1',
-      { repository_id, yaml_id }
+      { repository_id, yaml_id }, () => {}
     );
-    if (!result || result.length === 0) return null;
-    return result[0].get('c');
+    if (!result || typeof result.getAll !== 'function') return null;
+    const rows = await result.getAll();
+    if (!rows || rows.length === 0) return null;
+    return rows[0].get('c');
   }
 }
 
