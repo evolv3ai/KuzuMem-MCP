@@ -1,6 +1,37 @@
 import readline from 'readline';
+import fs from 'fs';
+import path from 'path';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp';
 import { MemoryService } from './services/memory.service';
+
+// Ensure database directory and file exists
+let dbPath = process.env.DB_FILENAME || path.join(__dirname, '../memory-bank.sqlite');
+const dbDir = path.dirname(dbPath);
+
+// Make absolute path if relative
+if (!path.isAbsolute(dbPath)) {
+  dbPath = path.resolve(process.cwd(), dbPath);
+}
+
+// Create database directory if it doesn't exist
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+
+// Create empty database file if it doesn't exist
+if (!fs.existsSync(dbPath)) {
+  fs.writeFileSync(dbPath, '');
+  console.error(`Created database file at: ${dbPath}`);
+}
+
+// Initialize memory service early
+let memoryServiceInstance: MemoryService | null = null;
+MemoryService.getInstance().then(instance => {
+  memoryServiceInstance = instance;
+  console.error('Memory service initialized');
+}).catch(err => {
+  console.error('Failed to initialize memory service:', err);
+});
 
 // Create the readline interface for stdio
 const rl = readline.createInterface({
@@ -245,9 +276,14 @@ rl.on('line', async (line) => {
         }
 
         try {
-          // You may want to route to the correct implementation based on toolName
-          // For demo: handle init-memory-bank, get-metadata, etc. via MemoryService
-          const memoryService = await MemoryService.getInstance();
+          // Use pre-initialized memory service instance, or get a new one if needed
+          const memoryService = memoryServiceInstance || await MemoryService.getInstance();
+          
+          // If we had to create a new instance, store it for future use
+          if (!memoryServiceInstance) {
+            memoryServiceInstance = memoryService;
+            console.error('Memory service initialized on first tool call');
+          }
           let toolResult: any = null;
           switch (toolName) {
             case 'init-memory-bank': {

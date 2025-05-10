@@ -40,6 +40,16 @@ export class MemoryService {
    * This ensures proper lazy initialization of dependencies
    */
   private async initialize(): Promise<void> {
+    // Ensure database is initialized with migrations
+    try {
+      const { initializeDatabase } = await import('../db/index.js');
+      await initializeDatabase();
+    } catch (error) {
+      console.error('Error initializing database:', error);
+      // Continue initialization process despite error
+      // This allows for graceful recovery when possible
+    }
+    
     this.repositoryRepo = await RepositoryRepository.getInstance();
     this.metadataRepo = await MetadataRepository.getInstance();
     this.contextRepo = await ContextRepository.getInstance();

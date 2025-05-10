@@ -10,13 +10,32 @@ dotenv.config();
 // Default to SQLite if not specified
 const client = process.env.DB_CLIENT || 'sqlite3';
 
-// Ensure db directory exists for SQLite
-const dbFilename = process.env.DB_FILENAME || path.join(__dirname, '../../memory-bank.sqlite');
+// Define a consistent absolute path for the database file
+// This ensures the same path is used regardless of how the application is run
+let dbFilename = process.env.DB_FILENAME || 'memory-bank.sqlite';
+
+// Convert to absolute path if relative
+if (!path.isAbsolute(dbFilename)) {
+  // Always use the project root directory as base
+  const projectRoot = path.resolve(__dirname, '../..');
+  dbFilename = path.join(projectRoot, dbFilename);
+}
+
+// Store the resolved path back in environment variables for consistency
+process.env.DB_FILENAME = dbFilename;
+
+// Ensure database directory exists
 if (client === 'sqlite3') {
   const dbDir = path.dirname(dbFilename);
+  
+  // Create directory if it doesn't exist
   if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
+    console.log(`Created database directory: ${dbDir}`);
   }
+  
+  // Log the database path for debugging
+  console.log(`Using SQLite database at: ${dbFilename}`);
 }
 
 const config: Knex.Config = {
