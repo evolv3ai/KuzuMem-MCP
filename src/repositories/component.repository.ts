@@ -89,4 +89,22 @@ export class ComponentRepository {
     if (!rows || rows.length === 0) return null;
     return rows[0].c ?? rows[0]["c"] ?? rows[0];
   }
+
+  /**
+   * Get all upstream dependencies for a component (transitive DEPENDS_ON)
+   */
+  async getComponentDependencies(repositoryId: string, componentId: string): Promise<Component[]> {
+    // Traverse all DEPENDS_ON relationships (transitive closure)
+    const query = `
+      MATCH (r:Repository {id: '${repositoryId}'})-[:HAS_COMPONENT]->(c:Component {yaml_id: '${componentId}'})
+      MATCH path = (c)-[:DEPENDS_ON*1..]->(dep:Component)
+      RETURN DISTINCT dep
+    `;
+    const result = await KuzuDBClient.executeQuery(query);
+    if (!result || typeof result.getAll !== "function") return [];
+    const rows = await result.getAll();
+    if (!rows || rows.length === 0) return [];
+    // Each row.dep is a Component node
+    return rows.map((row: any) => row.dep ?? row["dep"] ?? row);
+  }
 }

@@ -562,4 +562,18 @@ export class MemoryService {
       return false;
     }
   }
+
+  /**
+   * Get all upstream dependencies for a component (transitive DEPENDS_ON)
+   */
+  async getComponentDependencies(
+    repositoryName: string,
+    branch: string,
+    componentId: string
+  ): Promise<Component[]> {
+    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
+    if (!repository) return [];
+    const componentRepo = await ComponentRepository.getInstance();
+    return componentRepo.getComponentDependencies(String(repository.id!), componentId);
+  }
 }
