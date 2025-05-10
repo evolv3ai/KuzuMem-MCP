@@ -18,6 +18,15 @@ import {
 } from "../types";
 import { Mutex } from "../utils/mutex";
 
+// Import operation modules
+import * as metadataOps from "./memory-operations/metadata.ops";
+import * as contextOps from "./memory-operations/context.ops";
+import * as componentOps from "./memory-operations/component.ops";
+import * as decisionOps from "./memory-operations/decision.ops";
+import * as ruleOps from "./memory-operations/rule.ops";
+import * as importExportOps from "./memory-operations/import-export.ops";
+import * as graphOps from "./memory-operations/graph.ops";
+
 /**
  * Service for memory bank operations
  * Implements the singleton pattern as per best practices
@@ -150,18 +159,12 @@ export class MemoryService {
     repositoryName: string,
     branch: string = "main"
   ): Promise<Metadata | null> {
-    const repository = await this.repositoryRepo.findByName(
+    return metadataOps.getMetadataOp(
       repositoryName,
-      branch
+      branch,
+      this.repositoryRepo,
+      this.metadataRepo
     );
-    if (!repository) {
-      return null;
-    }
-    const metadata = await this.metadataRepo.getMetadataForRepository(
-      String(repository.id!),
-      branch
-    );
-    return metadata ?? null;
   }
 
   /**
@@ -172,28 +175,13 @@ export class MemoryService {
     metadata: Partial<Metadata["content"]>,
     branch: string = "main"
   ): Promise<Metadata | null> {
-    const repository = await this.repositoryRepo.findByName(
+    return metadataOps.updateMetadataOp(
       repositoryName,
-      branch
-    );
-    if (!repository) {
-      return null;
-    }
-    const existing = await this.metadataRepo.getMetadataForRepository(
-      String(repository.id!),
-      branch
-    );
-    if (!existing) {
-      return null;
-    }
-    const updated = await this.metadataRepo.upsertMetadata({
-      repository: String(repository.id!),
-      yaml_id: "meta",
-      name: repositoryName,
-      content: { ...existing.content, ...metadata },
       branch,
-    });
-    return updated ?? null;
+      metadata,
+      this.repositoryRepo,
+      this.metadataRepo
+    );
   }
 
   /**
@@ -203,20 +191,12 @@ export class MemoryService {
     repositoryName: string,
     branch: string = "main"
   ): Promise<Context | null> {
-    const repository = await this.repositoryRepo.findByName(
+    return contextOps.getTodayContextOp(
       repositoryName,
-      branch
-    );
-    if (!repository) {
-      return null;
-    }
-    const today = new Date().toISOString().split("T")[0];
-    const context = await this.contextRepo.getTodayContext(
-      String(repository.id!),
       branch,
-      today
+      this.repositoryRepo,
+      this.contextRepo
     );
-    return context ?? null;
   }
 
   /**
@@ -229,6 +209,19 @@ export class MemoryService {
     >,
     branch: string = "main"
   ): Promise<Context | null> {
+    // This specific method might require more direct logic or be refactored
+    // into a specific Op if its logic is distinct enough from the general updateContextOp.
+    // For now, keeping its original logic as it directly calls getTodayContext (now an Op)
+    // and then contextRepo.upsertContext. Or, updateContextOp could be enhanced.
+    // To maintain current behavior exactly, we might call its internal parts.
+    // However, the plan implies updateContextOp should handle this general case.
+    // Let's assume updateContextOp can be used by adapting the parameters if necessary.
+    // This method seems more specific than the generic `updateContext` tool method.
+    // For now, let's keep its direct implementation using the repo, or
+    // we can call the more generic updateContextOp by constructing its params.
+
+    // Re-evaluating: updateTodayContext is specific. Let's call contextRepo directly for now or create a dedicated Op later.
+    // For this refactoring pass, we will keep it as is to avoid altering its specific behavior immediately.
     const repository = await this.repositoryRepo.findByName(
       repositoryName,
       branch
@@ -265,217 +258,118 @@ export class MemoryService {
    */
   async getLatestContexts(
     repositoryName: string,
-    limit: number = 10,
-    branch: string = "main"
+    branch: string = "main",
+    limit?: number
   ): Promise<Context[]> {
-    const repository = await this.repositoryRepo.findByName(
+    return contextOps.getLatestContextsOp(
       repositoryName,
-      branch
-    );
-    if (!repository) {
-      return [];
-    }
-    return this.contextRepo.getLatestContexts(
-      String(repository.id!),
       branch,
-      limit
+      limit,
+      this.repositoryRepo,
+      this.contextRepo
     );
   }
 
   /**
-   * Create or update a component
+   * Update today's context for a repository/branch (MCP tool compatibility)
+   * Accepts summary, agent, decision, issue, observation. Merges with existing.
    */
-  async upsertComponent(
-    repositoryName: string,
-    componentId: string,
-    component: Omit<Component, "repository_id" | "yaml_id">,
-    branch: string = "main"
-  ): Promise<Component | null> {
-    const repository = await this.repositoryRepo.findByName(
-      repositoryName,
-      branch
-    );
-    if (!repository) {
-      return null;
-    }
-
-    return this.componentRepo.upsertComponent({
-      yaml_id: componentId,
-      ...component,
-    });
-  }
-
-  /**
-   * Get all active components
-   */
-  async getActiveComponents(
-    repositoryName: string,
-    branch: string = "main"
-  ): Promise<Component[]> {
-    const repository = await this.repositoryRepo.findByName(
-      repositoryName,
-      branch
-    );
-    if (!repository) {
-      return [];
-    }
-    return this.componentRepo.getActiveComponents(String(repository.id!));
-  }
-
-  /**
-   * Create or update a decision
-   */
-  async upsertDecision(
-    repositoryName: string,
-    decisionId: string,
-    decision: Omit<Decision, "repository_id" | "yaml_id">,
-    branch: string = "main"
-  ): Promise<Decision | null> {
-    const repository = await this.repositoryRepo.findByName(
-      repositoryName,
-      branch
-    );
-    if (!repository) {
-      return null;
-    }
-    return this.decisionRepo.upsertDecision({
-      yaml_id: decisionId,
-      ...decision,
-    });
-  }
-
-  /**
-   * Get decisions by date range
-   */
-  async getDecisionsByDateRange(
-    repositoryName: string,
-    startDate: string,
-    endDate: string,
-    branch: string = "main"
-  ): Promise<Decision[]> {
-    const repository = await this.repositoryRepo.findByName(
-      repositoryName,
-      branch
-    );
-    if (!repository) {
-      return [];
-    }
-    return this.decisionRepo.getDecisionsByDateRange(
-      String(repository.id!),
-      startDate,
-      endDate,
-      branch
+  async updateContext(params: {
+    repository: string;
+    branch?: string;
+    summary?: string;
+    agent?: string;
+    decision?: string;
+    issue?: string;
+    observation?: string;
+  }): Promise<Context | null> {
+    // The params for updateContextOp are slightly different (repositoryName instead of repository)
+    return contextOps.updateContextOp(
+      { repositoryName: params.repository, ...params },
+      this.repositoryRepo,
+      this.contextRepo
     );
   }
 
   /**
-   * Create or update a rule
+   * Create or update a rule for a repository
    */
   async upsertRule(
     repositoryName: string,
-    ruleId: string,
-    rule: Omit<Rule, "repository_id" | "yaml_id">,
+    rule: Omit<Rule, "repository" | "branch">,
     branch: string = "main"
   ): Promise<Rule | null> {
-    const repository = await this.repositoryRepo.findByName(
+    return ruleOps.upsertRuleOp(
       repositoryName,
-      branch
+      branch,
+      rule,
+      this.repositoryRepo,
+      this.ruleRepo
     );
-    if (!repository) {
-      return null;
-    }
-    return this.ruleRepo.upsertRule({
-      yaml_id: ruleId,
-      ...rule,
-    });
   }
 
-  /**
-   * Get all active rules
-   */
-  async getActiveRules(
+  // Add new methods for tools, delegating to Ops
+  async upsertComponent(
     repositoryName: string,
-    branch: string = "main"
-  ): Promise<Rule[]> {
-    const repository = await this.repositoryRepo.findByName(
-      repositoryName,
-      branch
-    );
-    if (!repository) {
-      return [];
+    branch: string,
+    componentData: {
+      yaml_id: string;
+      name: string;
+      kind?: string;
+      status?: "active" | "deprecated" | "planned";
+      depends_on?: string[];
     }
-    return this.ruleRepo.getActiveRules(String(repository.id!), branch);
+  ): Promise<Component | null> {
+    return componentOps.upsertComponentOp(
+      repositoryName,
+      branch,
+      componentData,
+      this.repositoryRepo,
+      this.componentRepo
+    );
+  }
+
+  async upsertDecision(
+    repositoryName: string,
+    branch: string,
+    decisionData: {
+      yaml_id: string;
+      name: string;
+      date: string;
+      context?: string;
+    }
+  ): Promise<Decision | null> {
+    return decisionOps.upsertDecisionOp(
+      repositoryName,
+      branch,
+      decisionData,
+      this.repositoryRepo,
+      this.decisionRepo
+    );
   }
 
   /**
-   * Export memory bank as YAML files
-   * Returns an object with file paths and content
+   * Export memory bank for a repository to YAML files
    */
   async exportMemoryBank(
     repositoryName: string,
     branch: string = "main"
   ): Promise<Record<string, string>> {
-    const repository = await this.repositoryRepo.findByName(
+    return importExportOps.exportMemoryBankOp(
       repositoryName,
-      branch
-    );
-    if (!repository) {
-      return {};
-    }
-
-    const files: Record<string, string> = {};
-    // Export metadata
-    const metadata = await this.metadataRepo.getMetadataForRepository(
-      String(repository.id!),
-      branch
-    );
-    if (metadata) {
-      files["memory/metadata.yaml"] =
-        this.yamlService.serializeMetadata(metadata);
-    }
-    // Export contexts
-    const contexts = await this.contextRepo.getLatestContexts(
-      String(repository.id!),
       branch,
-      1000
-    ); // Use a large limit for export
-    for (const context of contexts) {
-      files[`memory/context/${context.yaml_id}.yaml`] =
-        this.yamlService.serializeContext(context);
-    }
-    // Export components
-    const components = await this.componentRepo.getActiveComponents(
-      String(repository.id!)
+      this.repositoryRepo,
+      this.metadataRepo,
+      this.contextRepo,
+      this.componentRepo,
+      this.decisionRepo,
+      this.ruleRepo,
+      this.yamlService
     );
-    for (const component of components) {
-      files[`memory/graph/components/${component.yaml_id}.yaml`] =
-        this.yamlService.serializeComponent(component);
-    }
-    // Export decisions
-    const decisions = await this.decisionRepo.getDecisionsByDateRange(
-      String(repository.id!),
-      "1900-01-01",
-      "2100-01-01",
-      branch
-    );
-    for (const decision of decisions) {
-      files[`memory/graph/decisions/${decision.yaml_id}.yaml`] =
-        this.yamlService.serializeDecision(decision);
-    }
-    // Export rules
-    const rules = await this.ruleRepo.getActiveRules(
-      String(repository.id!),
-      branch
-    );
-    for (const rule of rules) {
-      files[`memory/graph/rules/${rule.yaml_id}.yaml`] =
-        this.yamlService.serializeRule(rule);
-    }
-    return files;
   }
 
   /**
-   * Import memory bank from YAML content
+   * Import memory bank for a repository from YAML files
    */
   async importMemoryBank(
     repositoryName: string,
@@ -484,83 +378,20 @@ export class MemoryService {
     id: string,
     branch: string = "main"
   ): Promise<boolean> {
-    const repository = await this.getOrCreateRepository(repositoryName, branch);
-    if (!repository) {
-      return false;
-    }
-    try {
-      const { data } = this.yamlService.parseYaml(yamlContent);
-
-      switch (type) {
-        case "metadata":
-          await this.metadataRepo.upsertMetadata({
-            repository: String(repository.id!),
-            yaml_id: id,
-            name: repositoryName,
-            content: data,
-            branch,
-          });
-          break;
-
-        case "context":
-          await this.contextRepo.upsertContext({
-            repository: String(repository.id!),
-            yaml_id: id,
-            iso_date: data.iso_date,
-            agent: data.agent,
-            related_issue: data.related_issue,
-            summary: data.summary,
-            decisions: data.decisions,
-            observations: data.observations,
-            branch,
-          });
-          break;
-
-        case "component":
-          await this.componentRepo.upsertComponent({
-            repository: String(repository.id!),
-            yaml_id: id,
-            name: data.name,
-            kind: data.kind,
-            depends_on: data.depends_on,
-            status: data.status || "active",
-            branch,
-          });
-          break;
-
-        case "decision":
-          await this.decisionRepo.upsertDecision({
-            repository: String(repository.id!),
-            yaml_id: id,
-            name: data.name,
-            context: data.context,
-            date: data.date,
-            branch,
-          });
-          break;
-
-        case "rule":
-          await this.ruleRepo.upsertRule({
-            repository: String(repository.id!),
-            yaml_id: id,
-            name: data.name,
-            created: data.created,
-            triggers: data.triggers,
-            content: data.content,
-            status: data.status || "active",
-            branch,
-          });
-          break;
-
-        default:
-          return false;
-      }
-
-      return true;
-    } catch (error) {
-      console.error("Error importing memory bank:", error);
-      return false;
-    }
+    return importExportOps.importMemoryBankOp(
+      repositoryName,
+      branch,
+      yamlContent,
+      type,
+      id,
+      this.repositoryRepo,
+      this.metadataRepo,
+      this.contextRepo,
+      this.componentRepo,
+      this.decisionRepo,
+      this.ruleRepo,
+      this.yamlService
+    );
   }
 
   /**
@@ -571,9 +402,168 @@ export class MemoryService {
     branch: string,
     componentId: string
   ): Promise<Component[]> {
-    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
-    if (!repository) return [];
-    const componentRepo = await ComponentRepository.getInstance();
-    return componentRepo.getComponentDependencies(String(repository.id!), componentId);
+    return componentOps.getComponentDependenciesOp(
+      repositoryName,
+      branch,
+      componentId,
+      this.repositoryRepo,
+      this.componentRepo
+    );
+  }
+
+  // Placeholder for getComponentDependents - to be implemented via componentOps
+  async getComponentDependents(
+    repositoryName: string,
+    branch: string,
+    componentId: string
+  ): Promise<Component[]> {
+    return componentOps.getComponentDependentsOp(
+      repositoryName,
+      branch,
+      componentId,
+      this.repositoryRepo,
+      this.componentRepo
+    );
+  }
+
+  // Placeholder for getItemContextualHistory - to be implemented via graphOps
+  async getItemContextualHistory(
+    repositoryName: string,
+    branch: string,
+    itemId: string
+  ): Promise<any> {
+    return graphOps.getItemContextualHistoryOp(
+      repositoryName,
+      branch,
+      itemId,
+      this.repositoryRepo,
+      this.componentRepo // Or other relevant repos
+    );
+  }
+
+  // Placeholder for getGoverningItemsForComponent - to be implemented via graphOps
+  async getGoverningItemsForComponent(
+    repositoryName: string,
+    branch: string,
+    componentId: string
+  ): Promise<any> {
+    return graphOps.getGoverningItemsForComponentOp(
+      repositoryName,
+      branch,
+      componentId,
+      this.repositoryRepo,
+      this.componentRepo // Or other relevant repos
+    );
+  }
+
+  // Placeholder for getRelatedItems - to be implemented via graphOps
+  async getRelatedItems(
+    repositoryName: string,
+    branch: string,
+    itemId: string,
+    params: { relationshipTypes?: string[]; depth?: number; direction?: string }
+  ): Promise<any> {
+    return graphOps.getRelatedItemsOp(
+      repositoryName,
+      branch,
+      itemId,
+      params,
+      this.repositoryRepo,
+      this.componentRepo // Or other relevant repos
+    );
+  }
+
+  // Placeholder for kCoreDecomposition - to be implemented via graphOps
+  async kCoreDecomposition(
+    repositoryName: string,
+    branch: string,
+    k?: number
+  ): Promise<any> {
+    return graphOps.kCoreDecompositionOp(
+      repositoryName,
+      branch,
+      k,
+      this.repositoryRepo,
+      this.componentRepo // Or a GraphRepository
+    );
+  }
+
+  // Placeholder for louvainCommunityDetection - to be implemented via graphOps
+  async louvainCommunityDetection(
+    repositoryName: string,
+    branch: string
+  ): Promise<any> {
+    return graphOps.louvainCommunityDetectionOp(
+      repositoryName,
+      branch,
+      this.repositoryRepo,
+      this.componentRepo // Or a GraphRepository
+    );
+  }
+
+  // Placeholder for pageRank - to be implemented via graphOps
+  async pageRank(
+    repositoryName: string,
+    branch: string,
+    dampingFactor?: number,
+    iterations?: number
+  ): Promise<any> {
+    return graphOps.pageRankOp(
+      repositoryName,
+      branch,
+      dampingFactor,
+      iterations,
+      this.repositoryRepo,
+      this.componentRepo // Or a GraphRepository
+    );
+  }
+
+  // Placeholder for stronglyConnectedComponents - to be implemented via graphOps
+  async stronglyConnectedComponents(
+    repositoryName: string,
+    branch: string
+  ): Promise<any> {
+    return graphOps.stronglyConnectedComponentsOp(
+      repositoryName,
+      branch,
+      this.repositoryRepo,
+      this.componentRepo // Or a GraphRepository
+    );
+  }
+
+  // Placeholder for weaklyConnectedComponents - to be implemented via graphOps
+  async weaklyConnectedComponents(
+    repositoryName: string,
+    branch: string
+  ): Promise<any> {
+    return graphOps.weaklyConnectedComponentsOp(
+      repositoryName,
+      branch,
+      this.repositoryRepo,
+      this.componentRepo // Or a GraphRepository
+    );
+  }
+
+  // Placeholder for shortestPath - to be implemented via graphOps
+  async shortestPath(
+    repositoryName: string,
+    branch: string,
+    startNodeId: string,
+    endNodeId: string,
+    params: {
+      relationshipTypes?: string[];
+      direction?: string;
+      algorithm?: string;
+    }
+  ): Promise<any> {
+    return graphOps.shortestPathOp(
+      repositoryName,
+      branch,
+      startNodeId,
+      endNodeId,
+      params,
+      this.repositoryRepo,
+      this.componentRepo // Or a GraphRepository
+    );
   }
 }
