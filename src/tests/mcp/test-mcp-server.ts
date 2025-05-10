@@ -41,7 +41,7 @@ async function startTestServer() {
       console.log('\nTest MCP endpoints with curl:');
       console.log(`  curl http://localhost:${port}/mcp/server`);
       console.log(`  curl http://localhost:${port}/mcp/tools`);
-      console.log(`  curl -X POST http://localhost:${port}/mcp/tools/init-memory-bank -H "Content-Type: application/json" -d '{"repository": "test-repo"}'`);
+      console.log(`  curl -X POST http://localhost:${port}/mcp/tools/init-memory-bank -H "Content-Type: application/json" -d '{"repository": "test-repo", "branch": "main"}'`);
     });
     
     // Handle graceful shutdown

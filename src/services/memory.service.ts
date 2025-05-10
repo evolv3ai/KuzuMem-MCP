@@ -218,9 +218,10 @@ export class MemoryService {
   async upsertComponent(
     repositoryName: string,
     componentId: string,
-    component: Omit<Component, 'repository_id' | 'yaml_id'>
+    component: Omit<Component, 'repository_id' | 'yaml_id'>,
+    branch: string = 'main'
   ): Promise<Component | null> {
-    const repository = await this.repositoryRepo.findByName(repositoryName);
+    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
     if (!repository) {
       return null;
     }
@@ -314,8 +315,8 @@ export class MemoryService {
    * Export memory bank as YAML files
    * Returns an object with file paths and content
    */
-  async exportMemoryBank(repositoryName: string): Promise<Record<string, string>> {
-    const repository = await this.repositoryRepo.findByName(repositoryName);
+  async exportMemoryBank(repositoryName: string, branch: string = 'main'): Promise<Record<string, string>> {
+    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
     if (!repository) {
       return {};
     }

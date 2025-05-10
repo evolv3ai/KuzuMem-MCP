@@ -70,7 +70,7 @@ export class MemoryMcpServer {
    */
   private handleInitMemoryBank = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { repository } = req.body;
+      const { repository, branch = 'main' } = req.body;
       
       if (!repository) {
         res.status(400).json({ 
@@ -80,11 +80,11 @@ export class MemoryMcpServer {
         return;
       }
       
-      await this.memoryService.initMemoryBank(repository);
+      await this.memoryService.initMemoryBank(repository, branch);
       
       res.json({
         success: true,
-        message: `Memory bank initialized for repository: ${repository}`
+        message: `Memory bank initialized for repository: ${repository} (branch: ${branch})`
       });
     } catch (error) {
       console.error('Error initializing memory bank:', error);
@@ -100,7 +100,7 @@ export class MemoryMcpServer {
    */
   private handleGetMetadata = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { repository } = req.body;
+      const { repository, branch = 'main' } = req.body;
       
       if (!repository) {
         res.status(400).json({ 
@@ -110,12 +110,12 @@ export class MemoryMcpServer {
         return;
       }
       
-      const metadata = await this.memoryService.getMetadata(repository);
+      const metadata = await this.memoryService.getMetadata(repository, branch);
       
       if (!metadata) {
         res.status(404).json({ 
           success: false, 
-          error: "Metadata not found" 
+          error: `Metadata not found for repository '${repository}' (branch: ${branch})` 
         });
         return;
       }
@@ -138,7 +138,7 @@ export class MemoryMcpServer {
    */
   private handleUpdateMetadata = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { repository, metadata } = req.body;
+      const { repository, metadata, branch = 'main' } = req.body;
       
       if (!repository || !metadata) {
         res.status(400).json({ 
@@ -148,12 +148,12 @@ export class MemoryMcpServer {
         return;
       }
       
-      const updatedMetadata = await this.memoryService.updateMetadata(repository, metadata);
+      const updatedMetadata = await this.memoryService.updateMetadata(repository, metadata, branch);
       
       if (!updatedMetadata) {
         res.status(404).json({ 
           success: false, 
-          error: "Failed to update metadata" 
+          error: `Failed to update metadata for repository '${repository}' (branch: ${branch})` 
         });
         return;
       }
@@ -176,7 +176,7 @@ export class MemoryMcpServer {
    */
   private handleGetContext = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { repository, latest, limit } = req.body;
+      const { repository, latest, limit, branch = 'main' } = req.body;
       
       if (!repository) {
         res.status(400).json({ 
@@ -187,12 +187,12 @@ export class MemoryMcpServer {
       }
       
       if (latest) {
-        const context = await this.memoryService.getTodayContext(repository);
+        const context = await this.memoryService.getTodayContext(repository, branch);
         
         if (!context) {
           res.status(404).json({ 
             success: false, 
-            error: "Context not found" 
+            error: `Context not found for repository '${repository}' (branch: ${branch})` 
           });
           return;
         }
@@ -203,7 +203,7 @@ export class MemoryMcpServer {
         });
       } else {
         const limitNum = limit ? parseInt(limit.toString()) : 10;
-        const contexts = await this.memoryService.getLatestContexts(repository, limitNum);
+        const contexts = await this.memoryService.getLatestContexts(repository, limitNum, branch);
         
         res.json({
           success: true,
@@ -224,7 +224,7 @@ export class MemoryMcpServer {
    */
   private handleUpdateContext = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { repository, agent, issue, summary, decision, observation } = req.body;
+      const { repository, agent, issue, summary, decision, observation, branch = 'main' } = req.body;
       
       if (!repository) {
         res.status(400).json({ 
@@ -235,12 +235,12 @@ export class MemoryMcpServer {
       }
       
       // Get current context
-      const context = await this.memoryService.getTodayContext(repository);
+      const context = await this.memoryService.getTodayContext(repository, branch);
       
       if (!context) {
         res.status(404).json({ 
           success: false, 
-          error: "Context not found" 
+          error: `Context not found for repository '${repository}' (branch: ${branch})` 
         });
         return;
       }
@@ -260,12 +260,12 @@ export class MemoryMcpServer {
         update.observations = [...(context.observations || []), observation];
       }
       
-      const updatedContext = await this.memoryService.updateTodayContext(repository, update);
+      const updatedContext = await this.memoryService.updateTodayContext(repository, update, branch);
       
       if (!updatedContext) {
         res.status(404).json({ 
           success: false, 
-          error: "Failed to update context" 
+          error: `Failed to update context for repository '${repository}' (branch: ${branch})` 
         });
         return;
       }
@@ -288,7 +288,7 @@ export class MemoryMcpServer {
    */
   private handleAddComponent = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { repository, id, name, kind, depends_on, status } = req.body;
+      const { repository, id, name, kind, depends_on, status, branch = 'main' } = req.body;
       
       if (!repository || !id || !name) {
         res.status(400).json({ 
@@ -305,12 +305,12 @@ export class MemoryMcpServer {
         status: status || 'active'
       };
       
-      const result = await this.memoryService.upsertComponent(repository, id, component);
+      const result = await this.memoryService.upsertComponent(repository, id, component, branch);
       
       if (!result) {
         res.status(404).json({ 
           success: false, 
-          error: "Failed to add component" 
+          error: `Failed to add component for repository '${repository}' (branch: ${branch})` 
         });
         return;
       }
@@ -333,7 +333,7 @@ export class MemoryMcpServer {
    */
   private handleAddDecision = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { repository, id, name, context, date } = req.body;
+      const { repository, id, name, context, date, branch = 'main' } = req.body;
       
       if (!repository || !id || !name || !date) {
         res.status(400).json({ 
@@ -349,12 +349,12 @@ export class MemoryMcpServer {
         date
       };
       
-      const result = await this.memoryService.upsertDecision(repository, id, decision);
+      const result = await this.memoryService.upsertDecision(repository, id, decision, branch);
       
       if (!result) {
         res.status(404).json({ 
           success: false, 
-          error: "Failed to add decision" 
+          error: `Failed to add decision for repository '${repository}' (branch: ${branch})` 
         });
         return;
       }
@@ -377,7 +377,7 @@ export class MemoryMcpServer {
    */
   private handleAddRule = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { repository, id, name, created, triggers, content, status } = req.body;
+      const { repository, id, name, created, triggers, content, status, branch = 'main' } = req.body;
       
       if (!repository || !id || !name || !created) {
         res.status(400).json({ 
@@ -395,12 +395,12 @@ export class MemoryMcpServer {
         status: status || 'active'
       };
       
-      const result = await this.memoryService.upsertRule(repository, id, rule);
+      const result = await this.memoryService.upsertRule(repository, id, rule, branch);
       
       if (!result) {
         res.status(404).json({ 
           success: false, 
-          error: "Failed to add rule" 
+          error: `Failed to add rule for repository '${repository}' (branch: ${branch})` 
         });
         return;
       }
@@ -423,7 +423,7 @@ export class MemoryMcpServer {
    */
   private handleExportMemoryBank = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { repository } = req.body;
+      const { repository, branch = 'main' } = req.body;
       
       if (!repository) {
         res.status(400).json({ 
@@ -433,7 +433,7 @@ export class MemoryMcpServer {
         return;
       }
       
-      const files = await this.memoryService.exportMemoryBank(repository);
+      const files = await this.memoryService.exportMemoryBank(repository, branch);
       
       res.json({
         success: true,
@@ -453,7 +453,7 @@ export class MemoryMcpServer {
    */
   private handleImportMemoryBank = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { repository, content, type, id } = req.body;
+      const { repository, content, type, id, branch = 'main' } = req.body;
       
       if (!repository || !content || !type || !id) {
         res.status(400).json({ 
@@ -473,19 +473,19 @@ export class MemoryMcpServer {
       }
       
       const memoryType = type as 'metadata' | 'context' | 'component' | 'decision' | 'rule';
-      const success = await this.memoryService.importMemoryBank(repository, content, memoryType, id);
+      const success = await this.memoryService.importMemoryBank(repository, content, memoryType, id, branch);
       
       if (!success) {
         res.status(400).json({ 
           success: false, 
-          error: "Failed to import memory bank" 
+          error: `Failed to import memory bank for repository '${repository}' (branch: ${branch})` 
         });
         return;
       }
       
       res.json({
         success: true,
-        message: "Memory bank imported successfully"
+        message: `Memory bank imported successfully for repository '${repository}' (branch: ${branch})`
       });
     } catch (error) {
       console.error('Error importing memory bank:', error);

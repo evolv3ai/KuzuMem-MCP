@@ -2,7 +2,7 @@ import { McpTool } from '../types';
 
 /**
  * Initialize Memory Bank Tool
- * Used to initialize a new memory bank for a repository
+ * Used to initialize a new memory bank for a repository with branch support
  */
 export const initMemoryBankTool: McpTool = {
   name: "init-memory-bank",
@@ -13,6 +13,10 @@ export const initMemoryBankTool: McpTool = {
       repository: {
         type: "string",
         description: "Repository name to initialize",
+      },
+      branch: {
+        type: "string",
+        description: "Branch name for repository isolation (default: 'main')",
       },
     },
     required: ["repository"],

@@ -67,35 +67,176 @@ jest.mock('../db/kuzu', () => {
   };
 });
 
-// Also mock the other repository dependencies
+// Also mock the other repository dependencies with branch-aware implementations
 jest.mock('../repositories/metadata.repository', () => ({
-  MetadataRepository: { getInstance: jest.fn().mockResolvedValue({ getMetadataForRepository: jest.fn().mockResolvedValue(null), upsertMetadata: jest.fn().mockResolvedValue({ content: {} }) }) }
-}));
-
-jest.mock('../repositories/context.repository', () => ({
-  ContextRepository: { getInstance: jest.fn().mockResolvedValue({}) }
-}));
-
-jest.mock('../repositories/component.repository', () => ({
-  ComponentRepository: { getInstance: jest.fn().mockResolvedValue({}) }
-}));
-
-jest.mock('../repositories/decision.repository', () => ({
-  DecisionRepository: { getInstance: jest.fn().mockResolvedValue({}) }
-}));
-
-jest.mock('../repositories/rule.repository', () => ({
-  RuleRepository: { getInstance: jest.fn().mockResolvedValue({}) }
+  MetadataRepository: { 
+    getInstance: jest.fn().mockResolvedValue({ 
+      getMetadataForRepository: jest.fn().mockResolvedValue(null), 
+      upsertMetadata: jest.fn().mockResolvedValue({ content: {} }) 
+    }) 
+  }
 }));
 
 jest.mock('../services/yaml.service', () => ({
-  YamlService: { getInstance: jest.fn().mockResolvedValue({}) }
+  YamlService: {
+    getInstance: jest.fn().mockResolvedValue({
+      serializeMetadata: jest.fn().mockReturnValue('metadata yaml'),
+      serializeContext: jest.fn().mockReturnValue('context yaml'),
+      serializeComponent: jest.fn().mockImplementation((component) => {
+        if (component.name && component.name.includes('Main')) {
+          return 'main branch component yaml';
+        } else if (component.name && component.name.includes('Feature')) {
+          return 'feature branch component yaml';
+        }
+        return 'default component yaml';
+      }),
+      serializeDecision: jest.fn().mockReturnValue('decision yaml'),
+      serializeRule: jest.fn().mockReturnValue('rule yaml'),
+      parseYaml: jest.fn().mockImplementation((yaml: string) => {
+        if (yaml.includes('component')) {
+          return { type: 'component', name: 'Test Component', data: {} };
+        }
+        if (yaml.includes('rule')) {
+          return { type: 'rule', name: 'Test Rule', data: {} };
+        }
+        if (yaml.includes('decision')) {
+          return { type: 'decision', name: 'Test Decision', data: {} };
+        }
+        if (yaml.includes('context')) {
+          return { type: 'context', name: 'Test Context', data: {} };
+        }
+        if (yaml.includes('metadata')) {
+          return { type: 'metadata', name: 'Test Metadata', data: {} };
+        }
+        return { type: 'unknown', data: {} };
+      })
+    })
+  }
 }));
+
+// Create stores for each repository type for more realistic testing
+const contextStore: any[] = [];
+const componentStore: any[] = [];
+const decisionStore: any[] = [];
+const ruleStore: any[] = [];
+
+jest.mock('../repositories/context.repository', () => ({
+  ContextRepository: { 
+    getInstance: jest.fn().mockResolvedValue({
+      getTodayContext: jest.fn().mockImplementation(async (repoId) => {
+        return contextStore.find(c => c.repository_id === repoId) || null;
+      }),
+      getLatestContexts: jest.fn().mockImplementation(async (repoId, limit = 10) => {
+        return contextStore.filter(c => c.repository_id === repoId).slice(0, limit);
+      }),
+      upsertContext: jest.fn().mockImplementation(async (context) => {
+        const existingIndex = contextStore.findIndex(c => 
+          c.repository_id === context.repository_id && c.yaml_id === context.yaml_id);
+        
+        if (existingIndex >= 0) {
+          contextStore[existingIndex] = { ...contextStore[existingIndex], ...context };
+          return contextStore[existingIndex];
+        }
+        
+        const newContext = { ...context, id: contextStore.length + 1 };
+        contextStore.push(newContext);
+        return newContext;
+      })
+    }) 
+  }
+}));
+
+jest.mock('../repositories/component.repository', () => ({
+  ComponentRepository: { 
+    getInstance: jest.fn().mockResolvedValue({
+      upsertComponent: jest.fn().mockImplementation(async (component) => {
+        const existingIndex = componentStore.findIndex(c => 
+          c.repository_id === component.repository_id && c.yaml_id === component.yaml_id);
+        
+        if (existingIndex >= 0) {
+          componentStore[existingIndex] = { ...componentStore[existingIndex], ...component };
+          return componentStore[existingIndex];
+        }
+        
+        const newComponent = { ...component, id: componentStore.length + 1 };
+        componentStore.push(newComponent);
+        return newComponent;
+      }),
+      getActiveComponents: jest.fn().mockImplementation(async (repoId) => {
+        return componentStore.filter(c => c.repository_id === repoId && c.status === 'active');
+      })
+    })
+  }
+}));
+
+jest.mock('../repositories/decision.repository', () => ({
+  DecisionRepository: { 
+    getInstance: jest.fn().mockResolvedValue({
+      upsertDecision: jest.fn().mockImplementation(async (decision) => {
+        const existingIndex = decisionStore.findIndex(d => 
+          d.repository_id === decision.repository_id && d.yaml_id === decision.yaml_id);
+        
+        if (existingIndex >= 0) {
+          decisionStore[existingIndex] = { ...decisionStore[existingIndex], ...decision };
+          return decisionStore[existingIndex];
+        }
+        
+        const newDecision = { ...decision, id: decisionStore.length + 1 };
+        decisionStore.push(newDecision);
+        return newDecision;
+      }),
+      getDecisionsByDateRange: jest.fn().mockImplementation(async (repoId, startDate, endDate) => {
+        return decisionStore.filter(d => d.repository_id === repoId);
+      })
+    })
+  }
+}));
+
+jest.mock('../repositories/rule.repository', () => ({
+  RuleRepository: { 
+    getInstance: jest.fn().mockResolvedValue({
+      upsertRule: jest.fn().mockImplementation(async (rule) => {
+        const existingIndex = ruleStore.findIndex(r => 
+          r.repository_id === rule.repository_id && r.yaml_id === rule.yaml_id);
+        
+        if (existingIndex >= 0) {
+          ruleStore[existingIndex] = { ...ruleStore[existingIndex], ...rule };
+          return ruleStore[existingIndex];
+        }
+        
+        const newRule = { ...rule, id: ruleStore.length + 1 };
+        ruleStore.push(newRule);
+        return newRule;
+      }),
+      getActiveRules: jest.fn().mockImplementation(async (repoId) => {
+        return ruleStore.filter(r => r.repository_id === repoId && r.status === 'active');
+      })
+    })
+  }
+}));
+
+const serializeComponentMock = jest.fn().mockImplementation((component) => {
+  if (component.name && component.name.includes('Main')) {
+    return 'main branch component yaml';
+  } else if (component.name && component.name.includes('Feature')) {
+    return 'feature branch component yaml';
+  }
+  return 'default component yaml';
+});
+
+// (rest of the file continues as before)
 
 describe('MemoryService KuzuDB Initialization', () => {
   let memoryService: MemoryService;
   
-  beforeAll(async () => {
+  beforeEach(async () => {
+    // Clear all stores before each test for isolation
+    repoStore.length = 0;
+    contextStore.length = 0;
+    componentStore.length = 0;
+    decisionStore.length = 0;
+    ruleStore.length = 0;
+    
     // Get a fresh instance with our mocked KuzuDB
     memoryService = await MemoryService.getInstance();
   });
@@ -132,6 +273,307 @@ describe('MemoryService KuzuDB Initialization', () => {
     // Both should have the same ID (same object)
     if (repo1 && repo2) {
       expect(repo1.id).toBe(repo2.id);
+    }
+  });
+  
+  it('should properly isolate repositories with different branches', async () => {
+    const repoName = 'multi-branch-repo';
+    const mainBranch = 'main';
+    const featureBranch = 'feature/new-feature';
+    
+    // Initialize both repositories with same name but different branches
+    await memoryService.initMemoryBank(repoName, mainBranch);
+    await memoryService.initMemoryBank(repoName, featureBranch);
+    
+    // Get both repositories
+    const mainRepo = await memoryService.getOrCreateRepository(repoName, mainBranch);
+    const featureRepo = await memoryService.getOrCreateRepository(repoName, featureBranch);
+    
+    // Both should exist but have different IDs
+    expect(mainRepo).toBeTruthy();
+    expect(featureRepo).toBeTruthy();
+    expect(mainRepo?.id).not.toBe(featureRepo?.id);
+    
+    // Branch properties should be set correctly
+    expect(mainRepo?.branch).toBe(mainBranch);
+    expect(featureRepo?.branch).toBe(featureBranch);
+  });
+});
+
+describe('MemoryService Branch-Aware Component Operations', () => {
+  let memoryService: MemoryService;
+  let mainRepo: Repository | null;
+  let featureRepo: Repository | null;
+  
+  beforeEach(async () => {
+    // Clear all stores before each test for isolation
+    repoStore.length = 0;
+    componentStore.length = 0;
+    
+    memoryService = await MemoryService.getInstance();
+    
+    // Setup test repositories with different branches
+    const repoName = 'component-test-repo';
+    await memoryService.initMemoryBank(repoName, 'main');
+    await memoryService.initMemoryBank(repoName, 'feature/component-test');
+    
+    mainRepo = await memoryService.getOrCreateRepository(repoName, 'main');
+    featureRepo = await memoryService.getOrCreateRepository(repoName, 'feature/component-test');
+  });
+  
+  it('should create components for different branches with isolation', async () => {
+    // Skip if repository setup failed
+    if (!mainRepo || !featureRepo) {
+      fail('Repository setup failed');
+      return;
+    }
+    
+    // Create a component in main branch
+    const mainComponent = await memoryService.upsertComponent(
+      mainRepo.name,
+      'shared-component',
+      { name: 'Shared Component', kind: 'service', status: 'active' },
+      'main'
+    );
+    
+    // Create a different component with same ID in feature branch
+    const featureComponent = await memoryService.upsertComponent(
+      featureRepo.name,
+      'shared-component',
+      { name: 'Modified Shared Component', kind: 'microservice', status: 'active' },
+      'feature/component-test'
+    );
+    
+    // Both should exist
+    expect(mainComponent).toBeTruthy();
+    expect(featureComponent).toBeTruthy();
+    
+    // But they should have different values despite same yaml_id
+    expect(mainComponent?.name).toBe('Shared Component');
+    expect(featureComponent?.name).toBe('Modified Shared Component');
+    expect(mainComponent?.kind).toBe('service');
+    expect(featureComponent?.kind).toBe('microservice');
+    
+    // They should be linked to different repositories
+    expect(mainComponent?.repository_id).toBe(mainRepo.id);
+    expect(featureComponent?.repository_id).toBe(featureRepo.id);
+  });
+});
+
+describe('MemoryService Branch-Aware Rules and Decisions', () => {
+  let memoryService: MemoryService;
+  let mainRepo: Repository | null;
+  let featureRepo: Repository | null;
+  
+  beforeEach(async () => {
+    // Clear all stores before each test for isolation
+    repoStore.length = 0;
+    ruleStore.length = 0;
+    decisionStore.length = 0;
+    
+    memoryService = await MemoryService.getInstance();
+    
+    // Setup test repositories with different branches
+    const repoName = 'rules-decisions-repo';
+    await memoryService.initMemoryBank(repoName, 'main');
+    await memoryService.initMemoryBank(repoName, 'feature/rules-test');
+    
+    mainRepo = await memoryService.getOrCreateRepository(repoName, 'main');
+    featureRepo = await memoryService.getOrCreateRepository(repoName, 'feature/rules-test');
+  });
+  
+  it('should handle rules with branch isolation', async () => {
+    // Skip if repository setup failed
+    if (!mainRepo || !featureRepo) {
+      fail('Repository setup failed');
+      return;
+    }
+    
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Create a rule in main branch
+    const mainRule = await memoryService.upsertRule(
+      mainRepo.name,
+      'important-rule',
+      { 
+        name: 'Important Rule', 
+        created: today, 
+        content: 'Follow this rule', 
+        status: 'active',
+        triggers: ['event1', 'event2']
+      },
+      'main'
+    );
+    
+    // Create a different rule with same ID in feature branch
+    const featureRule = await memoryService.upsertRule(
+      featureRepo.name,
+      'important-rule',
+      { 
+        name: 'Modified Rule', 
+        created: today, 
+        content: 'New implementation', 
+        status: 'active',
+        triggers: ['event3']
+      },
+      'feature/rules-test'
+    );
+    
+    // Both should exist with different content
+    expect(mainRule).toBeTruthy();
+    expect(featureRule).toBeTruthy();
+    expect(mainRule?.content).toBe('Follow this rule');
+    expect(featureRule?.content).toBe('New implementation');
+    
+    // Should be isolated by repository
+    expect(mainRule?.repository_id).toBe(mainRepo.id);
+    expect(featureRule?.repository_id).toBe(featureRepo.id);
+  });
+  
+  it('should handle decisions with branch isolation', async () => {
+    // Skip if repository setup failed
+    if (!mainRepo || !featureRepo) {
+      fail('Repository setup failed');
+      return;
+    }
+    
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Create a decision in main branch
+    const mainDecision = await memoryService.upsertDecision(
+      mainRepo.name,
+      'architecture-decision',
+      { 
+        name: 'Architecture Decision', 
+        date: today, 
+        context: 'We decided to use microservices'
+      },
+      'main'
+    );
+    
+    // Create a different decision with same ID in feature branch
+    const featureDecision = await memoryService.upsertDecision(
+      featureRepo.name,
+      'architecture-decision',
+      { 
+        name: 'Alternative Architecture', 
+        date: today, 
+        context: 'We decided to use monolith'
+      },
+      'feature/rules-test'
+    );
+    
+    // Both should exist with different content
+    expect(mainDecision).toBeTruthy();
+    expect(featureDecision).toBeTruthy();
+    expect(mainDecision?.name).toBe('Architecture Decision');
+    expect(featureDecision?.name).toBe('Alternative Architecture');
+    
+    // Should be isolated by repository
+    expect(mainDecision?.repository_id).toBe(mainRepo.id);
+    expect(featureDecision?.repository_id).toBe(featureRepo.id);
+  });
+});
+
+describe('MemoryService Export and Import with Branch Awareness', () => {
+  let memoryService: MemoryService;
+  
+  beforeEach(async () => {
+    // Clear all stores
+    repoStore.length = 0;
+    componentStore.length = 0;
+    decisionStore.length = 0;
+    ruleStore.length = 0;
+    
+    memoryService = await MemoryService.getInstance();
+  });
+  
+  it('should export memory bank with branch awareness', async () => {
+    // Initialize repos with different branches
+    const repoName = 'export-test-repo';
+    await memoryService.initMemoryBank(repoName, 'main');
+    await memoryService.initMemoryBank(repoName, 'feature/export-test');
+    
+    const mainRepo = await memoryService.getOrCreateRepository(repoName, 'main');
+    const featureRepo = await memoryService.getOrCreateRepository(repoName, 'feature/export-test');
+    
+    if (!mainRepo || !featureRepo) {
+      fail('Repository setup failed');
+      return;
+    }
+    
+    // Add some components to each branch
+    await memoryService.upsertComponent(repoName, 'component1', { name: 'Main Component', status: 'active' }, 'main');
+    await memoryService.upsertComponent(repoName, 'component1', { name: 'Feature Component', status: 'active' }, 'feature/export-test');
+    
+    // Export from main branch
+    const mainExport = await memoryService.exportMemoryBank(repoName, 'main');
+    
+    // Export from feature branch
+    const featureExport = await memoryService.exportMemoryBank(repoName, 'feature/export-test');
+    
+    // Both should have exported something
+    expect(Object.keys(mainExport).length).toBeGreaterThan(0);
+    expect(Object.keys(featureExport).length).toBeGreaterThan(0);
+    
+    // Different branches should result in different exports
+    expect(mainExport).not.toEqual(featureExport);
+  });
+  
+  it('should import memory bank with branch awareness', async () => {
+    // Initialize repos with different branches
+    const repoName = 'import-test-repo';
+    await memoryService.initMemoryBank(repoName, 'main');
+    await memoryService.initMemoryBank(repoName, 'feature/import-test');
+    
+    // Import component to main branch with proper structure including required fields
+    const mainImportSuccess = await memoryService.importMemoryBank(
+      repoName,
+      `component:
+        name: "Main Component"
+        status: "active"
+        kind: "service"`,
+      'component',
+      'imported-component',
+      'main'
+    );
+    
+    // Import component to feature branch with proper structure including required fields
+    const featureImportSuccess = await memoryService.importMemoryBank(
+      repoName,
+      `component:
+        name: "Feature Component"
+        status: "active"
+        kind: "library"`,
+      'component',
+      'imported-component',
+      'feature/import-test'
+    );
+    
+    // Both imports should succeed
+    expect(mainImportSuccess).toBe(true);
+    expect(featureImportSuccess).toBe(true);
+    
+    // Verify isolation by looking at the component store
+    const mainRepo = await memoryService.getOrCreateRepository(repoName, 'main');
+    const featureRepo = await memoryService.getOrCreateRepository(repoName, 'feature/import-test');
+    
+    if (!mainRepo || !featureRepo) {
+      fail('Repository setup failed');
+      return;
+    }
+    
+    const mainComponents = await memoryService.getActiveComponents(repoName, 'main');
+    const featureComponents = await memoryService.getActiveComponents(repoName, 'feature/import-test');
+    
+    // Should have components in both branches, but with different repositories
+    expect(mainComponents.length).toBeGreaterThan(0);
+    expect(featureComponents.length).toBeGreaterThan(0);
+    
+    // Different components should be in different repositories
+    if (mainComponents.length > 0 && featureComponents.length > 0) {
+      expect(mainComponents[0].repository_id).toBe(mainRepo.id);
+      expect(featureComponents[0].repository_id).toBe(featureRepo.id);
     }
   });
 });

@@ -266,12 +266,12 @@ export async function configureServer(app: express.Application): Promise<void> {
             switch (method) {
               case 'init-memory-bank':
                 if (!params || !params.repository) throw new Error('Missing repository parameter');
-                await memoryService.initMemoryBank(params.repository);
+                await memoryService.initMemoryBank(params.repository, params.branch ?? 'main');
                 result = { success: true, message: 'Memory bank initialized' };
                 break;
               case 'get-metadata':
                 if (!params || !params.repository) throw new Error('Missing repository parameter');
-                result = await memoryService.getMetadata(params.repository);
+                result = await memoryService.getMetadata(params.repository, params.branch ?? 'main');
                 if (!result) throw new Error('Metadata not found');
                 break;
               // Add more MCP methods as needed
@@ -311,12 +311,12 @@ export async function configureServer(app: express.Application): Promise<void> {
             switch (method) {
               case 'init-memory-bank':
                 if (!params || !params.repository) throw new Error('Missing repository parameter');
-                await memoryService.initMemoryBank(params.repository);
+                await memoryService.initMemoryBank(params.repository, params.branch ?? 'main');
                 result = { success: true, message: 'Memory bank initialized' };
                 break;
               case 'get-metadata':
                 if (!params || !params.repository) throw new Error('Missing repository parameter');
-                result = await memoryService.getMetadata(params.repository);
+                result = await memoryService.getMetadata(params.repository, params.branch ?? 'main');
                 if (!result) throw new Error('Metadata not found');
                 break;
               // Add more MCP methods as needed
