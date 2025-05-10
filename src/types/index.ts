@@ -13,6 +13,7 @@ export interface BaseEntity {
 export interface Repository {
   id?: number;
   name: string;
+  branch: string;
   created_at?: Date;
   updated_at?: Date;
 }

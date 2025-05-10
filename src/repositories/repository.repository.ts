@@ -1,30 +1,30 @@
-import { Knex } from "knex";
-import db from "../db";
+const { KuzuDBClient } = require("../db/kuzu");
 import { Repository } from "../types";
 import { Mutex } from "../utils/mutex";
 
 /**
  * Thread-safe implementation of the repository pattern using singleton
- * Following the user's best practices
+ * Migrated to KuzuDB and Cypher queries
  */
 export class RepositoryRepository {
-  private readonly db: Knex;
+  private conn: any;
   private static instance: RepositoryRepository;
   private static lock = new Mutex();
 
   private constructor() {
-    this.db = db;
+    // Initialize connection for compatibility, but use KuzuDBClient.executeQuery for all queries
+    this.conn = KuzuDBClient.getConnection();
   }
 
   static async getInstance(): Promise<RepositoryRepository> {
     // Acquire lock for thread safety
     const release = await RepositoryRepository.lock.acquire();
-    
+
     try {
       if (!RepositoryRepository.instance) {
         RepositoryRepository.instance = new RepositoryRepository();
       }
-      
+
       return RepositoryRepository.instance;
     } finally {
       // Always release the lock
@@ -32,48 +32,72 @@ export class RepositoryRepository {
     }
   }
 
-  async findById(id: number): Promise<Repository | null> {
-    const repository = await this.db("repositories").where({ id }).first();
-
-    return repository || null;
+  // Find repository by name and branch using Cypher
+  async findByName(name: string, branch: string = 'main'): Promise<Repository | null> {
+    const result = await KuzuDBClient.executeQuery(
+      "MATCH (r:Repository {name: $name, branch: $branch}) RETURN r LIMIT 1",
+      { name, branch }
+    );
+    if (!result || result.length === 0) return null;
+    // Map KuzuDB node to Repository type
+    const node = result[0].get("r");
+    return node
+      ? ({
+          name: node.name,
+          branch: node.branch,
+          id: node.id,
+          created_at: node.created_at,
+          updated_at: node.updated_at,
+        } as Repository)
+      : null;
   }
 
-  async findByName(name: string): Promise<Repository | null> {
-    const repository = await this.db("repositories").where({ name }).first();
-
-    return repository || null;
-  }
-
+  // Create a new repository node (requires branch)
+  /**
+   * Creates a new repository node (requires branch)
+   * Returns the created Repository or null if creation failed
+   */
   async create(
     repository: Omit<Repository, "id" | "created_at" | "updated_at">
-  ): Promise<Repository> {
-    const [id] = await this.db("repositories")
-      .insert({
-        ...repository,
-        updated_at: new Date(),
-      })
-      .returning("id");
-
-    return {
-      ...repository,
-      id,
-    };
+  ): Promise<Repository | null> {
+    const branch = repository.branch || 'main';
+    await KuzuDBClient.executeQuery(
+      "CREATE (r:Repository {name: $name, branch: $branch, created_at: datetime(), updated_at: datetime()}) RETURN r",
+      { name: repository.name, branch }
+    );
+    // Return the created repository
+    return this.findByName(repository.name, branch);
   }
 
+  // List all repositories, optionally filter by branch
+  async findAll(branch?: string): Promise<Repository[]> {
+    let result;
+    if (branch) {
+      result = await KuzuDBClient.executeQuery("MATCH (r:Repository {branch: $branch}) RETURN r", { branch });
+    } else {
+      result = await KuzuDBClient.executeQuery("MATCH (r:Repository) RETURN r");
+    }
+    if (!result) return [];
+    return result.map((row: any) => {
+      const node = row.get("r");
+      return {
+        name: node.name,
+        branch: node.branch,
+        id: node.id,
+        created_at: node.created_at,
+        updated_at: node.updated_at,
+      } as Repository;
+    });
+  }
+
+  // Not implemented: update and delete
   async update(id: number, repository: Partial<Repository>): Promise<void> {
-    await this.db("repositories")
-      .where({ id })
-      .update({
-        ...repository,
-        updated_at: new Date(),
-      });
+    // TODO: Implement Cypher update logic for Repository
+    throw new Error("Not implemented");
   }
 
   async delete(id: number): Promise<void> {
-    await this.db("repositories").where({ id }).delete();
-  }
-
-  async findAll(): Promise<Repository[]> {
-    return this.db("repositories").select("*");
+    // TODO: Implement Cypher delete logic for Repository
+    throw new Error("Not implemented");
   }
 }

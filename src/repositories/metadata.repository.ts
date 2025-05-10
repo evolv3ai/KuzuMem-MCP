@@ -1,53 +1,75 @@
 import { Metadata } from '../types';
-import { BaseRepository } from './base.repository';
 import { Mutex } from '../utils/mutex';
+const { KuzuDBClient } = require("../db/kuzu");
 
-export class MetadataRepository extends BaseRepository<Metadata> {
+/**
+ * Thread-safe singleton repository for Metadata, using KuzuDB and Cypher queries
+ */
+export class MetadataRepository {
   private static instance: MetadataRepository;
   private static lock = new Mutex();
+  private conn: any;
 
   private constructor() {
-    super('metadata');
+    this.conn = KuzuDBClient.getConnection();
   }
 
   static async getInstance(): Promise<MetadataRepository> {
-    // Acquire lock for thread safety
     const release = await MetadataRepository.lock.acquire();
-    
     try {
       if (!MetadataRepository.instance) {
         MetadataRepository.instance = new MetadataRepository();
       }
-      
       return MetadataRepository.instance;
     } finally {
-      // Always release the lock
       release();
     }
   }
 
+  /**
+   * Get metadata node for a repository
+   */
   async getMetadataForRepository(repositoryId: number): Promise<Metadata | null> {
-    const result = await this.db(this.tableName)
-      .where({ repository_id: repositoryId })
-      .first();
-    
-    return result || null;
+    const result = await this.conn.query(
+      'MATCH (m:Metadata {repository_id: $repositoryId}) RETURN m LIMIT 1',
+      { repositoryId }
+    );
+    if (!result || result.length === 0) return null;
+    return result[0].get('m');
   }
 
-  // Creates or updates metadata for a repository (only one metadata per repository)
-  async upsertMetadata(metadata: Metadata): Promise<Metadata> {
+  /**
+   * Creates or updates metadata for a repository (only one metadata per repository)
+   */
+  /**
+ * Creates or updates metadata for a repository (only one metadata per repository)
+ * Returns the upserted Metadata or null if not found
+ */
+async upsertMetadata(metadata: Metadata): Promise<Metadata | null> {
     const existing = await this.getMetadataForRepository(metadata.repository_id);
-    
     if (existing) {
-      await this.update(existing.id!, {
-        content: metadata.content
-      });
+      await this.conn.query(
+        'MATCH (m:Metadata {repository_id: $repository_id}) SET m.content = $content RETURN m',
+        {
+          repository_id: metadata.repository_id,
+          content: metadata.content
+        }
+      );
       return {
         ...existing,
         content: metadata.content
       };
     } else {
-      return this.create(metadata);
+      await this.conn.query(
+        'CREATE (m:Metadata {repository_id: $repository_id, content: $content}) RETURN m',
+        {
+          repository_id: metadata.repository_id,
+          content: metadata.content
+        }
+      );
+      // Return the newly created metadata
+      return this.getMetadataForRepository(metadata.repository_id);
     }
   }
 }
+
