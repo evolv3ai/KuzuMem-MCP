@@ -1,0 +1,17 @@
+{
+  "name": "mcp-http-streaming-examples",
+  "version": "1.0.0",
+  "description": "Example clients for the MCP HTTP Streaming Server",
+  "main": "http-stream-client.js",
+  "scripts": {
+    "start": "node http-stream-client.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "eventsource": "^2.0.2",
+    "node-fetch": "^2.6.7",
+    "readline": "^1.3.0"
+  }
+}
