@@ -50,7 +50,7 @@ HTTP_STREAM_PORT=3001           # For the MCP HTTP Streaming Server
 HOST=localhost
 
 # Debug Logging for MCP Servers (0=Error, 1=Warn, 2=Info, 3=Debug, 4=Trace)
-DEBUG=1 
+DEBUG=1
 ```
 
 ## Usage

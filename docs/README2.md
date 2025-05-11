@@ -82,7 +82,7 @@ $ curl -X POST http://localhost:3000/tools/get-governing-items-for-component \
 # Results include decisions, rules and when/why they were made
 {
   "decisions": [
-    {"id": "dec-20250315-GDPR", "name": "GDPR Compliance Strategy", "date": "2025-03-15", "context": "EU regulations required ..."}, 
+    {"id": "dec-20250315-GDPR", "name": "GDPR Compliance Strategy", "date": "2025-03-15", "context": "EU regulations required ..."},
     {"id": "dec-20250401-Caching", "name": "Profile Data Caching Policy", "date": "2025-04-01", "context": "Performance issues in production..."}
   ],
   "rules": [
@@ -197,7 +197,7 @@ The foundation of the Advanced Memory Bank's capabilities is its graph-based dat
 flowchart TD
   classDef pk fill:#f96,stroke:#333,stroke-width:2px
   classDef branchPoint fill:#bbdefb,stroke:#333,stroke-width:2px
-  
+
   Repository["Repository[PK] id: name + ':' + branchname: STRING branch: STRING created_at: TIMESTAMP updated_at: TIMESTAMP"]
   Metadata["Metadata[PK] yaml_id: STRING name: STRING content: STRING created_at: TIMESTAMP updated_at: TIMESTAMP"]
   Context["Context[PK] yaml_id: STRING name: STRING summary: STRING created_at: TIMESTAMP updated_at: TIMESTAMP"]
@@ -208,7 +208,7 @@ flowchart TD
   subgraph "Branch Isolation Mechanism"
     BranchA["Repository[PK] id: 'repo1:main' name: 'repo1' branch: 'main'"]
     BranchB["Repository[PK] id: 'repo1:feature' name: 'repo1' branch: 'feature'"]
-    BranchA -.-> MetadataA["Metadata for main branch"] 
+    BranchA -.-> MetadataA["Metadata for main branch"]
     BranchB -.-> MetadataB["Metadata for feature branch"]
   end
 
@@ -217,7 +217,7 @@ flowchart TD
   Repository -- "HAS_COMPONENT(Branch-isolated via Repository.id)" --> Component
   Repository -- "HAS_DECISION(Branch-isolated via Repository.id)" --> Decision
   Repository -- "HAS_RULE(Branch-isolated via Repository.id)" --> Rule
-  
+
   Component -- "DEPENDS_ON(Component dependency)" --> Component
   Context -- "CONTEXT_OF(Links context to component)" --> Component
   Context -- "CONTEXT_OF_DECISION(Links context to decision)" --> Decision
@@ -231,14 +231,16 @@ flowchart TD
 ### Key Schema Design Elements
 
 1. **Branch-Aware Repository Nodes**
+
    - Repository nodes use a synthetic primary key (`id = name + ':' + branch`)
    - This enables complete isolation of memory between branches
    - All operations filter by both repository name and branch
 
 2. **Rich Relationship Types**
-   - **HAS_* relationships** - Connect repositories to memory entities
+
+   - **HAS\_\* relationships** - Connect repositories to memory entities
    - **DEPENDS_ON** - Track component dependencies (self-referential)
-   - **CONTEXT_OF*** - Link context to components, decisions, and rules
+   - **CONTEXT_OF\*** - Link context to components, decisions, and rules
    - **DECISION_ON** - Connect decisions to affected components
 
 3. **Graph Traversal Capabilities**

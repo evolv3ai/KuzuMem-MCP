@@ -7,10 +7,7 @@ module.exports = {
     ecmaVersion: 2022,
   },
   plugins: ['@typescript-eslint/eslint-plugin', 'prettier'],
-  extends: [
-    'plugin:@typescript-eslint/recommended',
-    'plugin:prettier/recommended',
-  ],
+  extends: ['plugin:@typescript-eslint/recommended', 'plugin:prettier/recommended'],
   root: true,
   env: {
     node: true,
@@ -22,20 +19,23 @@ module.exports = {
     '@typescript-eslint/explicit-function-return-type': 'warn',
     '@typescript-eslint/explicit-module-boundary-types': 'warn',
     '@typescript-eslint/no-explicit-any': 'warn',
-    '@typescript-eslint/no-unused-vars': ['warn', { 
-      'argsIgnorePattern': '^_',
-      'varsIgnorePattern': '^_' 
-    }],
+    '@typescript-eslint/no-unused-vars': [
+      'warn',
+      {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+      },
+    ],
     'prettier/prettier': 'error',
     'no-console': ['warn', { allow: ['warn', 'error', 'info'] }],
     'no-var': 'error',
     'prefer-const': 'error',
-    'no-multiple-empty-lines': ['error', { 'max': 1, 'maxEOF': 1 }],
+    'no-multiple-empty-lines': ['error', { max: 1, maxEOF: 1 }],
     'no-trailing-spaces': 'error',
-    'quotes': ['error', 'single', { 'avoidEscape': true, 'allowTemplateLiterals': true }],
-    'semi': ['error', 'always'],
+    quotes: ['error', 'single', { avoidEscape: true, allowTemplateLiterals: true }],
+    semi: ['error', 'always'],
     'arrow-parens': ['error', 'always'],
-    'eqeqeq': ['error', 'always'],
-    'curly': ['error', 'all'],
+    eqeqeq: ['error', 'always'],
+    curly: ['error', 'all'],
   },
 };
