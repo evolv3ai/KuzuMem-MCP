@@ -1,23 +1,23 @@
 # Advanced Memory Bank MCP Tool
 
-A TypeScript implementation of a distributed memory bank as an MCP (Model Context Protocol) tool, storing memories in a **KùzuDB graph database** with repository and branch filtering capabilities. Branch isolation enables using a centralized memory bank for all repositories, while still allowing each repository to have its own branch-specific memories. Fully compliant with MCP specification for seamless integration with IDEs and AI agents.
+A TypeScript implementation of a distributed memory bank as an MCP (Model Context Protocol) tool, storing memories in a **KùzuDB graph database** with repository and branch filtering capabilities. Branch isolation is achieved by using a graph-unique identifier for entities, enabling a centralized memory bank while allowing repository-specific and branch-specific views. Fully compliant with MCP specification for seamless integration with IDEs and AI agents.
 
 ## Features
 
 - **Thread-Safe Singleton Pattern** - Ensures each resource is instantiated only once, with proper thread safety
 - **Distributed YAML Structure** - Follows the advanced memory bank specification
-- **Repository & Branch Filtering** - All operations are isolated by repository name and branch
+- **Repository & Branch Awareness** - All operations are contextualized by repository name and branch, with entities uniquely identified by a composite key (`repositoryName:branchName:itemId`).
 - **Asynchronous Operations** - Uses async/await for better performance
 - **Both API & CLI** - Access via REST API (MCP-compliant POST endpoints) or command line
 - **KùzuDB Backend** - Utilizes KùzuDB for graph-based memory storage and querying.
 - **Fully MCP Compliant** - All tools follow the Model Context Protocol for IDE integration
 - **Modular Architecture** - Clear separation between MCP servers, service layer, memory operations, and repositories.
 - **MCP/JSON-RPC Communication** - Supports HTTP, HTTP Streaming, and stdio communication for versatile integration
-- **New Graph & Traversal Tools** - Includes tools for dependency analysis, pathfinding, and (placeholders for) graph algorithms.
+- **Graph & Traversal Tools** - Includes tools for dependency analysis, pathfinding, and graph algorithms.
 
 ## Documentation
 
-This README provides basic setup and usage information. For detailed documentation on architecture, advanced usage patterns, and graph database capabilities, please see [Extended Documentation](docs/README2.md).
+This README provides basic setup and usage information. For detailed documentation on architecture, advanced usage patterns, and graph database capabilities, please see [Extended Documentation](docs/graph-schema.md) and `graph-schema.md`.
 
 ## Installation
 
@@ -31,9 +31,6 @@ npm install
 
 # Build the project
 npm run build
-
-# KùzuDB setup is handled internally by the application.
-# Ensure KùzuDB is accessible if run as a separate server, or it will use an in-process/on-disk file.
 ```
 
 ## Configuration
@@ -77,76 +74,24 @@ DEBUG=1
 
 ## MCP Server Implementation
 
-This project implements the Model Context Protocol specification with three server types, all refactored to use a shared tool handling mechanism:
-
-### HTTP Server (`src/mcp/server.ts`)
-
-The standard server exposes MCP tool operations via dedicated POST endpoints (e.g., `/tools/init-memory-bank`, `/tools/get-component-dependencies`). It also serves general MCP metadata at `/server` and `/tools` (for tool listing).
-
-### HTTP Streaming Server (`src/mcp-httpstream-server.ts`)
-
-Implements the MCP protocol with HTTP streaming support via a unified `/mcp` endpoint, following the TypeScript SDK approach. Enables real-time feedback and progressive results for MCP clients that support it.
-
-### stdio Server (`src/mcp-stdio-server.ts`)
-
-A stdio-based implementation that follows JSON-RPC 2.0 for direct integration with AI tools and IDEs. This server was refactored to use a centralized tool handler for improved modularity.
-
 All server implementations support these MCP capabilities:
 
 - `initialize` - Protocol handshake and capability discovery.
-- `tools/list` - Discovery of available tools with full schema definitions (see `src/mcp/tools/index.ts` for the complete list).
+- `tools/list` - Discovery of available tools with full schema definitions.
 - `tools/call` (for stdio and http-stream unified endpoint) - Execution of any listed tool.
 - Dedicated HTTP POST endpoints for each tool (e.g., `/tools/<tool-name>`) in the main HTTP server.
 
-### Debug Logging
-
-Set the `DEBUG` environment variable (0-4) to control log verbosity for the MCP servers.
-
-### Using with Coding IDEs (Example: Windsurf)
-
-Register the `mcp-stdio-server.ts` with your IDE. Example configuration:
-
-```json
-{
-  "mcpServers": {
-    "advanced-memory-bank-mcp": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "ts-node",
-        "/absolute_path/to/advanced-memory-tool/src/mcp-stdio-server.ts" // or "/absolute_path/to/advanced-memory-tool/src/index.ts" or "/absolute_path/to/advanced-memory-tool/src/mcp-http-stream-server.ts"
-      ],
-      "env": {
-        "DB_FILENAME": "./memory-bank.kuzu",
-        "DEBUG": "1"
-      },
-      "transportType": "stdio" // or "http" or "http-stream"
-    }
-  }
-}
-```
-
-### Agent Rules for IDE Integration
-
-Custom rules in the `rules/` directory guide AI agents on leveraging the memory bank effectively.
-
 ### Using the CLI
 
-The CLI allows interaction with the memory bank. **Note**: CLI commands call `MemoryService` methods directly; ensure `branch` options are used where applicable if not defaulting to "main".
+The CLI allows interaction with the memory bank. **Note**: CLI commands generally require `repository` and `id` (logical item ID) arguments, and often a `branch` option.
 
 ```bash
 # Initialize a memory bank for a repository (defaults to main branch)
 npm run cli init my-repo
-# To specify a branch with tools that now require it via MemoryService:
-# (CLI needs updates to pass branch to all relevant service calls if not using default)
 
-# Example: Add a component (branch defaults to main in CLI definition)
+# Example: Add a component
 npm run cli add-component my-repo comp-AuthService -n "AuthService" -k "service" -b "feature-branch"
-
-# Other commands: export, import, add-context, add-decision, add-rule (see below)
 ```
-
-(Existing CLI commands like `export`, `import`, `add-context`, `add-decision`, `add-rule` are available. Their internal calls to `MemoryService` have been updated.)
 
 ### Using the API (HTTP MCP Server - `src/mcp/server.ts`)
 
@@ -156,34 +101,33 @@ The primary way to interact with tools is via specific POST endpoints on the HTT
 
 **Common Tool Parameters (in JSON request body)**:
 
-- `repository`: string (repository name)
-- `branch`: string (optional, defaults to "main" in most service calls)
+- `repository`: string (repository name, e.g., "my-project")
+- `branch`: string (optional, defaults to "main"; specifies the branch context for the item)
+- `id`: string (the logical/user-defined ID for the item, e.g., "comp-auth", "my-rule-001")
 
 **Tool Endpoints (POST requests):**
 
 - `/init-memory-bank` - Body: `{ "repository": "repo-name", "branch": "main" }`
-- `/get-metadata` - Body: `{ "repository": "repo-name", "branch": "main" }`
-- `/update-metadata` - Body: `{ "repository": "repo-name", "branch": "main", "metadata": { ... } }`
+- `/get-metadata` - Body: `{ "repository": "repo-name", "branch": "main" }` (Metadata logical ID is implicitly "meta")
+- `/update-metadata` - Body: `{ "repository": "repo-name", "branch": "main", "metadata": { "project": { "name": "New Name" } } }`
 - `/get-context` - Body: `{ "repository": "repo-name", "branch": "main", "latest": true/false, "limit": 10 }`
-- `/update-context` - Body: `{ "repository": "repo-name", "branch": "main", "summary": "...", ... }`
-- `/add-component` - Body: `{ "repository": "repo-name", "branch": "main", "id": "yaml_id", "name": "...", ... }`
-- `/add-decision` - Body: `{ "repository": "repo-name", "branch": "main", "id": "yaml_id", "name": "...", ... }`
-- `/add-rule` - Body: `{ "repository": "repo-name", "branch": "main", "id": "yaml_id", "name": "...", ... }`
+- `/update-context` - Body: `{ "repository": "repo-name", "branch": "main", "id": "context-YYYY-MM-DD", "summary": "...", ... }`
+- `/add-component` - Body: `{ "repository": "repo-name", "branch": "main", "id": "your-component-id", "name": "...", ... }`
+- `/add-decision` - Body: `{ "repository": "repo-name", "branch": "main", "id": "your-decision-id", "name": "...", ... }`
+- `/add-rule` - Body: `{ "repository": "repo-name", "branch": "main", "id": "your-rule-id", "name": "...", ... }`
 
-- **New Traversal & Graph Tools:**
-  - `/get-component-dependencies` - Body: `{ "repository", "branch"?, "componentId", "depth"? }`
-  - `/get-component-dependents` - Body: `{ "repository", "branch"?, "componentId", "depth"? }`
+- **Traversal & Graph Tools (parameters like `componentId`, `itemId`, `startNodeId` refer to the logical `id`):**
+  - `/get-component-dependencies` - Body: `{ "repository", "branch"?, "componentId" }`
+  - `/get-component-dependents` - Body: `{ "repository", "branch"?, "componentId" }`
   - `/get-item-contextual-history` - Body: `{ "repository", "branch"?, "itemId", "itemType": ("Component"|"Decision"|"Rule") }`
   - `/get-governing-items-for-component` - Body: `{ "repository", "branch"?, "componentId" }`
-  - `/get-related-items` - Body: `{ "repository", "branch"?, "itemId", "params": { "relationshipTypes"?, "depth"?, "direction"? } }`
+  - `/get-related-items` - Body: `{ "repository", "branch"?, "startItemId", "params": { "relationshipTypes"?, "depth"?, "direction"? } }`
   - `/shortest-path` - Body: `{ "repository", "branch"?, "startNodeId", "endNodeId", "params": { "relationshipTypes"?, "direction"? } }`
   - `/k-core-decomposition` - Body: `{ "repository", "branch"?, "k"? }`
   - `/louvain-community-detection` - Body: `{ "repository", "branch"? }`
   - `/pagerank` - Body: `{ "repository", "branch"?, "dampingFactor"?, "iterations"? }`
   - `/strongly-connected-components` - Body: `{ "repository", "branch"? }`
   - `/weakly-connected-components` - Body: `{ "repository", "branch"? }`
-
-(Note: The API layer previously mentioned in the README for direct entity manipulation like `/api/memory/repositories/:repository/components/:id` might be superseded or coexist with these MCP tool endpoints. The focus here is on MCP tool interaction.)
 
 ## Architecture
 
@@ -220,7 +164,6 @@ A new layer introduced to encapsulate specific business logic for groups of oper
 ### Service Layer
 
 - `MemoryService` - Core business logic, now acts as an orchestrator, delegating to Memory Operations Layer functions. Manages repository instances.
-- `YamlService` - Serialization/deserialization of YAML content.
 
 ### MCP Layer (`src/mcp/`)
 
@@ -238,13 +181,13 @@ Commander-based CLI with async operation support, interacting with `MemoryServic
 
 ## KùzuDB Graph Schema
 
-The memory bank now uses a graph structure in KùzuDB. Refer to `graph-schema.md` for the detailed node and relationship definitions, including a Mermaid diagram.
+The memory bank uses a graph structure in KùzuDB. Refer to `graph-schema.md` for the detailed node and relationship definitions.
 
 Key aspects:
 
 - **Nodes**: `Repository`, `Metadata`, `Context`, `Component`, `Decision`, `Rule`.
-- **Relationships**: `HAS_METADATA`, `HAS_CONTEXT`, `HAS_COMPONENT`, `HAS_DECISION`, `HAS_RULE`, `DEPENDS_ON`, `CONTEXT_OF`, `CONTEXT_OF_DECISION`, `CONTEXT_OF_RULE`, `DECISION_ON`.
-- `Repository` nodes use a synthetic primary key: `name + ':' + branch` for branch isolation.
+- **Primary Keys**: `Repository` nodes use `id` (format: `name:branch`). Other entities (`Metadata`, `Context`, `Component`, `Decision`, `Rule`) use a `graph_unique_id` (format: `repositoryName:itemBranch:logicalId`) as their `PRIMARY KEY` to ensure uniqueness across repositories and branches. They also store their logical `id` and `branch` as separate properties.
+- **Relationships**: Various `HAS_...` and semantic relationships like `DEPENDS_ON`, `CONTEXT_OF`, etc., link these nodes.
 
 ## License
 

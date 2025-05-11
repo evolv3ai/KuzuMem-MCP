@@ -6,6 +6,7 @@ import {
   componentSchema,
   decisionSchema,
   ruleSchema,
+  Rule,
 } from '../types';
 import { z } from 'zod';
 import { Mutex } from '../utils/mutex';
@@ -248,7 +249,7 @@ export class MemoryController {
       }
 
       const componentDataForService = {
-        yaml_id: id,
+        id: id,
         name: componentInput.name,
         kind: componentInput.kind,
         depends_on: componentInput.depends_on,
@@ -310,7 +311,7 @@ export class MemoryController {
       }
 
       const decisionDataForService = {
-        yaml_id: id,
+        id: id,
         name: decisionInput.name,
         context: decisionInput.context,
         date: decisionInput.date,
@@ -384,7 +385,7 @@ export class MemoryController {
       }
 
       const ruleDataForService = {
-        yaml_id: id,
+        id: id,
         name: ruleInput.name,
         created: ruleInput.created,
         triggers: ruleInput.triggers,
@@ -394,7 +395,7 @@ export class MemoryController {
 
       const updatedRule = await this.memoryService.upsertRule(
         repository,
-        ruleDataForService,
+        ruleDataForService as Rule,
         branch,
       );
 

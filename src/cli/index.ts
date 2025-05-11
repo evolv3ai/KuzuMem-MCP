@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { MemoryService } from '../services/memory.service';
+import { Rule } from '../types'; // Import Rule type
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -265,7 +266,7 @@ program
     try {
       const branch = (options.branch as string) || 'main';
       const componentDataForService = {
-        yaml_id: id,
+        id: id,
         name: options.name,
         kind: options.kind,
         depends_on: options.depends ? options.depends.split(',') : undefined,
@@ -293,7 +294,7 @@ program
     try {
       const branch = (options.branch as string) || 'main';
       const decisionDataForService = {
-        yaml_id: id,
+        id: id,
         name: options.name,
         context: options.context,
         date: options.date,
@@ -322,14 +323,14 @@ program
     try {
       const branch = options.branch || 'main';
       const ruleDataForService = {
-        yaml_id: id,
+        id: id,
         name: options.name,
         created: options.created,
         triggers: options.triggers ? options.triggers.split(',') : undefined,
         content: options.content,
         status: options.status as 'active' | 'deprecated',
       };
-      await memoryService.upsertRule(repository, ruleDataForService, branch);
+      await memoryService.upsertRule(repository, ruleDataForService as Rule, branch);
       console.log(`✅ Rule ${id} added to repository: ${repository} (branch: ${branch})`);
     } catch (error) {
       console.error('❌ Failed to add rule:', error);

@@ -6,7 +6,6 @@ import {
   DecisionRepository,
   RuleRepository,
 } from '../repositories';
-import { YamlService } from './yaml.service';
 import { Repository, Metadata, Context, Component, Decision, Rule, MemoryType } from '../types';
 import { Mutex } from '../utils/mutex';
 import { initializeKuzuDB } from '../db/kuzu';
@@ -32,7 +31,6 @@ export class MemoryService {
   private componentRepo!: ComponentRepository;
   private decisionRepo!: DecisionRepository;
   private ruleRepo!: RuleRepository;
-  private yamlService!: YamlService;
 
   private constructor() {}
 
@@ -61,7 +59,6 @@ export class MemoryService {
     this.componentRepo = await ComponentRepository.getInstance();
     this.decisionRepo = await DecisionRepository.getInstance();
     this.ruleRepo = await RuleRepository.getInstance();
-    this.yamlService = await YamlService.getInstance();
   }
 
   static async getInstance(): Promise<MemoryService> {
@@ -115,23 +112,18 @@ export class MemoryService {
    */
   async initMemoryBank(repositoryName: string, branch: string = 'main'): Promise<void> {
     const repository = await this.getOrCreateRepository(repositoryName, branch);
-    if (!repository) {
-      throw new Error('Repository not found');
+    if (!repository || !repository.id) {
+      throw new Error(`Repository ${repositoryName}:${branch} could not be found or created.`);
     }
-
-    // Check if metadata exists
-    const existingMetadata = await this.metadataRepo.getMetadataForRepository(
-      String(repository.id!),
-    );
+    const existingMetadata = await this.metadataRepo.findMetadata(repositoryName, branch, 'meta');
 
     if (!existingMetadata) {
-      // Create stub metadata using upsert
       const today = new Date().toISOString().split('T')[0];
       await this.metadataRepo.upsertMetadata({
-        repository: String(repository.id!),
-        yaml_id: 'meta',
+        repository: repository.id,
+        branch: branch,
+        id: 'meta',
         name: repositoryName,
-        branch,
         content: {
           id: 'meta',
           project: {
@@ -146,7 +138,7 @@ export class MemoryService {
           architecture: 'unknown',
           memory_spec_version: '3.0.0',
         },
-      });
+      } as Metadata);
     }
   }
 
@@ -196,25 +188,32 @@ export class MemoryService {
    */
   async updateTodayContext(
     repositoryName: string,
-    contextUpdate: Partial<Omit<Context, 'repository_id' | 'yaml_id' | 'iso_date'>>,
+    contextUpdate: Partial<Omit<Context, 'repository' | 'id' | 'iso_date' | 'branch'>>,
     branch: string = 'main',
   ): Promise<Context | null> {
     const repository = await this.repositoryRepo.findByName(repositoryName, branch);
-    if (!repository) {
+    if (!repository || !repository.id) {
+      console.warn(`Repository ${repositoryName}:${branch} not found in updateTodayContext.`);
       return null;
     }
-    const today = new Date().toISOString().split('T')[0];
-    const context = await this.contextRepo.getTodayContext(String(repository.id!), today);
+    const todayIsoDate = new Date().toISOString().split('T')[0];
+    const context = await this.contextRepo.getContextByDate(repositoryName, branch, todayIsoDate);
+
     if (!context) {
+      console.warn(
+        `No context found for ${repositoryName}:${branch} on ${todayIsoDate} to update.`,
+      );
       return null;
     }
 
     const updatedContextObject: Context = {
       ...context,
       ...contextUpdate,
-      repository: String(repository.id!),
-      branch: branch,
-      name: (contextUpdate as any).name || context.name,
+      name: contextUpdate.name || context.name,
+      summary: contextUpdate.summary || context.summary,
+      repository: context.repository,
+      branch: context.branch,
+      id: context.id,
     };
 
     const updated = await this.contextRepo.upsertContext(updatedContextObject);
@@ -229,8 +228,13 @@ export class MemoryService {
     branch: string = 'main',
     limit?: number,
   ): Promise<Context[]> {
+    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
+    if (!repository || !repository.id) {
+      console.warn(`Repository ${repositoryName}:${branch} not found in getLatestContexts.`);
+      return [];
+    }
     return contextOps.getLatestContextsOp(
-      repositoryName,
+      repository.id,
       branch,
       limit,
       this.repositoryRepo,
@@ -250,8 +254,8 @@ export class MemoryService {
     decision?: string;
     issue?: string;
     observation?: string;
+    id?: string;
   }): Promise<Context | null> {
-    // The params for updateContextOp are slightly different (repositoryName instead of repository)
     return contextOps.updateContextOp(
       { repositoryName: params.repository, ...params },
       this.repositoryRepo,
@@ -264,10 +268,16 @@ export class MemoryService {
    */
   async upsertRule(
     repositoryName: string,
-    rule: Omit<Rule, 'repository' | 'branch'>,
+    rule: Omit<Rule, 'repository' | 'branch' | 'id'> & { id: string },
     branch: string = 'main',
   ): Promise<Rule | null> {
-    return ruleOps.upsertRuleOp(repositoryName, branch, rule, this.repositoryRepo, this.ruleRepo);
+    return ruleOps.upsertRuleOp(
+      repositoryName,
+      branch,
+      rule as Rule,
+      this.repositoryRepo,
+      this.ruleRepo,
+    );
   }
 
   // Add new methods for tools, delegating to Ops
@@ -275,7 +285,7 @@ export class MemoryService {
     repositoryName: string,
     branch: string,
     componentData: {
-      yaml_id: string;
+      id: string;
       name: string;
       kind?: string;
       status?: 'active' | 'deprecated' | 'planned';
@@ -295,7 +305,7 @@ export class MemoryService {
     repositoryName: string,
     branch: string,
     decisionData: {
-      yaml_id: string;
+      id: string;
       name: string;
       date: string;
       context?: string;
@@ -328,8 +338,13 @@ export class MemoryService {
   }
 
   async getActiveComponents(repositoryName: string, branch: string = 'main'): Promise<Component[]> {
+    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
+    if (!repository || !repository.id) {
+      console.warn(`Repository ${repositoryName}:${branch} not found in getActiveComponents.`);
+      return [];
+    }
     return componentOps.getActiveComponentsOp(
-      repositoryName,
+      repository.id,
       branch,
       this.repositoryRepo,
       this.componentRepo,

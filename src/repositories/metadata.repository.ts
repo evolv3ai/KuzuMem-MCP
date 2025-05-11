@@ -1,6 +1,7 @@
 import { Metadata } from '../types';
 import { Mutex } from '../utils/mutex';
 import { KuzuDBClient } from '../db/kuzu';
+import { formatGraphUniqueId, parseGraphUniqueId } from '../utils/id.utils';
 
 /**
  * Thread-safe singleton repository for Metadata, using KuzuDB and Cypher queries
@@ -47,17 +48,22 @@ export class MetadataRepository {
   }
 
   /**
-   * Get metadata node for a repository
+   * Get metadata for a repository, branch, and metadata logical ID (usually 'meta').
+   * @param repositoryName The logical name of the repository (e.g., 'my-project').
+   * @param branch The branch for the metadata (e.g., 'main', 'dev').
+   * @param metadataId The logical ID of the metadata (typically 'meta').
    */
-  /**
-   * Get metadata node for a repository by synthetic id (id = name + ':' + branch)
-   */
-  async getMetadataForRepository(repositoryId: string): Promise<Metadata | null> {
-    const escapedRepoId = this.escapeStr(repositoryId);
-    const query = `MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_METADATA]->(m:Metadata) RETURN m LIMIT 1`;
-    console.error(
-      `E2E_DEBUG: MetadataRepository.getMetadataForRepository executing query: ${query}`,
-    );
+  async findMetadata(
+    repositoryName: string,
+    branch: string,
+    metadataId: string = 'meta',
+  ): Promise<Metadata | null> {
+    const graphUniqueId = formatGraphUniqueId(repositoryName, branch, metadataId);
+    const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
+
+    const query = `MATCH (m:Metadata {graph_unique_id: '${escapedGraphUniqueId}'}) RETURN m LIMIT 1`;
+    // console.error for query logging can be added if needed for debugging
+
     const result = await KuzuDBClient.executeQuery(query);
     if (!result || typeof result.getAll !== 'function') {
       return null;
@@ -66,63 +72,71 @@ export class MetadataRepository {
     if (!rows || rows.length === 0) {
       return null;
     }
-    return (rows[0].m ?? rows[0]['m'] ?? rows[0]) as Metadata;
+
+    const metadataData = rows[0].m ?? rows[0]['m'];
+    return {
+      ...metadataData,
+      id: metadataData.id, // Ensure logical id is mapped
+      graph_unique_id: undefined, // Do not expose internal DB PK
+    } as Metadata;
   }
 
   /**
-   * Creates or updates metadata for a repository (only one metadata per repository)
-   */
-  /**
-   * Creates or updates metadata for a repository (only one metadata per repository)
-   * Returns the upserted Metadata or null if not found
-   */
-  /**
-   * Creates or updates metadata for a repository (only one metadata per repository)
-   * Uses the synthetic repository id (id = name + ':' + branch)
+   * Creates or updates metadata for a repository.
+   * The input `metadata.repository` is the Repository node's PK (e.g., 'my-project:main').
+   * The `metadata.branch` is the branch this metadata applies to.
+   * The `metadata.id` is the logical ID (e.g., 'meta').
    */
   async upsertMetadata(metadata: Metadata): Promise<Metadata | null> {
-    const repositoryId = String(metadata.repository);
-    const escapedRepoId = this.escapeStr(repositoryId);
+    const repositoryNodeId = metadata.repository; // This is PK of Repository, e.g., 'my-project:main'
 
-    const existing = await this.getMetadataForRepository(repositoryId);
-    const nowIso = new Date().toISOString();
-    const kuzuTimestamp = nowIso.replace('T', ' ').replace('Z', ''); // Kuzu-specific timestamp
-
-    if (existing) {
-      const escapedContent = this.escapeJsonProp(metadata.content);
-      const escapedName = this.escapeStr(metadata.name);
-
-      const updateQuery = `
-         MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_METADATA]->(m:Metadata)
-         SET m.content = ${escapedContent}, m.name = '${escapedName}', m.updated_at = timestamp('${kuzuTimestamp}')
-         RETURN m`;
-      console.error(
-        `E2E_DEBUG: MetadataRepository.upsertMetadata (update) executing query: ${updateQuery}`,
+    // Extract the logical repository name from the Repository Node ID
+    const repoIdParts = repositoryNodeId.split(':');
+    if (repoIdParts.length < 2) {
+      // Ensure at least 'name' and 'branch' parts exist
+      throw new Error(
+        `Invalid repositoryNodeId format: ${repositoryNodeId}. Expected format 'repositoryName:repositoryBranch'.`,
       );
-      await KuzuDBClient.executeQuery(updateQuery);
-
-      const updatedMetadata = await this.getMetadataForRepository(repositoryId);
-      return updatedMetadata;
-    } else {
-      const escapedYamlId = this.escapeStr(metadata.yaml_id || 'meta');
-      const escapedName = this.escapeStr(metadata.name);
-      const escapedContent = this.escapeJsonProp(metadata.content);
-
-      const createQuery = `
-         MATCH (repo:Repository {id: '${escapedRepoId}'})
-         CREATE (repo)-[:HAS_METADATA]->(m:Metadata {
-           yaml_id: '${escapedYamlId}',
-           name: '${escapedName}',
-           content: ${escapedContent},
-           created_at: timestamp('${kuzuTimestamp}'),
-           updated_at: timestamp('${kuzuTimestamp}')
-         })
-         RETURN m`;
-      console.error(
-        `E2E_DEBUG: MetadataRepository.upsertMetadata (create) executing query: ${createQuery}`,
-      );
-      await KuzuDBClient.executeQuery(createQuery);
-      return this.getMetadataForRepository(repositoryId);
     }
+    const logicalRepositoryName = repoIdParts[0]; // Get the 'my-project' part
+    // const repositorysOwnBranch = repoIdParts[1]; // Branch of the repository node itself, if needed
+
+    const metadataBranch = metadata.branch; // Branch this specific metadata document pertains to
+    const logicalId = metadata.id || 'meta'; // Logical ID for this metadata (usually 'meta')
+
+    // graph_unique_id for Metadata is repoName (logical) : metadataBranch : metadataLogicalId
+    const graphUniqueId = formatGraphUniqueId(logicalRepositoryName, metadataBranch, logicalId);
+    const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
+
+    const escapedRepoNodeId = this.escapeStr(repositoryNodeId); // For MATCH (repo:Repository {id: ... })
+    const escapedName = this.escapeStr(metadata.name);
+    const escapedContent = this.escapeJsonProp(metadata.content);
+    const escapedMetadataBranch = this.escapeStr(metadataBranch);
+    const escapedLogicalId = this.escapeStr(logicalId);
+
+    const nowIso = new Date().toISOString();
+    const kuzuTimestamp = nowIso.replace('T', ' ').replace('Z', '');
+
+    const query = `
+      MATCH (repo:Repository {id: '${escapedRepoNodeId}'})
+      MERGE (m:Metadata {graph_unique_id: '${escapedGraphUniqueId}'})
+      ON CREATE SET
+        m.id = '${escapedLogicalId}',
+        m.name = '${escapedName}',
+        m.content = ${escapedContent},
+        m.branch = '${escapedMetadataBranch}',
+        m.created_at = timestamp('${kuzuTimestamp}'),
+        m.updated_at = timestamp('${kuzuTimestamp}')
+      ON MATCH SET
+        m.name = '${escapedName}',
+        m.content = ${escapedContent},
+        m.branch = '${escapedMetadataBranch}', 
+        m.updated_at = timestamp('${kuzuTimestamp}')
+      MERGE (repo)-[:HAS_METADATA]->(m)
+      RETURN m`;
+
+    await KuzuDBClient.executeQuery(query);
+    // When finding, use the logicalRepositoryName, the metadata's own branch, and its logicalId
+    return this.findMetadata(logicalRepositoryName, metadataBranch, logicalId);
   }
 }

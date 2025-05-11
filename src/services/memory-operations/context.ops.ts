@@ -4,7 +4,7 @@ import { Context } from '../../types';
 /**
  * Retrieves the latest context entries for a repository and branch.
  *
- * @param repositoryName - The name of the repository.
+ * @param repositoryNodeId - The node primary key of the repository.
  * @param branch - The branch of the repository.
  * @param limit - Optional limit for the number of context entries to return.
  * @param repositoryRepo - Instance of RepositoryRepository.
@@ -12,18 +12,13 @@ import { Context } from '../../types';
  * @returns A Promise resolving to an array of Context objects.
  */
 export async function getLatestContextsOp(
-  repositoryName: string,
+  repositoryNodeId: string,
   branch: string,
   limit: number | undefined,
   repositoryRepo: RepositoryRepository,
   contextRepo: ContextRepository,
 ): Promise<Context[]> {
-  const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
-    console.warn(`Repository not found: ${repositoryName}/${branch} in getLatestContextsOp`);
-    return [];
-  }
-  return contextRepo.getLatestContexts(String(repository.id!), limit);
+  return contextRepo.getLatestContexts(repositoryNodeId, branch, limit);
 }
 
 /**
@@ -42,18 +37,15 @@ export async function getTodayContextOp(
   repositoryRepo: RepositoryRepository,
   contextRepo: ContextRepository,
 ): Promise<Context | null> {
-  const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
-    console.warn(`Repository not found: ${repositoryName}/${branch} in getTodayContextOp`);
-    return null;
-  }
   const today = new Date().toISOString().split('T')[0];
-  return contextRepo.getTodayContext(String(repository.id!), today);
+  return contextRepo.getContextByDate(repositoryName, branch, today);
 }
 
+// Moved interface definition before its use
 interface UpdateContextOpParams {
   repositoryName: string;
   branch?: string;
+  id?: string; // Added optional logical id for the context
   name?: string;
   summary?: string;
   agent?: string;
@@ -71,13 +63,14 @@ interface UpdateContextOpParams {
  * @returns A Promise resolving to the updated or created Context object or null on failure.
  */
 export async function updateContextOp(
-  params: UpdateContextOpParams,
+  params: UpdateContextOpParams, // Now defined above
   repositoryRepo: RepositoryRepository,
   contextRepo: ContextRepository,
 ): Promise<Context | null> {
   const {
     repositoryName,
     branch = 'main',
+    id,
     name,
     summary,
     agent,
@@ -87,10 +80,6 @@ export async function updateContextOp(
   } = params;
 
   const repo = await repositoryRepo.findByName(repositoryName, branch);
-  console.error(
-    `DEBUG: context.ops.ts - After findByName - repositoryName: ${repositoryName}, branch: ${branch}, repo: ${JSON.stringify(repo)}, repo.id: ${repo ? repo.id : 'repo_is_null'}`,
-  );
-
   if (!repo || !repo.id) {
     console.warn(
       `Repository or Repository ID not found: ${repositoryName}:${branch} in updateContextOp. Repo was: ${JSON.stringify(repo)}`,
@@ -99,43 +88,33 @@ export async function updateContextOp(
   }
 
   const todayDateString = new Date().toISOString().split('T')[0];
-  const currentContext = await contextRepo.getTodayContext(String(repo.id), todayDateString);
+  const contextLogicalId = id || `context-${todayDateString}`;
 
-  const contextName = name || params.summary || `Context-${todayDateString}`;
+  const currentContext = await contextRepo.findByIdAndBranch(
+    repositoryName,
+    contextLogicalId,
+    branch,
+  );
+
+  const contextName = name || summary || contextLogicalId;
 
   if (!currentContext) {
-    const finalIsoDateForCreate = new Date().toISOString().split('T')[0];
-    console.error(
-      `DEBUG: context.ops.ts: finalIsoDateForCreate for new context = >>>${finalIsoDateForCreate}<<<`,
-    );
-    const repoIdForCreate = String(repo.id); // Explicitly get it here
-    console.error(
-      `DEBUG: context.ops.ts - CREATE path - repo.id for upsert: >>>${repoIdForCreate}<<<, typeof repo.id: ${typeof repo.id}`,
-    );
-    return contextRepo.upsertContext({
-      repository: repoIdForCreate,
+    const contextToCreate: Context = {
+      repository: repo.id,
       branch: branch,
-      yaml_id: `context-${finalIsoDateForCreate}`,
+      id: contextLogicalId,
       name: contextName,
-      iso_date: finalIsoDateForCreate,
+      iso_date: todayDateString,
       summary: summary || '',
       agent: agent,
       related_issue: issue,
       decisions: decision ? [decision] : [],
       observations: observation ? [observation] : [],
-    } as Context);
+    } as Context;
+    return contextRepo.upsertContext(contextToCreate);
   } else {
-    console.error(
-      `DEBUG: context.ops.ts: iso_date from existing context = >>>${currentContext.iso_date}<<<`,
-    );
-    const repoIdForUpdate = String(repo.id); // Explicitly get it here
-    console.error(
-      `DEBUG: context.ops.ts - UPDATE path - repo.id for upsert: >>>${repoIdForUpdate}<<<, typeof repo.id: ${typeof repo.id}`,
-    );
     const updatedData: Context = {
       ...currentContext,
-      repository: repoIdForUpdate,
-      branch: branch,
       name: contextName,
       summary: summary ?? currentContext.summary,
       agent: agent ?? currentContext.agent,
@@ -146,6 +125,10 @@ export async function updateContextOp(
       observations: observation
         ? Array.from(new Set([...(currentContext.observations || []), observation]))
         : currentContext.observations,
+      repository: currentContext.repository,
+      branch: currentContext.branch,
+      id: currentContext.id,
+      iso_date: currentContext.iso_date,
     };
     return contextRepo.upsertContext(updatedData);
   }

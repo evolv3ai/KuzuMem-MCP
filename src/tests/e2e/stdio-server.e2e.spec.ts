@@ -308,23 +308,23 @@ describe('MCP STDIO Server E2E Tests', () => {
   it('T_STDIO_002: should initialize a new memory bank (secondary check) and handle subsequent calls', async () => {
     const tempRepo = `${testRepository}-tempinit`;
     const params = { repository: tempRepo, branch: testBranch };
-    // This call is expected to fail because beforeAll already initialized a 'meta' PK.
+    // This call should now SUCCEED because graph_unique_id for metadata will be unique for the new repo.
     const response = await client.request('tools/call', {
       name: 'init-memory-bank',
       arguments: params,
     });
-    expect(response.error).toBeUndefined(); // RPC call itself should succeed
+    expect(response.error).toBeUndefined();
     expect(response.result).toBeDefined();
-    expect(response.result!.isError).toBe(true); // The tool call should report an error
+    expect(response.result!.isError).toBe(false); // Should NOT be an error
     expect(response.result!.content).toBeDefined();
     expect(response.result!.content[0]).toBeDefined();
     console.log(
-      'T_STDIO_002 raw response text (expected error):',
+      'T_STDIO_002 raw response text (expected success):',
       response.result!.content[0].text,
     );
     const toolResult = JSON.parse(response.result!.content[0].text);
-    expect(toolResult.error).toBeDefined();
-    expect(toolResult.error).toContain('Found duplicated primary key value meta');
+    expect(toolResult.success).toBe(true); // Expect success
+    expect(toolResult.message).toContain(`Memory bank initialized for ${tempRepo}`);
   });
 
   // Test for get-metadata after init
@@ -337,7 +337,7 @@ describe('MCP STDIO Server E2E Tests', () => {
     expect(response.error).toBeUndefined();
     const toolResult = JSON.parse(response.result!.content[0].text);
     expect(toolResult).toBeDefined();
-    expect(toolResult.yaml_id).toBe('meta');
+    expect(toolResult.id).toBe('meta');
     expect(toolResult.name).toBe(testRepository);
     const contentObject = JSON.parse(toolResult.content);
     expect(contentObject.project.name).toBe(testRepository);
@@ -546,6 +546,69 @@ describe('MCP STDIO Server E2E Tests', () => {
     });
   });
 
+  describe('Simplified Dependency Test', () => {
+    const primaryId = `dep-test-primary-${Date.now()}`;
+    const dependentId = `dep-test-dependent-${Date.now()}`;
+
+    beforeAll(async () => {
+      // Ensure repository is initialized (it should be from the main beforeAll)
+      // Create primary component
+      let response = await client.request('tools/call', {
+        name: 'add-component',
+        arguments: {
+          repository: testRepository,
+          branch: testBranch,
+          id: primaryId,
+          name: 'Dep Test Primary',
+          kind: 'lib',
+          status: 'active',
+        },
+      });
+      let toolResult = JSON.parse(response.result!.content[0].text);
+      expect(toolResult.success).toBe(true);
+
+      // Create dependent component
+      response = await client.request('tools/call', {
+        name: 'add-component',
+        arguments: {
+          repository: testRepository,
+          branch: testBranch,
+          id: dependentId,
+          name: 'Dep Test Dependent',
+          kind: 'service',
+          status: 'active',
+          depends_on: [primaryId],
+        },
+      });
+      toolResult = JSON.parse(response.result!.content[0].text);
+      expect(toolResult.success).toBe(true);
+      console.log(`SIMPLIFIED TEST: Finished creating ${dependentId} depending on ${primaryId}`);
+      // Add a small delay just in case of ultra-fast race condition, though unlikely with auto-commit
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    });
+
+    it('T_STDIO_simplified_get-component-dependencies: should retrieve dependency for the new dependent component', async () => {
+      const toolArgs = {
+        repository: testRepository,
+        branch: testBranch,
+        componentId: dependentId,
+      };
+      const response = await client.request('tools/call', {
+        name: 'get-component-dependencies',
+        arguments: toolArgs,
+      });
+      expect(response.error).toBeUndefined();
+      const toolResult = JSON.parse(response.result!.content[0].text) as Component[];
+      console.log(
+        `SIMPLIFIED TEST: Dependencies found for ${dependentId}:`,
+        JSON.stringify(toolResult),
+      );
+      expect(Array.isArray(toolResult)).toBe(true);
+      expect(toolResult.length).toBeGreaterThanOrEqual(1);
+      expect(toolResult.some((c) => c.id === primaryId)).toBe(true);
+    });
+  });
+
   describe('Traversal and Graph Tools (Initial Implementations)', () => {
     let dependentComponentId: string; // To be set after adding dependent component
 
@@ -597,7 +660,7 @@ describe('MCP STDIO Server E2E Tests', () => {
       const toolResult = JSON.parse(response.result!.content[0].text) as Component[];
       expect(Array.isArray(toolResult)).toBe(true);
       expect(toolResult.length).toBeGreaterThanOrEqual(1);
-      expect(toolResult.some((c) => c.yaml_id === testComponentId)).toBe(true);
+      expect(toolResult.some((c) => c.id === testComponentId)).toBe(true);
     });
 
     it('T_STDIO_get-component-dependents: should retrieve dependents for the primary component', async () => {
@@ -615,7 +678,7 @@ describe('MCP STDIO Server E2E Tests', () => {
       const toolResult = JSON.parse(response.result!.content[0].text) as Component[];
       expect(Array.isArray(toolResult)).toBe(true);
       expect(toolResult.length).toBeGreaterThanOrEqual(1);
-      expect(toolResult.some((c) => c.yaml_id === dependentComponentId)).toBe(true);
+      expect(toolResult.some((c) => c.id === dependentComponentId)).toBe(true);
     });
 
     it('T_STDIO_shortest-path: should find a shortest path between dependent and primary component', async () => {
@@ -626,7 +689,7 @@ describe('MCP STDIO Server E2E Tests', () => {
         branch: testBranch,
         startNodeId: dependentComponentId,
         endNodeId: testComponentId!,
-        projectedGraphName: 'sp_graph_components',
+        projectedGraphName: 'sp_graph_components_test',
         nodeTableNames: ['Component'],
         relationshipTableNames: ['DEPENDS_ON'],
         relationshipTypes: ['DEPENDS_ON'],
@@ -637,15 +700,18 @@ describe('MCP STDIO Server E2E Tests', () => {
         arguments: toolArgs,
       });
       expect(response.error).toBeUndefined();
-      const toolResult = JSON.parse(response.result!.content[0].text); // toolResult is an array of path objects, e.g. [ { _nodes: [], _rels: [] } ]
-      expect(Array.isArray(toolResult)).toBe(true);
-      expect(toolResult.length).toBeGreaterThanOrEqual(1);
-      const firstPathObject = toolResult[0];
-      expect(firstPathObject).toBeDefined();
-      expect(firstPathObject).toHaveProperty('_nodes');
-      expect(Array.isArray(firstPathObject._nodes)).toBe(true);
-      expect(firstPathObject._nodes.length).toBeGreaterThanOrEqual(2);
-      const pathNodeIds = firstPathObject._nodes.map((node: any) => node.yaml_id);
+      const toolResultPaths = JSON.parse(response.result!.content[0].text) as Component[][];
+      expect(Array.isArray(toolResultPaths)).toBe(true);
+      expect(toolResultPaths.length).toBeGreaterThanOrEqual(1);
+
+      const firstPathNodeArray = toolResultPaths[0];
+      expect(firstPathNodeArray).toBeDefined();
+      expect(Array.isArray(firstPathNodeArray)).toBe(true);
+      expect(firstPathNodeArray.length).toBeGreaterThanOrEqual(2);
+
+      const pathNodeIds = firstPathNodeArray.map((node: Component) => node.id);
+      expect(pathNodeIds[0]).toBe(dependentComponentId);
+      expect(pathNodeIds[pathNodeIds.length - 1]).toBe(testComponentId!);
       expect(pathNodeIds).toContain(dependentComponentId);
       expect(pathNodeIds).toContain(testComponentId!);
     });

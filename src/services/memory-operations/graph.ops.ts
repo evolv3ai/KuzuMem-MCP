@@ -17,28 +17,22 @@ import { Component, Context, Decision } from '../../types'; // Added Context and
 export async function kCoreDecompositionOp(
   repositoryName: string,
   branch: string,
-  k: number | undefined, // k might be optional
+  k: number | undefined,
   repositoryRepo: RepositoryRepository,
-  componentRepo: ComponentRepository, // Or a GraphRepository
+  componentRepo: ComponentRepository,
 ): Promise<any> {
   if (k === undefined || k < 0) {
-    // Or throw error, or default k. For now, returning error message.
-    return {
-      message: 'k parameter must be a non-negative number for kCoreDecompositionOp.',
-      nodes: [],
-    };
+    return { message: 'k parameter must be non-negative.', nodes: [], details: [] };
   }
   const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
-    console.warn(`Repository '${repositoryName}/${branch}' not found in kCoreDecompositionOp.`);
+  if (!repository || !repository.id) {
     return {
       message: `Repository '${repositoryName}/${branch}' not found.`,
       nodes: [],
+      details: [],
     };
   }
-  const repositoryId = String(repository.id!);
-
-  return componentRepo.kCoreDecomposition(repositoryId, k);
+  return componentRepo.kCoreDecomposition(repository.id, k);
 }
 
 /**
@@ -48,21 +42,13 @@ export async function louvainCommunityDetectionOp(
   repositoryName: string,
   branch: string,
   repositoryRepo: RepositoryRepository,
-  componentRepo: ComponentRepository, // Or a GraphRepository
+  componentRepo: ComponentRepository,
 ): Promise<any> {
   const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
-    console.warn(
-      `Repository '${repositoryName}/${branch}' not found in louvainCommunityDetectionOp.`,
-    );
-    return {
-      message: `Repository '${repositoryName}/${branch}' not found.`,
-      communities: [], // Match expected return structure on error
-    };
+  if (!repository || !repository.id) {
+    return { message: `Repository '${repositoryName}/${branch}' not found.`, communities: [] };
   }
-  const repositoryId = String(repository.id!);
-  // Call the actual repository method, assuming it's now implemented
-  return componentRepo.louvainCommunityDetection(repositoryId);
+  return componentRepo.louvainCommunityDetection(repository.id);
 }
 
 /**
@@ -79,18 +65,11 @@ export async function pageRankOp(
   componentRepo: ComponentRepository,
 ): Promise<any> {
   const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
-    console.warn(`Repository '${repositoryName}/${branch}' not found in pageRankOp.`);
-    // Return a structure consistent with what the repository method might return on error/empty
-    return {
-      message: `Repository '${repositoryName}/${branch}' not found.`,
-      ranks: [],
-    };
+  if (!repository || !repository.id) {
+    return { message: `Repository '${repositoryName}/${branch}' not found.`, ranks: [] };
   }
-  const repositoryId = String(repository.id!);
-
   return componentRepo.pageRank(
-    repositoryId,
+    repository.id,
     dampingFactor,
     iterations,
     tolerance,
@@ -104,22 +83,15 @@ export async function pageRankOp(
 export async function stronglyConnectedComponentsOp(
   repositoryName: string,
   branch: string,
-  maxIterations: number | undefined, // Added maxIterations
+  maxIterations: number | undefined,
   repositoryRepo: RepositoryRepository,
   componentRepo: ComponentRepository,
 ): Promise<any> {
   const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
-    console.warn(
-      `Repository '${repositoryName}/${branch}' not found in stronglyConnectedComponentsOp.`,
-    );
-    return {
-      message: `Repository '${repositoryName}/${branch}' not found.`,
-      components: [],
-    };
+  if (!repository || !repository.id) {
+    return { message: `Repository '${repositoryName}/${branch}' not found.`, components: [] };
   }
-  const repositoryId = String(repository.id!);
-  return componentRepo.getStronglyConnectedComponents(repositoryId, maxIterations);
+  return componentRepo.getStronglyConnectedComponents(repository.id, maxIterations);
 }
 
 /**
@@ -128,22 +100,15 @@ export async function stronglyConnectedComponentsOp(
 export async function weaklyConnectedComponentsOp(
   repositoryName: string,
   branch: string,
-  maxIterations: number | undefined, // Added maxIterations
+  maxIterations: number | undefined,
   repositoryRepo: RepositoryRepository,
   componentRepo: ComponentRepository,
 ): Promise<any> {
   const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
-    console.warn(
-      `Repository '${repositoryName}/${branch}' not found in weaklyConnectedComponentsOp.`,
-    );
-    return {
-      message: `Repository '${repositoryName}/${branch}' not found.`,
-      components: [],
-    };
+  if (!repository || !repository.id) {
+    return { message: `Repository '${repositoryName}/${branch}' not found.`, components: [] };
   }
-  const repositoryId = String(repository.id!);
-  return componentRepo.getWeaklyConnectedComponents(repositoryId, maxIterations);
+  return componentRepo.getWeaklyConnectedComponents(repository.id, maxIterations);
 }
 
 /**
@@ -151,31 +116,21 @@ export async function weaklyConnectedComponentsOp(
  */
 export async function shortestPathOp(
   repositoryName: string,
-  branch: string,
-  startNodeId: string,
-  endNodeId: string,
+  branch: string, // This branch is for startNode and endNode
+  startNodeId: string, // Logical ID
+  endNodeId: string, // Logical ID
   params: {
     relationshipTypes?: string[];
     direction?: 'OUTGOING' | 'INCOMING' | 'BOTH';
-    algorithm?: string;
   },
-  repositoryRepo: RepositoryRepository,
-  componentRepo: ComponentRepository, // Assumes componentRepo has findShortestPath
+  repositoryRepo: RepositoryRepository, // Not strictly needed if repo takes repositoryName directly
+  componentRepo: ComponentRepository,
 ): Promise<any[]> {
-  const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
-    console.warn(`Repository '${repositoryName}/${branch}' not found in shortestPathOp.`);
-    return [];
-  }
-  const repositoryId = String(repository.id!);
-
-  // Pass along the relationshipTypes and direction from params
-  // The 'algorithm' param is not directly used by ComponentRepository.findShortestPath in this design
-  // but could be used if findShortestPath supported different algorithms.
-  return componentRepo.findShortestPath(repositoryId, startNodeId, endNodeId, {
+  // ComponentRepository.findShortestPath expects (repositoryName, startNodeId, startNodeBranch, endNodeId, params)
+  // The 'branch' param here applies to both start and end node for path context.
+  return componentRepo.findShortestPath(repositoryName, startNodeId, branch, endNodeId, {
     relationshipTypes: params.relationshipTypes,
     direction: params.direction,
-    // algorithm: params.algorithm // Not passed to current repo method signature
   });
 }
 
@@ -184,34 +139,14 @@ export async function shortestPathOp(
  */
 export async function getItemContextualHistoryOp(
   repositoryName: string,
-  branch: string,
-  itemId: string,
+  branch: string, // Branch for the item and its contexts
+  itemId: string, // Logical ID
   itemType: 'Component' | 'Decision' | 'Rule',
-  repositoryRepo: RepositoryRepository,
-  componentRepo: ComponentRepository,
+  repositoryRepo: RepositoryRepository, // Not strictly needed
+  componentRepo: ComponentRepository, // ContextRepo should be used if history is for non-components
 ): Promise<Context[]> {
-  console.error(
-    `DEBUG: graph.ops.ts: getItemContextualHistoryOp received itemType = >>>${itemType}<<<`,
-  ); // Log received itemType
-
-  const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
-    console.warn(
-      `Repository '${repositoryName}/${branch}' not found in getItemContextualHistoryOp.`,
-    );
-    return [];
-  }
-  const repositoryId = String(repository.id!);
-
-  if (!itemType) {
-    // Defaulting or error handling if itemType is crucial and not provided by caller
-    console.warn('itemType not provided to getItemContextualHistoryOp, this might lead to issues.');
-    // Potentially throw new Error("itemType is required for getItemContextualHistoryOp");
-    // For now, if the repository method handles a missing/default itemType, this might be okay,
-    // but the repository method currently requires it.
-  }
-
-  return componentRepo.getItemContextualHistory(repositoryId, itemId, itemType, branch);
+  // ComponentRepository.getItemContextualHistory expects (repositoryName, itemId, itemBranch, itemType)
+  return componentRepo.getItemContextualHistory(repositoryName, itemId, branch, itemType);
 }
 
 /**
@@ -219,22 +154,13 @@ export async function getItemContextualHistoryOp(
  */
 export async function getGoverningItemsForComponentOp(
   repositoryName: string,
-  branch: string,
-  componentId: string, // This is yaml_id
-  repositoryRepo: RepositoryRepository,
-  componentRepo: ComponentRepository, // Using ComponentRepository
+  branch: string, // Branch of the component
+  componentId: string, // Logical ID
+  repositoryRepo: RepositoryRepository, // Not strictly needed
+  componentRepo: ComponentRepository,
 ): Promise<Decision[]> {
-  // Updated return type to Decision[]
-  const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
-    console.warn(
-      `Repository '${repositoryName}/${branch}' not found in getGoverningItemsForComponentOp.`,
-    );
-    return [];
-  }
-  const repositoryId = String(repository.id!);
-
-  return componentRepo.getGoverningItemsForComponent(repositoryId, componentId);
+  // ComponentRepository.getGoverningItemsForComponent expects (repositoryName, componentId, componentBranch)
+  return componentRepo.getGoverningItemsForComponent(repositoryName, componentId, branch);
 }
 
 /**
@@ -242,56 +168,24 @@ export async function getGoverningItemsForComponentOp(
  */
 export async function getRelatedItemsOp(
   repositoryName: string,
-  branch: string,
-  itemId: string, // This is the yaml_id of the starting component
+  branch: string, // Branch of the startItem and relatedItems
+  itemId: string, // Logical ID of the startItem
   params: {
     relationshipTypes?: string[];
     depth?: number;
     direction?: 'INCOMING' | 'OUTGOING' | 'BOTH';
   },
-  repositoryRepo: RepositoryRepository,
-  componentRepo: ComponentRepository, // Assumes componentRepo has getRelatedItems
+  repositoryRepo: RepositoryRepository, // Not strictly needed
+  componentRepo: ComponentRepository,
 ): Promise<Component[]> {
-  // Assuming it returns Component[] for now
-  // The repositoryId needed by componentRepo.getRelatedItems is resolved from repositoryName and branch by MemoryService or this Op.
-  // For now, assuming this Op is responsible if MemoryService doesn't pass repoId directly.
-  // However, the actual ComponentRepository.getRelatedItems takes repositoryId directly.
-  // So, MemoryService should resolve repositoryName/branch to repositoryId first, or this Op needs to.
-  // Let's assume for now this Op still needs to find the repository to get its ID if not passed directly.
-  // This is a common pattern in other Ops if they don't get repoId directly.
-
-  // Note: The repositoryRepo.findByName is not strictly needed here if componentRepo.getRelatedItems takes repositoryId directly
-  // and MemoryService already resolves repositoryName -> repositoryId.
-  // However, to be safe and consistent with how other Ops might work if they need to lookup repo details,
-  // keeping it. But the actual call to componentRepo.getRelatedItems uses repositoryId.
-  // The `MemoryService.getRelatedItems` will call this Op. It should pass the `repositoryId` it has already resolved.
-  // So, this Op should expect `repositoryId` instead of `repositoryName` and `branch` if we optimize.
-  // For now, sticking to the existing pattern of Ops taking `repositoryName` and `branch`.
-
   const { relationshipTypes, depth, direction } = params;
-
-  // The ComponentRepository.getRelatedItems expects repositoryId.
-  // This Op should have been called by MemoryService which would resolve repositoryName/branch to ID.
-  // Let's call componentRepo.getRelatedItems. If it needs repositoryId, the MemoryService should provide it.
-  // The current `graph.ops.ts` placeholders pass `componentRepo` from `MemoryService`.
-  // The `MemoryService.getRelatedItems` will have access to `this.repositoryRepo` to find the repo ID.
-
-  // Simplification: Assume MemoryService will resolve repoId and pass it or componentRepo is enhanced.
-  // The call from MemoryService to this Op would be like:
-  // graphOps.getRelatedItemsOp(repositoryName, branch, itemId, params, this.repositoryRepo, this.componentRepo)
-  // So, this Op has the means to get repositoryId IF NEEDED. Or it can rely on MemoryService to pass it.
-
-  // Based on ComponentRepository.getRelatedItems signature, it takes repositoryId.
-  // This Op should call it like that.
-  // MemoryService will call this with repositoryName, branch, etc.
-  // This Op will then find the repo to get ID to pass to componentRepo.getRelatedItems.
-
-  const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
-    console.warn(`Repository '${repositoryName}/${branch}' not found in getRelatedItemsOp.`);
-    return [];
-  }
-  const repositoryId = String(repository.id!);
-
-  return componentRepo.getRelatedItems(repositoryId, itemId, relationshipTypes, depth, direction);
+  // ComponentRepository.getRelatedItems expects (repositoryName, componentId, componentBranch, relTypes?, depth?, dir?)
+  return componentRepo.getRelatedItems(
+    repositoryName,
+    itemId,
+    branch,
+    relationshipTypes,
+    depth,
+    direction,
+  );
 }

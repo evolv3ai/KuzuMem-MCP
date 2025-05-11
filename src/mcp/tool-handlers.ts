@@ -95,7 +95,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
       throw serviceMethodNotFoundError('add-component', 'upsertComponent');
     }
     await memoryService.upsertComponent(repository, branch, {
-      yaml_id: id,
+      id: id,
       name,
       kind,
       status,
@@ -115,7 +115,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
       throw serviceMethodNotFoundError('add-decision', 'upsertDecision');
     }
     await memoryService.upsertDecision(repository, branch, {
-      yaml_id: id,
+      id: id,
       name,
       date,
       context,
@@ -135,7 +135,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
     }
     await (memoryService as any).upsertRule(
       repository,
-      { yaml_id: id, name, created, content, status, triggers },
+      { id: id, name, created, content, status, triggers },
       branch,
     );
     return {

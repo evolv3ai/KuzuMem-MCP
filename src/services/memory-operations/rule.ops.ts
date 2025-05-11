@@ -3,17 +3,15 @@ import { Rule } from '../../types';
 
 /**
  * Input parameters for upserting a rule.
- * Corresponds to Omit<Rule, 'repository_id'> used in MemoryService,
- * plus ensuring branch is handled correctly if part of Rule type for repo layer.
+ * Corresponds to Omit<Rule, 'repository' | 'branch'> & { id: string } used in MemoryService.
  */
 interface UpsertRuleData {
-  yaml_id: string;
+  id: string; // Renamed from yaml_id
   name: string;
   created: string; // Expecting YYYY-MM-DD string format
   content?: string;
   status?: 'active' | 'deprecated';
   triggers?: string[];
-  // branch?: string; // If branch is part of Rule type passed to repo
 }
 
 /**
@@ -28,26 +26,27 @@ interface UpsertRuleData {
  */
 export async function upsertRuleOp(
   repositoryName: string,
-  branch: string,
-  ruleData: UpsertRuleData, // Effectively Omit<Rule, 'repository' | 'branch'> if repo needs separate branch
+  branch: string, // This is the branch for the Rule entity
+  ruleData: UpsertRuleData,
   repositoryRepo: RepositoryRepository,
   ruleRepo: RuleRepository,
 ): Promise<Rule | null> {
   const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
+  if (!repository || !repository.id) {
+    // Check repository.id
     console.warn(`Repository not found: ${repositoryName}/${branch} in upsertRuleOp`);
     return null;
   }
 
-  // Data as expected by ruleRepo.upsertRule, which takes an object including
-  // 'repository' (the ID) and 'branch', plus other rule fields.
   const dataForRepo: Rule = {
-    ...ruleData,
-    repository: String(repository.id!),
-    branch: branch,
-    status: ruleData.status || 'active', // Default status if not provided
-    // Ensure all required fields from Rule type are present
-  };
+    ...(ruleData as Omit<Rule, 'repository' | 'branch' | 'created_at' | 'updated_at'>), // Spread ruleData, ensuring types match
+    id: ruleData.id, // Explicitly ensure logical id is from ruleData
+    repository: repository.id, // Repository Node PK
+    branch: branch, // Branch for this Rule entity
+    status: ruleData.status || 'active',
+    // created_at, updated_at will be handled by repository
+    // Other fields like name, created, content, triggers are from ruleData
+  } as Rule; // Cast to satisfy Rule type
 
   return ruleRepo.upsertRule(dataForRepo);
 }
@@ -63,15 +62,16 @@ export async function upsertRuleOp(
  */
 export async function getActiveRulesOp(
   repositoryName: string,
-  branch: string,
+  branch: string, // This is the branch for the Rule entities
   repositoryRepo: RepositoryRepository,
   ruleRepo: RuleRepository,
 ): Promise<Rule[]> {
   const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
+  if (!repository || !repository.id) {
+    // Check repository.id
     console.warn(`Repository not found: ${repositoryName}/${branch} in getActiveRulesOp`);
     return [];
   }
-  // RuleRepository.getActiveRules expects repositoryId (synthetic) and branch.
-  return ruleRepo.getActiveRules(String(repository.id!), branch);
+  // RuleRepository.getActiveRules expects repositoryNodeId (PK of Repository) and ruleBranch.
+  return ruleRepo.getActiveRules(repository.id, branch);
 }

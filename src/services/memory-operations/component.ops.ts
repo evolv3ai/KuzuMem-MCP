@@ -7,7 +7,7 @@ import { Component, ComponentInput } from '../../types';
  * excluding repository_id which is resolved by the operation.
  */
 interface UpsertComponentData {
-  yaml_id: string;
+  id: string;
   name: string;
   kind?: string;
   status?: 'active' | 'deprecated' | 'planned';
@@ -34,23 +34,21 @@ export async function upsertComponentOp(
   componentRepo: ComponentRepository,
 ): Promise<Component | null> {
   const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
+  if (!repository || !repository.id) {
     console.warn(`Repository not found: ${repositoryName}/${branch} in upsertComponentOp`);
     return null;
   }
 
-  const repoId = String(repository.id!);
   const inputForRepo: ComponentInput = {
-    yaml_id: componentData.yaml_id,
+    id: componentData.id,
     name: componentData.name,
     kind: componentData.kind,
-    status: componentData.status || 'active', // Defaulting status
+    status: componentData.status || 'active',
     depends_on: componentData.depends_on || [],
     branch: branch,
-    // content would be componentData.content if it existed on UpsertComponentData
   };
 
-  return componentRepo.upsertComponent(repoId, inputForRepo);
+  return componentRepo.upsertComponent(repository.id, inputForRepo);
 }
 
 /**
@@ -66,20 +64,11 @@ export async function upsertComponentOp(
 export async function getComponentDependenciesOp(
   repositoryName: string,
   branch: string,
-  componentId: string, // This is yaml_id
+  componentId: string,
   repositoryRepo: RepositoryRepository,
   componentRepo: ComponentRepository,
 ): Promise<Component[]> {
-  const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
-    console.warn(`Repository not found: ${repositoryName}/${branch} in getComponentDependenciesOp`);
-    return [];
-  }
-  // ComponentRepository.getComponentDependencies expects the internal DB component ID if different from yaml_id
-  // For now, assuming componentId (yaml_id) is used directly or resolved by the repo method.
-  // The existing MemoryService.getComponentDependencies calls ComponentRepository.getComponentDependencies(String(repository.id!), componentId)
-  // which suggests componentId there is indeed the yaml_id.
-  return componentRepo.getComponentDependencies(String(repository.id!), componentId);
+  return componentRepo.getComponentDependencies(repositoryName, componentId, branch);
 }
 
 /**
@@ -96,18 +85,11 @@ export async function getComponentDependenciesOp(
 export async function getComponentDependentsOp(
   repositoryName: string,
   branch: string,
-  componentId: string, // This is yaml_id
+  componentId: string,
   repositoryRepo: RepositoryRepository,
   componentRepo: ComponentRepository,
 ): Promise<Component[]> {
-  const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
-    console.warn(`Repository not found: ${repositoryName}/${branch} in getComponentDependentsOp`);
-    return [];
-  }
-
-  // Call the actual repository method
-  return componentRepo.getComponentDependents(String(repository.id!), componentId);
+  return componentRepo.getComponentDependents(repositoryName, componentId, branch);
 }
 
 /**
@@ -120,20 +102,10 @@ export async function getComponentDependentsOp(
  * @returns A Promise resolving to an array of active Component objects.
  */
 export async function getActiveComponentsOp(
-  repositoryName: string,
-  branch: string,
+  repositoryNodeId: string,
+  componentBranch: string,
   repositoryRepo: RepositoryRepository,
   componentRepo: ComponentRepository,
 ): Promise<Component[]> {
-  const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
-    console.warn(`Repository not found: ${repositoryName}/${branch} in getActiveComponentsOp`);
-    return [];
-  }
-  // ComponentRepository.getActiveComponents expects the repositoryId (which is name + ':' + branch)
-  // The schema shows Component nodes do not have a direct branch property, they are linked to a Repository which has the branch.
-  // However, ComponentRepository.getActiveComponents currently takes `repositoryId: string`
-  // and its query is `MATCH (r:Repository {id: '${repositoryId}'})-[:HAS_COMPONENT]->(c:Component {status: 'active'}) ...`
-  // This is correct as repositoryId already has the branch info.
-  return componentRepo.getActiveComponents(String(repository.id!));
+  return componentRepo.getActiveComponents(repositoryNodeId, componentBranch);
 }

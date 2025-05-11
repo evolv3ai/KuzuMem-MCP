@@ -1,6 +1,7 @@
 import { Rule } from '../types';
 import { Mutex } from '../utils/mutex';
 import { KuzuDBClient } from '../db/kuzu';
+import { formatGraphUniqueId, parseGraphUniqueId } from '../utils/id.utils';
 
 /**
  * Thread-safe singleton repository for Rule, using KuzuDB and Cypher queries
@@ -33,34 +34,37 @@ export class RuleRepository {
     return String(value).replace(/'/g, "\\'").replace(/\\/g, '\\\\');
   }
 
-  private escapeJsonProp(value: any): string {
-    if (value === undefined || value === null) {
-      return 'null';
-    }
-    try {
-      const jsonString = JSON.stringify(value);
-      return `'${this.escapeStr(jsonString)}'`;
-    } catch (e) {
-      console.error('Failed to stringify JSON for escapeJsonProp', value, e);
-      return 'null';
-    }
-  }
-
   private formatStringArrayForCypher(arr: string[] | undefined | null): string {
     if (arr === undefined || arr === null || arr.length === 0) {
-      return 'null'; // Cypher keyword null for empty or null arrays
+      return 'null';
     }
     const escapedItems = arr.map((item) => `'${this.escapeStr(item)}'`);
     return `[${escapedItems.join(', ')}]`;
   }
 
+  private formatRule(ruleData: any): Rule {
+    let created_str = ruleData.created;
+    if (ruleData.created instanceof Date) {
+      created_str = ruleData.created.toISOString().split('T')[0];
+    }
+    return {
+      ...ruleData,
+      id: ruleData.id,
+      created: created_str,
+      graph_unique_id: undefined,
+    } as Rule;
+  }
+
   /**
-   * Get all active rules for a repository (status = 'active'), ordered by created descending
+   * Get all active rules for a repository node and branch.
    */
-  async getActiveRules(repositoryId: string, branch: string): Promise<Rule[]> {
-    const escapedRepoId = this.escapeStr(repositoryId);
-    const escapedBranch = this.escapeStr(branch);
-    const query = `MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_RULE]->(r:Rule {status: 'active', branch: '${escapedBranch}'}) RETURN r ORDER BY r.created DESC`;
+  async getActiveRules(repositoryNodeId: string, ruleBranch: string): Promise<Rule[]> {
+    const escapedRepoNodeId = this.escapeStr(repositoryNodeId);
+    const escapedRuleBranch = this.escapeStr(ruleBranch);
+    const query = `
+      MATCH (repo:Repository {id: '${escapedRepoNodeId}'})-[:HAS_RULE]->(r:Rule {status: 'active', branch: '${escapedRuleBranch}'})
+      RETURN r ORDER BY r.created DESC
+    `;
     const result = await KuzuDBClient.executeQuery(query);
     if (!result || typeof result.getAll !== 'function') {
       return [];
@@ -69,74 +73,85 @@ export class RuleRepository {
     if (!rows || rows.length === 0) {
       return [];
     }
-    return rows.map((row: any) => {
-      const rawRuleData = row.r as any;
-      let created_str = rawRuleData.created;
-      if (rawRuleData.created instanceof Date) {
-        created_str = rawRuleData.created.toISOString().split('T')[0];
-      }
-      return { ...rawRuleData, created: created_str } as Rule;
-    });
+    return rows.map((row: any) => this.formatRule(row.r ?? row['r']));
   }
 
   /**
-   * Upsert a rule by repository and yaml_id
-   */
-  /**
-   * Creates or updates a rule for a repository
-   * Returns the upserted Rule or null if not found
+   * Creates or updates a rule.
+   * `rule.repository` is the Repository node PK (e.g., 'my-repo:main').
+   * `rule.branch` is the branch of this Rule entity.
+   * `rule.id` is the logical ID of this Rule entity.
    */
   async upsertRule(rule: Rule): Promise<Rule | null> {
-    const repositoryId = String(rule.repository);
-    const branch = String(rule.branch);
-    const yamlId = String(rule.yaml_id);
+    const repositoryNodeId = rule.repository;
 
-    const escapedRepoId = this.escapeStr(repositoryId);
-    const escapedBranch = this.escapeStr(branch);
-    const escapedYamlId = this.escapeStr(yamlId);
+    // Extract the logical repository name from the Repository Node ID
+    const repoIdParts = repositoryNodeId.split(':');
+    if (repoIdParts.length < 2) {
+      // Expects 'repoName:repoBranch'
+      throw new Error(`Invalid repositoryNodeId format in rule.repository: ${repositoryNodeId}`);
+    }
+    const logicalRepositoryName = repoIdParts[0];
+
+    const ruleBranch = rule.branch;
+    const logicalId = rule.id;
+    const graphUniqueId = formatGraphUniqueId(logicalRepositoryName, ruleBranch, logicalId);
+    const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
+
+    const escapedRepoNodeId = this.escapeStr(repositoryNodeId); // For MATCH (repo:Repository)
+    const escapedLogicalId = this.escapeStr(logicalId);
     const escapedName = this.escapeStr(rule.name);
-    const escapedCreated = this.escapeStr(rule.created);
-    const cypherTriggersList = this.formatStringArrayForCypher(rule.triggers); // Use new helper
+    const escapedCreated = this.escapeStr(rule.created); // Expects 'YYYY-MM-DD'
+    const cypherTriggersList = this.formatStringArrayForCypher(rule.triggers);
     const escapedContent = this.escapeStr(rule.content);
     const escapedStatus = this.escapeStr(rule.status || 'active');
+    const escapedBranch = this.escapeStr(ruleBranch);
     const nowIso = new Date().toISOString();
     const kuzuTimestamp = nowIso.replace('T', ' ').replace('Z', '');
 
-    const existing = await this.findByYamlId(repositoryId, yamlId, branch);
+    const query = `
+      MATCH (repo:Repository {id: '${escapedRepoNodeId}'})
+      MERGE (r:Rule {graph_unique_id: '${escapedGraphUniqueId}'})
+      ON CREATE SET
+        r.id = '${escapedLogicalId}',
+        r.name = '${escapedName}',
+        r.created = date('${escapedCreated}'), 
+        r.triggers = ${cypherTriggersList}, 
+        r.content = '${escapedContent}', 
+        r.status = '${escapedStatus}', 
+        r.branch = '${escapedBranch}',
+        r.created_at = timestamp('${kuzuTimestamp}'),
+        r.updated_at = timestamp('${kuzuTimestamp}')
+      ON MATCH SET
+        r.name = '${escapedName}',
+        r.created = date('${escapedCreated}'),
+        r.triggers = ${cypherTriggersList},
+        r.content = '${escapedContent}',
+        r.status = '${escapedStatus}',
+        r.branch = '${escapedBranch}',
+        r.updated_at = timestamp('${kuzuTimestamp}')
+      MERGE (repo)-[:HAS_RULE]->(r)
+      RETURN r`;
 
-    if (existing) {
-      const updateQuery = `MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_RULE]->(r:Rule {yaml_id: '${escapedYamlId}', branch: '${escapedBranch}'})
-         SET r.name = '${escapedName}', r.triggers = ${cypherTriggersList}, r.content = '${escapedContent}', r.status = '${escapedStatus}', r.updated_at = timestamp('${kuzuTimestamp}')
-         RETURN r`;
-      await KuzuDBClient.executeQuery(updateQuery);
-      return this.findByYamlId(repositoryId, yamlId, branch);
-    } else {
-      const createQuery = `MATCH (repo:Repository {id: '${escapedRepoId}'})
-         CREATE (repo)-[:HAS_RULE]->(r:Rule {
-           yaml_id: '${escapedYamlId}', 
-           name: '${escapedName}', 
-           created: date('${escapedCreated}'), 
-           triggers: ${cypherTriggersList}, 
-           content: '${escapedContent}', 
-           status: '${escapedStatus}', 
-           branch: '${escapedBranch}',
-           created_at: timestamp('${kuzuTimestamp}'),
-           updated_at: timestamp('${kuzuTimestamp}')
-          })
-         RETURN r`;
-      await KuzuDBClient.executeQuery(createQuery);
-      return this.findByYamlId(repositoryId, yamlId, branch);
-    }
+    await KuzuDBClient.executeQuery(query);
+    return this.findByIdAndBranch(logicalRepositoryName, logicalId, ruleBranch);
   }
 
   /**
-   * Find a rule by repository and yaml_id
+   * Find a rule by its logical ID and branch, within a given repository name.
    */
-  async findByYamlId(repositoryId: string, yaml_id: string, branch: string): Promise<Rule | null> {
-    const escapedRepoId = this.escapeStr(repositoryId);
-    const escapedYamlId = this.escapeStr(yaml_id);
-    const escapedBranch = this.escapeStr(branch);
-    const query = `MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_RULE]->(r:Rule {yaml_id: '${escapedYamlId}', branch: '${escapedBranch}'}) RETURN r LIMIT 1`;
+  async findByIdAndBranch(
+    repositoryName: string,
+    itemId: string,
+    itemBranch: string,
+  ): Promise<Rule | null> {
+    const graphUniqueId = formatGraphUniqueId(repositoryName, itemBranch, itemId);
+    const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
+
+    const query = `
+      MATCH (r:Rule {graph_unique_id: '${escapedGraphUniqueId}'})
+      RETURN r LIMIT 1
+    `;
     const result = await KuzuDBClient.executeQuery(query);
     if (!result || typeof result.getAll !== 'function') {
       return null;
@@ -145,29 +160,22 @@ export class RuleRepository {
     if (!rows || rows.length === 0) {
       return null;
     }
-    const rawRuleData = rows[0].r ?? rows[0]['r'] ?? rows[0];
+    const rawRuleData = rows[0].r ?? rows[0]['r'];
     if (!rawRuleData) {
       return null;
     }
-    let created_str = rawRuleData.created;
-    if (rawRuleData.created instanceof Date) {
-      created_str = rawRuleData.created.toISOString().split('T')[0];
-    }
-    return { ...rawRuleData, created: created_str } as Rule;
+    return this.formatRule(rawRuleData);
   }
 
   /**
-   * Get all rules for a repository and branch.
-   * @param repositoryId The synthetic ID of the repository (name + ':' + branch).
-   * @param branch The branch name.
-   * @returns A promise that resolves to an array of Rule objects.
+   * Get all rules for a repository node and branch.
    */
-  async getAllRules(repositoryId: string, branch: string): Promise<Rule[]> {
-    const escapedRepoId = this.escapeStr(repositoryId);
-    const escapedBranch = this.escapeStr(branch);
+  async getAllRules(repositoryNodeId: string, ruleBranch: string): Promise<Rule[]> {
+    const escapedRepoNodeId = this.escapeStr(repositoryNodeId);
+    const escapedRuleBranch = this.escapeStr(ruleBranch);
 
     const query = `
-      MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_RULE]->(r:Rule {branch: '${escapedBranch}'})
+      MATCH (repo:Repository {id: '${escapedRepoNodeId}'})-[:HAS_RULE]->(r:Rule {branch: '${escapedRuleBranch}'})
       RETURN r
       ORDER BY r.created DESC, r.name ASC
     `;
@@ -179,13 +187,6 @@ export class RuleRepository {
     if (!rows || rows.length === 0) {
       return [];
     }
-    return rows.map((row: any) => {
-      const rawRuleData = row.r as any;
-      let created_str = rawRuleData.created;
-      if (rawRuleData.created instanceof Date) {
-        created_str = rawRuleData.created.toISOString().split('T')[0];
-      }
-      return { ...rawRuleData, created: created_str } as Rule;
-    });
+    return rows.map((row: any) => this.formatRule(row.r ?? row['r']));
   }
 }

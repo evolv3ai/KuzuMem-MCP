@@ -18,15 +18,18 @@ export async function getMetadataOp(
   repositoryRepo: RepositoryRepository,
   metadataRepo: MetadataRepository,
 ): Promise<Metadata | null> {
-  const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
-    console.warn(`Repository not found: ${repositoryName}/${branch} in getMetadataOp`);
-    return null;
-  }
-  const metadata = await metadataRepo.getMetadataForRepository(String(repository.id!));
-  if (!metadata) {
-    // console.warn(`Metadata not found for repository ID: ${repository.id}`);
-  }
+  // No need to fetch Repository node if findMetadata uses logical repositoryName
+  // const repository = await repositoryRepo.findByName(repositoryName, branch);
+  // if (!repository || !repository.id) {
+  //   console.warn(`Repository not found: ${repositoryName}/${branch} in getMetadataOp`);
+  //   return null;
+  // }
+
+  // metadataRepo.findMetadata expects repositoryName, branch, and logical metadataId ('meta')
+  const metadata = await metadataRepo.findMetadata(repositoryName, branch, 'meta');
+  // if (!metadata) {
+  //   console.warn(`Metadata not found for repository ${repositoryName}, branch ${branch}`);
+  // }
   return metadata ?? null;
 }
 
@@ -48,78 +51,72 @@ export async function updateMetadataOp(
   metadataRepo: MetadataRepository,
 ): Promise<Metadata | null> {
   const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
+  if (!repository || !repository.id) {
+    // Ensure repository.id is checked
     console.warn(`Repository not found: ${repositoryName}/${branch} in updateMetadataOp`);
     return null;
   }
 
-  const existingMetadata = await metadataRepo.getMetadataForRepository(String(repository.id!));
+  // findMetadata takes repositoryName and branch
+  const existingMetadata = await metadataRepo.findMetadata(repositoryName, branch, 'meta');
 
-  if (!existingMetadata || typeof existingMetadata.content !== 'string') {
+  if (!existingMetadata) {
     console.warn(
-      `Cannot update: Existing metadata or its content string not found for ${repositoryName}/${branch}. Create metadata first.`,
+      `No existing metadata found for ${repositoryName}/${branch} to update. Will attempt to create.`,
     );
-    return null;
   }
 
-  let currentContentObject: Metadata['content'];
-  try {
-    currentContentObject = JSON.parse(existingMetadata.content);
-  } catch (e) {
-    console.error('Failed to parse existing metadata content string:', existingMetadata.content, e);
-    return null; // Cannot update if existing content is malformed
-  }
+  // If existingMetadata is null, newContentObject will base off an empty content structure or defaults.
+  // existingMetadata.content is already an object, no need to parse it from string here.
+  const currentContentObject: Partial<Metadata['content']> = existingMetadata
+    ? existingMetadata.content
+    : {
+        project: { name: repositoryName, created: new Date().toISOString().split('T')[0] },
+        tech_stack: {},
+        id: 'meta',
+        memory_spec_version: '3.0.0',
+      };
+  // Removed the check for typeof existingMetadata.content !== 'string' as it should be an object.
 
-  // Perform a deep merge of metadataUpdatePayload into currentContentObject
-  // This is a simplified deep merge. For true deep merge, a library or recursive function is better.
   const newContentObject: Metadata['content'] = {
-    ...currentContentObject,
-    ...metadataUpdatePayload, // Overwrite top-level keys
+    ...(currentContentObject as Metadata['content']), // Cast to full type after defaulting
+    ...metadataUpdatePayload,
     project: {
-      ...(currentContentObject.project || {}),
+      ...((currentContentObject as Metadata['content']).project || {
+        name: repositoryName,
+        created: new Date().toISOString().split('T')[0],
+      }), // Ensure project object and its fields exist
       ...(metadataUpdatePayload.project || {}),
     },
     tech_stack: {
-      ...(currentContentObject.tech_stack || {}),
+      ...((currentContentObject as Metadata['content']).tech_stack || {}),
       ...(metadataUpdatePayload.tech_stack || {}),
     },
+    // Ensure required fields for Metadata['content'] are present
+    id: currentContentObject.id || metadataUpdatePayload.id || 'meta',
+    memory_spec_version:
+      currentContentObject.memory_spec_version ||
+      metadataUpdatePayload.memory_spec_version ||
+      '3.0.0',
+    architecture:
+      currentContentObject.architecture || metadataUpdatePayload.architecture || 'unknown',
   };
-  // Ensure all required fields of Metadata["content"] are present if necessary, or rely on their optionality
-  // For example, ensure 'id' from original content is preserved if not in payload
-  newContentObject.id = currentContentObject.id || metadataUpdatePayload.id || 'meta';
+  // Ensure project.name and project.created are always set if not provided
+  if (!newContentObject.project.name) {
+    newContentObject.project.name = repositoryName;
+  }
+  if (!newContentObject.project.created) {
+    newContentObject.project.created = new Date().toISOString().split('T')[0];
+  }
 
-  const metadataToUpsert: Metadata = {
-    // Base properties from existing, do not spread ...existingMetadata directly if it contains outdated repo/branch info
-    yaml_id: existingMetadata.yaml_id, // Keep original yaml_id
-    name: existingMetadata.name, // Keep original name from metadata
-    repository: String(repository.id!), // Use current repository context
-    branch: branch, // Use current branch context
-    content: newContentObject, // Pass the merged object, repo will stringify it via escapeJsonProp
-    // This assumes metadataRepo.upsertMetadata expects content as an object
-    // based on the Metadata type, and it will handle stringification.
-    // Let's verify upsertMetadata signature in MetadataRepository.
-  } as Metadata; // Cast needed because content is an object here but Metadata type might expect string in some contexts
-  // However, upsertMetadata in repo takes `metadata: Metadata`, and `Metadata.content` IS an object.
-  // The repository's `escapeJsonProp` handles the stringification.
-
-  // The line `delete (metadataToUpsert as any).branch;` was in the original provided code.
-  // This suggests that the `metadataRepo.upsertMetadata` might not want a branch property directly on the object it receives,
-  // if the branch is implicitly handled by the repositoryId or a separate parameter (not the case here).
-  // Let's check the `upsertMetadata` method in `MetadataRepository`.
-  // `upsertMetadata(metadata: Metadata)` -> `metadata.branch` is part of `BaseEntity` in `Metadata` type.
-  // So, it should be fine to pass it.
-
-  // The actual type for Metadata.content is an object. Repository's escapeJsonProp handles stringification.
-  // So, metadataToUpsert should be:
-  const finalMetadataToUpsert: Omit<Metadata, 'created_at' | 'updated_at'> & {
-    content: object;
-  } = {
-    yaml_id: existingMetadata.yaml_id,
-    name: existingMetadata.name,
-    repository: String(repository.id!),
-    branch: branch,
+  const finalMetadataToUpsert: Metadata = {
+    id: existingMetadata?.id || 'meta', // Logical ID
+    name: existingMetadata?.name || repositoryName, // Default name to repo name
+    repository: repository.id, // Repository Node PK
+    branch: branch, // Branch for this metadata instance
     content: newContentObject,
-  };
+    // created_at, updated_at will be handled by repository
+  } as Metadata; // Cast as Omit<...> is complex here
 
-  return metadataRepo.upsertMetadata(finalMetadataToUpsert as Metadata); // Cast back to Metadata for the call
+  return metadataRepo.upsertMetadata(finalMetadataToUpsert);
 }

@@ -98,58 +98,63 @@ export async function initializeKuzuDB(customPath?: string): Promise<void> {
 
     console.error('E2E_DEBUG: [KuzuDB] Creating table: Metadata...');
     await KuzuDBClient.executeQuery(`CREATE NODE TABLE IF NOT EXISTS Metadata(
-      yaml_id STRING,
+      graph_unique_id STRING,
+      id STRING,
       name STRING,
       content STRING,
       branch STRING,
       created_at TIMESTAMP,
       updated_at TIMESTAMP,
-      PRIMARY KEY (yaml_id)
+      PRIMARY KEY (graph_unique_id)
     )`);
     console.error('E2E_DEBUG: [KuzuDB] Table Metadata: OK');
 
     console.error('E2E_DEBUG: [KuzuDB] Creating table: Context...');
     await KuzuDBClient.executeQuery(`CREATE NODE TABLE IF NOT EXISTS Context(
-      yaml_id STRING,
+      graph_unique_id STRING,
+      id STRING,
       name STRING,
       summary STRING,
       iso_date DATE,
       branch STRING,
       created_at TIMESTAMP,
       updated_at TIMESTAMP,
-      PRIMARY KEY (yaml_id)
+      PRIMARY KEY (graph_unique_id)
     )`);
     console.error('E2E_DEBUG: [KuzuDB] Table Context: OK');
 
     console.error('E2E_DEBUG: [KuzuDB] Creating table: Component...');
     await KuzuDBClient.executeQuery(`CREATE NODE TABLE IF NOT EXISTS Component(
-      yaml_id STRING,
+      graph_unique_id STRING,
+      id STRING,
       name STRING,
       kind STRING,
       status STRING,
       branch STRING,
       created_at TIMESTAMP,
       updated_at TIMESTAMP,
-      PRIMARY KEY (yaml_id)
+      PRIMARY KEY (graph_unique_id)
     )`);
     console.error('E2E_DEBUG: [KuzuDB] Table Component: OK');
 
     console.error('E2E_DEBUG: [KuzuDB] Creating table: Decision...');
     await KuzuDBClient.executeQuery(`CREATE NODE TABLE IF NOT EXISTS Decision(
-      yaml_id STRING,
+      graph_unique_id STRING,
+      id STRING,
       name STRING,
       context STRING,
       date DATE,
       branch STRING,
       created_at TIMESTAMP,
       updated_at TIMESTAMP,
-      PRIMARY KEY (yaml_id)
+      PRIMARY KEY (graph_unique_id)
     )`);
     console.error('E2E_DEBUG: [KuzuDB] Table Decision: OK');
 
     console.error('E2E_DEBUG: [KuzuDB] Creating table: Rule...');
     await KuzuDBClient.executeQuery(`CREATE NODE TABLE IF NOT EXISTS Rule(
-      yaml_id STRING,
+      graph_unique_id STRING,
+      id STRING,
       name STRING,
       created DATE,
       triggers STRING[],
@@ -158,7 +163,7 @@ export async function initializeKuzuDB(customPath?: string): Promise<void> {
       branch STRING,
       created_at TIMESTAMP,
       updated_at TIMESTAMP,
-      PRIMARY KEY (yaml_id)
+      PRIMARY KEY (graph_unique_id)
     )`);
     console.error('E2E_DEBUG: [KuzuDB] Table Rule: OK');
 
@@ -218,11 +223,11 @@ export async function initializeKuzuDB(customPath?: string): Promise<void> {
     if (count === 0) {
       const now = new Date().toISOString();
       const kuzuTimestamp = String(now).replace('T', ' ').replace('Z', '');
-      const defaultRepoId = 'default:main';
+      const defaultRepoCompositeId = 'default:main';
       const defaultRepoName = 'default';
       const defaultBranch = 'main';
       await KuzuDBClient.executeQuery(
-        `CREATE (r:Repository {id: '${localEscapeStr(defaultRepoId)}', name: '${localEscapeStr(
+        `CREATE (r:Repository {id: '${localEscapeStr(defaultRepoCompositeId)}', name: '${localEscapeStr(
           defaultRepoName,
         )}', branch: '${localEscapeStr(
           defaultBranch,

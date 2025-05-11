@@ -1,6 +1,7 @@
 import { Context } from '../types';
 import { Mutex } from '../utils/mutex';
 import { KuzuDBClient } from '../db/kuzu';
+import { formatGraphUniqueId, parseGraphUniqueId } from '../utils/id.utils';
 
 /**
  * Thread-safe singleton repository for Context, using KuzuDB and Cypher queries
@@ -33,144 +34,62 @@ export class ContextRepository {
     return String(value).replace(/'/g, "\\'").replace(/\\/g, '\\\\');
   }
 
-  /**
-   * Get the latest N contexts for a repository, ordered by iso_date descending
-   */
-  /**
-   * Get the latest N contexts for a repository, ordered by created_at descending
-   */
-  async getLatestContexts(
-    repositoryId: string, // This is the synthetic repoId (name:branch)
-    // branch parameter is redundant here as repoId includes it
-    limit: number = 10,
-  ): Promise<Context[]> {
-    const escapedRepoId = this.escapeStr(repositoryId);
-    const query = `
-      MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_CONTEXT]->(c:Context)
-      RETURN c ORDER BY c.created_at DESC LIMIT ${limit}
-    `; // limit is a number, directly interpolated
-    const result = await KuzuDBClient.executeQuery(query);
-    if (!result || typeof result.getAll !== 'function') {
-      return [];
+  private formatContext(contextData: any, repositoryNodeId: string): Context {
+    let iso_date_str = contextData.iso_date;
+    if (contextData.iso_date instanceof Date) {
+      iso_date_str = contextData.iso_date.toISOString().split('T')[0];
     }
-    const rows = await result.getAll();
-    if (!rows || rows.length === 0) {
-      return [];
-    }
-    return rows.map((row: any) => row.c as Context);
-  }
-
-  /**
-   * Get the context for a repository for a specific iso_date
-   */
-  /**
-   * Get the context for a repository for a specific iso_date
-   */
-  async getTodayContext(repositoryId: string, today: string): Promise<Context | null> {
-    const escapedRepoId = this.escapeStr(repositoryId);
-    const escapedToday = this.escapeStr(today);
-
-    const query = `
-      MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_CONTEXT]->(c:Context {iso_date: date('${escapedToday}')}) 
-      RETURN c LIMIT 1
-    `; // Used date() function for comparison
-    const result = await KuzuDBClient.executeQuery(query);
-    if (!result || typeof result.getAll !== 'function') {
-      return null;
-    }
-    const rows = await result.getAll();
-    if (!rows || rows.length === 0) {
-      return null;
-    }
-
-    const rawContextData = rows[0].c ?? rows[0]['c'] ?? rows[0];
-    if (!rawContextData) {
-      return null;
-    }
-
-    // Ensure iso_date is consistently a 'YYYY-MM-DD' string
-    let iso_date_str = rawContextData.iso_date;
-    if (rawContextData.iso_date instanceof Date) {
-      iso_date_str = rawContextData.iso_date.toISOString().split('T')[0];
-    }
-
     return {
-      ...rawContextData,
+      ...contextData,
+      id: contextData.id,
       iso_date: iso_date_str,
+      repository: repositoryNodeId,
+      branch: contextData.branch,
+      graph_unique_id: undefined,
     } as Context;
   }
 
   /**
-   * Upsert a context by repository_id and yaml_id
+   * Get the latest N contexts for a specific repository node and context branch.
    */
-  /**
-   * Creates or updates context for a repository
-   * Returns the upserted Context or null if not found
-   */
-  /**
-   * Creates or updates context for a repository (only one context per repository/yaml_id)
-   * Uses the synthetic repository id (id = name + ':' + branch)
-   */
-  async upsertContext(context: Context): Promise<Context | null> {
-    const repositoryId = String(context.repository);
-    console.error(
-      `DEBUG: context.repository.ts - upsertContext - received context.repository: >>>${context.repository}<<<, type: ${typeof context.repository}`,
-    );
-    const escapedRepoId = this.escapeStr(repositoryId);
-    console.error(
-      `DEBUG: context.repository.ts - upsertContext - escapedRepoId: >>>${escapedRepoId}<<<`,
-    );
-    const escapedYamlId = this.escapeStr(context.yaml_id);
-    const escapedName = this.escapeStr(context.name);
-    const escapedSummary = this.escapeStr(context.summary);
-    const escapedIsoDate = this.escapeStr(context.iso_date); // This is YYYY-MM-DD
-    const escapedBranch = this.escapeStr(context.branch); // Define and escape branch
-    const nowIso = new Date().toISOString();
-    const kuzuTimestamp = nowIso.replace('T', ' ').replace('Z', '');
-
-    const existing = await this.findByYamlId(repositoryId, context.yaml_id);
-
-    if (existing) {
-      const updateQuery = `
-         MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_CONTEXT]->(c:Context {yaml_id: '${escapedYamlId}'})
-         SET c.name = '${escapedName}', c.summary = '${escapedSummary}', c.iso_date = date('${escapedIsoDate}'), c.branch = '${escapedBranch}', c.updated_at = timestamp('${kuzuTimestamp}')
-         RETURN c`; // Added c.branch to SET
-      await KuzuDBClient.executeQuery(updateQuery);
-      return this.findByYamlId(repositoryId, context.yaml_id);
-    } else {
-      const createQuery = `
-         MATCH (repo:Repository {id: '${escapedRepoId}'})
-         CREATE (repo)-[:HAS_CONTEXT]->(c:Context {
-           yaml_id: '${escapedYamlId}',
-           name: '${escapedName}',
-           iso_date: date('${escapedIsoDate}'), 
-           summary: '${escapedSummary}',
-           branch: '${escapedBranch}', // Added branch to CREATE
-           created_at: timestamp('${kuzuTimestamp}'),
-           updated_at: timestamp('${kuzuTimestamp}')
-         })
-         RETURN c`;
-      await KuzuDBClient.executeQuery(createQuery);
-      return this.findByYamlId(repositoryId, context.yaml_id);
+  async getLatestContexts(
+    repositoryNodeId: string,
+    contextBranch: string,
+    limit: number = 10,
+  ): Promise<Context[]> {
+    const escapedRepoNodeId = this.escapeStr(repositoryNodeId);
+    const escapedContextBranch = this.escapeStr(contextBranch);
+    const query = `
+      MATCH (repo:Repository {id: '${escapedRepoNodeId}'})-[:HAS_CONTEXT]->(c:Context {branch: '${escapedContextBranch}'})
+      RETURN c ORDER BY c.created_at DESC LIMIT ${limit}
+    `;
+    const result = await KuzuDBClient.executeQuery(query);
+    if (!result || typeof result.getAll !== 'function') {
+      return [];
     }
+    const rows = await result.getAll();
+    if (!rows || rows.length === 0) {
+      return [];
+    }
+    return rows.map((row: any) => this.formatContext(row.c ?? row['c'], repositoryNodeId));
   }
 
   /**
-   * Find a context by repository_id and yaml_id
+   * Get the context for a specific repository name, branch, and ISO date.
+   * The logical ID for a daily context is typically 'context-[ISODATE]'.
    */
-  /**
-   * Find a context by repository_id and yaml_id using synthetic id
-   */
-  async findByYamlId(
-    repositoryId: string, // This is the synthetic repoId (name:branch)
-    yaml_id: string,
-    // branch parameter is redundant
+  async getContextByDate(
+    repositoryName: string,
+    contextBranch: string,
+    isoDate: string,
+    contextLogicalId?: string, // Optional: if a specific logical ID is used other than date-derived
   ): Promise<Context | null> {
-    const escapedRepoId = this.escapeStr(repositoryId);
-    const escapedYamlId = this.escapeStr(yaml_id);
-    // Context nodes should be matched by yaml_id, not branch directly
+    const cId = contextLogicalId || `context-${isoDate}`;
+    const graphUniqueId = formatGraphUniqueId(repositoryName, contextBranch, cId);
+    const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
+
     const query = `
-      MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_CONTEXT]->(c:Context {yaml_id: '${escapedYamlId}'})
+      MATCH (c:Context {graph_unique_id: '${escapedGraphUniqueId}'}) 
       RETURN c LIMIT 1
     `;
     const result = await KuzuDBClient.executeQuery(query);
@@ -181,20 +100,96 @@ export class ContextRepository {
     if (!rows || rows.length === 0) {
       return null;
     }
-
-    const rawContextData = rows[0].c ?? rows[0]['c'] ?? rows[0];
+    const rawContextData = rows[0].c ?? rows[0]['c'];
     if (!rawContextData) {
       return null;
     }
+    const repositoryNodeId = `${repositoryName}:${contextBranch}`;
+    return this.formatContext(rawContextData, repositoryNodeId);
+  }
 
-    let iso_date_str = rawContextData.iso_date;
-    if (rawContextData.iso_date instanceof Date) {
-      iso_date_str = rawContextData.iso_date.toISOString().split('T')[0];
+  /**
+   * Creates or updates a context.
+   * `context.repository` is the Repository node PK (e.g., 'my-repo:main').
+   * `context.branch` is the branch of this Context entity.
+   * `context.id` is the logical ID of this Context entity.
+   */
+  async upsertContext(context: Context): Promise<Context | null> {
+    const repositoryNodeId = context.repository; // e.g. 'my-repo:main'
+
+    // Extract the logical repository name from the Repository Node ID
+    const repoIdParts = repositoryNodeId.split(':');
+    if (repoIdParts.length === 0) {
+      throw new Error(`Invalid repositoryNodeId format in context.repository: ${repositoryNodeId}`);
     }
+    const logicalRepositoryName = repoIdParts[0];
 
-    return {
-      ...rawContextData,
-      iso_date: iso_date_str,
-    } as Context;
+    const contextBranch = context.branch;
+    const logicalId = context.id;
+    const graphUniqueId = formatGraphUniqueId(logicalRepositoryName, contextBranch, logicalId);
+    const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
+
+    const escapedRepoNodeId = this.escapeStr(repositoryNodeId);
+    const escapedLogicalId = this.escapeStr(logicalId);
+    const escapedName = this.escapeStr(context.name);
+    const escapedSummary = this.escapeStr(context.summary);
+    const escapedIsoDate = this.escapeStr(context.iso_date);
+    const escapedBranch = this.escapeStr(contextBranch);
+    const nowIso = new Date().toISOString();
+    const kuzuTimestamp = nowIso.replace('T', ' ').replace('Z', '');
+
+    const query = `
+      MATCH (repo:Repository {id: '${escapedRepoNodeId}'})
+      MERGE (c:Context {graph_unique_id: '${escapedGraphUniqueId}'})
+      ON CREATE SET
+        c.id = '${escapedLogicalId}',
+        c.name = '${escapedName}',
+        c.summary = '${escapedSummary}',
+        c.iso_date = date('${escapedIsoDate}'),
+        c.branch = '${escapedBranch}',
+        c.created_at = timestamp('${kuzuTimestamp}'),
+        c.updated_at = timestamp('${kuzuTimestamp}')
+      ON MATCH SET
+        c.name = '${escapedName}', 
+        c.summary = '${escapedSummary}', 
+        c.iso_date = date('${escapedIsoDate}'), 
+        c.branch = '${escapedBranch}', 
+        c.updated_at = timestamp('${kuzuTimestamp}')
+      MERGE (repo)-[:HAS_CONTEXT]->(c)
+      RETURN c`;
+
+    await KuzuDBClient.executeQuery(query);
+    return this.findByIdAndBranch(logicalRepositoryName, logicalId, contextBranch);
+  }
+
+  /**
+   * Find a context by its logical ID and branch, within a given repository name.
+   */
+  async findByIdAndBranch(
+    repositoryName: string,
+    itemId: string, // Logical ID of the context
+    itemBranch: string,
+  ): Promise<Context | null> {
+    const graphUniqueId = formatGraphUniqueId(repositoryName, itemBranch, itemId);
+    const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
+
+    const query = `
+      MATCH (c:Context {graph_unique_id: '${escapedGraphUniqueId}'})
+      RETURN c LIMIT 1
+    `;
+    const result = await KuzuDBClient.executeQuery(query);
+    if (!result || typeof result.getAll !== 'function') {
+      return null;
+    }
+    const rows = await result.getAll();
+    if (!rows || rows.length === 0) {
+      return null;
+    }
+    const rawContextData = rows[0].c ?? rows[0]['c'];
+    if (!rawContextData) {
+      return null;
+    }
+    const repositoryNodeId = `${repositoryName}:${itemBranch}`;
+    return this.formatContext(rawContextData, repositoryNodeId);
   }
 }

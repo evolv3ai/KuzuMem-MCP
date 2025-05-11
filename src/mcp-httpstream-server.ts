@@ -11,13 +11,13 @@ import dotenv from 'dotenv';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
 import { MemoryService } from './services/memory.service';
 
-// Extend Express Request interface to include our custom properties
-declare global {
-  namespace Express {
-    interface Request {
-      requestId?: string;
-      startTime?: number;
-    }
+// Extend Express Request interface to include our custom properties using ES2015 module augmentation
+import type { Request as ExpressRequest } from 'express';
+
+declare module 'express-serve-static-core' {
+  interface Request {
+    requestId?: string;
+    startTime?: number;
   }
 }
 
@@ -360,7 +360,7 @@ export async function configureServer(app: express.Application): Promise<void> {
                   throw new Error('Missing required component parameters');
                 }
                 result = await memoryService.upsertComponent(params.repository, params.branch, {
-                  yaml_id: params.id,
+                  id: params.id,
                   name: params.name,
                   kind: params.kind,
                   depends_on: params.depends_on,
@@ -378,7 +378,7 @@ export async function configureServer(app: express.Application): Promise<void> {
                   throw new Error('Missing required decision parameters');
                 }
                 result = await memoryService.upsertDecision(params.repository, params.branch, {
-                  yaml_id: params.id,
+                  id: params.id,
                   name: params.name,
                   context: params.context,
                   date: params.date,
@@ -403,7 +403,7 @@ export async function configureServer(app: express.Application): Promise<void> {
                 result = await memoryService.upsertRule(
                   params.repository,
                   {
-                    yaml_id: params.id,
+                    id: params.id,
                     name: params.name,
                     created: params.created,
                     triggers: params.triggers,

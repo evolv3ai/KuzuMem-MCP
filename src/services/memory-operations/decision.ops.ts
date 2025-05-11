@@ -5,7 +5,7 @@ import { Decision } from '../../types';
  * Input parameters for upserting a decision.
  */
 interface UpsertDecisionData {
-  yaml_id: string;
+  id: string;
   name: string;
   date: string; // Expecting YYYY-MM-DD string format
   context?: string; // Optional context description
@@ -30,20 +30,20 @@ export async function upsertDecisionOp(
   decisionRepo: DecisionRepository,
 ): Promise<Decision | null> {
   const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
+  if (!repository || !repository.id) {
     console.warn(`Repository not found: ${repositoryName}/${branch} in upsertDecisionOp`);
     return null;
   }
 
   const dataForRepo: Decision = {
-    repository: String(repository.id!),
-    branch: branch, // Use the function's branch parameter
-    yaml_id: decisionData.yaml_id,
+    repository: repository.id,
+    branch: branch,
+    id: decisionData.id,
     name: decisionData.name,
     date: decisionData.date,
     context: decisionData.context,
-    // Ensure all required fields for DecisionRepository.upsertDecision are present
-  };
+    // created_at, updated_at will be handled by repository
+  } as Decision;
 
   return decisionRepo.upsertDecision(dataForRepo);
 }
@@ -68,10 +68,10 @@ export async function getDecisionsByDateRangeOp(
   decisionRepo: DecisionRepository,
 ): Promise<Decision[]> {
   const repository = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repository) {
+  if (!repository || !repository.id) {
     console.warn(`Repository not found: ${repositoryName}/${branch} in getDecisionsByDateRangeOp`);
     return [];
   }
-  // DecisionRepository.getDecisionsByDateRange expects the repositoryId (synthetic ID) and branch separately.
-  return decisionRepo.getDecisionsByDateRange(String(repository.id!), branch, startDate, endDate);
+  // DecisionRepository.getDecisionsByDateRange expects the repositoryNodeId (PK of Repository) and decisionBranch.
+  return decisionRepo.getDecisionsByDateRange(repository.id, branch, startDate, endDate);
 }
