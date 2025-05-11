@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // Base entity type
 export interface BaseEntity {
-  yaml_id: string;
+  id: string;
   created_at?: Date;
   updated_at?: Date;
   repository: string;
@@ -11,7 +11,7 @@ export interface BaseEntity {
 
 // Repository type
 export interface Repository {
-  id?: number;
+  id: string;
   name: string;
   branch: string;
   created_at?: Date;
@@ -58,7 +58,7 @@ export interface Component extends BaseEntity {
 export type ComponentStatus = 'active' | 'deprecated' | 'planned';
 
 export interface ComponentInput {
-  yaml_id: string;
+  id: string;
   name: string;
   branch?: string;
   kind?: string;
@@ -96,7 +96,7 @@ export const repositorySchema = z.object({
 });
 
 export const metadataSchema = z.object({
-  yaml_id: z.string().min(1),
+  id: z.string().min(1),
   repository: z.string().min(1),
   branch: z.string().min(1),
   name: z.string().min(1),
@@ -113,9 +113,10 @@ export const metadataSchema = z.object({
 });
 
 export const contextSchema = z.object({
-  yaml_id: z.string().min(1),
+  id: z.string().min(1),
   repository: z.string().min(1),
   branch: z.string().min(1),
+  name: z.string().min(1),
   iso_date: z.string(),
   agent: z.string().optional(),
   related_issue: z.string().optional(),
@@ -125,7 +126,7 @@ export const contextSchema = z.object({
 });
 
 export const componentSchema = z.object({
-  yaml_id: z.string().min(1),
+  id: z.string().min(1),
   repository: z.string().min(1),
   branch: z.string().min(1),
   name: z.string().min(1),
@@ -135,7 +136,7 @@ export const componentSchema = z.object({
 });
 
 export const decisionSchema = z.object({
-  yaml_id: z.string().min(1),
+  id: z.string().min(1),
   repository: z.string().min(1),
   branch: z.string().min(1),
   name: z.string().min(1),
@@ -144,7 +145,7 @@ export const decisionSchema = z.object({
 });
 
 export const ruleSchema = z.object({
-  yaml_id: z.string().min(1),
+  id: z.string().min(1),
   repository: z.string().min(1),
   branch: z.string().min(1),
   name: z.string().min(1),
