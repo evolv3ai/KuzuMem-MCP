@@ -1,6 +1,6 @@
-import { Decision } from "../types";
-import { Mutex } from "../utils/mutex";
-import { KuzuDBClient } from "../db/kuzu";
+import { Decision } from '../types';
+import { Mutex } from '../utils/mutex';
+import { KuzuDBClient } from '../db/kuzu';
 
 /**
  * Thread-safe singleton repository for Decision, using KuzuDB and Cypher queries
@@ -26,22 +26,44 @@ export class DecisionRepository {
     }
   }
 
+  private escapeStr(value: any): string {
+    if (value === undefined || value === null) {
+      return 'null';
+    }
+    return String(value).replace(/'/g, "\\'").replace(/\\/g, '\\\\');
+  }
+
   /**
    * Get all decisions for a repository in a date range, ordered by date descending
    */
   async getDecisionsByDateRange(
-    repository: string,
+    repositoryId: string,
     branch: string,
     startDate: string,
-    endDate: string
+    endDate: string,
   ): Promise<Decision[]> {
-    const result = await KuzuDBClient.executeQuery(
-      `MATCH (repo:Repository {id: '${repository}'})-[:HAS_DECISION]->(d:Decision {branch: '${branch}'}) WHERE d.date >= '${startDate}' AND d.date <= '${endDate}' RETURN d ORDER BY d.date DESC`
-    );
-    if (!result || typeof result.getAll !== "function") return [];
+    const escapedRepoId = this.escapeStr(repositoryId);
+    const escapedBranch = this.escapeStr(branch);
+    const escapedStartDate = this.escapeStr(startDate);
+    const escapedEndDate = this.escapeStr(endDate);
+
+    const query = `MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_DECISION]->(d:Decision {branch: '${escapedBranch}'}) WHERE d.date >= '${escapedStartDate}' AND d.date <= '${escapedEndDate}' RETURN d ORDER BY d.date DESC`;
+    const result = await KuzuDBClient.executeQuery(query);
+    if (!result || typeof result.getAll !== 'function') {
+      return [];
+    }
     const rows = await result.getAll();
-    if (!rows || rows.length === 0) return [];
-    return rows.map((row: any) => row.d ?? row["d"] ?? row);
+    if (!rows || rows.length === 0) {
+      return [];
+    }
+    return rows.map((row: any) => {
+      const rawDecisionData = row.d as any;
+      let date_str = rawDecisionData.date;
+      if (rawDecisionData.date instanceof Date) {
+        date_str = rawDecisionData.date.toISOString().split('T')[0];
+      }
+      return { ...rawDecisionData, date: date_str } as Decision;
+    });
   }
 
   /**
@@ -52,31 +74,41 @@ export class DecisionRepository {
    * Returns the upserted Decision or null if not found
    */
   async upsertDecision(decision: Decision): Promise<Decision | null> {
-    const existing = await this.findByYamlId(
-      String(decision.repository),
-      String(decision.yaml_id),
-      String(decision.branch)
-    );
+    const repositoryId = String(decision.repository);
+    const branch = String(decision.branch);
+    const yamlId = String(decision.yaml_id);
+
+    const escapedRepoId = this.escapeStr(repositoryId);
+    const escapedBranch = this.escapeStr(branch);
+    const escapedYamlId = this.escapeStr(yamlId);
+    const escapedName = this.escapeStr(decision.name);
+    const escapedContext = this.escapeStr(decision.context);
+    const escapedDate = this.escapeStr(decision.date);
+    const nowIso = new Date().toISOString();
+    const kuzuTimestamp = nowIso.replace('T', ' ').replace('Z', '');
+
+    const existing = await this.findByYamlId(repositoryId, yamlId, branch);
+
     if (existing) {
-      await KuzuDBClient.executeQuery(
-        `MATCH (repo:Repository {id: '${decision.repository}'})-[:HAS_DECISION]->(d:Decision {yaml_id: '${decision.yaml_id}', branch: '${decision.branch}'}) SET d.name = '${decision.name}', d.context = '${decision.context}', d.date = '${decision.date}' RETURN d`
-      );
-      return {
-        ...existing,
-        name: decision.name,
-        context: decision.context,
-        date: decision.date,
-      };
+      const updateQuery = `MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_DECISION]->(d:Decision {yaml_id: '${escapedYamlId}', branch: '${escapedBranch}'})
+         SET d.name = '${escapedName}', d.context = '${escapedContext}', d.date = date('${escapedDate}'), d.updated_at = timestamp('${kuzuTimestamp}')
+         RETURN d`;
+      await KuzuDBClient.executeQuery(updateQuery);
+      return this.findByYamlId(repositoryId, yamlId, branch);
     } else {
-      await KuzuDBClient.executeQuery(
-        `MATCH (repo:Repository {id: '${decision.repository}'}) CREATE (repo)-[:HAS_DECISION]->(d:Decision {yaml_id: '${decision.yaml_id}', name: '${decision.name}', context: '${decision.context}', date: '${decision.date}', branch: '${decision.branch}'}) RETURN d`
-      );
-      // Return the newly created decision
-      return this.findByYamlId(
-        String(decision.repository),
-        String(decision.yaml_id),
-        String(decision.branch)
-      );
+      const createQuery = `MATCH (repo:Repository {id: '${escapedRepoId}'})
+         CREATE (repo)-[:HAS_DECISION]->(d:Decision {
+           yaml_id: '${escapedYamlId}', 
+           name: '${escapedName}', 
+           context: '${escapedContext}', 
+           date: date('${escapedDate}'), 
+           branch: '${escapedBranch}',
+           created_at: timestamp('${kuzuTimestamp}'),
+           updated_at: timestamp('${kuzuTimestamp}')
+          })
+         RETURN d`;
+      await KuzuDBClient.executeQuery(createQuery);
+      return this.findByYamlId(repositoryId, yamlId, branch);
     }
   }
 
@@ -84,17 +116,31 @@ export class DecisionRepository {
    * Find a decision by repository and yaml_id
    */
   async findByYamlId(
-    repository: string,
+    repositoryId: string,
     yaml_id: string,
-    branch: string
+    branch: string,
   ): Promise<Decision | null> {
-    const result = await KuzuDBClient.executeQuery(
-      `MATCH (repo:Repository {id: '${repository}'})-[:HAS_DECISION]->(d:Decision {yaml_id: '${yaml_id}', branch: '${branch}'}) RETURN d LIMIT 1`
-    );
-    if (!result || typeof result.getAll !== "function") return null;
+    const escapedRepoId = this.escapeStr(repositoryId);
+    const escapedYamlId = this.escapeStr(yaml_id);
+    const escapedBranch = this.escapeStr(branch);
+    const query = `MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_DECISION]->(d:Decision {yaml_id: '${escapedYamlId}', branch: '${escapedBranch}'}) RETURN d LIMIT 1`;
+    const result = await KuzuDBClient.executeQuery(query);
+    if (!result || typeof result.getAll !== 'function') {
+      return null;
+    }
     const rows = await result.getAll();
-    if (!rows || rows.length === 0) return null;
-    return rows[0].d ?? rows[0]["d"] ?? rows[0];
+    if (!rows || rows.length === 0) {
+      return null;
+    }
+    const rawDecisionData = rows[0].d ?? rows[0]['d'] ?? rows[0];
+    if (!rawDecisionData) {
+      return null;
+    }
+    let date_str = rawDecisionData.date;
+    if (rawDecisionData.date instanceof Date) {
+      date_str = rawDecisionData.date.toISOString().split('T')[0];
+    }
+    return { ...rawDecisionData, date: date_str } as Decision;
   }
 
   /**
@@ -103,28 +149,30 @@ export class DecisionRepository {
    * @param branch The branch name.
    * @returns A promise that resolves to an array of Decision objects.
    */
-  async getAllDecisions(
-    repositoryId: string,
-    branch: string
-  ): Promise<Decision[]> {
-    // The repositoryId already includes the branch, but Decision nodes are also directly tagged with a branch.
-    const safeRepositoryId = repositoryId.replace(/'/g, "\\'");
-    const safeBranch = branch.replace(/'/g, "\\'");
+  async getAllDecisions(repositoryId: string, branch: string): Promise<Decision[]> {
+    const escapedRepoId = this.escapeStr(repositoryId);
+    const escapedBranch = this.escapeStr(branch);
 
     const query = `
-      MATCH (repo:Repository {id: '${safeRepositoryId}'})-[:HAS_DECISION]->(d:Decision {branch: '${safeBranch}'})
+      MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_DECISION]->(d:Decision {branch: '${escapedBranch}'})
       RETURN d
       ORDER BY d.date DESC, d.name ASC
     `;
-    // console.log("Executing getAllDecisions query:", query);
     const result = await KuzuDBClient.executeQuery(query);
-    if (!result || typeof result.getAll !== "function") {
+    if (!result || typeof result.getAll !== 'function') {
       return [];
     }
     const rows = await result.getAll();
     if (!rows || rows.length === 0) {
       return [];
     }
-    return rows.map((row: any) => row.d ?? row["d"] ?? row);
+    return rows.map((row: any) => {
+      const rawDecisionData = row.d as any;
+      let date_str = rawDecisionData.date;
+      if (rawDecisionData.date instanceof Date) {
+        date_str = rawDecisionData.date.toISOString().split('T')[0];
+      }
+      return { ...rawDecisionData, date: date_str } as Decision;
+    });
   }
 }

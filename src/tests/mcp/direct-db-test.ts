@@ -1,6 +1,5 @@
 import express from 'express';
 import { MemoryMcpServer } from '../../mcp';
-import { KuzuDBClient } from '../../db/kuzu';
 
 /**
  * KuzuDB-based MCP server integration test
@@ -48,7 +47,7 @@ async function startMcpServer() {
     res.json({
       status: 'ok',
       timestamp: new Date().toISOString(),
-      message: 'MCP Server is running with KuzuDB integration'
+      message: 'MCP Server is running with KuzuDB integration',
     });
   });
 
@@ -62,8 +61,12 @@ async function startMcpServer() {
     console.log('\nTest MCP endpoints with curl:');
     console.log(`  curl http://localhost:${port}/mcp/server`);
     console.log(`  curl http://localhost:${port}/mcp/tools`);
-    console.log(`  curl -X POST http://localhost:${port}/mcp/tools/init-memory-bank -H "Content-Type: application/json" -d '{"repository": "test-repo", "branch": "main"}'`);
-    console.log(`  curl -X POST http://localhost:${port}/mcp/tools/get-metadata -H "Content-Type: application/json" -d '{"repository": "test-repo", "branch": "main"}'`);
+    console.log(
+      `  curl -X POST http://localhost:${port}/mcp/tools/init-memory-bank -H "Content-Type: application/json" -d '{"repository": "test-repo", "branch": "main"}'`,
+    );
+    console.log(
+      `  curl -X POST http://localhost:${port}/mcp/tools/get-metadata -H "Content-Type: application/json" -d '{"repository": "test-repo", "branch": "main"}'`,
+    );
   });
 
   // Handle graceful shutdown

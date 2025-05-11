@@ -329,7 +329,7 @@ DEBUG=1
 
 ### MCP Tools
 
-The server provides tools for repository operations, memory management, and graph traversal. See [README.md](./README.md) for the complete tool list.
+The server provides tools for repository operations, memory management, and graph traversal. See [README.md](../README.md) for the complete tool list.
 
 ## 🏗️ Architecture
 

@@ -3,7 +3,7 @@
  * Uses TypeScript design patterns to ensure singleton behavior
  */
 // import threading from 'node:worker_threads'; // This import was present but not used
-import { Mutex } from "./mutex"; // Import Mutex from the dedicated file
+import { Mutex } from './mutex'; // Import Mutex from the dedicated file
 
 /**
  * Singleton metaclass implementation

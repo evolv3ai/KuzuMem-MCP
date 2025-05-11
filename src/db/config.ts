@@ -12,7 +12,9 @@ dotenv.config();
 
 // Define a consistent absolute path for the KuzuDB database file
 // This ensures the same path is used regardless of how the application is run
-let dbPath = process.env.KUZU_DB_PATH || 'memory-bank.kuzu';
+
+// Use DB_FILENAME as the primary environment variable, falling back to KUZU_DB_PATH, then a default.
+let dbPath = process.env.DB_FILENAME || process.env.KUZU_DB_PATH || 'memory-bank.kuzu';
 
 // Convert to absolute path if relative
 if (!path.isAbsolute(dbPath)) {
@@ -21,8 +23,14 @@ if (!path.isAbsolute(dbPath)) {
   dbPath = path.join(projectRoot, dbPath);
 }
 
-// Store the resolved path back in environment variables for consistency
-process.env.KUZU_DB_PATH = dbPath;
+// Store the resolved path back in DB_FILENAME for consistency if it was set via KUZU_DB_PATH or default
+if (process.env.DB_FILENAME !== dbPath) {
+  process.env.DB_FILENAME = dbPath;
+}
+// Also update KUZU_DB_PATH for any part of the code that might still use it, though DB_FILENAME is preferred now.
+if (process.env.KUZU_DB_PATH !== dbPath) {
+  process.env.KUZU_DB_PATH = dbPath;
+}
 
 // Ensure database directory exists
 const dbDir = path.dirname(dbPath);

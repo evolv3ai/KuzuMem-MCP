@@ -1,11 +1,5 @@
 import YAML from 'yaml';
-import { 
-  Metadata, 
-  Context, 
-  Component, 
-  Decision, 
-  Rule 
-} from '../types';
+import { Metadata, Context, Component, Decision, Rule } from '../types';
 import { Mutex } from '../utils/mutex';
 
 /**
@@ -21,12 +15,12 @@ export class YamlService {
   static async getInstance(): Promise<YamlService> {
     // Acquire lock for thread safety
     const release = await YamlService.lock.acquire();
-    
+
     try {
       if (!YamlService.instance) {
         YamlService.instance = new YamlService();
       }
-      
+
       return YamlService.instance;
     } finally {
       // Always release the lock
@@ -53,9 +47,9 @@ export class YamlService {
       related_issue: context.related_issue,
       summary: context.summary,
       decisions: context.decisions,
-      observations: context.observations
+      observations: context.observations,
     };
-    
+
     return `--- !Context\n${YAML.stringify(yamlObj)}`;
   }
 
@@ -68,9 +62,9 @@ export class YamlService {
       name: component.name,
       kind: component.kind,
       depends_on: component.depends_on,
-      status: component.status
+      status: component.status,
     };
-    
+
     return `--- !Component\n${YAML.stringify(yamlObj)}`;
   }
 
@@ -82,9 +76,9 @@ export class YamlService {
       id: decision.yaml_id,
       name: decision.name,
       context: decision.context,
-      date: decision.date
+      date: decision.date,
     };
-    
+
     return `--- !Decision\n${YAML.stringify(yamlObj)}`;
   }
 
@@ -98,9 +92,9 @@ export class YamlService {
       created: rule.created,
       triggers: rule.triggers,
       content: rule.content,
-      status: rule.status
+      status: rule.status,
     };
-    
+
     return `--- !Rule\n${YAML.stringify(yamlObj)}`;
   }
 
@@ -108,20 +102,53 @@ export class YamlService {
    * Parses YAML string and determines the type
    */
   parseYaml(yamlString: string): { type: string; data: any } {
-    // Extract the YAML type from the first line (e.g., "--- !Metadata")
-    const firstLine = yamlString.split('\n')[0];
-    const match = firstLine.match(/---\s+!(\w+)/);
-    
-    if (!match) {
-      throw new Error('Invalid YAML format: missing type declaration');
+    const lines = yamlString.split('\n');
+    if (lines.length === 0) {
+      throw new Error('Invalid YAML format: empty content');
     }
-    
+    const firstLine = lines[0];
+    const match = firstLine.match(/^---\s+!(\w+)/); // Ensure --- is at the start
+
+    if (!match) {
+      throw new Error('Invalid YAML format: missing type declaration (e.g., --- !Component)');
+    }
+
     const type = match[1].toLowerCase();
-    const content = YAML.parse(yamlString.substring(firstLine.length));
-    
+
+    // Join lines *after* the first (directive) line
+    const contentString = lines.slice(1).join('\n');
+
+    if (!contentString.trim()) {
+      console.error(
+        `YAML content is empty after directive for type ${type}. Original YAML:`,
+        yamlString,
+      );
+      throw new Error(`Invalid YAML content for type ${type}: content part is empty.`);
+    }
+
+    let data;
+    try {
+      data = YAML.parse(contentString); // Parse only the content after the directive line
+    } catch (e: any) {
+      console.error(
+        `YAML.parse failed for contentString. Type: ${type}. Error: ${e.message}. ContentString: >>>${contentString}<<<`,
+      );
+      throw new Error(`Invalid YAML content for type ${type}: ${e.message}`);
+    }
+
+    if (data === null || typeof data !== 'object') {
+      console.error(
+        `YAML.parse resulted in non-object data for type ${type}. Parsed data:`,
+        data,
+        `Content string:`,
+        contentString,
+      );
+      throw new Error(`Invalid YAML content for type ${type}: parsed to null or non-object.`);
+    }
+
     return {
       type,
-      data: content
+      data,
     };
   }
 }

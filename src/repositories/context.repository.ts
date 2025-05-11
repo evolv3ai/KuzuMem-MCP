@@ -1,6 +1,6 @@
-import { Context } from "../types";
-import { Mutex } from "../utils/mutex";
-import { KuzuDBClient } from "../db/kuzu";
+import { Context } from '../types';
+import { Mutex } from '../utils/mutex';
+import { KuzuDBClient } from '../db/kuzu';
 
 /**
  * Thread-safe singleton repository for Context, using KuzuDB and Cypher queries
@@ -26,6 +26,13 @@ export class ContextRepository {
     }
   }
 
+  private escapeStr(value: any): string {
+    if (value === undefined || value === null) {
+      return 'null';
+    }
+    return String(value).replace(/'/g, "\\'").replace(/\\/g, '\\\\');
+  }
+
   /**
    * Get the latest N contexts for a repository, ordered by iso_date descending
    */
@@ -33,18 +40,24 @@ export class ContextRepository {
    * Get the latest N contexts for a repository, ordered by created_at descending
    */
   async getLatestContexts(
-    repository: string,
-    branch: string,
-    limit: number = 10
+    repositoryId: string, // This is the synthetic repoId (name:branch)
+    // branch parameter is redundant here as repoId includes it
+    limit: number = 10,
   ): Promise<Context[]> {
-    const result = await KuzuDBClient.executeQuery(
-      `MATCH (repo:Repository {id: '${repository}'})-[:HAS_CONTEXT]->(c:Context {branch: '${branch}'})
-       RETURN c ORDER BY c.created_at DESC LIMIT ${limit}`
-    );
-    if (!result || typeof result.getAll !== "function") return [];
+    const escapedRepoId = this.escapeStr(repositoryId);
+    const query = `
+      MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_CONTEXT]->(c:Context)
+      RETURN c ORDER BY c.created_at DESC LIMIT ${limit}
+    `; // limit is a number, directly interpolated
+    const result = await KuzuDBClient.executeQuery(query);
+    if (!result || typeof result.getAll !== 'function') {
+      return [];
+    }
     const rows = await result.getAll();
-    if (!rows || rows.length === 0) return [];
-    return rows.map((row: any) => row.c ?? row["c"] ?? row);
+    if (!rows || rows.length === 0) {
+      return [];
+    }
+    return rows.map((row: any) => row.c as Context);
   }
 
   /**
@@ -53,18 +66,38 @@ export class ContextRepository {
   /**
    * Get the context for a repository for a specific iso_date
    */
-  async getTodayContext(
-    repository: string,
-    branch: string,
-    today: string
-  ): Promise<Context | null> {
-    const result = await KuzuDBClient.executeQuery(
-      `MATCH (repo:Repository {id: '${repository}'})-[:HAS_CONTEXT]->(c:Context {iso_date: '${today}', branch: '${branch}'}) RETURN c LIMIT 1`
-    );
-    if (!result || typeof result.getAll !== "function") return null;
+  async getTodayContext(repositoryId: string, today: string): Promise<Context | null> {
+    const escapedRepoId = this.escapeStr(repositoryId);
+    const escapedToday = this.escapeStr(today);
+
+    const query = `
+      MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_CONTEXT]->(c:Context {iso_date: date('${escapedToday}')}) 
+      RETURN c LIMIT 1
+    `; // Used date() function for comparison
+    const result = await KuzuDBClient.executeQuery(query);
+    if (!result || typeof result.getAll !== 'function') {
+      return null;
+    }
     const rows = await result.getAll();
-    if (!rows || rows.length === 0) return null;
-    return rows[0].c ?? rows[0]["c"] ?? rows[0];
+    if (!rows || rows.length === 0) {
+      return null;
+    }
+
+    const rawContextData = rows[0].c ?? rows[0]['c'] ?? rows[0];
+    if (!rawContextData) {
+      return null;
+    }
+
+    // Ensure iso_date is consistently a 'YYYY-MM-DD' string
+    let iso_date_str = rawContextData.iso_date;
+    if (rawContextData.iso_date instanceof Date) {
+      iso_date_str = rawContextData.iso_date.toISOString().split('T')[0];
+    }
+
+    return {
+      ...rawContextData,
+      iso_date: iso_date_str,
+    } as Context;
   }
 
   /**
@@ -79,46 +112,46 @@ export class ContextRepository {
    * Uses the synthetic repository id (id = name + ':' + branch)
    */
   async upsertContext(context: Context): Promise<Context | null> {
-    const existing = await this.findByYamlId(
-      String(context.repository),
-      String(context.yaml_id),
-      String(context.branch)
+    const repositoryId = String(context.repository);
+    console.error(
+      `DEBUG: context.repository.ts - upsertContext - received context.repository: >>>${context.repository}<<<, type: ${typeof context.repository}`,
     );
+    const escapedRepoId = this.escapeStr(repositoryId);
+    console.error(
+      `DEBUG: context.repository.ts - upsertContext - escapedRepoId: >>>${escapedRepoId}<<<`,
+    );
+    const escapedYamlId = this.escapeStr(context.yaml_id);
+    const escapedName = this.escapeStr(context.name);
+    const escapedSummary = this.escapeStr(context.summary);
+    const escapedIsoDate = this.escapeStr(context.iso_date); // This is YYYY-MM-DD
+    const escapedBranch = this.escapeStr(context.branch); // Define and escape branch
+    const nowIso = new Date().toISOString();
+    const kuzuTimestamp = nowIso.replace('T', ' ').replace('Z', '');
+
+    const existing = await this.findByYamlId(repositoryId, context.yaml_id);
+
     if (existing) {
-      await KuzuDBClient.executeQuery(
-        `MATCH (repo:Repository {id: '${context.repository}'})-[:HAS_CONTEXT]->(c:Context {yaml_id: '${context.yaml_id}', branch: '${context.branch}'})
-         SET c.agent = '${context.agent}', c.related_issue = '${context.related_issue}', c.summary = '${context.summary}', c.decisions = '${context.decisions}', c.observations = '${context.observations}'
-         RETURN c`
-      );
-      return {
-        ...existing,
-        agent: context.agent,
-        related_issue: context.related_issue,
-        summary: context.summary,
-        decisions: context.decisions,
-        observations: context.observations,
-      };
+      const updateQuery = `
+         MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_CONTEXT]->(c:Context {yaml_id: '${escapedYamlId}'})
+         SET c.name = '${escapedName}', c.summary = '${escapedSummary}', c.iso_date = date('${escapedIsoDate}'), c.branch = '${escapedBranch}', c.updated_at = timestamp('${kuzuTimestamp}')
+         RETURN c`; // Added c.branch to SET
+      await KuzuDBClient.executeQuery(updateQuery);
+      return this.findByYamlId(repositoryId, context.yaml_id);
     } else {
-      await KuzuDBClient.executeQuery(
-        `MATCH (repo:Repository {id: '${context.repository}'})
+      const createQuery = `
+         MATCH (repo:Repository {id: '${escapedRepoId}'})
          CREATE (repo)-[:HAS_CONTEXT]->(c:Context {
-           repository: '${context.repository}',
-           yaml_id: '${context.yaml_id}',
-           iso_date: '${context.iso_date}',
-           agent: '${context.agent}',
-           related_issue: '${context.related_issue}',
-           summary: '${context.summary}',
-           decisions: '${context.decisions}',
-           observations: '${context.observations}',
-           branch: '${context.branch}'
+           yaml_id: '${escapedYamlId}',
+           name: '${escapedName}',
+           iso_date: date('${escapedIsoDate}'), 
+           summary: '${escapedSummary}',
+           branch: '${escapedBranch}', // Added branch to CREATE
+           created_at: timestamp('${kuzuTimestamp}'),
+           updated_at: timestamp('${kuzuTimestamp}')
          })
-         RETURN c`
-      );
-      return this.findByYamlId(
-        String(context.repository),
-        String(context.yaml_id),
-        String(context.branch)
-      );
+         RETURN c`;
+      await KuzuDBClient.executeQuery(createQuery);
+      return this.findByYamlId(repositoryId, context.yaml_id);
     }
   }
 
@@ -129,16 +162,39 @@ export class ContextRepository {
    * Find a context by repository_id and yaml_id using synthetic id
    */
   async findByYamlId(
-    repository: string,
+    repositoryId: string, // This is the synthetic repoId (name:branch)
     yaml_id: string,
-    branch: string
+    // branch parameter is redundant
   ): Promise<Context | null> {
-    const result = await KuzuDBClient.executeQuery(
-      `MATCH (repo:Repository {id: '${repository}'})-[:HAS_CONTEXT]->(c:Context {yaml_id: '${yaml_id}', branch: '${branch}'}) RETURN c LIMIT 1`
-    );
-    if (!result || typeof result.getAll !== "function") return null;
+    const escapedRepoId = this.escapeStr(repositoryId);
+    const escapedYamlId = this.escapeStr(yaml_id);
+    // Context nodes should be matched by yaml_id, not branch directly
+    const query = `
+      MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_CONTEXT]->(c:Context {yaml_id: '${escapedYamlId}'})
+      RETURN c LIMIT 1
+    `;
+    const result = await KuzuDBClient.executeQuery(query);
+    if (!result || typeof result.getAll !== 'function') {
+      return null;
+    }
     const rows = await result.getAll();
-    if (!rows || rows.length === 0) return null;
-    return rows[0].c ?? rows[0]["c"] ?? rows[0];
+    if (!rows || rows.length === 0) {
+      return null;
+    }
+
+    const rawContextData = rows[0].c ?? rows[0]['c'] ?? rows[0];
+    if (!rawContextData) {
+      return null;
+    }
+
+    let iso_date_str = rawContextData.iso_date;
+    if (rawContextData.iso_date instanceof Date) {
+      iso_date_str = rawContextData.iso_date.toISOString().split('T')[0];
+    }
+
+    return {
+      ...rawContextData,
+      iso_date: iso_date_str,
+    } as Context;
   }
 }

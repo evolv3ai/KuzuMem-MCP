@@ -1,5 +1,5 @@
-import { ContextRepository, RepositoryRepository } from "../../repositories";
-import { Context } from "../../types";
+import { ContextRepository, RepositoryRepository } from '../../repositories';
+import { Context } from '../../types';
 
 /**
  * Retrieves the latest context entries for a repository and branch.
@@ -16,16 +16,14 @@ export async function getLatestContextsOp(
   branch: string,
   limit: number | undefined,
   repositoryRepo: RepositoryRepository,
-  contextRepo: ContextRepository
+  contextRepo: ContextRepository,
 ): Promise<Context[]> {
   const repository = await repositoryRepo.findByName(repositoryName, branch);
   if (!repository) {
-    console.warn(
-      `Repository not found: ${repositoryName}/${branch} in getLatestContextsOp`
-    );
+    console.warn(`Repository not found: ${repositoryName}/${branch} in getLatestContextsOp`);
     return [];
   }
-  return contextRepo.getLatestContexts(String(repository.id!), branch, limit);
+  return contextRepo.getLatestContexts(String(repository.id!), limit);
 }
 
 /**
@@ -42,22 +40,21 @@ export async function getTodayContextOp(
   repositoryName: string,
   branch: string,
   repositoryRepo: RepositoryRepository,
-  contextRepo: ContextRepository
+  contextRepo: ContextRepository,
 ): Promise<Context | null> {
   const repository = await repositoryRepo.findByName(repositoryName, branch);
   if (!repository) {
-    console.warn(
-      `Repository not found: ${repositoryName}/${branch} in getTodayContextOp`
-    );
+    console.warn(`Repository not found: ${repositoryName}/${branch} in getTodayContextOp`);
     return null;
   }
-  const today = new Date().toISOString().split("T")[0];
-  return contextRepo.getTodayContext(String(repository.id!), branch, today);
+  const today = new Date().toISOString().split('T')[0];
+  return contextRepo.getTodayContext(String(repository.id!), today);
 }
 
 interface UpdateContextOpParams {
   repositoryName: string;
   branch?: string;
+  name?: string;
   summary?: string;
   agent?: string;
   decision?: string;
@@ -76,11 +73,12 @@ interface UpdateContextOpParams {
 export async function updateContextOp(
   params: UpdateContextOpParams,
   repositoryRepo: RepositoryRepository,
-  contextRepo: ContextRepository
+  contextRepo: ContextRepository,
 ): Promise<Context | null> {
   const {
     repositoryName,
-    branch = "main",
+    branch = 'main',
+    name,
     summary,
     agent,
     decision,
@@ -89,53 +87,65 @@ export async function updateContextOp(
   } = params;
 
   const repo = await repositoryRepo.findByName(repositoryName, branch);
-  if (!repo) {
+  console.error(
+    `DEBUG: context.ops.ts - After findByName - repositoryName: ${repositoryName}, branch: ${branch}, repo: ${JSON.stringify(repo)}, repo.id: ${repo ? repo.id : 'repo_is_null'}`,
+  );
+
+  if (!repo || !repo.id) {
     console.warn(
-      `Repository not found: ${repositoryName}/${branch} in updateContextOp`
+      `Repository or Repository ID not found: ${repositoryName}:${branch} in updateContextOp. Repo was: ${JSON.stringify(repo)}`,
     );
     return null;
   }
 
-  const todayDate = new Date().toISOString().split("T")[0];
-  let currentContext = await contextRepo.getTodayContext(
-    String(repo.id!),
-    branch,
-    todayDate
-  );
+  const todayDateString = new Date().toISOString().split('T')[0];
+  const currentContext = await contextRepo.getTodayContext(String(repo.id), todayDateString);
+
+  const contextName = name || params.summary || `Context-${todayDateString}`;
 
   if (!currentContext) {
-    // Create new context for today
-    // Temporary 'as any' for array fields until ContextRepository.upsertContext types are confirmed to handle string[]
+    const finalIsoDateForCreate = new Date().toISOString().split('T')[0];
+    console.error(
+      `DEBUG: context.ops.ts: finalIsoDateForCreate for new context = >>>${finalIsoDateForCreate}<<<`,
+    );
+    const repoIdForCreate = String(repo.id); // Explicitly get it here
+    console.error(
+      `DEBUG: context.ops.ts - CREATE path - repo.id for upsert: >>>${repoIdForCreate}<<<, typeof repo.id: ${typeof repo.id}`,
+    );
     return contextRepo.upsertContext({
-      repository: String(repo.id!),
-      yaml_id: `context-${todayDate}`,
-      iso_date: todayDate,
-      agent: agent ?? undefined,
-      related_issue: (issue ? [issue] : []) as any,
-      summary: summary || "",
-      decisions: (decision ? [decision] : []) as any,
-      observations: (observation ? [observation] : []) as any,
-      branch,
-    });
+      repository: repoIdForCreate,
+      branch: branch,
+      yaml_id: `context-${finalIsoDateForCreate}`,
+      name: contextName,
+      iso_date: finalIsoDateForCreate,
+      summary: summary || '',
+      agent: agent,
+      related_issue: issue,
+      decisions: decision ? [decision] : [],
+      observations: observation ? [observation] : [],
+    } as Context);
   } else {
-    // Merge updates with existing context
-    // Temporary 'as any' for array fields
-    const updatedData = {
+    console.error(
+      `DEBUG: context.ops.ts: iso_date from existing context = >>>${currentContext.iso_date}<<<`,
+    );
+    const repoIdForUpdate = String(repo.id); // Explicitly get it here
+    console.error(
+      `DEBUG: context.ops.ts - UPDATE path - repo.id for upsert: >>>${repoIdForUpdate}<<<, typeof repo.id: ${typeof repo.id}`,
+    );
+    const updatedData: Context = {
       ...currentContext,
-      agent: agent ?? currentContext.agent,
+      repository: repoIdForUpdate,
+      branch: branch,
+      name: contextName,
       summary: summary ?? currentContext.summary,
-      related_issue: (issue
-        ? Array.from(new Set([...(currentContext.related_issue || []), issue]))
-        : currentContext.related_issue) as any,
-      decisions: (decision
+      agent: agent ?? currentContext.agent,
+      related_issue: issue ?? currentContext.related_issue,
+      decisions: decision
         ? Array.from(new Set([...(currentContext.decisions || []), decision]))
-        : currentContext.decisions) as any,
-      observations: (observation
-        ? Array.from(
-            new Set([...(currentContext.observations || []), observation])
-          )
-        : currentContext.observations) as any,
-      branch, // Ensure branch is part of the upsert data for ContextRepository if needed
+        : currentContext.decisions,
+      observations: observation
+        ? Array.from(new Set([...(currentContext.observations || []), observation]))
+        : currentContext.observations,
     };
     return contextRepo.upsertContext(updatedData);
   }

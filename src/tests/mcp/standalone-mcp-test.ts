@@ -20,10 +20,10 @@ class StandaloneMcpServer {
   private setupEndpoints(): void {
     // Register server metadata endpoint
     this.router.get('/server', this.getServerInfo);
-    
+
     // Register tool endpoints
     this.router.get('/tools', this.getToolsInfo);
-    
+
     // MCP Tool-specific endpoints - all returning mock responses
     this.router.post('/tools/init-memory-bank', this.handleInitMemoryBank);
     this.router.post('/tools/get-metadata', this.handleGetMetadata);
@@ -47,107 +47,107 @@ class StandaloneMcpServer {
 
   // Mock handlers that return success responses without database interaction
   private handleInitMemoryBank = (req: Request, res: Response): void => {
-    const { repository, branch = 'main'  } = req.body;
-    
+    const { repository, branch = 'main' } = req.body;
+
     if (!repository) {
-      res.status(400).json({ 
-        success: false, 
-        error: "Missing required parameter: repository (and branch)" 
+      res.status(400).json({
+        success: false,
+        error: 'Missing required parameter: repository (and branch)',
       });
       return;
     }
-    
+
     res.json({
       success: true,
-      message: `Memory bank initialized for repository: ${repository} (branch: ${branch})`
+      message: `Memory bank initialized for repository: ${repository} (branch: ${branch})`,
     });
   };
 
   private handleGetMetadata = (req: Request, res: Response): void => {
-    const { repository, branch = 'main'  } = req.body;
-    
+    const { repository, branch = 'main' } = req.body;
+
     if (!repository) {
-      res.status(400).json({ 
-        success: false, 
-        error: "Missing required parameter: repository (and branch)" 
+      res.status(400).json({
+        success: false,
+        error: 'Missing required parameter: repository (and branch)',
       });
       return;
     }
-    
+
     res.json({
       success: true,
       metadata: {
         id: 'meta',
         project: {
           name: 'Test Project',
-          created: '2025-05-10'
+          created: '2025-05-10',
         },
         tech_stack: {
           language: 'TypeScript',
           framework: 'Express',
-          datastore: 'SQLite'
-        }
-      }
+          datastore: 'SQLite',
+        },
+      },
     });
   };
 
   private handleUpdateMetadata = (req: Request, res: Response): void => {
-    const { repository, branch = 'main' , metadata } = req.body;
-    
+    const { repository, branch = 'main', metadata } = req.body;
+
     if (!repository || !metadata) {
-      res.status(400).json({ 
-        success: false, 
-        error: "Missing required parameters" 
+      res.status(400).json({
+        success: false,
+        error: 'Missing required parameters',
       });
       return;
     }
-    
+
     res.json({
       success: true,
       metadata: {
         ...metadata,
-        id: 'meta'
-      }
+        id: 'meta',
+      },
     });
   };
 
   private handleGetContext = (req: Request, res: Response): void => {
-    const { repository, branch = 'main' , latest } = req.body;
-    
+    const { repository, branch = 'main', latest } = req.body;
+
     if (!repository) {
-      res.status(400).json({ 
-        success: false, 
-        error: "Missing required parameter: repository (and branch)" 
+      res.status(400).json({
+        success: false,
+        error: 'Missing required parameter: repository (and branch)',
       });
       return;
     }
-    
+
     const context = {
       id: 'ctx-2025-05-10',
       iso_date: '2025-05-10T08:00:00Z',
       agent: 'test-agent',
       summary: 'Test context summary',
       decisions: ['Test decision'],
-      observations: ['Test observation']
+      observations: ['Test observation'],
     };
-    
+
     res.json({
       success: true,
-      context: latest ? [context] : [context, {...context, id: 'ctx-2025-05-09'}]
+      context: latest ? [context] : [context, { ...context, id: 'ctx-2025-05-09' }],
     });
   };
 
   private handleUpdateContext = (req: Request, res: Response): void => {
-    const { repository, branch = 'main'  } = req.body;
-    
+    const { repository, branch = 'main' } = req.body;
+
     if (!repository) {
-      res.status(400).json({ 
-        success: false, 
-        error: "Missing required parameter: repository (and branch)" 
+      res.status(400).json({
+        success: false,
+        error: 'Missing required parameter: repository (and branch)',
       });
       return;
     }
-    
+
     res.json({
       success: true,
       context: {
@@ -156,22 +156,24 @@ class StandaloneMcpServer {
         agent: req.body.agent || 'test-agent',
         summary: req.body.summary || 'Updated context summary',
         decisions: req.body.decision ? ['Test decision', req.body.decision] : ['Test decision'],
-        observations: req.body.observation ? ['Test observation', req.body.observation] : ['Test observation']
-      }
+        observations: req.body.observation
+          ? ['Test observation', req.body.observation]
+          : ['Test observation'],
+      },
     });
   };
 
   private handleAddComponent = (req: Request, res: Response): void => {
-    const { repository, branch = 'main' , id, name } = req.body;
-    
+    const { repository, branch = 'main', id, name } = req.body;
+
     if (!repository || !id || !name) {
-      res.status(400).json({ 
-        success: false, 
-        error: "Missing required parameters" 
+      res.status(400).json({
+        success: false,
+        error: 'Missing required parameters',
       });
       return;
     }
-    
+
     res.json({
       success: true,
       component: {
@@ -179,44 +181,44 @@ class StandaloneMcpServer {
         name,
         kind: req.body.kind || 'service',
         depends_on: req.body.depends_on || [],
-        status: req.body.status || 'active'
-      }
+        status: req.body.status || 'active',
+      },
     });
   };
 
   private handleAddDecision = (req: Request, res: Response): void => {
-    const { repository, branch = 'main' , id, name, date } = req.body;
-    
+    const { repository, branch = 'main', id, name, date } = req.body;
+
     if (!repository || !id || !name || !date) {
-      res.status(400).json({ 
-        success: false, 
-        error: "Missing required parameters" 
+      res.status(400).json({
+        success: false,
+        error: 'Missing required parameters',
       });
       return;
     }
-    
+
     res.json({
       success: true,
       decision: {
         id,
         name,
         context: req.body.context || '',
-        date
-      }
+        date,
+      },
     });
   };
 
   private handleAddRule = (req: Request, res: Response): void => {
-    const { repository, branch = 'main' , id, name, created } = req.body;
-    
+    const { repository, branch = 'main', id, name, created } = req.body;
+
     if (!repository || !id || !name || !created) {
-      res.status(400).json({ 
-        success: false, 
-        error: "Missing required parameters" 
+      res.status(400).json({
+        success: false,
+        error: 'Missing required parameters',
       });
       return;
     }
-    
+
     res.json({
       success: true,
       rule: {
@@ -225,22 +227,22 @@ class StandaloneMcpServer {
         created,
         triggers: req.body.triggers || [],
         content: req.body.content || '',
-        status: req.body.status || 'active'
-      }
+        status: req.body.status || 'active',
+      },
     });
   };
 
   private handleExportMemoryBank = (req: Request, res: Response): void => {
-    const { repository, branch = 'main'  } = req.body;
-    
+    const { repository, branch = 'main' } = req.body;
+
     if (!repository) {
-      res.status(400).json({ 
-        success: false, 
-        error: "Missing required parameter: repository (and branch)" 
+      res.status(400).json({
+        success: false,
+        error: 'Missing required parameter: repository (and branch)',
       });
       return;
     }
-    
+
     res.json({
       success: true,
       files: {
@@ -248,33 +250,33 @@ class StandaloneMcpServer {
         contexts: ['--- !Context\nid: ctx-2025-05-10\niso_date: 2025-05-10T08:00:00Z'],
         components: ['--- !Component\nid: comp-test\nname: Test Component'],
         decisions: ['--- !Decision\nid: dec-test\nname: Test Decision\ndate: 2025-05-10'],
-        rules: ['--- !Rule\nid: rule-test\nname: Test Rule\ncreated: 2025-05-10']
-      }
+        rules: ['--- !Rule\nid: rule-test\nname: Test Rule\ncreated: 2025-05-10'],
+      },
     });
   };
 
   private handleImportMemoryBank = (req: Request, res: Response): void => {
-    const { repository, branch = 'main' , content, type, id } = req.body;
-    
+    const { repository, branch = 'main', content, type, id } = req.body;
+
     if (!repository || !content || !type || !id) {
-      res.status(400).json({ 
-        success: false, 
-        error: "Missing required parameters" 
+      res.status(400).json({
+        success: false,
+        error: 'Missing required parameters',
       });
       return;
     }
-    
+
     if (!['metadata', 'context', 'component', 'decision', 'rule'].includes(type)) {
-      res.status(400).json({ 
-        success: false, 
-        error: "Invalid memory type" 
+      res.status(400).json({
+        success: false,
+        error: 'Invalid memory type',
       });
       return;
     }
-    
+
     res.json({
       success: true,
-      message: "Memory bank imported successfully"
+      message: 'Memory bank imported successfully',
     });
   };
 }
@@ -287,26 +289,26 @@ async function startStandaloneServer() {
     // Create Express app
     const app = express();
     const port = process.env.PORT || 4000;
-    
+
     // Parse JSON request body
     app.use(express.json());
-    
+
     // Initialize MCP server
     const mcpServer = new StandaloneMcpServer();
     const mcpRouter = mcpServer.initialize();
-    
+
     // Mount MCP endpoints at /mcp
     app.use('/mcp', mcpRouter);
-    
+
     // Add a simple health check endpoint
     app.get('/health', (req, res) => {
       res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
-        message: 'MCP Test Server is running'
+        message: 'MCP Test Server is running',
       });
     });
-    
+
     // Start server
     const server = app.listen(port, () => {
       console.log(`✅ Standalone MCP Test Server running at http://localhost:${port}`);
@@ -317,9 +319,11 @@ async function startStandaloneServer() {
       console.log('\nTest MCP endpoints with curl:');
       console.log(`  curl http://localhost:${port}/mcp/server`);
       console.log(`  curl http://localhost:${port}/mcp/tools`);
-      console.log(`  curl -X POST http://localhost:${port}/mcp/tools/init-memory-bank -H "Content-Type: application/json" -d '{"repository": "test-repo", "branch": "main"}'`);
+      console.log(
+        `  curl -X POST http://localhost:${port}/mcp/tools/init-memory-bank -H "Content-Type: application/json" -d '{"repository": "test-repo", "branch": "main"}'`,
+      );
     });
-    
+
     // Handle graceful shutdown
     process.on('SIGINT', () => {
       console.log('\nShutting down MCP test server');
@@ -328,7 +332,6 @@ async function startStandaloneServer() {
         process.exit(0);
       });
     });
-    
   } catch (error) {
     console.error('Failed to start MCP test server:', error);
     process.exit(1);

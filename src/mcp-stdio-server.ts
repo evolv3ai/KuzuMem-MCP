@@ -1,49 +1,28 @@
-import readline from "readline";
-import fs from "fs";
-import path from "path";
-import { MEMORY_BANK_MCP_TOOLS } from "./mcp";
-import { MemoryService } from "./services/memory.service";
-import { toolHandlers } from "./mcp/tool-handlers";
+import readline from 'readline';
+import fs from 'fs';
+import path from 'path';
+import { MEMORY_BANK_MCP_TOOLS } from './mcp';
+import { MemoryService } from './services/memory.service';
+import { toolHandlers } from './mcp/tool-handlers';
 
 // Ensure database directory and file exists
 // Always use the project root for consistency
-const projectRoot = path.resolve(__dirname, "..");
-let dbPath =
-  process.env.DB_FILENAME || path.join(projectRoot, "memory-bank.sqlite");
+const projectRoot = path.resolve(__dirname, '..');
+// DB_FILENAME is now set by test-db-setup.ts or .env for other runs
+let dbPath = process.env.DB_FILENAME || path.join(projectRoot, 'memory-bank.kuzu'); // Fallback if not set
 const dbDir = path.dirname(dbPath);
 
-// Make absolute path if relative
 if (!path.isAbsolute(dbPath)) {
   dbPath = path.resolve(projectRoot, dbPath);
 }
+process.env.DB_FILENAME = dbPath; // Ensure it's absolute for KuzuDBClient if it re-reads
 
-// Set the environment variable for other components
-process.env.DB_FILENAME = dbPath;
 console.error(`MCP server using database path: ${dbPath}`);
 
-// Create database directory if it doesn't exist
+// Ensure PARENT directory exists (KuzuDB will create the actual DB directory/file itself)
 if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
-}
-
-// Create empty database file if it doesn't exist
-if (!fs.existsSync(dbPath)) {
-  // Create with explicit permissions (read/write for user, group, others)
-  fs.writeFileSync(dbPath, "", { mode: 0o666 });
-  console.error(
-    `Created database file at: ${dbPath} with read/write permissions`
-  );
-}
-
-// Ensure the file is writable even if it already exists
-if (fs.existsSync(dbPath)) {
-  try {
-    // Set permissions to read/write for user, group, and others
-    fs.chmodSync(dbPath, 0o666);
-    console.error(`Ensured database file at: ${dbPath} has proper permissions`);
-  } catch (err) {
-    console.error(`Failed to set permissions on database file: ${err}`);
-  }
+  console.error(`Created parent directory for KuzuDB: ${dbDir}`);
 }
 
 // Initialize memory service early
@@ -51,10 +30,10 @@ let memoryServiceInstance: MemoryService | null = null;
 MemoryService.getInstance()
   .then((instance) => {
     memoryServiceInstance = instance;
-    console.error("Memory service initialized");
+    console.error('Memory service initialized');
   })
   .catch((err) => {
-    console.error("Failed to initialize memory service:", err);
+    console.error('Failed to initialize memory service:', err);
   });
 
 // Create the readline interface for stdio
@@ -93,9 +72,7 @@ interface McpError {
 }
 
 // Debug levels
-const DEBUG_LEVEL = process.env.DEBUG
-  ? parseInt(process.env.DEBUG, 10) || 1
-  : 0;
+const DEBUG_LEVEL = process.env.DEBUG ? parseInt(process.env.DEBUG, 10) || 1 : 0;
 
 // Debug logging helper
 function debugLog(level: number, message: string, data?: any): void {
@@ -103,7 +80,7 @@ function debugLog(level: number, message: string, data?: any): void {
     if (data) {
       console.error(
         `[DEBUG${level}] ${message}`,
-        typeof data === "string" ? data : JSON.stringify(data, null, 2)
+        typeof data === 'string' ? data : JSON.stringify(data, null, 2),
       );
     } else {
       console.error(`[DEBUG${level}] ${message}`);
@@ -115,8 +92,8 @@ function debugLog(level: number, message: string, data?: any): void {
 function sendResponse(response: McpResponse): void {
   // Only log the full response for debug level 2+
   debugLog(1, `Sending response for id: ${response.id}`);
-  debugLog(2, "Response details:", response);
-  process.stdout.write(JSON.stringify(response) + "\n");
+  debugLog(2, 'Response details:', response);
+  process.stdout.write(JSON.stringify(response) + '\n');
 }
 
 // Helper for tool errors
@@ -127,22 +104,22 @@ function createToolError(message: string): any {
 }
 
 // Process incoming messages
-rl.on("line", async (line) => {
+rl.on('line', async (line) => {
   let request: McpRequest;
 
   try {
     request = JSON.parse(line);
     debugLog(1, `Received request: ${request.method}`);
-    debugLog(2, "Request details:", request);
+    debugLog(2, 'Request details:', request);
 
     // Validate the request has required fields
     if (!request.jsonrpc || !request.method) {
       sendResponse({
-        jsonrpc: "2.0",
+        jsonrpc: '2.0',
         id: request.id || null,
         error: {
           code: -32600,
-          message: "Invalid Request: missing required fields",
+          message: 'Invalid Request: missing required fields',
         },
       });
       return;
@@ -150,13 +127,13 @@ rl.on("line", async (line) => {
 
     // Process the request based on method
     switch (request.method) {
-      case "initialize": {
+      case 'initialize': {
         // MCP initialization
-        const protocolVersion = request.params?.protocolVersion || "0.1";
+        const protocolVersion = request.params?.protocolVersion || '0.1';
         initialized = true;
 
         sendResponse({
-          jsonrpc: "2.0",
+          jsonrpc: '2.0',
           id: request.id,
           result: {
             protocolVersion,
@@ -165,37 +142,37 @@ rl.on("line", async (line) => {
               tools: { list: true, call: true },
             },
             serverInfo: {
-              name: "memory-bank-mcp",
-              version: "1.0.0",
+              name: 'memory-bank-mcp',
+              version: '1.0.0',
             },
           },
         });
         break;
       }
 
-      case "initialized": {
+      case 'initialized': {
         // Just acknowledge, no response needed
         initialized = true;
         break;
       }
 
-      case "notifications/initialized": {
+      case 'notifications/initialized': {
         // This is used by the client to signal initialization of notifications
         // In our implementation, we don't need to respond specifically
-        debugLog(1, "Handling notifications/initialized");
+        debugLog(1, 'Handling notifications/initialized');
         sendResponse({
-          jsonrpc: "2.0",
+          jsonrpc: '2.0',
           id: request.id,
           result: {},
         });
         break;
       }
 
-      case "resources/list": {
+      case 'resources/list': {
         // Return an empty resources list as we don't have any resources
-        debugLog(1, "Handling resources/list request");
+        debugLog(1, 'Handling resources/list request');
         sendResponse({
-          jsonrpc: "2.0",
+          jsonrpc: '2.0',
           id: request.id,
           result: {
             resources: [],
@@ -205,11 +182,11 @@ rl.on("line", async (line) => {
         break;
       }
 
-      case "resources/templates/list": {
+      case 'resources/templates/list': {
         // Return an empty templates list as we don't have any resource templates
-        debugLog(1, "Handling resources/templates/list request");
+        debugLog(1, 'Handling resources/templates/list request');
         sendResponse({
-          jsonrpc: "2.0",
+          jsonrpc: '2.0',
           id: request.id,
           result: {
             templates: [],
@@ -219,15 +196,12 @@ rl.on("line", async (line) => {
         break;
       }
 
-      case "tools/list": {
+      case 'tools/list': {
         // Ensure tools is an array and follows MCP spec exactly
-        debugLog(
-          1,
-          `Returning tools/list with ${MEMORY_BANK_MCP_TOOLS.length} tools`
-        );
+        debugLog(1, `Returning tools/list with ${MEMORY_BANK_MCP_TOOLS.length} tools`);
 
         // Debug log all tools before conversion
-        debugLog(2, "Tools before conversion:");
+        debugLog(2, 'Tools before conversion:');
         MEMORY_BANK_MCP_TOOLS.forEach((tool, i) => {
           debugLog(2, `Tool #${i}: ${tool.name}`);
           debugLog(3, `Tool #${i} details:`, {
@@ -242,13 +216,13 @@ rl.on("line", async (line) => {
         const convertedTools = MEMORY_BANK_MCP_TOOLS.map((tool) => {
           // Create a safe version of the tool with default values for missing properties
           const defaultParameters = {
-            type: "object",
+            type: 'object',
             properties: {},
             required: [],
           };
 
           const defaultReturns = {
-            type: "object",
+            type: 'object',
             properties: {},
           };
 
@@ -273,11 +247,11 @@ rl.on("line", async (line) => {
         });
 
         if (convertedTools.length > 0) {
-          debugLog(2, "First converted tool:", convertedTools[0]);
+          debugLog(2, 'First converted tool:', convertedTools[0]);
         }
 
         sendResponse({
-          jsonrpc: "2.0",
+          jsonrpc: '2.0',
           id: request.id,
           result: {
             tools: convertedTools,
@@ -286,24 +260,22 @@ rl.on("line", async (line) => {
         break;
       }
 
-      case "tools/call": {
+      case 'tools/call': {
         // MCP-compliant tool execution handler
         const toolName = request.params?.name;
         const toolArgs = request.params?.arguments || {};
         debugLog(1, `Handling tools/call for tool: ${toolName}`);
 
         // It's good to keep the check if the tool is defined in MEMORY_BANK_MCP_TOOLS for consistency, even if handlers are primary.
-        const toolDefinition = MEMORY_BANK_MCP_TOOLS.find(
-          (t) => t.name === toolName
-        );
+        const toolDefinition = MEMORY_BANK_MCP_TOOLS.find((t) => t.name === toolName);
         if (!toolDefinition) {
           sendResponse({
-            jsonrpc: "2.0",
+            jsonrpc: '2.0',
             id: request.id,
             result: {
               content: [
                 {
-                  type: "text",
+                  type: 'text',
                   text: `Tool '${toolName}' not found in definitions.`,
                 },
               ],
@@ -314,11 +286,10 @@ rl.on("line", async (line) => {
         }
 
         try {
-          const memoryService =
-            memoryServiceInstance || (await MemoryService.getInstance());
+          const memoryService = memoryServiceInstance || (await MemoryService.getInstance());
           if (!memoryServiceInstance) {
             memoryServiceInstance = memoryService;
-            console.error("Memory service initialized on first tool call");
+            console.error('Memory service initialized on first tool call');
           }
 
           let toolResult: any = null;
@@ -340,38 +311,32 @@ rl.on("line", async (line) => {
             // This catches errors from within the handler execution (e.g., validation, service errors)
             debugLog(
               0,
-              `ERROR during tool execution for '${toolName}': ${
-                err.message || String(err)
-              }`,
-              err.stack
+              `ERROR during tool execution for '${toolName}': ${err.message || String(err)}`,
+              err.stack,
             );
             toolResult = {
-              error: `Error executing tool '${toolName}': ${
-                err.message || String(err)
-              }`,
+              error: `Error executing tool '${toolName}': ${err.message || String(err)}`,
             };
           }
 
           // Format result according to MCP tools/call spec
           sendResponse({
-            jsonrpc: "2.0",
+            jsonrpc: '2.0',
             id: request.id,
             result: {
-              content: [
-                { type: "text", text: JSON.stringify(toolResult, null, 2) },
-              ],
+              content: [{ type: 'text', text: JSON.stringify(toolResult, null, 2) }],
               isError: !!toolResult?.error,
             },
           });
         } catch (err: any) {
           debugLog(0, `ERROR (tools/call): ${err.message || String(err)}`, err);
           sendResponse({
-            jsonrpc: "2.0",
+            jsonrpc: '2.0',
             id: request.id,
             result: {
               content: [
                 {
-                  type: "text",
+                  type: 'text',
                   text: `Internal error: ${err.message || String(err)}`,
                 },
               ],
@@ -385,11 +350,11 @@ rl.on("line", async (line) => {
       default: {
         if (!initialized) {
           sendResponse({
-            jsonrpc: "2.0",
+            jsonrpc: '2.0',
             id: request.id,
             error: {
               code: -32002,
-              message: "Server not initialized",
+              message: 'Server not initialized',
             },
           });
           return;
@@ -400,21 +365,19 @@ rl.on("line", async (line) => {
           const memoryService = await MemoryService.getInstance();
 
           switch (request.method) {
-            case "init-memory-bank": {
-              const { repository, branch = "main" } = request.params || {};
+            case 'init-memory-bank': {
+              const { repository, branch = 'main' } = request.params || {};
               if (!repository) {
                 sendResponse({
-                  jsonrpc: "2.0",
+                  jsonrpc: '2.0',
                   id: request.id,
-                  result: createToolError(
-                    `Missing repository parameter for branch ${branch}`
-                  ),
+                  result: createToolError(`Missing repository parameter for branch ${branch}`),
                 });
                 return;
               }
               await memoryService.initMemoryBank(repository, branch);
               sendResponse({
-                jsonrpc: "2.0",
+                jsonrpc: '2.0',
                 id: request.id,
                 result: {
                   success: true,
@@ -423,35 +386,30 @@ rl.on("line", async (line) => {
               });
               break;
             }
-            case "get-metadata": {
-              const { repository, branch = "main" } = request.params || {};
+            case 'get-metadata': {
+              const { repository, branch = 'main' } = request.params || {};
               if (!repository) {
                 sendResponse({
-                  jsonrpc: "2.0",
+                  jsonrpc: '2.0',
                   id: request.id,
-                  result: createToolError(
-                    `Missing repository parameter for branch ${branch}`
-                  ),
+                  result: createToolError(`Missing repository parameter for branch ${branch}`),
                 });
                 return;
               }
-              const metadata = await memoryService.getMetadata(
-                repository,
-                branch
-              );
+              const metadata = await memoryService.getMetadata(repository, branch);
               if (!metadata) {
                 sendResponse({
-                  jsonrpc: "2.0",
+                  jsonrpc: '2.0',
                   id: request.id,
                   result: createToolError(
-                    `Metadata not found for ${repository} (branch: ${branch})`
+                    `Metadata not found for ${repository} (branch: ${branch})`,
                   ),
                 });
                 return;
               }
 
               sendResponse({
-                jsonrpc: "2.0",
+                jsonrpc: '2.0',
                 id: request.id,
                 result: { metadata },
               });
@@ -462,7 +420,7 @@ rl.on("line", async (line) => {
 
             default:
               sendResponse({
-                jsonrpc: "2.0",
+                jsonrpc: '2.0',
                 id: request.id,
                 error: {
                   code: -32601,
@@ -473,11 +431,9 @@ rl.on("line", async (line) => {
         } catch (err: any) {
           debugLog(0, `ERROR: ${err.message || String(err)}`, err);
           sendResponse({
-            jsonrpc: "2.0",
+            jsonrpc: '2.0',
             id: request.id,
-            result: createToolError(
-              `Internal error: ${err.message || String(err)}`
-            ),
+            result: createToolError(`Internal error: ${err.message || String(err)}`),
           });
         }
       }
@@ -485,18 +441,19 @@ rl.on("line", async (line) => {
   } catch (err: any) {
     debugLog(0, `Parse error: ${err.message || String(err)}`, err);
     sendResponse({
-      jsonrpc: "2.0",
+      jsonrpc: '2.0',
       id: null,
       error: {
         code: -32700,
-        message: "Parse error",
+        message: 'Parse error',
       },
     });
   }
 });
 
 // Handle process events
-process.on("SIGINT", () => process.exit(0));
-process.on("SIGTERM", () => process.exit(0));
+process.on('SIGINT', () => process.exit(0));
+process.on('SIGTERM', () => process.exit(0));
 
-debugLog(0, "MCP stdio server started and waiting for requests...");
+// Use console.log for the final ready message to ensure it goes to STDOUT
+console.log('MCP_STDIO_SERVER_READY_FOR_TESTING');

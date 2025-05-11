@@ -1,5 +1,5 @@
-import { DecisionRepository, RepositoryRepository } from "../../repositories";
-import { Decision } from "../../types";
+import { DecisionRepository, RepositoryRepository } from '../../repositories';
+import { Decision } from '../../types';
 
 /**
  * Input parameters for upserting a decision.
@@ -27,13 +27,11 @@ export async function upsertDecisionOp(
   branch: string,
   decisionData: UpsertDecisionData,
   repositoryRepo: RepositoryRepository,
-  decisionRepo: DecisionRepository
+  decisionRepo: DecisionRepository,
 ): Promise<Decision | null> {
   const repository = await repositoryRepo.findByName(repositoryName, branch);
   if (!repository) {
-    console.warn(
-      `Repository not found: ${repositoryName}/${branch} in upsertDecisionOp`
-    );
+    console.warn(`Repository not found: ${repositoryName}/${branch} in upsertDecisionOp`);
     return null;
   }
 
@@ -48,4 +46,32 @@ export async function upsertDecisionOp(
   };
 
   return decisionRepo.upsertDecision(dataForRepo);
+}
+
+/**
+ * Retrieves decisions for a repository and branch within a given date range.
+ *
+ * @param repositoryName - The name of the repository.
+ * @param branch - The branch of the repository.
+ * @param startDate - The start date of the range (YYYY-MM-DD).
+ * @param endDate - The end date of the range (YYYY-MM-DD).
+ * @param repositoryRepo - Instance of RepositoryRepository.
+ * @param decisionRepo - Instance of DecisionRepository.
+ * @returns A Promise resolving to an array of Decision objects.
+ */
+export async function getDecisionsByDateRangeOp(
+  repositoryName: string,
+  branch: string,
+  startDate: string,
+  endDate: string,
+  repositoryRepo: RepositoryRepository,
+  decisionRepo: DecisionRepository,
+): Promise<Decision[]> {
+  const repository = await repositoryRepo.findByName(repositoryName, branch);
+  if (!repository) {
+    console.warn(`Repository not found: ${repositoryName}/${branch} in getDecisionsByDateRangeOp`);
+    return [];
+  }
+  // DecisionRepository.getDecisionsByDateRange expects the repositoryId (synthetic ID) and branch separately.
+  return decisionRepo.getDecisionsByDateRange(String(repository.id!), branch, startDate, endDate);
 }

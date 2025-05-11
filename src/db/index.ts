@@ -4,7 +4,7 @@
  */
 
 // Export KuzuDB client for use by repositories
-import { KuzuDBClient, initializeKuzuDB } from "./kuzu";
+import { KuzuDBClient, initializeKuzuDB } from './kuzu';
 
 // Export the KuzuDB initialization function and KuzuDBClient class
 export { KuzuDBClient, initializeKuzuDB };
@@ -27,7 +27,7 @@ export default {
   // Allow initializing KuzuDB via the exported function
   initialize: async () => {
     await initializeKuzuDB();
-    console.log("KuzuDB initialized successfully");
+    console.log('KuzuDB initialized successfully');
     return {};
   },
 };

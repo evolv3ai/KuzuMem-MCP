@@ -3,8 +3,8 @@ import {
   // Presumed: ComponentRepository or a dedicated GraphRepository might be needed
   // For now, let's include ComponentRepository if graph ops are on components.
   ComponentRepository,
-} from "../../repositories";
-import { Component, Context, Decision } from "../../types"; // Added Context and Decision imports
+} from '../../repositories';
+import { Component, Context, Decision } from '../../types'; // Added Context and Decision imports
 
 // This file is a placeholder for graph-related operations.
 // Implementations will depend on the capabilities of the underlying repositories
@@ -19,21 +19,18 @@ export async function kCoreDecompositionOp(
   branch: string,
   k: number | undefined, // k might be optional
   repositoryRepo: RepositoryRepository,
-  componentRepo: ComponentRepository // Or a GraphRepository
+  componentRepo: ComponentRepository, // Or a GraphRepository
 ): Promise<any> {
   if (k === undefined || k < 0) {
     // Or throw error, or default k. For now, returning error message.
     return {
-      message:
-        "k parameter must be a non-negative number for kCoreDecompositionOp.",
+      message: 'k parameter must be a non-negative number for kCoreDecompositionOp.',
       nodes: [],
     };
   }
   const repository = await repositoryRepo.findByName(repositoryName, branch);
   if (!repository) {
-    console.warn(
-      `Repository '${repositoryName}/${branch}' not found in kCoreDecompositionOp.`
-    );
+    console.warn(`Repository '${repositoryName}/${branch}' not found in kCoreDecompositionOp.`);
     return {
       message: `Repository '${repositoryName}/${branch}' not found.`,
       nodes: [],
@@ -51,12 +48,21 @@ export async function louvainCommunityDetectionOp(
   repositoryName: string,
   branch: string,
   repositoryRepo: RepositoryRepository,
-  componentRepo: ComponentRepository // Or a GraphRepository
+  componentRepo: ComponentRepository, // Or a GraphRepository
 ): Promise<any> {
-  console.warn(
-    "louvainCommunityDetectionOp is a placeholder and not fully implemented."
-  );
-  throw new Error("Not Implemented");
+  const repository = await repositoryRepo.findByName(repositoryName, branch);
+  if (!repository) {
+    console.warn(
+      `Repository '${repositoryName}/${branch}' not found in louvainCommunityDetectionOp.`,
+    );
+    return {
+      message: `Repository '${repositoryName}/${branch}' not found.`,
+      communities: [], // Match expected return structure on error
+    };
+  }
+  const repositoryId = String(repository.id!);
+  // Call the actual repository method, assuming it's now implemented
+  return componentRepo.louvainCommunityDetection(repositoryId);
 }
 
 /**
@@ -67,11 +73,29 @@ export async function pageRankOp(
   branch: string,
   dampingFactor: number | undefined,
   iterations: number | undefined,
+  tolerance: number | undefined,
+  normalizeInitial: boolean | undefined,
   repositoryRepo: RepositoryRepository,
-  componentRepo: ComponentRepository // Or a GraphRepository
+  componentRepo: ComponentRepository,
 ): Promise<any> {
-  console.warn("pageRankOp is a placeholder and not fully implemented.");
-  throw new Error("Not Implemented");
+  const repository = await repositoryRepo.findByName(repositoryName, branch);
+  if (!repository) {
+    console.warn(`Repository '${repositoryName}/${branch}' not found in pageRankOp.`);
+    // Return a structure consistent with what the repository method might return on error/empty
+    return {
+      message: `Repository '${repositoryName}/${branch}' not found.`,
+      ranks: [],
+    };
+  }
+  const repositoryId = String(repository.id!);
+
+  return componentRepo.pageRank(
+    repositoryId,
+    dampingFactor,
+    iterations,
+    tolerance,
+    normalizeInitial,
+  );
 }
 
 /**
@@ -80,13 +104,22 @@ export async function pageRankOp(
 export async function stronglyConnectedComponentsOp(
   repositoryName: string,
   branch: string,
+  maxIterations: number | undefined, // Added maxIterations
   repositoryRepo: RepositoryRepository,
-  componentRepo: ComponentRepository // Or a GraphRepository
+  componentRepo: ComponentRepository,
 ): Promise<any> {
-  console.warn(
-    "stronglyConnectedComponentsOp is a placeholder and not fully implemented."
-  );
-  throw new Error("Not Implemented");
+  const repository = await repositoryRepo.findByName(repositoryName, branch);
+  if (!repository) {
+    console.warn(
+      `Repository '${repositoryName}/${branch}' not found in stronglyConnectedComponentsOp.`,
+    );
+    return {
+      message: `Repository '${repositoryName}/${branch}' not found.`,
+      components: [],
+    };
+  }
+  const repositoryId = String(repository.id!);
+  return componentRepo.getStronglyConnectedComponents(repositoryId, maxIterations);
 }
 
 /**
@@ -95,13 +128,22 @@ export async function stronglyConnectedComponentsOp(
 export async function weaklyConnectedComponentsOp(
   repositoryName: string,
   branch: string,
+  maxIterations: number | undefined, // Added maxIterations
   repositoryRepo: RepositoryRepository,
-  componentRepo: ComponentRepository // Or a GraphRepository
+  componentRepo: ComponentRepository,
 ): Promise<any> {
-  console.warn(
-    "weaklyConnectedComponentsOp is a placeholder and not fully implemented."
-  );
-  throw new Error("Not Implemented");
+  const repository = await repositoryRepo.findByName(repositoryName, branch);
+  if (!repository) {
+    console.warn(
+      `Repository '${repositoryName}/${branch}' not found in weaklyConnectedComponentsOp.`,
+    );
+    return {
+      message: `Repository '${repositoryName}/${branch}' not found.`,
+      components: [],
+    };
+  }
+  const repositoryId = String(repository.id!);
+  return componentRepo.getWeaklyConnectedComponents(repositoryId, maxIterations);
 }
 
 /**
@@ -114,17 +156,15 @@ export async function shortestPathOp(
   endNodeId: string,
   params: {
     relationshipTypes?: string[];
-    direction?: "OUTGOING" | "INCOMING" | "BOTH";
+    direction?: 'OUTGOING' | 'INCOMING' | 'BOTH';
     algorithm?: string;
   },
   repositoryRepo: RepositoryRepository,
-  componentRepo: ComponentRepository // Assumes componentRepo has findShortestPath
+  componentRepo: ComponentRepository, // Assumes componentRepo has findShortestPath
 ): Promise<any[]> {
   const repository = await repositoryRepo.findByName(repositoryName, branch);
   if (!repository) {
-    console.warn(
-      `Repository '${repositoryName}/${branch}' not found in shortestPathOp.`
-    );
+    console.warn(`Repository '${repositoryName}/${branch}' not found in shortestPathOp.`);
     return [];
   }
   const repositoryId = String(repository.id!);
@@ -145,16 +185,19 @@ export async function shortestPathOp(
 export async function getItemContextualHistoryOp(
   repositoryName: string,
   branch: string,
-  itemId: string, // This is yaml_id
-  itemType: "Component" | "Decision" | "Rule", // Added itemType based on repository method
+  itemId: string,
+  itemType: 'Component' | 'Decision' | 'Rule',
   repositoryRepo: RepositoryRepository,
-  componentRepo: ComponentRepository // Using ComponentRepository as it now houses the method
+  componentRepo: ComponentRepository,
 ): Promise<Context[]> {
-  // Expecting Context[] as per repository method
+  console.error(
+    `DEBUG: graph.ops.ts: getItemContextualHistoryOp received itemType = >>>${itemType}<<<`,
+  ); // Log received itemType
+
   const repository = await repositoryRepo.findByName(repositoryName, branch);
   if (!repository) {
     console.warn(
-      `Repository '${repositoryName}/${branch}' not found in getItemContextualHistoryOp.`
+      `Repository '${repositoryName}/${branch}' not found in getItemContextualHistoryOp.`,
     );
     return [];
   }
@@ -162,15 +205,13 @@ export async function getItemContextualHistoryOp(
 
   if (!itemType) {
     // Defaulting or error handling if itemType is crucial and not provided by caller
-    console.warn(
-      "itemType not provided to getItemContextualHistoryOp, this might lead to issues."
-    );
+    console.warn('itemType not provided to getItemContextualHistoryOp, this might lead to issues.');
     // Potentially throw new Error("itemType is required for getItemContextualHistoryOp");
     // For now, if the repository method handles a missing/default itemType, this might be okay,
     // but the repository method currently requires it.
   }
 
-  return componentRepo.getItemContextualHistory(repositoryId, itemId, itemType);
+  return componentRepo.getItemContextualHistory(repositoryId, itemId, itemType, branch);
 }
 
 /**
@@ -181,13 +222,13 @@ export async function getGoverningItemsForComponentOp(
   branch: string,
   componentId: string, // This is yaml_id
   repositoryRepo: RepositoryRepository,
-  componentRepo: ComponentRepository // Using ComponentRepository
+  componentRepo: ComponentRepository, // Using ComponentRepository
 ): Promise<Decision[]> {
   // Updated return type to Decision[]
   const repository = await repositoryRepo.findByName(repositoryName, branch);
   if (!repository) {
     console.warn(
-      `Repository '${repositoryName}/${branch}' not found in getGoverningItemsForComponentOp.`
+      `Repository '${repositoryName}/${branch}' not found in getGoverningItemsForComponentOp.`,
     );
     return [];
   }
@@ -206,10 +247,10 @@ export async function getRelatedItemsOp(
   params: {
     relationshipTypes?: string[];
     depth?: number;
-    direction?: "INCOMING" | "OUTGOING" | "BOTH";
+    direction?: 'INCOMING' | 'OUTGOING' | 'BOTH';
   },
   repositoryRepo: RepositoryRepository,
-  componentRepo: ComponentRepository // Assumes componentRepo has getRelatedItems
+  componentRepo: ComponentRepository, // Assumes componentRepo has getRelatedItems
 ): Promise<Component[]> {
   // Assuming it returns Component[] for now
   // The repositoryId needed by componentRepo.getRelatedItems is resolved from repositoryName and branch by MemoryService or this Op.
@@ -247,18 +288,10 @@ export async function getRelatedItemsOp(
 
   const repository = await repositoryRepo.findByName(repositoryName, branch);
   if (!repository) {
-    console.warn(
-      `Repository '${repositoryName}/${branch}' not found in getRelatedItemsOp.`
-    );
+    console.warn(`Repository '${repositoryName}/${branch}' not found in getRelatedItemsOp.`);
     return [];
   }
   const repositoryId = String(repository.id!);
 
-  return componentRepo.getRelatedItems(
-    repositoryId,
-    itemId,
-    relationshipTypes,
-    depth,
-    direction
-  );
+  return componentRepo.getRelatedItems(repositoryId, itemId, relationshipTypes, depth, direction);
 }

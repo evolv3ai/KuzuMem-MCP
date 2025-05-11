@@ -1,5 +1,5 @@
-import { RuleRepository, RepositoryRepository } from "../../repositories";
-import { Rule } from "../../types";
+import { RuleRepository, RepositoryRepository } from '../../repositories';
+import { Rule } from '../../types';
 
 /**
  * Input parameters for upserting a rule.
@@ -11,7 +11,7 @@ interface UpsertRuleData {
   name: string;
   created: string; // Expecting YYYY-MM-DD string format
   content?: string;
-  status?: "active" | "deprecated";
+  status?: 'active' | 'deprecated';
   triggers?: string[];
   // branch?: string; // If branch is part of Rule type passed to repo
 }
@@ -31,13 +31,11 @@ export async function upsertRuleOp(
   branch: string,
   ruleData: UpsertRuleData, // Effectively Omit<Rule, 'repository' | 'branch'> if repo needs separate branch
   repositoryRepo: RepositoryRepository,
-  ruleRepo: RuleRepository
+  ruleRepo: RuleRepository,
 ): Promise<Rule | null> {
   const repository = await repositoryRepo.findByName(repositoryName, branch);
   if (!repository) {
-    console.warn(
-      `Repository not found: ${repositoryName}/${branch} in upsertRuleOp`
-    );
+    console.warn(`Repository not found: ${repositoryName}/${branch} in upsertRuleOp`);
     return null;
   }
 
@@ -47,9 +45,33 @@ export async function upsertRuleOp(
     ...ruleData,
     repository: String(repository.id!),
     branch: branch,
-    status: ruleData.status || "active", // Default status if not provided
+    status: ruleData.status || 'active', // Default status if not provided
     // Ensure all required fields from Rule type are present
   };
 
   return ruleRepo.upsertRule(dataForRepo);
+}
+
+/**
+ * Retrieves active rules for a repository and branch.
+ *
+ * @param repositoryName - The name of the repository.
+ * @param branch - The branch of the repository.
+ * @param repositoryRepo - Instance of RepositoryRepository.
+ * @param ruleRepo - Instance of RuleRepository.
+ * @returns A Promise resolving to an array of active Rule objects.
+ */
+export async function getActiveRulesOp(
+  repositoryName: string,
+  branch: string,
+  repositoryRepo: RepositoryRepository,
+  ruleRepo: RuleRepository,
+): Promise<Rule[]> {
+  const repository = await repositoryRepo.findByName(repositoryName, branch);
+  if (!repository) {
+    console.warn(`Repository not found: ${repositoryName}/${branch} in getActiveRulesOp`);
+    return [];
+  }
+  // RuleRepository.getActiveRules expects repositoryId (synthetic) and branch.
+  return ruleRepo.getActiveRules(String(repository.id!), branch);
 }

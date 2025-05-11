@@ -5,55 +5,55 @@ import { McpTool } from '../types';
  * Used to add a decision to a repository's memory bank (branch-aware for KuzuDB)
  */
 export const addDecisionTool: McpTool = {
-  name: "add-decision",
+  name: 'add-decision',
   description: "Add a decision record to a repository's memory bank",
   parameters: {
-    type: "object",
+    type: 'object',
     properties: {
       repository: {
-        type: "string",
-        description: "Repository name",
+        type: 'string',
+        description: 'Repository name',
       },
       branch: {
-        type: "string",
+        type: 'string',
         description: "Repository branch (defaults to 'main')",
       },
       id: {
-        type: "string",
-        description: "Decision ID",
+        type: 'string',
+        description: 'Decision ID',
       },
       name: {
-        type: "string",
-        description: "Decision name",
+        type: 'string',
+        description: 'Decision name',
       },
       context: {
-        type: "string",
-        description: "Decision context",
+        type: 'string',
+        description: 'Decision context',
       },
       date: {
-        type: "string",
-        description: "Decision date (YYYY-MM-DD)",
+        type: 'string',
+        description: 'Decision date (YYYY-MM-DD)',
       },
     },
-    required: ["repository", "branch", "id", "name", "date"],
+    required: ['repository', 'branch', 'id', 'name', 'date'],
   },
   annotations: {
-    title: "Add Decision",
+    title: 'Add Decision',
     readOnlyHint: false,
     destructiveHint: false,
     idempotentHint: false,
     openWorldHint: false,
   },
   returns: {
-    type: "object",
+    type: 'object',
     properties: {
       success: {
-        type: "boolean",
-        description: "Whether the operation was successful",
+        type: 'boolean',
+        description: 'Whether the operation was successful',
       },
       decision: {
-        type: "object",
-        description: "Added decision content",
+        type: 'object',
+        description: 'Added decision content',
       },
     },
   },

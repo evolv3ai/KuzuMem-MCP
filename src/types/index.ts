@@ -37,6 +37,7 @@ export interface Metadata extends BaseEntity {
 
 // Context type
 export interface Context extends BaseEntity {
+  name: string;
   iso_date: string;
   agent?: string;
   related_issue?: string;
@@ -51,6 +52,19 @@ export interface Component extends BaseEntity {
   kind?: string;
   depends_on?: string[];
   status: 'active' | 'deprecated' | 'planned';
+}
+
+// Explicitly export ComponentStatus for use in ComponentInput and elsewhere
+export type ComponentStatus = 'active' | 'deprecated' | 'planned';
+
+export interface ComponentInput {
+  yaml_id: string;
+  name: string;
+  branch?: string;
+  kind?: string;
+  status: ComponentStatus;
+  content?: string | Record<string, any> | null;
+  depends_on?: string[] | null;
 }
 
 // Decision type

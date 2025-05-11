@@ -1,7 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const kuzu = require("kuzu");
+const kuzu = require('kuzu');
 // Import configuration with db path
-import config from "./config";
+import config from './config';
 
 /**
  * Thread-safe singleton for KuzuDB connections
@@ -24,8 +24,7 @@ export class KuzuDBClient {
     // Simple mutex to prevent race conditions during initialization
     if (KuzuDBClient.mutex) {
       // Wait for initialization to complete
-      const wait = (ms: number) =>
-        new Promise((resolve) => setTimeout(resolve, ms));
+      const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
       return wait(100).then(() => KuzuDBClient.getConnection(dbPath));
     }
 
@@ -42,7 +41,7 @@ export class KuzuDBClient {
         // This is where queries are executed
         KuzuDBClient.connection = new kuzu.Connection(KuzuDBClient.database);
       } catch (error) {
-        console.error("Error initializing KuzuDB connection:", error);
+        console.error('Error initializing KuzuDB connection:', error);
         throw error;
       } finally {
         KuzuDBClient.mutex = false;
@@ -60,12 +59,7 @@ export class KuzuDBClient {
     try {
       const conn = this.getConnection();
       // Only two arguments: query string and callback
-      console.log(
-        "KuzuDBClient.executeQuery:",
-        query,
-        "callback:",
-        typeof (() => {})
-      );
+      console.error('KuzuDBClient.executeQuery Triggered. Query:', query);
       return await conn.query(query, () => {});
     } catch (error) {
       console.error(`Error executing query: ${query}`, error);
@@ -80,12 +74,18 @@ export class KuzuDBClient {
  * @param customPath Optional path override, uses config.dbPath by default
  */
 export async function initializeKuzuDB(customPath?: string): Promise<void> {
-  console.log("[KuzuDB] Running initializeKuzuDB DDL setup...");
-  // Use provided path or fall back to configuration
+  // Local helper for escaping strings, mirroring KuzuDBClient.escapeStr
+  const localEscapeStr = (value: any): string => {
+    if (value === undefined || value === null) {
+      return 'null';
+    }
+    return String(value).replace(/'/g, "\\'").replace(/\\/g, '\\\\');
+  };
+
+  console.error('E2E_DEBUG: [KuzuDB] Attempting initializeKuzuDB DDL setup...');
   const dbPath = customPath || config.dbPath;
   try {
-    // Create node tables if not exist (DDL)
-    console.log("[KuzuDB] Creating table: Repository");
+    console.error('E2E_DEBUG: [KuzuDB] Creating table: Repository...');
     await KuzuDBClient.executeQuery(`CREATE NODE TABLE IF NOT EXISTS Repository(
       id STRING,
       name STRING,
@@ -94,114 +94,147 @@ export async function initializeKuzuDB(customPath?: string): Promise<void> {
       updated_at TIMESTAMP,
       PRIMARY KEY (id)
     )`);
-    console.log("[KuzuDB] Creating table: Metadata");
-    console.log("[KuzuDB] Creating table: Metadata");
+    console.error('E2E_DEBUG: [KuzuDB] Table Repository: OK');
+
+    console.error('E2E_DEBUG: [KuzuDB] Creating table: Metadata...');
     await KuzuDBClient.executeQuery(`CREATE NODE TABLE IF NOT EXISTS Metadata(
       yaml_id STRING,
       name STRING,
       content STRING,
+      branch STRING,
       created_at TIMESTAMP,
       updated_at TIMESTAMP,
       PRIMARY KEY (yaml_id)
     )`);
-    console.log("[KuzuDB] Creating table: Context");
-    console.log("[KuzuDB] Creating table: Context");
+    console.error('E2E_DEBUG: [KuzuDB] Table Metadata: OK');
+
+    console.error('E2E_DEBUG: [KuzuDB] Creating table: Context...');
     await KuzuDBClient.executeQuery(`CREATE NODE TABLE IF NOT EXISTS Context(
       yaml_id STRING,
       name STRING,
       summary STRING,
+      iso_date DATE,
+      branch STRING,
       created_at TIMESTAMP,
       updated_at TIMESTAMP,
       PRIMARY KEY (yaml_id)
     )`);
-    console.log("[KuzuDB] Creating table: Component");
-    console.log("[KuzuDB] Creating table: Component");
+    console.error('E2E_DEBUG: [KuzuDB] Table Context: OK');
+
+    console.error('E2E_DEBUG: [KuzuDB] Creating table: Component...');
     await KuzuDBClient.executeQuery(`CREATE NODE TABLE IF NOT EXISTS Component(
       yaml_id STRING,
       name STRING,
       kind STRING,
       status STRING,
+      branch STRING,
       created_at TIMESTAMP,
       updated_at TIMESTAMP,
       PRIMARY KEY (yaml_id)
     )`);
-    console.log("[KuzuDB] Creating table: Decision");
-    console.log("[KuzuDB] Creating table: Decision");
+    console.error('E2E_DEBUG: [KuzuDB] Table Component: OK');
+
+    console.error('E2E_DEBUG: [KuzuDB] Creating table: Decision...');
     await KuzuDBClient.executeQuery(`CREATE NODE TABLE IF NOT EXISTS Decision(
       yaml_id STRING,
       name STRING,
       context STRING,
       date DATE,
+      branch STRING,
       created_at TIMESTAMP,
       updated_at TIMESTAMP,
       PRIMARY KEY (yaml_id)
     )`);
-    console.log("[KuzuDB] Creating table: Rule");
-    console.log("[KuzuDB] Creating table: Rule");
+    console.error('E2E_DEBUG: [KuzuDB] Table Decision: OK');
+
+    console.error('E2E_DEBUG: [KuzuDB] Creating table: Rule...');
     await KuzuDBClient.executeQuery(`CREATE NODE TABLE IF NOT EXISTS Rule(
       yaml_id STRING,
       name STRING,
-      content STRING,
       created DATE,
+      triggers STRING[],
+      content STRING,
       status STRING,
+      branch STRING,
       created_at TIMESTAMP,
       updated_at TIMESTAMP,
       PRIMARY KEY (yaml_id)
     )`);
+    console.error('E2E_DEBUG: [KuzuDB] Table Rule: OK');
 
-    // Create relationship tables (edges)
-    console.log("[KuzuDB] Creating relationship tables...");
+    console.error('E2E_DEBUG: [KuzuDB] Creating relationship tables...');
     await KuzuDBClient.executeQuery(
-      `CREATE REL TABLE IF NOT EXISTS HAS_METADATA(FROM Repository TO Metadata)`
+      `CREATE REL TABLE IF NOT EXISTS HAS_METADATA(FROM Repository TO Metadata)`,
     );
+    console.error('E2E_DEBUG: [KuzuDB] Rel HAS_METADATA: OK');
     await KuzuDBClient.executeQuery(
-      `CREATE REL TABLE IF NOT EXISTS HAS_CONTEXT(FROM Repository TO Context)`
+      `CREATE REL TABLE IF NOT EXISTS HAS_CONTEXT(FROM Repository TO Context)`,
     );
+    console.error('E2E_DEBUG: [KuzuDB] Rel HAS_CONTEXT: OK');
     await KuzuDBClient.executeQuery(
-      `CREATE REL TABLE IF NOT EXISTS HAS_COMPONENT(FROM Repository TO Component)`
+      `CREATE REL TABLE IF NOT EXISTS HAS_COMPONENT(FROM Repository TO Component)`,
     );
+    console.error('E2E_DEBUG: [KuzuDB] Rel HAS_COMPONENT: OK');
     await KuzuDBClient.executeQuery(
-      `CREATE REL TABLE IF NOT EXISTS HAS_DECISION(FROM Repository TO Decision)`
+      `CREATE REL TABLE IF NOT EXISTS HAS_DECISION(FROM Repository TO Decision)`,
     );
+    console.error('E2E_DEBUG: [KuzuDB] Rel HAS_DECISION: OK');
     await KuzuDBClient.executeQuery(
-      `CREATE REL TABLE IF NOT EXISTS HAS_RULE(FROM Repository TO Rule)`
+      `CREATE REL TABLE IF NOT EXISTS HAS_RULE(FROM Repository TO Rule)`,
     );
+    console.error('E2E_DEBUG: [KuzuDB] Rel HAS_RULE: OK');
     await KuzuDBClient.executeQuery(
-      `CREATE REL TABLE IF NOT EXISTS DEPENDS_ON(FROM Component TO Component)`
+      `CREATE REL TABLE IF NOT EXISTS DEPENDS_ON(FROM Component TO Component)`,
     );
+    console.error('E2E_DEBUG: [KuzuDB] Rel DEPENDS_ON: OK');
     await KuzuDBClient.executeQuery(
-      `CREATE REL TABLE IF NOT EXISTS CONTEXT_OF(FROM Context TO Component)`
+      `CREATE REL TABLE IF NOT EXISTS CONTEXT_OF(FROM Context TO Component)`,
     );
+    console.error('E2E_DEBUG: [KuzuDB] Rel CONTEXT_OF: OK');
     await KuzuDBClient.executeQuery(
-      `CREATE REL TABLE IF NOT EXISTS CONTEXT_OF_DECISION(FROM Context TO Decision)`
+      `CREATE REL TABLE IF NOT EXISTS CONTEXT_OF_DECISION(FROM Context TO Decision)`,
     );
+    console.error('E2E_DEBUG: [KuzuDB] Rel CONTEXT_OF_DECISION: OK');
     await KuzuDBClient.executeQuery(
-      `CREATE REL TABLE IF NOT EXISTS CONTEXT_OF_RULE(FROM Context TO Rule)`
+      `CREATE REL TABLE IF NOT EXISTS CONTEXT_OF_RULE(FROM Context TO Rule)`,
     );
+    console.error('E2E_DEBUG: [KuzuDB] Rel CONTEXT_OF_RULE: OK');
     await KuzuDBClient.executeQuery(
-      `CREATE REL TABLE IF NOT EXISTS DECISION_ON(FROM Decision TO Component)`
+      `CREATE REL TABLE IF NOT EXISTS DECISION_ON(FROM Decision TO Component)`,
     );
-    await KuzuDBClient.executeQuery(`INSTALL Algo`);
-    // Check if any Repository node exists using the executeQuery helper
-    console.log("[KuzuDB] Checking for existing Repository nodes...");
+    console.error('E2E_DEBUG: [KuzuDB] Rel DECISION_ON: OK');
+
+    console.error('E2E_DEBUG: [KuzuDB] Installing Algo extension (if not exists)...');
+    await KuzuDBClient.executeQuery(`INSTALL ALGO`);
+    await KuzuDBClient.executeQuery(`LOAD ALGO`);
+    console.error('E2E_DEBUG: [KuzuDB] Algo extension: OK (installed and loaded)');
+
+    console.error('E2E_DEBUG: [KuzuDB] Checking for existing Repository nodes...');
     const checkRepo = await KuzuDBClient.executeQuery(
-      "MATCH (r:Repository) RETURN count(r) as count"
+      'MATCH (r:Repository) RETURN count(r) as count',
     );
-    // Get row count from result
     const rows = await checkRepo.getAll();
-    const count = rows.length > 0 ? rows[0].count ?? rows[0]["count"] : 0;
+    const count = rows.length > 0 ? (rows[0].count ?? rows[0]['count']) : 0;
     if (count === 0) {
-      // Create default repository with main branch
       const now = new Date().toISOString();
+      const kuzuTimestamp = String(now).replace('T', ' ').replace('Z', '');
+      const defaultRepoId = 'default:main';
+      const defaultRepoName = 'default';
+      const defaultBranch = 'main';
       await KuzuDBClient.executeQuery(
-        `CREATE (r:Repository {id: 'default:main', name: 'default', branch: 'main', created_at: timestamp('${now}'), updated_at: timestamp('${now}')})`
+        `CREATE (r:Repository {id: '${localEscapeStr(defaultRepoId)}', name: '${localEscapeStr(
+          defaultRepoName,
+        )}', branch: '${localEscapeStr(
+          defaultBranch,
+        )}', created_at: timestamp('${kuzuTimestamp}'), updated_at: timestamp('${kuzuTimestamp}')})`,
       );
-      console.log("Initialized KuzuDB: default Repository node created.");
+      console.error('E2E_DEBUG: Initialized KuzuDB: default Repository node created.');
     } else {
-      console.log("KuzuDB already initialized: Repository node(s) exist.");
+      console.error('E2E_DEBUG: KuzuDB already initialized: Repository node(s) exist.');
     }
+    console.error('E2E_DEBUG: [KuzuDB] initializeKuzuDB DDL setup finished.');
   } catch (error) {
-    console.error("Error during KuzuDB initialization:", error);
+    console.error('E2E_DEBUG: [KuzuDB] Error during KuzuDB initialization DDL setup:', error);
     throw error;
   }
 }

@@ -1,75 +1,75 @@
-import { McpTool } from "../types";
+import { McpTool } from '../types';
 
 /**
  * PageRank Tool
  * Calculates the PageRank for nodes in a projected graph of memory items.
  */
 export const pageRankTool: McpTool = {
-  name: "mcp_pagerank",
+  name: 'pagerank',
   description:
-    "Use this tool to identify the most influential or central memory items by calculating their PageRank score. Requires defining a projected graph first.",
+    'Use this tool to identify the most influential or central memory items by calculating their PageRank score. Requires defining a projected graph first.',
   parameters: {
-    type: "object",
+    type: 'object',
     properties: {
       repository: {
-        type: "string",
+        type: 'string',
         description: "Repository name (e.g., 'my-repo')",
       },
       branch: {
-        type: "string",
+        type: 'string',
         description: "Repository branch (e.g., 'main')",
       },
       projectedGraphName: {
-        type: "string",
+        type: 'string',
         description:
           "A unique name for the projected graph to be used by the Kuzu algorithm (e.g., 'myProjectedGraphForPageRank'). This graph is temporary.",
       },
       nodeTableNames: {
-        type: "array",
+        type: 'array',
         description:
           "Array of node table names to include in the projection (e.g., ['Component', 'Decision', 'Rule']).",
-        items: { type: "string" },
+        items: { type: 'string' },
       },
       relationshipTableNames: {
-        type: "array",
+        type: 'array',
         description:
           "Array of relationship table names to include in the projection (e.g., ['DEPENDS_ON', 'CONTEXT_OF']).",
-        items: { type: "string" },
+        items: { type: 'string' },
       },
       // PageRank specific parameters (refer to Kuzu documentation for exact names/types)
       dampingFactor: {
-        type: "number", // Assuming float/double
+        type: 'number', // Assuming float/double
         description:
           "Optional: Damping factor for PageRank (e.g., 0.85). Defaults to Kuzu's internal default if not provided.",
       },
       maxIterations: {
-        type: "integer",
+        type: 'integer',
         description:
           "Optional: Maximum number of iterations for PageRank calculation. Defaults to Kuzu's internal default if not provided.",
       },
     },
     required: [
-      "repository",
-      "branch",
-      "projectedGraphName",
-      "nodeTableNames",
-      "relationshipTableNames",
+      'repository',
+      'branch',
+      'projectedGraphName',
+      'nodeTableNames',
+      'relationshipTableNames',
     ],
   },
   annotations: {
-    title: "PageRank",
+    title: 'PageRank',
     readOnlyHint: true,
     destructiveHint: false,
     idempotentHint: true, // PageRank is deterministic
     openWorldHint: false,
   },
   returns: {
-    type: "object",
+    type: 'object',
     properties: {
       pageRankScores: {
-        type: "array",
+        type: 'array',
         description:
-          "An array of objects, where each object represents a node and its PageRank score. Each object typically contains nodeId and score.",
+          'An array of objects, where each object represents a node and its PageRank score. Each object typically contains nodeId and score.',
       },
     },
   },

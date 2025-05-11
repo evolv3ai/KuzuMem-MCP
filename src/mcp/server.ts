@@ -1,8 +1,8 @@
-import express, { Request, Response } from "express";
-import { MemoryController } from "../controllers/memory.controller";
-import { MemoryService } from "../services/memory.service";
-import { MEMORY_BANK_MCP_SERVER, MEMORY_BANK_MCP_TOOLS } from "./";
-import { toolHandlers } from "./tool-handlers"; // Import shared tool handlers
+import express, { Request, Response } from 'express';
+import { MemoryController } from '../controllers/memory.controller';
+import { MemoryService } from '../services/memory.service';
+import { MEMORY_BANK_MCP_SERVER, MEMORY_BANK_MCP_TOOLS } from './';
+import { toolHandlers } from './tool-handlers'; // Import shared tool handlers
 
 /**
  * MCP Server implementation for Memory Bank
@@ -34,70 +34,49 @@ export class MemoryMcpServer {
    */
   private setupEndpoints(): void {
     // Register server metadata endpoint
-    this.router.get("/server", this.getServerInfo);
+    this.router.get('/server', this.getServerInfo);
 
     // Register tool endpoints
-    this.router.get("/tools", this.getToolsInfo);
+    this.router.get('/tools', this.getToolsInfo);
 
     // MCP Tool-specific endpoints (all handlers are defined as class properties)
-    this.router.post("/tools/init-memory-bank", this.handleInitMemoryBank);
-    this.router.post("/tools/get-metadata", this.handleGetMetadata);
-    this.router.post("/tools/update-metadata", this.handleUpdateMetadata);
-    this.router.post("/tools/get-context", this.handleGetContext);
-    this.router.post("/tools/update-context", this.handleUpdateContext);
-    this.router.post("/tools/add-component", this.handleAddComponent);
-    this.router.post("/tools/add-decision", this.handleAddDecision);
-    this.router.post("/tools/add-rule", this.handleAddRule);
-    this.router.post("/tools/export-memory-bank", this.handleExportMemoryBank);
-    this.router.post("/tools/import-memory-bank", this.handleImportMemoryBank);
+    this.router.post('/tools/init-memory-bank', this.handleInitMemoryBank);
+    this.router.post('/tools/get-metadata', this.handleGetMetadata);
+    this.router.post('/tools/update-metadata', this.handleUpdateMetadata);
+    this.router.post('/tools/get-context', this.handleGetContext);
+    this.router.post('/tools/update-context', this.handleUpdateContext);
+    this.router.post('/tools/add-component', this.handleAddComponent);
+    this.router.post('/tools/add-decision', this.handleAddDecision);
+    this.router.post('/tools/add-rule', this.handleAddRule);
+    this.router.post('/tools/export-memory-bank', this.handleExportMemoryBank);
+    this.router.post('/tools/import-memory-bank', this.handleImportMemoryBank);
 
     // Add routes for Basic Traversal Tools
+    this.router.post('/tools/get-component-dependencies', this.handleGetComponentDependencies);
+    this.router.post('/tools/get-component-dependents', this.handleGetComponentDependents);
+    this.router.post('/tools/get-item-contextual-history', this.handleGetItemContextualHistory);
     this.router.post(
-      "/tools/get-component-dependencies",
-      this.handleGetComponentDependencies
+      '/tools/get-governing-items-for-component',
+      this.handleGetGoverningItemsForComponent,
     );
-    this.router.post(
-      "/tools/get-component-dependents",
-      this.handleGetComponentDependents
-    );
-    this.router.post(
-      "/tools/get-item-contextual-history",
-      this.handleGetItemContextualHistory
-    );
-    this.router.post(
-      "/tools/get-governing-items-for-component",
-      this.handleGetGoverningItemsForComponent
-    );
-    this.router.post("/tools/get-related-items", this.handleGetRelatedItems);
+    this.router.post('/tools/get-related-items', this.handleGetRelatedItems);
 
     // Add routes for Graph Algorithm Tools
+    this.router.post('/tools/k-core-decomposition', this.handleKCoreDecomposition);
+    this.router.post('/tools/louvain-community-detection', this.handleLouvainCommunityDetection);
+    this.router.post('/tools/pagerank', this.handlePageRank);
     this.router.post(
-      "/tools/k-core-decomposition",
-      this.handleKCoreDecomposition
+      '/tools/strongly-connected-components',
+      this.handleStronglyConnectedComponents,
     );
-    this.router.post(
-      "/tools/louvain-community-detection",
-      this.handleLouvainCommunityDetection
-    );
-    this.router.post("/tools/pagerank", this.handlePageRank);
-    this.router.post(
-      "/tools/strongly-connected-components",
-      this.handleStronglyConnectedComponents
-    );
-    this.router.post(
-      "/tools/weakly-connected-components",
-      this.handleWeaklyConnectedComponents
-    );
-    this.router.post("/tools/shortest-path", this.handleShortestPath);
+    this.router.post('/tools/weakly-connected-components', this.handleWeaklyConnectedComponents);
+    this.router.post('/tools/shortest-path', this.handleShortestPath);
   }
 
   /**
    * Get server information
    */
-  private getServerInfo = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  private getServerInfo = async (req: Request, res: Response): Promise<void> => {
     res.json(MEMORY_BANK_MCP_SERVER);
   };
 
@@ -111,35 +90,29 @@ export class MemoryMcpServer {
   /**
    * Handle init memory bank tool
    */
-  private handleInitMemoryBank = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  private handleInitMemoryBank = async (req: Request, res: Response): Promise<void> => {
     try {
       const toolArgs = req.body; // { repository, branch? }
 
       if (!toolArgs.repository) {
         res.status(400).json({
           success: false,
-          error: "Missing required parameter: repository",
+          error: 'Missing required parameter: repository',
         });
         return;
       }
       // Ensure branch default, as shared handler might expect it or rely on MemoryService default
-      toolArgs.branch = toolArgs.branch || "main";
+      toolArgs.branch = toolArgs.branch || 'main';
 
-      const result = await toolHandlers["init-memory-bank"](
-        toolArgs,
-        this.memoryService
-      );
+      const result = await toolHandlers['init-memory-bank'](toolArgs, this.memoryService);
 
       // Assuming shared handler returns an object like { success: true, message: ... } or throws error
       res.json(result);
     } catch (error: any) {
-      console.error("Error in init-memory-bank tool (HTTP):", error.message);
+      console.error('Error in init-memory-bank tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to initialize memory bank",
+        error: error.message || 'Failed to initialize memory bank',
       });
     }
   };
@@ -147,28 +120,22 @@ export class MemoryMcpServer {
   /**
    * Handle get metadata tool
    */
-  private handleGetMetadata = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  private handleGetMetadata = async (req: Request, res: Response): Promise<void> => {
     try {
       const toolArgs = req.body; // { repository, branch? }
 
       if (!toolArgs.repository) {
         res.status(400).json({
           success: false,
-          error: "Missing required parameter: repository",
+          error: 'Missing required parameter: repository',
         });
         return;
       }
-      toolArgs.branch = toolArgs.branch || "main";
+      toolArgs.branch = toolArgs.branch || 'main';
 
       // The shared 'get-metadata' handler returns the metadata object directly or throws.
       // It might also return null if the underlying service method returns null for not found.
-      const metadata = await toolHandlers["get-metadata"](
-        toolArgs,
-        this.memoryService
-      );
+      const metadata = await toolHandlers['get-metadata'](toolArgs, this.memoryService);
 
       if (metadata === null || metadata === undefined) {
         // Check for null or undefined specifically
@@ -184,10 +151,10 @@ export class MemoryMcpServer {
         metadata, // The shared handler is expected to return the metadata object itself
       });
     } catch (error: any) {
-      console.error("Error in get-metadata tool (HTTP):", error.message);
+      console.error('Error in get-metadata tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to get metadata",
+        error: error.message || 'Failed to get metadata',
       });
     }
   };
@@ -195,27 +162,21 @@ export class MemoryMcpServer {
   /**
    * Handle update metadata tool
    */
-  private handleUpdateMetadata = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  private handleUpdateMetadata = async (req: Request, res: Response): Promise<void> => {
     try {
       const toolArgs = req.body; // { repository, metadata, branch? }
 
       if (!toolArgs.repository || !toolArgs.metadata) {
         res.status(400).json({
           success: false,
-          error: "Missing required parameters: repository and metadata",
+          error: 'Missing required parameters: repository and metadata',
         });
         return;
       }
-      toolArgs.branch = toolArgs.branch || "main";
+      toolArgs.branch = toolArgs.branch || 'main';
 
       // Assuming shared 'update-metadata' handler will return the updated metadata object or null/undefined on failure.
-      const updatedMetadata = await toolHandlers["update-metadata"](
-        toolArgs,
-        this.memoryService
-      );
+      const updatedMetadata = await toolHandlers['update-metadata'](toolArgs, this.memoryService);
 
       if (updatedMetadata === null || updatedMetadata === undefined) {
         res.status(404).json({
@@ -231,10 +192,10 @@ export class MemoryMcpServer {
         metadata: updatedMetadata, // Return the actual updated metadata object
       });
     } catch (error: any) {
-      console.error("Error in update-metadata tool (HTTP):", error.message);
+      console.error('Error in update-metadata tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to update metadata",
+        error: error.message || 'Failed to update metadata',
       });
     }
   };
@@ -242,27 +203,21 @@ export class MemoryMcpServer {
   /**
    * Handle get context tool
    */
-  private handleGetContext = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  private handleGetContext = async (req: Request, res: Response): Promise<void> => {
     try {
       const toolArgs = req.body; // { repository, latest?, limit?, branch? }
 
       if (!toolArgs.repository) {
         res.status(400).json({
           success: false,
-          error: "Missing required parameter: repository",
+          error: 'Missing required parameter: repository',
         });
         return;
       }
-      toolArgs.branch = toolArgs.branch || "main";
+      toolArgs.branch = toolArgs.branch || 'main';
       // latest defaults to false if not provided, limit defaults in shared handler if applicable
 
-      const contexts = await toolHandlers["get-context"](
-        toolArgs,
-        this.memoryService
-      );
+      const contexts = await toolHandlers['get-context'](toolArgs, this.memoryService);
 
       // The shared handler returns an array.
       // If 'latest' was true and no context found, it would return an empty array.
@@ -279,10 +234,10 @@ export class MemoryMcpServer {
         context: contexts, // Shared handler returns an array for both cases
       });
     } catch (error: any) {
-      console.error("Error in get-context tool (HTTP):", error.message);
+      console.error('Error in get-context tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to get context",
+        error: error.message || 'Failed to get context',
       });
     }
   };
@@ -290,10 +245,7 @@ export class MemoryMcpServer {
   /**
    * Handle update context tool
    */
-  private handleUpdateContext = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  private handleUpdateContext = async (req: Request, res: Response): Promise<void> => {
     try {
       const toolArgs = req.body;
       // { repository, agent?, issue?, summary?, decision?, observation?, branch? }
@@ -301,19 +253,16 @@ export class MemoryMcpServer {
       if (!toolArgs.repository) {
         res.status(400).json({
           success: false,
-          error: "Missing required parameter: repository",
+          error: 'Missing required parameter: repository',
         });
         return;
       }
-      toolArgs.branch = toolArgs.branch || "main";
+      toolArgs.branch = toolArgs.branch || 'main';
       // Other fields (agent, issue, etc.) are optional and handled by the shared handler / service layer
 
       // Shared handler 'update-context' is expected to call MemoryService.updateContext
       // which handles merging and returns the updated Context | null.
-      const updatedContext = await toolHandlers["update-context"](
-        toolArgs,
-        this.memoryService
-      );
+      const updatedContext = await toolHandlers['update-context'](toolArgs, this.memoryService);
 
       if (!updatedContext) {
         // This could be due to repository not found, or other update failure if service returns null
@@ -330,10 +279,10 @@ export class MemoryMcpServer {
         context: updatedContext,
       });
     } catch (error: any) {
-      console.error("Error in update-context tool (HTTP):", error.message);
+      console.error('Error in update-context tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to update context",
+        error: error.message || 'Failed to update context',
       });
     }
   };
@@ -341,10 +290,7 @@ export class MemoryMcpServer {
   /**
    * Handle add component tool
    */
-  private handleAddComponent = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  private handleAddComponent = async (req: Request, res: Response): Promise<void> => {
     try {
       const {
         repository,
@@ -353,14 +299,14 @@ export class MemoryMcpServer {
         kind,
         depends_on,
         status,
-        branch = "main",
+        branch = 'main',
         ...otherComponentData
       } = req.body;
 
       if (!repository || !id || !name) {
         res.status(400).json({
           success: false,
-          error: "Missing required parameters: repository, id, and name",
+          error: 'Missing required parameters: repository, id, and name',
         });
         return;
       }
@@ -372,14 +318,11 @@ export class MemoryMcpServer {
         name,
         kind,
         depends_on,
-        status: status || "active",
+        status: status || 'active',
         ...otherComponentData,
       };
 
-      const resultComponent = await toolHandlers["add-component"](
-        toolArgs,
-        this.memoryService
-      );
+      const resultComponent = await toolHandlers['add-component'](toolArgs, this.memoryService);
 
       if (!resultComponent) {
         res.status(404).json({
@@ -394,10 +337,10 @@ export class MemoryMcpServer {
         component: resultComponent,
       });
     } catch (error: any) {
-      console.error("Error in add-component tool (HTTP):", error.message);
+      console.error('Error in add-component tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to add component",
+        error: error.message || 'Failed to add component',
       });
     }
   };
@@ -405,10 +348,7 @@ export class MemoryMcpServer {
   /**
    * Handle add decision tool
    */
-  private handleAddDecision = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  private handleAddDecision = async (req: Request, res: Response): Promise<void> => {
     try {
       const {
         repository,
@@ -416,14 +356,14 @@ export class MemoryMcpServer {
         name,
         context,
         date,
-        branch = "main",
+        branch = 'main',
         ...otherDecisionData
       } = req.body;
 
       if (!repository || !id || !name || !date) {
         res.status(400).json({
           success: false,
-          error: "Missing required parameters: repository, id, name, and date",
+          error: 'Missing required parameters: repository, id, name, and date',
         });
         return;
       }
@@ -439,10 +379,7 @@ export class MemoryMcpServer {
       };
 
       // Shared handler 'add-decision' should return the created/updated Decision object or null
-      const resultDecision = await toolHandlers["add-decision"](
-        toolArgs,
-        this.memoryService
-      );
+      const resultDecision = await toolHandlers['add-decision'](toolArgs, this.memoryService);
 
       if (!resultDecision) {
         res.status(404).json({
@@ -458,10 +395,10 @@ export class MemoryMcpServer {
         decision: resultDecision,
       });
     } catch (error: any) {
-      console.error("Error in add-decision tool (HTTP):", error.message);
+      console.error('Error in add-decision tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to add decision",
+        error: error.message || 'Failed to add decision',
       });
     }
   };
@@ -469,10 +406,7 @@ export class MemoryMcpServer {
   /**
    * Handle add rule tool
    */
-  private handleAddRule = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  private handleAddRule = async (req: Request, res: Response): Promise<void> => {
     try {
       const {
         repository,
@@ -482,15 +416,14 @@ export class MemoryMcpServer {
         triggers,
         content,
         status,
-        branch = "main",
+        branch = 'main',
         ...otherRuleData
       } = req.body;
 
       if (!repository || !id || !name || !created) {
         res.status(400).json({
           success: false,
-          error:
-            "Missing required parameters: repository, id, name, and created",
+          error: 'Missing required parameters: repository, id, name, and created',
         });
         return;
       }
@@ -503,15 +436,12 @@ export class MemoryMcpServer {
         created,
         triggers,
         content,
-        status: status || "active",
+        status: status || 'active',
         ...otherRuleData,
       };
 
       // Shared handler 'add-rule' should return the created/updated Rule object or null
-      const resultRule = await toolHandlers["add-rule"](
-        toolArgs,
-        this.memoryService
-      );
+      const resultRule = await toolHandlers['add-rule'](toolArgs, this.memoryService);
 
       if (!resultRule) {
         res.status(404).json({
@@ -527,10 +457,10 @@ export class MemoryMcpServer {
         rule: resultRule,
       });
     } catch (error: any) {
-      console.error("Error in add-rule tool (HTTP):", error.message);
+      console.error('Error in add-rule tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to add rule",
+        error: error.message || 'Failed to add rule',
       });
     }
   };
@@ -538,30 +468,24 @@ export class MemoryMcpServer {
   /**
    * Handle export memory bank tool
    */
-  private handleExportMemoryBank = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  private handleExportMemoryBank = async (req: Request, res: Response): Promise<void> => {
     try {
       const toolArgs = req.body; // { repository, branch? }
 
       if (!toolArgs.repository) {
         res.status(400).json({
           success: false,
-          error: "Missing required parameter: repository",
+          error: 'Missing required parameter: repository',
         });
         return;
       }
-      toolArgs.branch = toolArgs.branch || "main";
+      toolArgs.branch = toolArgs.branch || 'main';
 
       // Shared handler 'export-memory-bank' returns an object like
       // { success: true, message: string, data: Record<string, string> } or throws.
       // The original HTTP response directly used the 'files' property from MemoryService.
       // We expect the shared handler's 'data' field to be this files record.
-      const result = await toolHandlers["export-memory-bank"](
-        toolArgs,
-        this.memoryService
-      );
+      const result = await toolHandlers['export-memory-bank'](toolArgs, this.memoryService);
 
       // Assuming result has a structure like { data: files } if successful,
       // or shared handler throws on error from service.
@@ -576,21 +500,20 @@ export class MemoryMcpServer {
         // This case might be hit if shared handler returns a success=false or unexpected structure
         // Or if it doesn't throw but indicates failure in its return object.
         console.error(
-          "Export memory bank failed or returned unexpected structure from shared handler:",
-          result
+          'Export memory bank failed or returned unexpected structure from shared handler:',
+          result,
         );
         res.status(500).json({
           success: false,
           error:
-            result?.message ||
-            "Failed to export memory bank due to unexpected handler response",
+            result?.message || 'Failed to export memory bank due to unexpected handler response',
         });
       }
     } catch (error: any) {
-      console.error("Error in export-memory-bank tool (HTTP):", error.message);
+      console.error('Error in export-memory-bank tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to export memory bank",
+        error: error.message || 'Failed to export memory bank',
       });
     }
   };
@@ -598,42 +521,25 @@ export class MemoryMcpServer {
   /**
    * Handle import memory bank tool
    */
-  private handleImportMemoryBank = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  private handleImportMemoryBank = async (req: Request, res: Response): Promise<void> => {
     try {
       const toolArgs = req.body;
       // { repository, content, type, id, branch? }
 
-      if (
-        !toolArgs.repository ||
-        !toolArgs.content ||
-        !toolArgs.type ||
-        !toolArgs.id
-      ) {
+      if (!toolArgs.repository || !toolArgs.content || !toolArgs.type || !toolArgs.id) {
         res.status(400).json({
           success: false,
-          error:
-            "Missing required parameters: repository, content, type, and id",
+          error: 'Missing required parameters: repository, content, type, and id',
         });
         return;
       }
 
       // Validate memory type (this is specific to the string input from HTTP)
-      const validTypes = [
-        "metadata",
-        "context",
-        "component",
-        "decision",
-        "rule",
-      ];
+      const validTypes = ['metadata', 'context', 'component', 'decision', 'rule'];
       if (!validTypes.includes(toolArgs.type)) {
         res.status(400).json({
           success: false,
-          error: `Invalid memory type '${
-            toolArgs.type
-          }'. Must be one of: ${validTypes.join(", ")}`,
+          error: `Invalid memory type '${toolArgs.type}'. Must be one of: ${validTypes.join(', ')}`,
         });
         return;
       }
@@ -642,12 +548,9 @@ export class MemoryMcpServer {
       // The toolArgs.type is already validated above to be one of the expected strings.
       // The shared handler will receive this string, and its internal call to MemoryService.importMemoryBank
       // also takes this string type.
-      toolArgs.branch = toolArgs.branch || "main";
+      toolArgs.branch = toolArgs.branch || 'main';
 
-      const result = await toolHandlers["import-memory-bank"](
-        toolArgs,
-        this.memoryService
-      );
+      const result = await toolHandlers['import-memory-bank'](toolArgs, this.memoryService);
 
       // Shared handler is expected to return { success: boolean, message?: string } or throw an error.
       if (result && result.success) {
@@ -667,351 +570,277 @@ export class MemoryMcpServer {
         });
       }
     } catch (error: any) {
-      console.error("Error in import-memory-bank tool (HTTP):", error.message);
+      console.error('Error in import-memory-bank tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to import memory bank",
+        error: error.message || 'Failed to import memory bank',
       });
     }
   };
 
   // Add handlers for Basic Traversal Tools
 
-  private handleGetComponentDependencies = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  private handleGetComponentDependencies = async (req: Request, res: Response): Promise<void> => {
     try {
       const toolArgs = req.body; // Expects { repository, componentId, branch?, depth? }
       if (!toolArgs.repository || !toolArgs.componentId) {
         res.status(400).json({
           success: false,
-          error: "Missing required parameters: repository and componentId",
+          error: 'Missing required parameters: repository and componentId',
         });
         return;
       }
-      toolArgs.branch = toolArgs.branch || "main";
-      const result = await toolHandlers["get-component-dependencies"](
-        toolArgs,
-        this.memoryService
-      );
+      toolArgs.branch = toolArgs.branch || 'main';
+      const result = await toolHandlers['get-component-dependencies'](toolArgs, this.memoryService);
       res.json({ success: true, data: result }); // Shared handler returns data directly or throws
     } catch (error: any) {
-      console.error(
-        "Error in get-component-dependencies tool (HTTP):",
-        error.message
-      );
+      console.error('Error in get-component-dependencies tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to get component dependencies",
+        error: error.message || 'Failed to get component dependencies',
       });
     }
   };
 
-  private handleGetComponentDependents = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  private handleGetComponentDependents = async (req: Request, res: Response): Promise<void> => {
     try {
       const toolArgs = req.body; // Expects { repository, componentId, branch?, depth? }
       if (!toolArgs.repository || !toolArgs.componentId) {
         res.status(400).json({
           success: false,
-          error: "Missing required parameters: repository and componentId",
+          error: 'Missing required parameters: repository and componentId',
         });
         return;
       }
-      toolArgs.branch = toolArgs.branch || "main";
-      const result = await toolHandlers["get-component-dependents"](
-        toolArgs,
-        this.memoryService
-      );
+      toolArgs.branch = toolArgs.branch || 'main';
+      const result = await toolHandlers['get-component-dependents'](toolArgs, this.memoryService);
       res.json({ success: true, data: result });
     } catch (error: any) {
-      console.error(
-        "Error in get-component-dependents tool (HTTP):",
-        error.message
-      );
+      console.error('Error in get-component-dependents tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to get component dependents",
+        error: error.message || 'Failed to get component dependents',
       });
     }
   };
 
-  private handleGetItemContextualHistory = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  private handleGetItemContextualHistory = async (req: Request, res: Response): Promise<void> => {
     try {
       const toolArgs = req.body; // Expects { repository, itemId, branch? }
       if (!toolArgs.repository || !toolArgs.itemId) {
         res.status(400).json({
           success: false,
-          error: "Missing required parameters: repository and itemId",
+          error: 'Missing required parameters: repository and itemId',
         });
         return;
       }
-      toolArgs.branch = toolArgs.branch || "main";
-      const result = await toolHandlers["get-item-contextual-history"](
+      toolArgs.branch = toolArgs.branch || 'main';
+      const result = await toolHandlers['get-item-contextual-history'](
         toolArgs,
-        this.memoryService
+        this.memoryService,
       );
       res.json({ success: true, data: result });
     } catch (error: any) {
-      console.error(
-        "Error in get-item-contextual-history tool (HTTP):",
-        error.message
-      );
+      console.error('Error in get-item-contextual-history tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to get item contextual history",
+        error: error.message || 'Failed to get item contextual history',
       });
     }
   };
 
   private handleGetGoverningItemsForComponent = async (
     req: Request,
-    res: Response
+    res: Response,
   ): Promise<void> => {
     try {
       const toolArgs = req.body; // Expects { repository, componentId, branch? }
       if (!toolArgs.repository || !toolArgs.componentId) {
         res.status(400).json({
           success: false,
-          error: "Missing required parameters: repository and componentId",
+          error: 'Missing required parameters: repository and componentId',
         });
         return;
       }
-      toolArgs.branch = toolArgs.branch || "main";
-      const result = await toolHandlers["get-governing-items-for-component"](
+      toolArgs.branch = toolArgs.branch || 'main';
+      const result = await toolHandlers['get-governing-items-for-component'](
         toolArgs,
-        this.memoryService
+        this.memoryService,
       );
       res.json({ success: true, data: result });
     } catch (error: any) {
-      console.error(
-        "Error in get-governing-items-for-component tool (HTTP):",
-        error.message
-      );
+      console.error('Error in get-governing-items-for-component tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to get governing items",
+        error: error.message || 'Failed to get governing items',
       });
     }
   };
 
-  private handleGetRelatedItems = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  private handleGetRelatedItems = async (req: Request, res: Response): Promise<void> => {
     try {
       const toolArgs = req.body; // Expects { repository, itemId, branch?, relationshipTypes?, depth?, direction? }
       if (!toolArgs.repository || !toolArgs.itemId) {
         res.status(400).json({
           success: false,
-          error: "Missing required parameters: repository and itemId",
+          error: 'Missing required parameters: repository and itemId',
         });
         return;
       }
-      toolArgs.branch = toolArgs.branch || "main";
-      const result = await toolHandlers["get-related-items"](
-        toolArgs,
-        this.memoryService
-      );
+      toolArgs.branch = toolArgs.branch || 'main';
+      const result = await toolHandlers['get-related-items'](toolArgs, this.memoryService);
       res.json({ success: true, data: result });
     } catch (error: any) {
-      console.error("Error in get-related-items tool (HTTP):", error.message);
+      console.error('Error in get-related-items tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to get related items",
+        error: error.message || 'Failed to get related items',
       });
     }
   };
 
   // Add handlers for Graph Algorithm Tools
 
-  private handleKCoreDecomposition = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  private handleKCoreDecomposition = async (req: Request, res: Response): Promise<void> => {
     try {
       const toolArgs = req.body; // Expects { repository, branch?, k? }
       if (!toolArgs.repository) {
         res.status(400).json({
           success: false,
-          error: "Missing required parameter: repository",
+          error: 'Missing required parameter: repository',
         });
         return;
       }
-      toolArgs.branch = toolArgs.branch || "main";
-      const result = await toolHandlers["k-core-decomposition"](
-        toolArgs,
-        this.memoryService
-      );
+      toolArgs.branch = toolArgs.branch || 'main';
+      const result = await toolHandlers['k-core-decomposition'](toolArgs, this.memoryService);
       res.json({ success: true, data: result });
     } catch (error: any) {
-      console.error(
-        "Error in k-core-decomposition tool (HTTP):",
-        error.message
-      );
+      console.error('Error in k-core-decomposition tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to perform k-core decomposition",
+        error: error.message || 'Failed to perform k-core decomposition',
       });
     }
   };
 
-  private handleLouvainCommunityDetection = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  private handleLouvainCommunityDetection = async (req: Request, res: Response): Promise<void> => {
     try {
       const toolArgs = req.body; // Expects { repository, branch? }
       if (!toolArgs.repository) {
         res.status(400).json({
           success: false,
-          error: "Missing required parameter: repository",
+          error: 'Missing required parameter: repository',
         });
         return;
       }
-      toolArgs.branch = toolArgs.branch || "main";
-      const result = await toolHandlers["louvain-community-detection"](
+      toolArgs.branch = toolArgs.branch || 'main';
+      const result = await toolHandlers['louvain-community-detection'](
         toolArgs,
-        this.memoryService
+        this.memoryService,
       );
       res.json({ success: true, data: result });
     } catch (error: any) {
-      console.error(
-        "Error in louvain-community-detection tool (HTTP):",
-        error.message
-      );
+      console.error('Error in louvain-community-detection tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to perform Louvain community detection",
+        error: error.message || 'Failed to perform Louvain community detection',
       });
     }
   };
 
-  private handlePageRank = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  private handlePageRank = async (req: Request, res: Response): Promise<void> => {
     try {
       const toolArgs = req.body; // Expects { repository, branch?, dampingFactor?, iterations? }
       if (!toolArgs.repository) {
         res.status(400).json({
           success: false,
-          error: "Missing required parameter: repository",
+          error: 'Missing required parameter: repository',
         });
         return;
       }
-      toolArgs.branch = toolArgs.branch || "main";
-      const result = await toolHandlers["pagerank"](
-        toolArgs,
-        this.memoryService
-      );
+      toolArgs.branch = toolArgs.branch || 'main';
+      const result = await toolHandlers['pagerank'](toolArgs, this.memoryService);
       res.json({ success: true, data: result });
     } catch (error: any) {
-      console.error("Error in pagerank tool (HTTP):", error.message);
+      console.error('Error in pagerank tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to calculate PageRank",
+        error: error.message || 'Failed to calculate PageRank',
       });
     }
   };
 
   private handleStronglyConnectedComponents = async (
     req: Request,
-    res: Response
+    res: Response,
   ): Promise<void> => {
     try {
       const toolArgs = req.body; // Expects { repository, branch? }
       if (!toolArgs.repository) {
         res.status(400).json({
           success: false,
-          error: "Missing required parameter: repository",
+          error: 'Missing required parameter: repository',
         });
         return;
       }
-      toolArgs.branch = toolArgs.branch || "main";
-      const result = await toolHandlers["strongly-connected-components"](
+      toolArgs.branch = toolArgs.branch || 'main';
+      const result = await toolHandlers['strongly-connected-components'](
         toolArgs,
-        this.memoryService
+        this.memoryService,
       );
       res.json({ success: true, data: result });
     } catch (error: any) {
-      console.error(
-        "Error in strongly-connected-components tool (HTTP):",
-        error.message
-      );
+      console.error('Error in strongly-connected-components tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to find strongly connected components",
+        error: error.message || 'Failed to find strongly connected components',
       });
     }
   };
 
-  private handleWeaklyConnectedComponents = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  private handleWeaklyConnectedComponents = async (req: Request, res: Response): Promise<void> => {
     try {
       const toolArgs = req.body; // Expects { repository, branch? }
       if (!toolArgs.repository) {
         res.status(400).json({
           success: false,
-          error: "Missing required parameter: repository",
+          error: 'Missing required parameter: repository',
         });
         return;
       }
-      toolArgs.branch = toolArgs.branch || "main";
-      const result = await toolHandlers["weakly-connected-components"](
+      toolArgs.branch = toolArgs.branch || 'main';
+      const result = await toolHandlers['weakly-connected-components'](
         toolArgs,
-        this.memoryService
+        this.memoryService,
       );
       res.json({ success: true, data: result });
     } catch (error: any) {
-      console.error(
-        "Error in weakly-connected-components tool (HTTP):",
-        error.message
-      );
+      console.error('Error in weakly-connected-components tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to find weakly connected components",
+        error: error.message || 'Failed to find weakly connected components',
       });
     }
   };
 
-  private handleShortestPath = async (
-    req: Request,
-    res: Response
-  ): Promise<void> => {
+  private handleShortestPath = async (req: Request, res: Response): Promise<void> => {
     try {
       const toolArgs = req.body; // Expects { repository, startNodeId, endNodeId, branch?, relationshipTypes?, direction?, algorithm? }
-      if (
-        !toolArgs.repository ||
-        !toolArgs.startNodeId ||
-        !toolArgs.endNodeId
-      ) {
+      if (!toolArgs.repository || !toolArgs.startNodeId || !toolArgs.endNodeId) {
         res.status(400).json({
           success: false,
-          error:
-            "Missing required parameters: repository, startNodeId, and endNodeId",
+          error: 'Missing required parameters: repository, startNodeId, and endNodeId',
         });
         return;
       }
-      toolArgs.branch = toolArgs.branch || "main";
-      const result = await toolHandlers["shortest-path"](
-        toolArgs,
-        this.memoryService
-      );
+      toolArgs.branch = toolArgs.branch || 'main';
+      const result = await toolHandlers['shortest-path'](toolArgs, this.memoryService);
       res.json({ success: true, data: result });
     } catch (error: any) {
-      console.error("Error in shortest-path tool (HTTP):", error.message);
+      console.error('Error in shortest-path tool (HTTP):', error.message);
       res.status(500).json({
         success: false,
-        error: error.message || "Failed to find shortest path",
+        error: error.message || 'Failed to find shortest path',
       });
     }
   };

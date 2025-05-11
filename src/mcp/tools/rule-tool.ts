@@ -5,67 +5,67 @@ import { McpTool } from '../types';
  * Used to add a rule to a repository's memory bank (branch-aware for KuzuDB)
  */
 export const addRuleTool: McpTool = {
-  name: "add-rule",
+  name: 'add-rule',
   description: "Add a rule to a repository's memory bank",
   parameters: {
-    type: "object",
+    type: 'object',
     properties: {
       repository: {
-        type: "string",
-        description: "Repository name",
+        type: 'string',
+        description: 'Repository name',
       },
       branch: {
-        type: "string",
+        type: 'string',
         description: "Repository branch (defaults to 'main')",
       },
       id: {
-        type: "string",
-        description: "Rule ID",
+        type: 'string',
+        description: 'Rule ID',
       },
       name: {
-        type: "string",
-        description: "Rule name",
+        type: 'string',
+        description: 'Rule name',
       },
       created: {
-        type: "string",
-        description: "Rule creation date (YYYY-MM-DD)",
+        type: 'string',
+        description: 'Rule creation date (YYYY-MM-DD)',
       },
       triggers: {
-        type: "array",
-        description: "Rule triggers",
+        type: 'array',
+        description: 'Rule triggers',
         items: {
-          type: "string",
+          type: 'string',
         },
       },
       content: {
-        type: "string",
-        description: "Rule content",
+        type: 'string',
+        description: 'Rule content',
       },
       status: {
-        type: "string",
-        description: "Rule status",
-        enum: ["active", "deprecated"],
+        type: 'string',
+        description: 'Rule status',
+        enum: ['active', 'deprecated'],
       },
     },
-    required: ["repository", "branch", "id", "name", "created"],
+    required: ['repository', 'branch', 'id', 'name', 'created'],
   },
   annotations: {
-    title: "Add Rule",
+    title: 'Add Rule',
     readOnlyHint: false,
     destructiveHint: false,
     idempotentHint: false,
     openWorldHint: false,
   },
   returns: {
-    type: "object",
+    type: 'object',
     properties: {
       success: {
-        type: "boolean",
-        description: "Whether the operation was successful",
+        type: 'boolean',
+        description: 'Whether the operation was successful',
       },
       rule: {
-        type: "object",
-        description: "Added rule content",
+        type: 'object',
+        description: 'Added rule content',
       },
     },
   },

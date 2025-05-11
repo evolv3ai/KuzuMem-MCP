@@ -5,43 +5,44 @@ import { McpTool } from '../types';
  * Used to retrieve context for a repository (branch-aware for KuzuDB)
  */
 export const getContextTool: McpTool = {
-  name: "get-context",
-  description: "Get the latest or all context entries for a repository. Use latest=true for the most recent context.",
+  name: 'get-context',
+  description:
+    'Get the latest or all context entries for a repository. Use latest=true for the most recent context.',
   parameters: {
-    type: "object",
+    type: 'object',
     properties: {
       repository: {
-        type: "string",
-        description: "Repository name",
+        type: 'string',
+        description: 'Repository name',
       },
       branch: {
-        type: "string",
+        type: 'string',
         description: "Repository branch (defaults to 'main')",
       },
       latest: {
-        type: "boolean",
-        description: "Whether to get only the latest context (true) or all contexts (false)",
+        type: 'boolean',
+        description: 'Whether to get only the latest context (true) or all contexts (false)',
       },
       limit: {
-        type: "integer",
-        description: "Number of contexts to return when latest is false",
+        type: 'integer',
+        description: 'Number of contexts to return when latest is false',
       },
     },
-    required: ["repository", "branch"],
+    required: ['repository', 'branch'],
   },
   annotations: {
-    title: "Get Context",
+    title: 'Get Context',
     readOnlyHint: true,
     destructiveHint: false,
     idempotentHint: true,
     openWorldHint: false,
   },
   returns: {
-    type: "object",
+    type: 'object',
     properties: {
       context: {
-        type: "array",
-        description: "Context objects",
+        type: 'array',
+        description: 'Context objects',
       },
     },
   },
@@ -52,59 +53,59 @@ export const getContextTool: McpTool = {
  * Used to update context for a repository (branch-aware for KuzuDB)
  */
 export const updateContextTool: McpTool = {
-  name: "update-context",
-  description: "Update context for a repository with new information",
+  name: 'update-context',
+  description: 'Update context for a repository with new information',
   parameters: {
-    type: "object",
+    type: 'object',
     properties: {
       repository: {
-        type: "string",
-        description: "Repository name",
+        type: 'string',
+        description: 'Repository name',
       },
       branch: {
-        type: "string",
+        type: 'string',
         description: "Repository branch (defaults to 'main')",
       },
       agent: {
-        type: "string",
-        description: "Agent name",
+        type: 'string',
+        description: 'Agent name',
       },
       issue: {
-        type: "string",
-        description: "Related issue",
+        type: 'string',
+        description: 'Related issue',
       },
       summary: {
-        type: "string",
-        description: "Context summary",
+        type: 'string',
+        description: 'Context summary',
       },
       decision: {
-        type: "string",
-        description: "Decision to add",
+        type: 'string',
+        description: 'Decision to add',
       },
       observation: {
-        type: "string",
-        description: "Observation to add",
+        type: 'string',
+        description: 'Observation to add',
       },
     },
-    required: ["repository", "branch"],
+    required: ['repository', 'branch'],
   },
   annotations: {
-    title: "Update Context",
+    title: 'Update Context',
     readOnlyHint: false,
     destructiveHint: true,
     idempotentHint: false,
     openWorldHint: false,
   },
   returns: {
-    type: "object",
+    type: 'object',
     properties: {
       success: {
-        type: "boolean",
-        description: "Whether the update was successful",
+        type: 'boolean',
+        description: 'Whether the update was successful',
       },
       context: {
-        type: "object",
-        description: "Updated context content",
+        type: 'object',
+        description: 'Updated context content',
       },
     },
   },

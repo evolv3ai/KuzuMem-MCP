@@ -9,17 +9,59 @@ import { app, configureServer } from '../../mcp-httpstream-server';
 // Mock the MemoryService
 jest.mock('../../services/memory.service', () => {
   const mockInstance = {
-    initMemoryBank: jest.fn().mockImplementation((repository, branch = "main") => Promise.resolve(true)),
-    getMetadata: jest.fn().mockImplementation((repository, branch = "main") => Promise.resolve({ id: 'meta', project: { name: 'TestProject' } })),
-    updateMetadata: jest.fn().mockImplementation((repository, metadata, branch = "main") => Promise.resolve({ id: "meta", project: { name: "UpdatedProject" } })),
-    getTodayContext: jest.fn().mockImplementation((repository, branch = "main") => Promise.resolve({ id: "ctx-2025-05-10", summary: "Test context" })),
-    getLatestContexts: jest.fn().mockImplementation((repository, limit, branch = "main") => Promise.resolve([{ id: "ctx-2025-05-10", summary: "Test context" }])),
-    updateTodayContext: jest.fn().mockImplementation((repository, context, branch = "main") => Promise.resolve({ id: "ctx-2025-05-10", summary: "Updated context" })),
-    upsertComponent: jest.fn().mockImplementation((repository, component, branch = "main") => Promise.resolve({ id: "comp-test", name: "TestComponent" })),
-    upsertDecision: jest.fn().mockImplementation((repository, decision, branch = "main") => Promise.resolve({ id: "dec-test", name: "TestDecision" })),
-    upsertRule: jest.fn().mockImplementation((repository, rule, branch = "main") => Promise.resolve({ id: "rule-test", name: "TestRule" })),
-    exportMemoryBank: jest.fn().mockImplementation((repository, branch = "main") => Promise.resolve({ metadata: "yaml content", contexts: ["yaml content"] })),
-    importMemoryBank: jest.fn().mockImplementation((repository, content, type, id, branch = "main") => Promise.resolve(true)),
+    initMemoryBank: jest
+      .fn()
+      .mockImplementation((repository, branch = 'main') => Promise.resolve(true)),
+    getMetadata: jest
+      .fn()
+      .mockImplementation((repository, branch = 'main') =>
+        Promise.resolve({ id: 'meta', project: { name: 'TestProject' } }),
+      ),
+    updateMetadata: jest
+      .fn()
+      .mockImplementation((repository, metadata, branch = 'main') =>
+        Promise.resolve({ id: 'meta', project: { name: 'UpdatedProject' } }),
+      ),
+    getTodayContext: jest
+      .fn()
+      .mockImplementation((repository, branch = 'main') =>
+        Promise.resolve({ id: 'ctx-2025-05-10', summary: 'Test context' }),
+      ),
+    getLatestContexts: jest
+      .fn()
+      .mockImplementation((repository, limit, branch = 'main') =>
+        Promise.resolve([{ id: 'ctx-2025-05-10', summary: 'Test context' }]),
+      ),
+    updateTodayContext: jest
+      .fn()
+      .mockImplementation((repository, context, branch = 'main') =>
+        Promise.resolve({ id: 'ctx-2025-05-10', summary: 'Updated context' }),
+      ),
+    upsertComponent: jest
+      .fn()
+      .mockImplementation((repository, component, branch = 'main') =>
+        Promise.resolve({ id: 'comp-test', name: 'TestComponent' }),
+      ),
+    upsertDecision: jest
+      .fn()
+      .mockImplementation((repository, decision, branch = 'main') =>
+        Promise.resolve({ id: 'dec-test', name: 'TestDecision' }),
+      ),
+    upsertRule: jest
+      .fn()
+      .mockImplementation((repository, rule, branch = 'main') =>
+        Promise.resolve({ id: 'rule-test', name: 'TestRule' }),
+      ),
+    exportMemoryBank: jest
+      .fn()
+      .mockImplementation((repository, branch = 'main') =>
+        Promise.resolve({ metadata: 'yaml content', contexts: ['yaml content'] }),
+      ),
+    importMemoryBank: jest
+      .fn()
+      .mockImplementation((repository, content, type, id, branch = 'main') =>
+        Promise.resolve(true),
+      ),
   };
 
   return {
@@ -51,10 +93,10 @@ const collectStreamEvents = async (response: Response) => {
   let errorEvent = false;
 
   return new Promise((resolve, reject) => {
-    response.on("data", (chunk: Buffer) => {
-      const lines = chunk.toString().split("\n\n");
+    response.on('data', (chunk: Buffer) => {
+      const lines = chunk.toString().split('\n\n');
       for (const line of lines) {
-        if (line.trim() === "") continue;
+        if (line.trim() === '') continue;
 
         // Parse the event type and data
         const eventMatch = line.match(/event: (\w+)\ndata: (.+)/);
@@ -63,14 +105,14 @@ const collectStreamEvents = async (response: Response) => {
           const parsedData = JSON.parse(eventData);
           events.push({ type: eventType, data: parsedData });
 
-          if (eventType === "start") startEvent = true;
-          if (eventType === "result") resultEvent = true;
-          if (eventType === "error") errorEvent = true;
+          if (eventType === 'start') startEvent = true;
+          if (eventType === 'result') resultEvent = true;
+          if (eventType === 'error') errorEvent = true;
         }
       }
     });
 
-    response.on("end", () => {
+    response.on('end', () => {
       resolve({
         events,
         hasStartEvent: startEvent,
@@ -79,13 +121,13 @@ const collectStreamEvents = async (response: Response) => {
       });
     });
 
-    response.on("error", (err: Error) => {
+    response.on('error', (err: Error) => {
       reject(err);
     });
   });
 };
 
-describe("MCP HTTP Streaming Server", () => {
+describe('MCP HTTP Streaming Server', () => {
   let testApp: any;
 
   beforeEach(async () => {
@@ -103,13 +145,16 @@ describe("MCP HTTP Streaming Server", () => {
           jsonrpc: '2.0',
           method: 'init-memory-bank',
           params: { repository: 'test-repo', branch: 'main' },
-          id: 1
+          id: 1,
         });
       expect(response.status).toBe(200);
       expect(response.body.result).toEqual({ success: true, message: 'Memory bank initialized' });
       expect(response.body.jsonrpc).toBe('2.0');
       expect(response.body.id).toBe(1);
-      expect((await MemoryService.getInstance()).initMemoryBank).toHaveBeenCalledWith('test-repo', 'main');
+      expect((await MemoryService.getInstance()).initMemoryBank).toHaveBeenCalledWith(
+        'test-repo',
+        'main',
+      );
     });
 
     test('POST /mcp (get-metadata) returns metadata', async () => {
@@ -120,25 +165,25 @@ describe("MCP HTTP Streaming Server", () => {
           jsonrpc: '2.0',
           method: 'get-metadata',
           params: { repository: 'test-repo', branch: 'main' },
-          id: 2
+          id: 2,
         });
       expect(response.status).toBe(200);
       expect(response.body.result).toEqual({ id: 'meta', project: { name: 'TestProject' } });
       expect(response.body.jsonrpc).toBe('2.0');
       expect(response.body.id).toBe(2);
-      expect((await MemoryService.getInstance()).getMetadata).toHaveBeenCalledWith('test-repo', 'main');
+      expect((await MemoryService.getInstance()).getMetadata).toHaveBeenCalledWith(
+        'test-repo',
+        'main',
+      );
     });
 
     test('POST /mcp (missing repository param) returns error', async () => {
-      const response = await request(testApp)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send({
-          jsonrpc: '2.0',
-          method: 'init-memory-bank',
-          params: {},
-          id: 3
-        });
+      const response = await request(testApp).post('/mcp').set('Origin', 'http://localhost').send({
+        jsonrpc: '2.0',
+        method: 'init-memory-bank',
+        params: {},
+        id: 3,
+      });
       expect(response.status).toBe(200);
       expect(response.body.error).toBeDefined();
       expect(response.body.error.message).toMatch(/Missing repository parameter/);
@@ -147,15 +192,12 @@ describe("MCP HTTP Streaming Server", () => {
     });
 
     test('POST /mcp (unknown method) returns error', async () => {
-      const response = await request(testApp)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send({
-          jsonrpc: '2.0',
-          method: 'unknown-method',
-          params: {},
-          id: 4
-        });
+      const response = await request(testApp).post('/mcp').set('Origin', 'http://localhost').send({
+        jsonrpc: '2.0',
+        method: 'unknown-method',
+        params: {},
+        id: 4,
+      });
       expect(response.status).toBe(200);
       expect(response.body.error).toBeDefined();
       expect(response.body.error.message).toMatch(/Method not implemented/);
@@ -165,8 +207,18 @@ describe("MCP HTTP Streaming Server", () => {
 
     test('POST /mcp batch returns array of results', async () => {
       const batch = [
-        { jsonrpc: '2.0', method: 'init-memory-bank', params: { repository: 'test-repo', branch: 'main' }, id: 10 },
-        { jsonrpc: '2.0', method: 'get-metadata', params: { repository: 'test-repo', branch: 'main' }, id: 11 }
+        {
+          jsonrpc: '2.0',
+          method: 'init-memory-bank',
+          params: { repository: 'test-repo', branch: 'main' },
+          id: 10,
+        },
+        {
+          jsonrpc: '2.0',
+          method: 'get-metadata',
+          params: { repository: 'test-repo', branch: 'main' },
+          id: 11,
+        },
       ];
       const response = await request(testApp)
         .post('/mcp')
@@ -189,7 +241,7 @@ describe("MCP HTTP Streaming Server", () => {
           jsonrpc: '2.0',
           method: 'get-metadata',
           params: { repository: 'test-repo', branch: 'main' },
-          id: 20
+          id: 20,
         });
       expect(response.status).toBe(200);
       // Should contain event: result and JSON-RPC payload
@@ -208,7 +260,7 @@ describe("MCP HTTP Streaming Server", () => {
           jsonrpc: '2.0',
           method: 'init-memory-bank',
           params: {}, // missing repository
-          id: 21
+          id: 21,
         });
       expect(response.status).toBe(200);
       expect(response.text).toContain('event: result');

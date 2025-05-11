@@ -114,7 +114,7 @@ Register the `mcp-stdio-server.ts` with your IDE. Example configuration:
       "args": [
         "-y",
         "ts-node",
-        "/absolute_path/to/advanced-memory-tool/src/mcp-stdio-server.ts" // or "/absolute_path/to/advanced-memory-tool/src/mcp-http-server.ts" or "/absolute_path/to/advanced-memory-tool/src/mcp-http-stream-server.ts"
+        "/absolute_path/to/advanced-memory-tool/src/mcp-stdio-server.ts" // or "/absolute_path/to/advanced-memory-tool/src/index.ts" or "/absolute_path/to/advanced-memory-tool/src/mcp-http-stream-server.ts"
       ],
       "env": {
         "DB_FILENAME": "./memory-bank.kuzu",
@@ -169,8 +169,6 @@ The primary way to interact with tools is via specific POST endpoints on the HTT
 - `/add-component` - Body: `{ "repository": "repo-name", "branch": "main", "id": "yaml_id", "name": "...", ... }`
 - `/add-decision` - Body: `{ "repository": "repo-name", "branch": "main", "id": "yaml_id", "name": "...", ... }`
 - `/add-rule` - Body: `{ "repository": "repo-name", "branch": "main", "id": "yaml_id", "name": "...", ... }`
-- `/export-memory-bank` - Body: `{ "repository": "repo-name", "branch": "main" }`
-- `/import-memory-bank` - Body: `{ "repository": "repo-name", "branch": "main", "type": "component", "id": "yaml_id", "content": "{...}" }`
 
 - **New Traversal & Graph Tools:**
   - `/get-component-dependencies` - Body: `{ "repository", "branch"?, "componentId", "depth"? }`
@@ -258,7 +256,7 @@ Please read the contributing guidelines before submitting a pull request.
 
 ## Future Improvements
 
-- (Original: Add support for GraphLayer in SQLite) - **Achieved by migrating to KùzuDB.**
-- Further optimize KùzuDB Cypher queries for graph algorithms.
-- Implement full KùzuDB native functions for algorithms where placeholders currently exist.
 - Enhance CLI to support branch selection for all relevant commands more explicitly.
+- **Variable naming convention updates, some of the used table variables are based on legacy YAML-file/SQLite based version**
+- **Add Full-Text Search (FTS) Capabilities** - Planned implementation to enable efficient keyword-based search across all memory items using KùzuDB's FTS extension.
+- **Vector Embeddings Support** - Under consideration pending clear use cases; would enable semantic similarity search and NLP-based memory retrieval using KùzuDB's vector capabilities.

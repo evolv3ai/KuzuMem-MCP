@@ -1,6 +1,6 @@
-import { Rule } from "../types";
-import { Mutex } from "../utils/mutex";
-import { KuzuDBClient } from "../db/kuzu";
+import { Rule } from '../types';
+import { Mutex } from '../utils/mutex';
+import { KuzuDBClient } from '../db/kuzu';
 
 /**
  * Thread-safe singleton repository for Rule, using KuzuDB and Cypher queries
@@ -26,17 +26,57 @@ export class RuleRepository {
     }
   }
 
+  private escapeStr(value: any): string {
+    if (value === undefined || value === null) {
+      return 'null';
+    }
+    return String(value).replace(/'/g, "\\'").replace(/\\/g, '\\\\');
+  }
+
+  private escapeJsonProp(value: any): string {
+    if (value === undefined || value === null) {
+      return 'null';
+    }
+    try {
+      const jsonString = JSON.stringify(value);
+      return `'${this.escapeStr(jsonString)}'`;
+    } catch (e) {
+      console.error('Failed to stringify JSON for escapeJsonProp', value, e);
+      return 'null';
+    }
+  }
+
+  private formatStringArrayForCypher(arr: string[] | undefined | null): string {
+    if (arr === undefined || arr === null || arr.length === 0) {
+      return 'null'; // Cypher keyword null for empty or null arrays
+    }
+    const escapedItems = arr.map((item) => `'${this.escapeStr(item)}'`);
+    return `[${escapedItems.join(', ')}]`;
+  }
+
   /**
    * Get all active rules for a repository (status = 'active'), ordered by created descending
    */
-  async getActiveRules(repository: string, branch: string): Promise<Rule[]> {
-    const result = await KuzuDBClient.executeQuery(
-      `MATCH (repo:Repository {id: '${repository}'})-[:HAS_RULE]->(r:Rule {status: 'active', branch: '${branch}'}) RETURN r ORDER BY r.created DESC`
-    );
-    if (!result || typeof result.getAll !== "function") return [];
+  async getActiveRules(repositoryId: string, branch: string): Promise<Rule[]> {
+    const escapedRepoId = this.escapeStr(repositoryId);
+    const escapedBranch = this.escapeStr(branch);
+    const query = `MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_RULE]->(r:Rule {status: 'active', branch: '${escapedBranch}'}) RETURN r ORDER BY r.created DESC`;
+    const result = await KuzuDBClient.executeQuery(query);
+    if (!result || typeof result.getAll !== 'function') {
+      return [];
+    }
     const rows = await result.getAll();
-    if (!rows || rows.length === 0) return [];
-    return rows.map((row: any) => row.r ?? row["r"] ?? row);
+    if (!rows || rows.length === 0) {
+      return [];
+    }
+    return rows.map((row: any) => {
+      const rawRuleData = row.r as any;
+      let created_str = rawRuleData.created;
+      if (rawRuleData.created instanceof Date) {
+        created_str = rawRuleData.created.toISOString().split('T')[0];
+      }
+      return { ...rawRuleData, created: created_str } as Rule;
+    });
   }
 
   /**
@@ -47,67 +87,73 @@ export class RuleRepository {
    * Returns the upserted Rule or null if not found
    */
   async upsertRule(rule: Rule): Promise<Rule | null> {
-    const existing = await this.findByYamlId(
-      String(rule.repository),
-      String(rule.yaml_id),
-      String(rule.branch)
-    );
+    const repositoryId = String(rule.repository);
+    const branch = String(rule.branch);
+    const yamlId = String(rule.yaml_id);
+
+    const escapedRepoId = this.escapeStr(repositoryId);
+    const escapedBranch = this.escapeStr(branch);
+    const escapedYamlId = this.escapeStr(yamlId);
+    const escapedName = this.escapeStr(rule.name);
+    const escapedCreated = this.escapeStr(rule.created);
+    const cypherTriggersList = this.formatStringArrayForCypher(rule.triggers); // Use new helper
+    const escapedContent = this.escapeStr(rule.content);
+    const escapedStatus = this.escapeStr(rule.status || 'active');
+    const nowIso = new Date().toISOString();
+    const kuzuTimestamp = nowIso.replace('T', ' ').replace('Z', '');
+
+    const existing = await this.findByYamlId(repositoryId, yamlId, branch);
+
     if (existing) {
-      await KuzuDBClient.executeQuery(
-        `MATCH (repo:Repository {id: '${String(
-          rule.repository
-        )}'})-[:HAS_RULE]->(r:Rule {yaml_id: '${String(
-          rule.yaml_id
-        )}', branch: '${String(rule.branch)}'}) SET r.name = '${
-          rule.name
-        }', r.triggers = '${rule.triggers}', r.content = '${
-          rule.content
-        }', r.status = '${rule.status}' RETURN r`
-      );
-      return {
-        ...existing,
-        name: rule.name,
-        triggers: rule.triggers,
-        content: rule.content,
-        status: rule.status,
-      };
+      const updateQuery = `MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_RULE]->(r:Rule {yaml_id: '${escapedYamlId}', branch: '${escapedBranch}'})
+         SET r.name = '${escapedName}', r.triggers = ${cypherTriggersList}, r.content = '${escapedContent}', r.status = '${escapedStatus}', r.updated_at = timestamp('${kuzuTimestamp}')
+         RETURN r`;
+      await KuzuDBClient.executeQuery(updateQuery);
+      return this.findByYamlId(repositoryId, yamlId, branch);
     } else {
-      const now = new Date().toISOString();
-      await KuzuDBClient.executeQuery(
-        `MATCH (repo:Repository {id: '${String(
-          rule.repository
-        )}'}) CREATE (repo)-[:HAS_RULE]->(r:Rule {yaml_id: '${String(
-          rule.yaml_id
-        )}', name: '${rule.name}', triggers: '${rule.triggers}', content: '${
-          rule.content
-        }', status: '${rule.status}', branch: '${String(
-          rule.branch
-        )}', created: timestamp('${now}')}) RETURN r`
-      );
-      // Return the newly created rule
-      return this.findByYamlId(
-        String(rule.repository),
-        String(rule.yaml_id),
-        String(rule.branch)
-      );
+      const createQuery = `MATCH (repo:Repository {id: '${escapedRepoId}'})
+         CREATE (repo)-[:HAS_RULE]->(r:Rule {
+           yaml_id: '${escapedYamlId}', 
+           name: '${escapedName}', 
+           created: date('${escapedCreated}'), 
+           triggers: ${cypherTriggersList}, 
+           content: '${escapedContent}', 
+           status: '${escapedStatus}', 
+           branch: '${escapedBranch}',
+           created_at: timestamp('${kuzuTimestamp}'),
+           updated_at: timestamp('${kuzuTimestamp}')
+          })
+         RETURN r`;
+      await KuzuDBClient.executeQuery(createQuery);
+      return this.findByYamlId(repositoryId, yamlId, branch);
     }
   }
 
   /**
    * Find a rule by repository and yaml_id
    */
-  async findByYamlId(
-    repository: string,
-    yaml_id: string,
-    branch: string
-  ): Promise<Rule | null> {
-    const result = await KuzuDBClient.executeQuery(
-      `MATCH (repo:Repository {id: '${repository}'})-[:HAS_RULE]->(r:Rule {yaml_id: '${yaml_id}', branch: '${branch}'}) RETURN r LIMIT 1`
-    );
-    if (!result || typeof result.getAll !== "function") return null;
+  async findByYamlId(repositoryId: string, yaml_id: string, branch: string): Promise<Rule | null> {
+    const escapedRepoId = this.escapeStr(repositoryId);
+    const escapedYamlId = this.escapeStr(yaml_id);
+    const escapedBranch = this.escapeStr(branch);
+    const query = `MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_RULE]->(r:Rule {yaml_id: '${escapedYamlId}', branch: '${escapedBranch}'}) RETURN r LIMIT 1`;
+    const result = await KuzuDBClient.executeQuery(query);
+    if (!result || typeof result.getAll !== 'function') {
+      return null;
+    }
     const rows = await result.getAll();
-    if (!rows || rows.length === 0) return null;
-    return rows[0].r ?? rows[0]["r"] ?? rows[0];
+    if (!rows || rows.length === 0) {
+      return null;
+    }
+    const rawRuleData = rows[0].r ?? rows[0]['r'] ?? rows[0];
+    if (!rawRuleData) {
+      return null;
+    }
+    let created_str = rawRuleData.created;
+    if (rawRuleData.created instanceof Date) {
+      created_str = rawRuleData.created.toISOString().split('T')[0];
+    }
+    return { ...rawRuleData, created: created_str } as Rule;
   }
 
   /**
@@ -117,23 +163,29 @@ export class RuleRepository {
    * @returns A promise that resolves to an array of Rule objects.
    */
   async getAllRules(repositoryId: string, branch: string): Promise<Rule[]> {
-    const safeRepositoryId = repositoryId.replace(/'/g, "\\'");
-    const safeBranch = branch.replace(/'/g, "\\'");
+    const escapedRepoId = this.escapeStr(repositoryId);
+    const escapedBranch = this.escapeStr(branch);
 
     const query = `
-      MATCH (repo:Repository {id: '${safeRepositoryId}'})-[:HAS_RULE]->(r:Rule {branch: '${safeBranch}'})
+      MATCH (repo:Repository {id: '${escapedRepoId}'})-[:HAS_RULE]->(r:Rule {branch: '${escapedBranch}'})
       RETURN r
       ORDER BY r.created DESC, r.name ASC
     `;
-    // console.log("Executing getAllRules query:", query);
     const result = await KuzuDBClient.executeQuery(query);
-    if (!result || typeof result.getAll !== "function") {
+    if (!result || typeof result.getAll !== 'function') {
       return [];
     }
     const rows = await result.getAll();
     if (!rows || rows.length === 0) {
       return [];
     }
-    return rows.map((row: any) => row.r ?? row["r"] ?? row);
+    return rows.map((row: any) => {
+      const rawRuleData = row.r as any;
+      let created_str = rawRuleData.created;
+      if (rawRuleData.created instanceof Date) {
+        created_str = rawRuleData.created.toISOString().split('T')[0];
+      }
+      return { ...rawRuleData, created: created_str } as Rule;
+    });
   }
 }
