@@ -4,6 +4,9 @@ import path from 'path';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp';
 import { MemoryService } from './services/memory.service';
 import { toolHandlers } from './mcp/tool-handlers';
+import { createProgressHandler } from './mcp/streaming/progress-handler';
+import { StdioProgressTransport } from './mcp/streaming/stdio-transport';
+import { ToolExecutionService } from './mcp/services/tool-execution.service';
 
 // Ensure database directory and file exists
 // Always use the project root for consistency
@@ -87,6 +90,9 @@ function debugLog(level: number, message: string, data?: any): void {
     }
   }
 }
+
+// Create transport once
+const progressTransport = new StdioProgressTransport(debugLog);
 
 // Helper for sending responses
 function sendResponse(response: McpResponse): void {
@@ -261,14 +267,13 @@ rl.on('line', async (line) => {
       }
 
       case 'tools/call': {
-        // MCP-compliant tool execution handler
         const toolName = request.params?.name;
         const toolArgs = request.params?.arguments || {};
         debugLog(1, `Handling tools/call for tool: ${toolName}`);
 
-        // It's good to keep the check if the tool is defined in MEMORY_BANK_MCP_TOOLS for consistency, even if handlers are primary.
         const toolDefinition = MEMORY_BANK_MCP_TOOLS.find((t) => t.name === toolName);
         if (!toolDefinition) {
+          // For a tool not found, send a direct standard error response.
           sendResponse({
             jsonrpc: '2.0',
             id: request.id,
@@ -286,60 +291,47 @@ rl.on('line', async (line) => {
         }
 
         try {
-          const memoryService = memoryServiceInstance || (await MemoryService.getInstance());
-          if (!memoryServiceInstance) {
-            memoryServiceInstance = memoryService;
-            console.error('Memory service initialized on first tool call');
-          }
+          const progressHandler = createProgressHandler(request.id, progressTransport);
+          const toolExecutionService = await ToolExecutionService.getInstance();
 
-          let toolResult: any = null;
-          try {
-            // Refactored to use toolHandlers map
-            const handler = toolHandlers[toolName];
-            if (handler) {
-              // toolArgs contains all arguments, including repository and branch if applicable for the tool.
-              // Handlers are responsible for extracting what they need from toolArgs.
-              toolResult = await handler(toolArgs, memoryService);
-            } else {
-              // This case should ideally not be hit if MEMORY_BANK_MCP_TOOLS and toolHandlers are in sync.
-              // And if toolDefinition was found.
-              toolResult = {
-                error: `Tool execution handler not implemented for '${toolName}'.`,
-              };
-            }
-          } catch (err: any) {
-            // This catches errors from within the handler execution (e.g., validation, service errors)
-            debugLog(
-              0,
-              `ERROR during tool execution for '${toolName}': ${err.message || String(err)}`,
-              err.stack,
-            );
-            toolResult = {
-              error: `Error executing tool '${toolName}': ${err.message || String(err)}`,
-            };
-          }
+          const toolResult = await toolExecutionService.executeTool(
+            toolName,
+            toolArgs,
+            toolHandlers,
+            progressHandler, // Always pass it, service/handler will decide to use it
+            debugLog,
+          );
 
-          // Format result according to MCP tools/call spec
-          sendResponse({
-            jsonrpc: '2.0',
-            id: request.id,
-            result: {
-              content: [{ type: 'text', text: JSON.stringify(toolResult, null, 2) }],
-              isError: !!toolResult?.error,
-            },
-          });
+          // If toolResult is not null, it means the tool handler did not use
+          // progressHandler.complete() itself (e.g., it's a batch tool, or an error
+          // was returned by ToolExecutionService in a batch format).
+          // In this case, send a standard single JSON-RPC response.
+          if (toolResult !== null) {
+            sendResponse({
+              jsonrpc: '2.0',
+              id: request.id,
+              result: {
+                content: [{ type: 'text', text: JSON.stringify(toolResult, null, 2) }],
+                isError: !!toolResult?.error,
+              },
+            });
+          }
+          // If toolResult IS null, it means progressHandler.complete() was called by
+          // the tool handler (via OperationClass) or by ToolExecutionService for an error
+          // in a streaming context. The response (final progress + standard response) is already handled.
         } catch (err: any) {
-          debugLog(0, `ERROR (tools/call): ${err.message || String(err)}`, err);
+          // This top-level catch handles unexpected errors in the stdio server itself,
+          // outside of ToolExecutionService or if ToolExecutionService.getInstance() fails.
+          debugLog(
+            0,
+            `FATAL ERROR (tools/call in stdio-server): ${err.message || String(err)}`,
+            err.stack,
+          );
           sendResponse({
             jsonrpc: '2.0',
             id: request.id,
             result: {
-              content: [
-                {
-                  type: 'text',
-                  text: `Internal error: ${err.message || String(err)}`,
-                },
-              ],
+              content: [{ type: 'text', text: `Server error: ${err.message || String(err)}` }],
               isError: true,
             },
           });

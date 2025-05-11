@@ -504,6 +504,9 @@ export class MemoryService {
       relationshipTypes?: string[];
       direction?: 'OUTGOING' | 'INCOMING' | 'BOTH';
       algorithm?: string;
+      projectedGraphName?: string;
+      nodeTableNames?: string[];
+      relationshipTableNames?: string[];
     },
   ): Promise<any> {
     return graphOps.shortestPathOp(

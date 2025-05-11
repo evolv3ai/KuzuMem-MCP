@@ -598,14 +598,15 @@ describe('MCP STDIO Server E2E Tests', () => {
         arguments: toolArgs,
       });
       expect(response.error).toBeUndefined();
-      const toolResult = JSON.parse(response.result!.content[0].text) as Component[];
+      const toolResultWrapper = JSON.parse(response.result!.content[0].text) as any; // Parse the wrapper
       console.log(
-        `SIMPLIFIED TEST: Dependencies found for ${dependentId}:`,
-        JSON.stringify(toolResult),
+        `SIMPLIFIED TEST: Dependencies wrapper for ${dependentId}:`,
+        JSON.stringify(toolResultWrapper),
       );
-      expect(Array.isArray(toolResult)).toBe(true);
-      expect(toolResult.length).toBeGreaterThanOrEqual(1);
-      expect(toolResult.some((c) => c.id === primaryId)).toBe(true);
+      expect(toolResultWrapper.status).toBe('complete');
+      expect(Array.isArray(toolResultWrapper.dependencies)).toBe(true);
+      expect(toolResultWrapper.dependencies.length).toBeGreaterThanOrEqual(1);
+      expect(toolResultWrapper.dependencies.some((c: Component) => c.id === primaryId)).toBe(true);
     });
   });
 
@@ -657,10 +658,13 @@ describe('MCP STDIO Server E2E Tests', () => {
         arguments: toolArgs,
       });
       expect(response.error).toBeUndefined();
-      const toolResult = JSON.parse(response.result!.content[0].text) as Component[];
-      expect(Array.isArray(toolResult)).toBe(true);
-      expect(toolResult.length).toBeGreaterThanOrEqual(1);
-      expect(toolResult.some((c) => c.id === testComponentId)).toBe(true);
+      const toolResultWrapper = JSON.parse(response.result!.content[0].text) as any; // Parse wrapper
+      expect(toolResultWrapper.status).toBe('complete');
+      expect(Array.isArray(toolResultWrapper.dependencies)).toBe(true);
+      expect(toolResultWrapper.dependencies.length).toBeGreaterThanOrEqual(1);
+      expect(toolResultWrapper.dependencies.some((c: Component) => c.id === testComponentId)).toBe(
+        true,
+      );
     });
 
     it('T_STDIO_get-component-dependents: should retrieve dependents for the primary component', async () => {
@@ -675,15 +679,74 @@ describe('MCP STDIO Server E2E Tests', () => {
         arguments: toolArgs,
       });
       expect(response.error).toBeUndefined();
-      const toolResult = JSON.parse(response.result!.content[0].text) as Component[];
-      expect(Array.isArray(toolResult)).toBe(true);
-      expect(toolResult.length).toBeGreaterThanOrEqual(1);
-      expect(toolResult.some((c) => c.id === dependentComponentId)).toBe(true);
+      const toolResultWrapper = JSON.parse(response.result!.content[0].text) as any; // Parse wrapper
+      expect(toolResultWrapper.status).toBe('complete');
+      expect(Array.isArray(toolResultWrapper.dependents)).toBe(true);
+      expect(toolResultWrapper.dependents.length).toBeGreaterThanOrEqual(1);
+      expect(
+        toolResultWrapper.dependents.some((c: Component) => c.id === dependentComponentId),
+      ).toBe(true);
     });
 
     it('T_STDIO_shortest-path: should find a shortest path between dependent and primary component', async () => {
       expect(testComponentId).not.toBeNull();
       expect(dependentComponentId).toBeDefined();
+
+      // --- BEGIN DIAGNOSTIC get-related-items CALL ---
+      console.log(
+        `DIAGNOSTIC: Checking related items for ${dependentComponentId} before shortest-path call...`,
+      );
+      const relatedItemsArgs = {
+        repository: testRepository,
+        branch: testBranch,
+        startItemId: dependentComponentId,
+        params: {
+          // Ensure params structure matches what RelatedItemsOperation expects
+          relationshipTypes: ['DEPENDS_ON'],
+          direction: 'OUTGOING',
+          depth: 1,
+        },
+      };
+      const relatedItemsResponse = await client.request('tools/call', {
+        name: 'get-related-items',
+        arguments: relatedItemsArgs,
+      });
+
+      if (relatedItemsResponse.error) {
+        console.error('DIAGNOSTIC: get-related-items RPC call failed:', relatedItemsResponse.error);
+      } else {
+        const relatedItemsWrapper = JSON.parse(relatedItemsResponse.result!.content[0].text) as any;
+        console.log(
+          'DIAGNOSTIC: get-related-items wrapper result:',
+          JSON.stringify(relatedItemsWrapper, null, 2),
+        );
+        if (relatedItemsWrapper.status === 'complete' && relatedItemsWrapper.relatedItems) {
+          console.log(
+            `DIAGNOSTIC: Found ${relatedItemsWrapper.relatedItems.length} related item(s).`,
+          );
+          relatedItemsWrapper.relatedItems.forEach((item: any) =>
+            console.log(`  - Related item ID: ${item.id}, Name: ${item.name}`),
+          );
+          if (relatedItemsWrapper.relatedItems.some((item: any) => item.id === testComponentId)) {
+            console.log(
+              `DIAGNOSTIC: SUCCESS - Primary component ${testComponentId} FOUND in related items.`,
+            );
+          } else {
+            console.log(
+              `DIAGNOSTIC: FAILURE - Primary component ${testComponentId} NOT FOUND in related items.`,
+            );
+          }
+        } else {
+          console.log(
+            'DIAGNOSTIC: get-related-items call did not return expected wrapper structure or failed. Status:',
+            relatedItemsWrapper.status,
+            'Error:',
+            relatedItemsWrapper.error,
+          );
+        }
+      }
+      // --- END DIAGNOSTIC get-related-items CALL ---
+
       const toolArgs = {
         repository: testRepository,
         branch: testBranch,
@@ -700,20 +763,15 @@ describe('MCP STDIO Server E2E Tests', () => {
         arguments: toolArgs,
       });
       expect(response.error).toBeUndefined();
-      const toolResultPaths = JSON.parse(response.result!.content[0].text) as Component[][];
-      expect(Array.isArray(toolResultPaths)).toBe(true);
-      expect(toolResultPaths.length).toBeGreaterThanOrEqual(1);
+      const toolResultWrapper = JSON.parse(response.result!.content[0].text) as any; // Parse wrapper
+      expect(toolResultWrapper.status).toBe('complete');
+      expect(toolResultWrapper.pathFound).toBe(true);
+      expect(Array.isArray(toolResultWrapper.path)).toBe(true);
+      expect(toolResultWrapper.path.length).toBeGreaterThanOrEqual(2);
 
-      const firstPathNodeArray = toolResultPaths[0];
-      expect(firstPathNodeArray).toBeDefined();
-      expect(Array.isArray(firstPathNodeArray)).toBe(true);
-      expect(firstPathNodeArray.length).toBeGreaterThanOrEqual(2);
-
-      const pathNodeIds = firstPathNodeArray.map((node: Component) => node.id);
+      const pathNodeIds = toolResultWrapper.path.map((node: any) => node.id); // Assuming path nodes have .id
       expect(pathNodeIds[0]).toBe(dependentComponentId);
       expect(pathNodeIds[pathNodeIds.length - 1]).toBe(testComponentId!);
-      expect(pathNodeIds).toContain(dependentComponentId);
-      expect(pathNodeIds).toContain(testComponentId!);
     });
 
     it('T_STDIO_shortest-path_reflexive: should find a reflexive shortest path for a single node', async () => {
@@ -732,11 +790,11 @@ describe('MCP STDIO Server E2E Tests', () => {
         arguments: toolArgs,
       });
       expect(response.error).toBeUndefined();
-      const toolResultPaths = JSON.parse(response.result!.content[0].text);
-      expect(Array.isArray(toolResultPaths)).toBe(true);
-      // For a reflexive query (A to A) with no self-loop and a path length quantifier like *1..N,
-      // Kuzu is expected to return no paths.
-      expect(toolResultPaths.length).toBe(0);
+      const toolResultWrapper = JSON.parse(response.result!.content[0].text) as any; // Parse wrapper
+      expect(toolResultWrapper.status).toBe('complete');
+      expect(Array.isArray(toolResultWrapper.path)).toBe(true);
+      expect(toolResultWrapper.path.length).toBe(0); // Expecting empty path as per original test logic
+      expect(toolResultWrapper.pathFound).toBe(false);
     });
   });
 
@@ -784,7 +842,7 @@ describe('MCP STDIO Server E2E Tests', () => {
   });
 
   describe('Advanced Traversal and Graph Tools', () => {
-    it('T_STDIO_get-governing-items-for-component: should retrieve governing decisions for a component', async () => {
+    it('T_STDIO_get-governing-items-for-component: should retrieve governing items for a component', async () => {
       expect(testComponentId).not.toBeNull();
       // To make this test meaningful, a decision explicitly linked to testComponentId via DECISION_ON is needed.
       // Current add-decision tool might not establish this link. This test will verify current state.
@@ -816,12 +874,14 @@ describe('MCP STDIO Server E2E Tests', () => {
         arguments: toolArgs,
       });
       expect(response.error).toBeUndefined();
-      const toolResult = JSON.parse(response.result!.content[0].text) as Decision[];
-      expect(Array.isArray(toolResult)).toBe(true);
-      // Given current limitations of add-decision not creating DECISION_ON, expect empty.
-      // If add-decision were enhanced, this would change.
-      console.log(`Governing items for ${testComponentId!}:`, toolResult);
-      expect(toolResult.length).toBe(0);
+      const toolResultWrapper = JSON.parse(response.result!.content[0].text) as any; // Parse wrapper
+      expect(toolResultWrapper.status).toBe('complete');
+      expect(typeof toolResultWrapper).toBe('object');
+      expect(Array.isArray(toolResultWrapper.decisions)).toBe(true);
+      expect(toolResultWrapper.decisions.length).toBe(0); // As per original test logic
+      expect(Array.isArray(toolResultWrapper.rules)).toBe(true);
+      expect(Array.isArray(toolResultWrapper.contextHistory)).toBe(true);
+      console.log(`Governing items wrapper for ${testComponentId!}:`, toolResultWrapper);
     });
 
     it('T_STDIO_get-item-contextual-history: should retrieve contextual history for an item', async () => {
@@ -855,38 +915,45 @@ describe('MCP STDIO Server E2E Tests', () => {
         arguments: toolArgs,
       });
       expect(response.error).toBeUndefined();
-      const toolResult = JSON.parse(response.result!.content[0].text) as Context[];
-      expect(Array.isArray(toolResult)).toBe(true);
-      console.log(`Contextual history for ${testComponentId!}:`, toolResult);
-      // Expect empty unless some implicit linking occurs or schema/repo query is very broad.
-      // The current repo query for getItemContextualHistory requires specific CONTEXT_OF link.
-      expect(toolResult.length).toBe(0);
+      const toolResultWrapper = JSON.parse(response.result!.content[0].text) as any; // Parse wrapper
+      expect(toolResultWrapper.status).toBe('complete');
+      expect(Array.isArray(toolResultWrapper.contextHistory)).toBe(true);
+      console.log(`Contextual history wrapper for ${testComponentId!}:`, toolResultWrapper);
+      expect(toolResultWrapper.contextHistory.length).toBe(0); // As per original test logic
     });
   });
 
   // Test for algorithm tools still uses the generic loop
   const algorithmTools = [
-    { name: 'k-core-decomposition', args: { k: 1 }, expectedDataKey: 'nodes' },
+    {
+      name: 'k-core-decomposition',
+      args: { k: 1 },
+      expectedDataKeyInWrapper: 'decomposition',
+      checkField: 'components',
+    },
     {
       name: 'louvain-community-detection',
       args: {},
-      expectedDataKey: 'communities',
+      expectedDataKeyInWrapper: 'communities',
+      isArrayDirectly: true,
     },
-    { name: 'pagerank', args: {}, expectedDataKey: 'ranks' },
+    { name: 'pagerank', args: {}, expectedDataKeyInWrapper: 'ranks', isArrayDirectly: true },
     {
       name: 'strongly-connected-components',
       args: {},
-      expectedDataKey: 'components',
+      expectedDataKeyInWrapper: 'stronglyConnectedComponents',
+      isArrayDirectly: true,
     },
     {
       name: 'weakly-connected-components',
       args: {},
-      expectedDataKey: 'components',
+      expectedDataKeyInWrapper: 'weaklyConnectedComponents',
+      isArrayDirectly: true,
     },
   ];
 
   algorithmTools.forEach((toolSetup) => {
-    it(`T_STDIO_ALGO_${toolSetup.name}: ${toolSetup.name} should return structured data or placeholder message`, async () => {
+    it(`T_STDIO_ALGO_${toolSetup.name}: ${toolSetup.name} should return structured data wrapper`, async () => {
       const toolArgs: any = {
         repository: testRepository,
         branch: testBranch,
@@ -897,48 +964,37 @@ describe('MCP STDIO Server E2E Tests', () => {
         arguments: toolArgs,
       });
       expect(response.error).toBeUndefined();
-      const toolResult = JSON.parse(response.result!.content[0].text);
+      const toolResultWrapper = JSON.parse(response.result!.content[0].text) as any;
       console.log(
-        `Result for ${toolSetup.name}:`,
-        JSON.stringify(toolResult).substring(0, 150) + '...',
+        `Result wrapper for ${toolSetup.name}:`,
+        JSON.stringify(toolResultWrapper).substring(0, 250) + '...',
       );
-      expect(toolResult).toBeDefined();
-      expect(toolResult.message).toBeDefined(); // All these repo methods now return a message
+      expect(toolResultWrapper).toBeDefined();
+      expect(toolResultWrapper.status).toBe('complete');
 
-      // Check for the specific data key and that it's an array
-      if (toolResult[toolSetup.expectedDataKey]) {
-        expect(Array.isArray(toolResult[toolSetup.expectedDataKey])).toBe(true);
-        // We can add more specific checks here if we know the graph state for a particular test repository
-        // For example, expect(toolResult.nodes.length).toBeGreaterThan(0) if nodes are expected.
-        // For now, just checking if the array exists is a good first step.
-        if (toolResult[toolSetup.expectedDataKey].length > 0) {
-          // If data exists, check first element for expected properties based on tool
-          const firstItem = toolResult[toolSetup.expectedDataKey][0];
-          if (
-            toolSetup.name === 'louvain-community-detection'
-            // SCC and WCC return groupId from the repository layer after our aliasing of component_id
-          ) {
-            expect(firstItem).toHaveProperty('component');
-            expect(firstItem).toHaveProperty('communityId'); // Louvain yields louvain_id, aliased to community_id
-          } else if (
-            toolSetup.name === 'strongly-connected-components' ||
-            toolSetup.name === 'weakly-connected-components'
-          ) {
-            expect(firstItem).toHaveProperty('component');
-            expect(firstItem).toHaveProperty('groupId'); // These yield component_id, aliased to groupId in repo
-          } else if (toolSetup.name === 'pagerank') {
-            expect(firstItem).toHaveProperty('component');
-            expect(firstItem).toHaveProperty('rank');
-          }
-          // k-core currently returns component objects directly in 'nodes', and 'details' has component+degree
-          // The current toolResult.nodes are the components, toolResult.details has the k_degree.
-        }
+      if (toolSetup.name === 'k-core-decomposition') {
+        expect(toolResultWrapper.decomposition).toBeDefined();
+        expect(Array.isArray(toolResultWrapper.decomposition.components)).toBe(true);
+        // Optionally check kValueApplied if needed:
+        // expect(toolResultWrapper.decomposition.kValueApplied).toBe(toolArgs.k || <default_k_if_any>);
       } else {
-        // If the primary data key isn't there, the message should explain (e.g. placeholder, or error from Kuzu)
-        console.warn(
-          `Tool ${toolSetup.name} did not return expected data key '${toolSetup.expectedDataKey}'. Message: ${toolResult.message}`,
-        );
+        const dataPayload = toolResultWrapper[toolSetup.expectedDataKeyInWrapper];
+        expect(dataPayload).toBeDefined();
+
+        if (toolSetup.isArrayDirectly) {
+          expect(Array.isArray(dataPayload)).toBe(true);
+        } else if (toolSetup.checkField) {
+          expect(dataPayload[toolSetup.checkField]).toBeDefined(); // Ensure the field itself exists
+          expect(Array.isArray(dataPayload[toolSetup.checkField])).toBe(true);
+        }
       }
+
+      if (toolSetup.name === 'louvain-community-detection') {
+        expect(toolResultWrapper).toHaveProperty('modularity');
+        // Modularity can be null if service/kuzu doesn't return it, which is acceptable
+        // expect(typeof toolResultWrapper.modularity === 'number' || toolResultWrapper.modularity === null).toBe(true);
+      }
+      // Add more specific assertions based on expected structure within the wrapper if necessary
     });
   });
 

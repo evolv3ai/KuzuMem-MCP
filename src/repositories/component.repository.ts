@@ -429,16 +429,20 @@ export class ComponentRepository {
    * Finds the shortest path between two components in a repository, assuming they are on the same branch.
    */
   async findShortestPath(
-    repositoryName: string, // Logical name of the repository
-    startNodeId: string, // Logical ID of the start component
-    startNodeBranch: string, // Branch of the start component (and assumed for the path & end component)
-    endNodeId: string, // Logical ID of the end component
-    // endNodeBranch is assumed to be same as startNodeBranch for this path query
+    repositoryName: string,
+    startNodeId: string,
+    startNodeBranch: string,
+    endNodeId: string,
     params?: {
       relationshipTypes?: string[];
       direction?: 'OUTGOING' | 'INCOMING' | 'BOTH';
+      algorithm?: string; // Keep for future use, though Kuzu shortest path Cypher is specific
+      projectedGraphName?: string; // Will be used if Kuzu's path MATCH needs it
+      nodeTableNames?: string[];
+      relationshipTableNames?: string[];
     },
-  ): Promise<any[]> {
+  ): Promise<{ path: Component[]; length: number; error?: string | null }> {
+    // Corrected return type
     let relTypeString = '';
     if (params?.relationshipTypes && params.relationshipTypes.length > 0) {
       const sanitizedTypes = params.relationshipTypes
@@ -452,65 +456,69 @@ export class ComponentRepository {
     let arrowLeft = '-';
     let arrowRight = '->';
     if (params?.direction === 'INCOMING') {
-      arrowLeft = '<-';
+      arrowLeft = '<- '; // Added space for clarity in Cypher if needed
       arrowRight = '-';
     } else if (params?.direction === 'BOTH') {
       arrowLeft = '-';
       arrowRight = '-';
     }
-    const hops = '1..10'; // Kùzu example: -[:Follows* SHORTEST 1..5]->
-    const relationshipPattern = `[${relTypeString}* SHORTEST ${hops}]`;
+    // Kuzu's *shortest* path variant usually implies finding one path. Default hop [1..10] is reasonable.
+    const relationshipPattern = `[${relTypeString}* SHORTEST 1..10]`;
 
     const startGraphUniqueId = formatGraphUniqueId(repositoryName, startNodeBranch, startNodeId);
-    const endGraphUniqueId = formatGraphUniqueId(repositoryName, startNodeBranch, endNodeId); // Assuming end node is on the same branch
+    const endGraphUniqueId = formatGraphUniqueId(repositoryName, startNodeBranch, endNodeId);
 
     const escapedStartGraphUniqueId = this.escapeStr(startGraphUniqueId);
     const escapedEndGraphUniqueId = this.escapeStr(endGraphUniqueId);
-    // Removed escapeStr for repositoryId as it's not directly used in this simplified query
 
-    // This query relies on graph_unique_id to scope nodes to the correct repo/branch/id combination.
+    // Standard Cypher for shortest path. Kuzu should support this.
+    // Using projectedGraphName here is tricky if it's not a Kuzu CALL algo(graphName)
+    // For now, assume the default graph contains the necessary data if projection isn't used by a CALL.
+    // If Kuzu's MATCH...RETURN path needs explicit graph context, this query would need to change significantly.
     const query = `
       MATCH (startNode:Component {graph_unique_id: '${escapedStartGraphUniqueId}'}), 
             (endNode:Component {graph_unique_id: '${escapedEndGraphUniqueId}'})
-      MATCH path = (startNode)${arrowLeft}${relationshipPattern}${arrowRight}(endNode)
-      RETURN path
-    `;
-    // Removed explicit MATCH for (repo) and WHERE clauses linking to repo, as graph_unique_id should suffice.
+      MATCH p = (startNode)${arrowLeft}${relationshipPattern}${arrowRight}(endNode)
+      RETURN p AS path ORDER BY length(p) LIMIT 1
+    `; // Added ORDER BY length(p) LIMIT 1 to ensure one shortest path
 
-    console.error(`DEBUG: findShortestPath query: ${query}`);
+    console.error(`DEBUG: ComponentRepository.findShortestPath query: ${query}`);
 
     try {
       const result = await KuzuDBClient.executeQuery(query);
       if (!result || typeof result.getAll !== 'function') {
         console.warn(
-          `Query for findShortestPath from ${startNodeId} to ${endNodeId} (branch ${startNodeBranch}, repo ${repositoryName}) returned no result or invalid result type.`,
+          `Query for findShortestPath from ${startNodeId} to ${endNodeId} returned invalid result type.`,
         );
-        return [];
+        return { path: [], length: 0, error: 'Query returned invalid result type.' };
       }
       const rows = await result.getAll();
-      if (!rows || rows.length === 0) {
-        return [];
+      if (!rows || rows.length === 0 || !rows[0].path) {
+        console.log(`DEBUG: No path found by query for ${startNodeId} -> ${endNodeId}`);
+        return { path: [], length: 0, error: null }; // No path found is not an error, just empty result
       }
-      return rows.map((row: any) => {
-        const pathData = row.path ?? row['path'];
-        if (pathData && pathData._nodes) {
-          // Kùzu returns path with _nodes and _rels
-          // We need to map these internal node structures to our Component type
-          return pathData._nodes.map((node: any) => ({
-            ...node,
-            id: node.id, // Assuming Kùzu node object has the logical id property we set
-            graph_unique_id: undefined,
-          })) as Component[];
-        }
-        return pathData; // Fallback, though should always have _nodes if path found
-      });
-    } catch (error) {
+
+      const kuzuPathObject = rows[0].path; // This is Kuzu's path structure
+
+      const nodes: Component[] = (kuzuPathObject._nodes || []).map((node: any) => ({
+        ...(node._properties || node), // Kuzu node properties might be under _properties
+        id: (node._properties || node).id,
+        graph_unique_id: undefined,
+      }));
+
+      const pathLength = (kuzuPathObject._rels || []).length;
+
+      return { path: nodes, length: pathLength, error: null };
+    } catch (error: any) {
       console.error(
-        `Error executing findShortestPath query from ${startNodeId} to ${endNodeId} (branch ${startNodeBranch}, repo ${repositoryName}):`,
+        `Error executing findShortestPath query from ${startNodeId} to ${endNodeId}:`,
         error,
       );
-      console.error('Query was:', query);
-      throw error;
+      return {
+        path: [],
+        length: 0,
+        error: error.message || 'Error executing shortest path query.',
+      };
     }
   }
 

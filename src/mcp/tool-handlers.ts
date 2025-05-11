@@ -1,12 +1,23 @@
 import { MemoryService } from '../services/memory.service';
 // Minimal types needed for handler construction, assuming MemoryService methods handle full type details.
-import { Context, Metadata } from '../types';
+import { Context, Metadata } from '../types/index'; // For global types
+import { ToolHandler } from './types'; // For MCP specific ToolHandler
+
+// Import Operation Classes
+import { ComponentDependenciesOperation } from './streaming/operations/component-dependencies.operation';
+import { ComponentDependentsOperation } from './streaming/operations/component-dependents.operation';
+import { ItemContextualHistoryOperation } from './streaming/operations/item-contextual-history.operation';
+import { GoverningItemsForComponentOperation } from './streaming/operations/governing-items-for-component.operation';
+import { RelatedItemsOperation } from './streaming/operations/related-items.operation';
+import { ShortestPathOperation } from './streaming/operations/shortest-path.operation';
+import { KCoreDecompositionOperation } from './streaming/operations/k-core-decomposition.operation';
+import { LouvainCommunityDetectionOperation } from './streaming/operations/louvain-community-detection.operation';
+import { PageRankOperation } from './streaming/operations/pagerank.operation';
+import { StronglyConnectedComponentsOperation } from './streaming/operations/strongly-connected-components.operation';
+import { WeaklyConnectedComponentsOperation } from './streaming/operations/weakly-connected-components.operation';
+// ... (other operation class imports will be added here as we update their handlers)
 
 type ToolArgs = any;
-
-interface ToolHandler {
-  (params: ToolArgs, memoryService: MemoryService): Promise<any>;
-}
 
 const serviceMethodNotFoundError = (toolName: string, methodName: string) => {
   return new Error(
@@ -15,8 +26,8 @@ const serviceMethodNotFoundError = (toolName: string, methodName: string) => {
 };
 
 export const toolHandlers: Record<string, ToolHandler> = {
-  'init-memory-bank': async (toolArgs, memoryService) => {
-    const { repository, branch = 'main' } = toolArgs;
+  'init-memory-bank': async (toolArgs, memoryService, progressHandler) => {
+    const { repository, branch = 'main' } = toolArgs as any;
     if (!repository) {
       throw new Error('Missing repository parameter for init-memory-bank');
     }
@@ -26,15 +37,15 @@ export const toolHandlers: Record<string, ToolHandler> = {
       message: `Memory bank initialized for ${repository} (branch: ${branch})`,
     };
   },
-  'get-metadata': async (toolArgs, memoryService) => {
-    const { repository, branch = 'main' } = toolArgs;
+  'get-metadata': async (toolArgs, memoryService, progressHandler) => {
+    const { repository, branch = 'main' } = toolArgs as any;
     if (!repository) {
       throw new Error('Missing repository parameter for get-metadata');
     }
     return memoryService.getMetadata(repository, branch);
   },
-  'update-metadata': async (toolArgs, memoryService) => {
-    const { repository, branch = 'main', metadata } = toolArgs;
+  'update-metadata': async (toolArgs, memoryService, progressHandler) => {
+    const { repository, branch = 'main', metadata } = toolArgs as any;
     if (!repository) {
       throw new Error('Missing repository parameter for update-metadata');
     }
@@ -47,16 +58,24 @@ export const toolHandlers: Record<string, ToolHandler> = {
       message: `Metadata updated for ${repository} (branch: ${branch})`,
     };
   },
-  'get-context': async (toolArgs, memoryService) => {
-    const { repository, branch = 'main', latest, limit } = toolArgs;
+  'get-context': async (toolArgs, memoryService, progressHandler) => {
+    const { repository, branch = 'main', latest, limit } = toolArgs as any;
     if (!repository) {
       throw new Error('Missing repository parameter for get-context');
     }
     const effectiveLimit = latest === true ? 1 : limit;
     return memoryService.getLatestContexts(repository, branch, effectiveLimit);
   },
-  'update-context': async (toolArgs, memoryService) => {
-    const { repository, branch = 'main', summary, agent, decision, observation, issue } = toolArgs;
+  'update-context': async (toolArgs, memoryService, progressHandler) => {
+    const {
+      repository,
+      branch = 'main',
+      summary,
+      agent,
+      decision,
+      observation,
+      issue,
+    } = toolArgs as any;
     if (!repository) {
       throw new Error('Missing repository for update-context');
     }
@@ -86,8 +105,8 @@ export const toolHandlers: Record<string, ToolHandler> = {
       };
     }
   },
-  'add-component': async (toolArgs, memoryService) => {
-    const { repository, branch = 'main', id, name, kind, status, depends_on } = toolArgs;
+  'add-component': async (toolArgs, memoryService, progressHandler) => {
+    const { repository, branch = 'main', id, name, kind, status, depends_on } = toolArgs as any;
     if (!repository || !id || !name) {
       throw new Error('Missing required params for add-component (repository, id, name)');
     }
@@ -106,8 +125,8 @@ export const toolHandlers: Record<string, ToolHandler> = {
       message: `Component '${name}' (id: ${id}) added/updated in ${repository} (branch: ${branch})`,
     };
   },
-  'add-decision': async (toolArgs, memoryService) => {
-    const { repository, branch = 'main', id, name, date, context } = toolArgs;
+  'add-decision': async (toolArgs, memoryService, progressHandler) => {
+    const { repository, branch = 'main', id, name, date, context } = toolArgs as any;
     if (!repository || !id || !name || !date) {
       throw new Error('Missing required params for add-decision (repository, id, name, date)');
     }
@@ -125,8 +144,17 @@ export const toolHandlers: Record<string, ToolHandler> = {
       message: `Decision '${name}' (id: ${id}) added/updated in ${repository} (branch: ${branch})`,
     };
   },
-  'add-rule': async (toolArgs, memoryService) => {
-    const { repository, branch = 'main', id, name, created, content, status, triggers } = toolArgs;
+  'add-rule': async (toolArgs, memoryService, progressHandler) => {
+    const {
+      repository,
+      branch = 'main',
+      id,
+      name,
+      created,
+      content,
+      status,
+      triggers,
+    } = toolArgs as any;
     if (!repository || !id || !name || !created) {
       throw new Error('Missing required params for add-rule (repository, id, name, created)');
     }
@@ -143,58 +171,159 @@ export const toolHandlers: Record<string, ToolHandler> = {
       message: `Rule '${name}' (id: ${id}) added/updated in ${repository} (branch: ${branch})`,
     };
   },
-  'get-component-dependencies': async (toolArgs, memoryService) => {
-    const { repository, branch = 'main', componentId } = toolArgs;
+  'get-component-dependencies': async (toolArgs, memoryService, progressHandler) => {
+    const { repository, branch = 'main', componentId, depth = 1 } = toolArgs as any;
+
     if (!repository || !componentId) {
-      throw new Error('Missing params for get-component-dependencies');
-    }
-    if (typeof memoryService.getComponentDependencies !== 'function') {
-      throw serviceMethodNotFoundError('get-component-dependencies', 'getComponentDependencies');
-    }
-    return memoryService.getComponentDependencies(repository, branch, componentId);
-  },
-  'get-component-dependents': async (toolArgs, memoryService) => {
-    const { repository, branch = 'main', componentId } = toolArgs;
-    if (!repository || !componentId) {
-      throw new Error('Missing params for get-component-dependents');
-    }
-    if (typeof (memoryService as any).getComponentDependents !== 'function') {
-      throw serviceMethodNotFoundError('get-component-dependents', 'getComponentDependents');
-    }
-    return (memoryService as any).getComponentDependents(repository, branch, componentId);
-  },
-  'get-item-contextual-history': async (toolArgs, memoryService) => {
-    const { repository, branch = 'main', itemId, itemType } = toolArgs;
-    console.error(
-      `DEBUG: tool-handlers.ts: Destructured itemType = >>>${itemType}<<<`,
-      'Full toolArgs:',
-      toolArgs,
-    );
-    if (!repository || !itemId || !itemType) {
-      console.error(
-        `DEBUG: tool-handlers.ts: Validation failed! Repo: ${repository}, ItemId: ${itemId}, ItemType: ${itemType}`,
-      );
-      throw new Error(
-        'Missing params for get-item-contextual-history (repository, itemId, itemType)',
-      );
+      const errorMsg =
+        'Missing required parameters for get-component-dependencies: repository and componentId are required';
+      if (progressHandler) {
+        progressHandler.sendFinalProgress({ error: errorMsg, status: 'error' });
+        progressHandler.sendFinalResponse({ error: errorMsg }, true);
+        return null;
+      }
+      return { error: errorMsg };
     }
 
-    return (memoryService as any).getItemContextualHistory(repository, branch, itemId, itemType);
+    const resultFromOperation = await ComponentDependenciesOperation.execute(
+      repository,
+      branch,
+      componentId,
+      depth,
+      memoryService,
+      progressHandler,
+    );
+
+    if (progressHandler) {
+      if (resultFromOperation?.error) {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        progressHandler.sendFinalResponse(resultFromOperation, true);
+      } else {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        // Send the entire wrapper object
+        progressHandler.sendFinalResponse(resultFromOperation, false);
+      }
+      return null;
+    }
+    return resultFromOperation;
   },
-  'get-governing-items-for-component': async (toolArgs, memoryService) => {
-    const { repository, branch = 'main', componentId } = toolArgs;
+  'get-component-dependents': async (toolArgs, memoryService, progressHandler) => {
+    const { repository, branch = 'main', componentId } = toolArgs as any;
+
     if (!repository || !componentId) {
-      throw new Error('Missing params for get-governing-items-for-component');
+      const errorMsg =
+        'Missing required parameters for get-component-dependents: repository and componentId are required';
+      if (progressHandler) {
+        progressHandler.sendFinalProgress({ error: errorMsg, status: 'error' });
+        progressHandler.sendFinalResponse({ error: errorMsg }, true);
+        return null;
+      }
+      return { error: errorMsg };
     }
-    if (typeof (memoryService as any).getGoverningItemsForComponent !== 'function') {
-      throw serviceMethodNotFoundError(
-        'get-governing-items-for-component',
-        'getGoverningItemsForComponent',
-      );
+
+    const resultFromOperation = await ComponentDependentsOperation.execute(
+      repository,
+      branch,
+      componentId,
+      memoryService,
+      progressHandler,
+    );
+
+    if (progressHandler) {
+      if (resultFromOperation?.error) {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        progressHandler.sendFinalResponse(resultFromOperation, true);
+      } else {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        // Send the entire wrapper object
+        progressHandler.sendFinalResponse(resultFromOperation, false);
+      }
+      return null;
     }
-    return (memoryService as any).getGoverningItemsForComponent(repository, branch, componentId);
+    return resultFromOperation;
   },
-  'get-related-items': async (toolArgs, memoryService) => {
+  'get-item-contextual-history': async (toolArgs, memoryService, progressHandler) => {
+    const { repository, branch = 'main', itemId, itemType } = toolArgs as any;
+
+    if (!repository || !itemId || !itemType) {
+      const errorMsg =
+        'Missing required parameters for get-item-contextual-history: repository, itemId, and itemType are required';
+      if (progressHandler) {
+        progressHandler.sendFinalProgress({ error: errorMsg, status: 'error' });
+        progressHandler.sendFinalResponse({ error: errorMsg }, true);
+        return null;
+      }
+      return { error: errorMsg };
+    }
+    const validItemTypes = ['Component', 'Decision', 'Rule'];
+    if (!validItemTypes.includes(itemType)) {
+      const errorMsg = `Invalid itemType: ${itemType}. Must be one of ${validItemTypes.join(', ')}`;
+      if (progressHandler) {
+        progressHandler.sendFinalProgress({ error: errorMsg, status: 'error' });
+        progressHandler.sendFinalResponse({ error: errorMsg }, true);
+        return null;
+      }
+      return { error: errorMsg };
+    }
+
+    const resultFromOperation = await ItemContextualHistoryOperation.execute(
+      repository,
+      branch,
+      itemId,
+      itemType,
+      memoryService,
+      progressHandler,
+    );
+
+    if (progressHandler) {
+      if (resultFromOperation?.error) {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        progressHandler.sendFinalResponse(resultFromOperation, true);
+      } else {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        // Send the entire wrapper object
+        progressHandler.sendFinalResponse(resultFromOperation, false);
+      }
+      return null;
+    }
+    return resultFromOperation;
+  },
+  'get-governing-items-for-component': async (toolArgs, memoryService, progressHandler) => {
+    const { repository, branch = 'main', componentId } = toolArgs as any;
+
+    if (!repository || !componentId) {
+      const errorMsg =
+        'Missing required parameters for get-governing-items-for-component: repository and componentId are required';
+      if (progressHandler) {
+        progressHandler.sendFinalProgress({ error: errorMsg, status: 'error' });
+        progressHandler.sendFinalResponse({ error: errorMsg }, true);
+        return null;
+      }
+      return { error: errorMsg };
+    }
+
+    const resultFromOperation = await GoverningItemsForComponentOperation.execute(
+      repository,
+      branch,
+      componentId,
+      memoryService,
+      progressHandler,
+    );
+
+    if (progressHandler) {
+      if (resultFromOperation?.error) {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        progressHandler.sendFinalResponse(resultFromOperation, true);
+      } else {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        // Send the entire wrapper object (it was already like this, just confirming)
+        progressHandler.sendFinalResponse(resultFromOperation, false);
+      }
+      return null;
+    }
+    return resultFromOperation;
+  },
+  'get-related-items': async (toolArgs, memoryService, progressHandler) => {
     const {
       repository,
       branch = 'main',
@@ -202,131 +331,283 @@ export const toolHandlers: Record<string, ToolHandler> = {
       relationshipTypes,
       depth,
       direction,
-    } = toolArgs;
+      params,
+    } = toolArgs as any;
+
     if (!repository || !startItemId) {
-      throw new Error('Missing params for get-related-items (repository, startItemId)');
+      const errorMsg =
+        'Missing required parameters for get-related-items: repository and startItemId are required';
+      if (progressHandler) {
+        progressHandler.sendFinalProgress({ error: errorMsg, status: 'error' });
+        progressHandler.sendFinalResponse({ error: errorMsg }, true);
+        return null;
+      }
+      return { error: errorMsg };
     }
 
-    let relTypesArray: string[] | undefined;
-    if (typeof relationshipTypes === 'string' && relationshipTypes.length > 0) {
-      relTypesArray = relationshipTypes
-        .split(',')
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-    } else if (Array.isArray(relationshipTypes)) {
-      relTypesArray = relationshipTypes;
-    }
-
-    const serviceParams = {
-      relationshipTypes: relTypesArray,
+    const operationParams = params || {
+      relationshipTypes,
       depth,
       direction,
     };
+    if (operationParams.depth === undefined && depth !== undefined) {
+      operationParams.depth = depth;
+    }
+    if (operationParams.relationshipTypes === undefined && relationshipTypes !== undefined) {
+      operationParams.relationshipTypes = relationshipTypes;
+    }
+    if (operationParams.direction === undefined && direction !== undefined) {
+      operationParams.direction = direction;
+    }
 
-    if (typeof (memoryService as any).getRelatedItems !== 'function') {
-      throw serviceMethodNotFoundError('get-related-items', 'getRelatedItems');
-    }
-    return (memoryService as any).getRelatedItems(repository, branch, startItemId, serviceParams);
-  },
-  'k-core-decomposition': async (toolArgs, memoryService) => {
-    const { repository, branch = 'main', k } = toolArgs;
-    if (!repository) {
-      throw new Error('Missing repository for k-core-decomposition');
-    }
-    if (typeof (memoryService as any).kCoreDecomposition !== 'function') {
-      throw serviceMethodNotFoundError('k-core-decomposition', 'kCoreDecomposition');
-    }
-    return (memoryService as any).kCoreDecomposition(repository, branch, k);
-  },
-  'louvain-community-detection': async (toolArgs, memoryService) => {
-    const { repository, branch = 'main' } = toolArgs;
-    if (!repository) {
-      throw new Error('Missing repository for louvain-community-detection');
-    }
-    if (typeof (memoryService as any).louvainCommunityDetection !== 'function') {
-      throw serviceMethodNotFoundError('louvain-community-detection', 'louvainCommunityDetection');
-    }
-    return (memoryService as any).louvainCommunityDetection(repository, branch);
-  },
-  pagerank: async (toolArgs, memoryService) => {
-    const { repository, branch = 'main', dampingFactor, iterations } = toolArgs;
-    if (!repository) {
-      throw new Error('Missing repository for pagerank');
-    }
-    if (typeof (memoryService as any).pageRank !== 'function') {
-      throw serviceMethodNotFoundError('pagerank', 'pageRank');
-    }
-    return (memoryService as any).pageRank(repository, branch, dampingFactor, iterations);
-  },
-  'strongly-connected-components': async (toolArgs, memoryService) => {
-    const { repository, branch = 'main' } = toolArgs;
-    if (!repository) {
-      throw new Error('Missing repository for strongly-connected-components');
-    }
-    if (typeof memoryService.getStronglyConnectedComponents !== 'function') {
-      throw serviceMethodNotFoundError(
-        'strongly-connected-components',
-        'getStronglyConnectedComponents',
-      );
-    }
-    return memoryService.getStronglyConnectedComponents(
+    const resultFromOperation = await RelatedItemsOperation.execute(
       repository,
       branch,
-      (toolArgs as any).maxIterations,
+      startItemId,
+      operationParams,
+      memoryService,
+      progressHandler,
     );
+
+    if (progressHandler) {
+      if (resultFromOperation?.error) {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        progressHandler.sendFinalResponse(resultFromOperation, true);
+      } else {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        // Send the entire wrapper object
+        progressHandler.sendFinalResponse(resultFromOperation, false);
+      }
+      return null;
+    }
+    return resultFromOperation;
   },
-  'weakly-connected-components': async (toolArgs, memoryService) => {
-    const { repository, branch = 'main' } = toolArgs;
+  'k-core-decomposition': async (toolArgs, memoryService, progressHandler) => {
+    const { repository, branch = 'main', k } = toolArgs as any;
+
     if (!repository) {
-      throw new Error('Missing repository for weakly-connected-components');
+      const errorMsg = 'Missing required parameter for k-core-decomposition: repository';
+      if (progressHandler) {
+        progressHandler.sendFinalProgress({ error: errorMsg, status: 'error' });
+        progressHandler.sendFinalResponse({ error: errorMsg }, true);
+        return null;
+      }
+      return { error: errorMsg };
     }
-    if (typeof memoryService.getWeaklyConnectedComponents !== 'function') {
-      throw serviceMethodNotFoundError(
-        'weakly-connected-components',
-        'getWeaklyConnectedComponents',
-      );
-    }
-    return memoryService.getWeaklyConnectedComponents(
+
+    const resultFromOperation = await KCoreDecompositionOperation.execute(
       repository,
       branch,
-      (toolArgs as any).maxIterations,
+      k,
+      memoryService,
+      progressHandler,
     );
+
+    if (progressHandler) {
+      if (resultFromOperation?.error) {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        progressHandler.sendFinalResponse(resultFromOperation, true);
+      } else {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        // Send the entire wrapper object
+        progressHandler.sendFinalResponse(resultFromOperation, false);
+      }
+      return null;
+    }
+    return resultFromOperation;
   },
-  'shortest-path': async (toolArgs, memoryService) => {
+  'louvain-community-detection': async (toolArgs, memoryService, progressHandler) => {
+    const { repository, branch = 'main' } = toolArgs as any;
+
+    if (!repository) {
+      const errorMsg = 'Missing required parameter for louvain-community-detection: repository';
+      if (progressHandler) {
+        progressHandler.sendFinalProgress({ error: errorMsg, status: 'error' });
+        progressHandler.sendFinalResponse({ error: errorMsg }, true);
+        return null;
+      }
+      return { error: errorMsg };
+    }
+
+    const resultFromOperation = await LouvainCommunityDetectionOperation.execute(
+      repository,
+      branch,
+      memoryService,
+      progressHandler,
+    );
+
+    if (progressHandler) {
+      if (resultFromOperation?.error) {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        progressHandler.sendFinalResponse(resultFromOperation, true);
+      } else {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        // Send the entire wrapper object
+        progressHandler.sendFinalResponse(resultFromOperation, false);
+      }
+      return null;
+    }
+    return resultFromOperation;
+  },
+  pagerank: async (toolArgs, memoryService, progressHandler) => {
+    const { repository, branch = 'main', dampingFactor, iterations } = toolArgs as any;
+
+    if (!repository) {
+      const errorMsg = 'Missing required parameter for pagerank: repository';
+      if (progressHandler) {
+        progressHandler.sendFinalProgress({ error: errorMsg, status: 'error' });
+        progressHandler.sendFinalResponse({ error: errorMsg }, true);
+        return null;
+      }
+      return { error: errorMsg };
+    }
+
+    const resultFromOperation = await PageRankOperation.execute(
+      repository,
+      branch,
+      dampingFactor,
+      iterations,
+      memoryService,
+      progressHandler,
+    );
+
+    if (progressHandler) {
+      if (resultFromOperation?.error) {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        progressHandler.sendFinalResponse(resultFromOperation, true);
+      } else {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        // Send the entire wrapper object
+        progressHandler.sendFinalResponse(resultFromOperation, false);
+      }
+      return null;
+    }
+    return resultFromOperation;
+  },
+  'strongly-connected-components': async (toolArgs, memoryService, progressHandler) => {
+    const { repository, branch = 'main', maxIterations } = toolArgs as any;
+
+    if (!repository) {
+      const errorMsg = 'Missing required parameter for strongly-connected-components: repository';
+      if (progressHandler) {
+        progressHandler.sendFinalProgress({ error: errorMsg, status: 'error' });
+        progressHandler.sendFinalResponse({ error: errorMsg }, true);
+        return null;
+      }
+      return { error: errorMsg };
+    }
+
+    const resultFromOperation = await StronglyConnectedComponentsOperation.execute(
+      repository,
+      branch,
+      memoryService,
+      progressHandler,
+    );
+
+    if (progressHandler) {
+      if (resultFromOperation?.error) {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        progressHandler.sendFinalResponse(resultFromOperation, true);
+      } else {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        // Send the entire wrapper object
+        progressHandler.sendFinalResponse(resultFromOperation, false);
+      }
+      return null;
+    }
+    return resultFromOperation;
+  },
+  'weakly-connected-components': async (toolArgs, memoryService, progressHandler) => {
+    const { repository, branch = 'main', maxIterations } = toolArgs as any;
+
+    if (!repository) {
+      const errorMsg = 'Missing required parameter for weakly-connected-components: repository';
+      if (progressHandler) {
+        progressHandler.sendFinalProgress({ error: errorMsg, status: 'error' });
+        progressHandler.sendFinalResponse({ error: errorMsg }, true);
+        return null;
+      }
+      return { error: errorMsg };
+    }
+
+    const resultFromOperation = await WeaklyConnectedComponentsOperation.execute(
+      repository,
+      branch,
+      memoryService,
+      progressHandler,
+    );
+
+    if (progressHandler) {
+      if (resultFromOperation?.error) {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        progressHandler.sendFinalResponse(resultFromOperation, true);
+      } else {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        // Send the entire wrapper object
+        progressHandler.sendFinalResponse(resultFromOperation, false);
+      }
+      return null;
+    }
+    return resultFromOperation;
+  },
+  'shortest-path': async (toolArgs, memoryService, progressHandler) => {
     const {
       repository,
       branch = 'main',
-      projectedGraphName,
-      nodeTableNames,
-      relationshipTableNames,
       startNodeId,
       endNodeId,
       relationshipTypes,
       direction,
       algorithm,
-    } = toolArgs;
+      params,
+    } = toolArgs as any;
 
-    if (
-      !repository ||
-      !branch ||
-      !projectedGraphName ||
-      !nodeTableNames ||
-      !relationshipTableNames ||
-      !startNodeId ||
-      !endNodeId
-    ) {
-      throw new Error(
-        'Missing required params for shortest-path (repository, branch, projectedGraphName, nodeTableNames, relationshipTableNames, startNodeId, endNodeId)',
-      );
+    if (!repository || !startNodeId || !endNodeId) {
+      const errorMsg =
+        'Missing required parameters for shortest-path: repository, startNodeId, and endNodeId are required';
+      if (progressHandler) {
+        progressHandler.sendFinalProgress({ error: errorMsg, status: 'error' });
+        progressHandler.sendFinalResponse({ error: errorMsg }, true);
+        return null;
+      }
+      return { error: errorMsg };
     }
 
-    if (typeof (memoryService as any).shortestPath !== 'function') {
-      throw serviceMethodNotFoundError('shortest-path', 'shortestPath');
-    }
-    return (memoryService as any).shortestPath(repository, branch, startNodeId, endNodeId, {
+    const operationParams = params || {
       relationshipTypes,
       direction,
       algorithm,
-    });
+    };
+    if (operationParams.relationshipTypes === undefined && relationshipTypes !== undefined) {
+      operationParams.relationshipTypes = relationshipTypes;
+    }
+    if (operationParams.direction === undefined && direction !== undefined) {
+      operationParams.direction = direction;
+    }
+    if (operationParams.algorithm === undefined && algorithm !== undefined) {
+      operationParams.algorithm = algorithm;
+    }
+
+    const resultFromOperation = await ShortestPathOperation.execute(
+      repository,
+      branch,
+      startNodeId,
+      endNodeId,
+      operationParams,
+      memoryService,
+      progressHandler,
+    );
+
+    if (progressHandler) {
+      if (resultFromOperation?.error) {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        progressHandler.sendFinalResponse(resultFromOperation, true);
+      } else {
+        progressHandler.sendFinalProgress(resultFromOperation);
+        progressHandler.sendFinalResponse(resultFromOperation, false);
+      }
+      return null;
+    }
+    return resultFromOperation;
   },
 };

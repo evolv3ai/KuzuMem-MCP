@@ -217,10 +217,8 @@ export class MemoryMcpServer {
       toolArgs.branch = toolArgs.branch || 'main';
       // latest defaults to false if not provided, limit defaults in shared handler if applicable
 
-      const contexts = await toolHandlers['get-context'](toolArgs, this.memoryService);
+      const contexts = (await toolHandlers['get-context'](toolArgs, this.memoryService)) as any;
 
-      // The shared handler returns an array.
-      // If 'latest' was true and no context found, it would return an empty array.
       if (toolArgs.latest === true && (!contexts || contexts.length === 0)) {
         res.status(404).json({
           success: false,
@@ -485,7 +483,10 @@ export class MemoryMcpServer {
       // { success: true, message: string, data: Record<string, string> } or throws.
       // The original HTTP response directly used the 'files' property from MemoryService.
       // We expect the shared handler's 'data' field to be this files record.
-      const result = await toolHandlers['export-memory-bank'](toolArgs, this.memoryService);
+      const result = (await toolHandlers['export-memory-bank'](
+        toolArgs,
+        this.memoryService,
+      )) as any;
 
       // Assuming result has a structure like { data: files } if successful,
       // or shared handler throws on error from service.
@@ -550,7 +551,10 @@ export class MemoryMcpServer {
       // also takes this string type.
       toolArgs.branch = toolArgs.branch || 'main';
 
-      const result = await toolHandlers['import-memory-bank'](toolArgs, this.memoryService);
+      const result = (await toolHandlers['import-memory-bank'](
+        toolArgs,
+        this.memoryService,
+      )) as any;
 
       // Shared handler is expected to return { success: boolean, message?: string } or throw an error.
       if (result && result.success) {
