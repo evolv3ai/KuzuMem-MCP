@@ -14,6 +14,8 @@ build/
 !jest.config.js
 !examples/*.js
 !scripts/init-db-direct.js
+!.eslintrc.js
+!.prettierrc.js
 
 # Environment variables
 .env
