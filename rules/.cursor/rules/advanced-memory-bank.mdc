@@ -73,45 +73,34 @@ These entities form a knowledge graph connected by typed relationships.
    - **When to Use**: When coding standards are defined, security requirements are established, or user preferences are expressed
    - **Best Practice**: Write clear, actionable rule content; use status 'active' for enforced rules
 
-9. **`export-memory-bank`**
-   - **Purpose**: Export memory bank to YAML format
-   - **Key Parameters**: repository, branch
-   - **When to Use**: For knowledge backup, sharing knowledge between environments
-   - **Best Practice**: Export periodically to preserve key milestones
-
-10. **`import-memory-bank`**
-    - **Purpose**: Import YAML content into memory bank
-    - **Key Parameters**: repository, branch, content, type, id
-    - **When to Use**: When initializing from a template, restoring from backup, or migrating knowledge
-    - **Best Practice**: Verify repository exists before importing
 
 ### Graph Traversal Tools
 
-11. **`get-component-dependencies`**
+9. **`get-component-dependencies`**
     - **Purpose**: Find all components a component depends on
     - **Key Parameters**: repository, branch, componentId
     - **When to Use**: Before modifying components, when analyzing impact of changes, explaining dependency chains
     - **Best Practice**: Review complete dependency chain before suggesting component modifications
 
-12. **`get-component-dependents`**
+10. **`get-component-dependents`**
     - **Purpose**: Find all components that depend on a component
     - **Key Parameters**: repository, branch, componentId
     - **When to Use**: When evaluating change impact, checking which components might break during refactoring
     - **Best Practice**: Alert user when critical components have many dependents
 
-13. **`get-governing-items-for-component`**
+11. **`get-governing-items-for-component`**
     - **Purpose**: Find decisions and rules affecting a component
     - **Key Parameters**: repository, branch, componentId
     - **When to Use**: Before generating component code, ensuring compliance with standards
     - **Best Practice**: Always check governing rules before suggesting implementation patterns
 
-14. **`get-item-contextual-history`**
+12. **`get-item-contextual-history`**
     - **Purpose**: Retrieve context history for a component, decision, or rule
     - **Key Parameters**: repository, branch, itemId, itemType
     - **When to Use**: To understand component evolution, review decision history, check how rules have been applied
     - **Best Practice**: Use to revisit past discussions, verify reasoning behind decisions
 
-15. **`get-related-items`**
+13. **`get-related-items`**
     - **Purpose**: Find items related to a starting node within N hops
     - **Key Parameters**: repository, branch, startItemId, depth, relationshipFilter, targetNodeTypeFilter
     - **When to Use**: For general relationship exploration, understanding connected items
@@ -119,37 +108,37 @@ These entities form a knowledge graph connected by typed relationships.
 
 ### Graph Algorithm Tools
 
-16. **`mcp_pagerank`**
+14. **`mcp_pagerank`**
     - **Purpose**: Identify influential or central components
     - **Key Parameters**: repository, branch, projectedGraphName, nodeTableNames, relationshipTableNames, dampingFactor (optional)
     - **When to Use**: To identify critical components, understand architectural importance, prioritize refactoring
     - **Best Practice**: Focus on components with high PageRank scores for architecture discussions
 
-17. **`louvain-community-detection`**
+15. **`louvain-community-detection`**
     - **Purpose**: Discover natural groupings/communities of components
     - **Key Parameters**: repository, branch, projectedGraphName, nodeTableNames, relationshipTableNames
     - **When to Use**: At project start to understand existing module structure, when reorganizing code, for architecture visualization
     - **Best Practice**: Suggest module boundaries based on community detection results
 
-18. **`k-core-decomposition`**
+16. **`k-core-decomposition`**
     - **Purpose**: Find densely connected component clusters
     - **Key Parameters**: repository, branch, projectedGraphName, nodeTableNames, relationshipTableNames, k
     - **When to Use**: To identify tightly coupled subsystems, find core architectural components
     - **Best Practice**: Use for identifying architectural layers and high-cohesion modules
 
-19. **`strongly-connected-components`**
+17. **`strongly-connected-components`**
     - **Purpose**: Detect circular dependencies in components
     - **Key Parameters**: repository, branch, projectedGraphName, nodeTableNames, relationshipTableNames
     - **When to Use**: During code quality assessment, before major refactoring, when diagnosing architectural issues
     - **Best Practice**: Suggest refactoring approaches for breaking circular dependencies
 
-20. **`weakly-connected-components`**
+18. **`weakly-connected-components`**
     - **Purpose**: Identify isolated "islands" of components
     - **Key Parameters**: repository, branch, projectedGraphName, nodeTableNames, relationshipTableNames
     - **When to Use**: To find disconnected subsystems, identify integration gaps
     - **Best Practice**: Help users understand separation/isolation in the architecture
 
-21. **`shortest-path`**
+19. **`shortest-path`**
     - **Purpose**: Find shortest path between two components
     - **Key Parameters**: repository, branch, projectedGraphName, nodeTableNames, relationshipTableNames, startNodeId, endNodeId
     - **When to Use**: To explain component relationships, trace dependencies, understand integration points

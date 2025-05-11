@@ -4,31 +4,31 @@ initialization: |
 </thinking>
 <thinking>
 _Check if the MCP server with advanced-memory-bank-mcp is registered.
-_ Check if a memory bank repository exists for the current project and branch.
+_Check if a memory bank repository exists for the current project and branch.
 _All operations must include branch parameter (defaulting to 'main') to maintain proper isolation.
-_ Repository operations use a synthetic ID composed of name and branch.
+_Repository operations use a synthetic ID composed of name and branch.
 </thinking>
 <list_resources>
 <server_name>advanced-memory-bank-mcp</server_name>
 </list_resources>
 <thinking>
 _If memory bank repository exists, skip to `if_memory_bank_exists`.
-_ Check both the repository name and branch parameter.
+_Check both the repository name and branch parameter.
 _For feature-specific work, check feature branch first, then main branch.
 </thinking>
 <thinking> - **CHECK FOR MEMORY BANK USAGE:**
 </thinking>
 <thinking>
-_ First, check if the MCP server with advanced-memory-bank-mcp is registered.
+_First, check if the MCP server with advanced-memory-bank-mcp is registered.
 _Check if a memory bank repository exists for the current project, considering the appropriate branch.
-_ Remember that all knowledge is isolated by branch in KuzuDB graph model.
+_Remember that all knowledge is isolated by branch in KuzuDB graph model.
 </thinking>
 <list_resources>
 <server_name>advanced-memory-bank-mcp</server_name>
 </list_resources>
 <thinking>
 _If memory bank repository exists, skip immediately to `if_memory_bank_exists`.
-_ If no memory bank exists for this branch but exists for another branch, consider if knowledge should be shared.
+_If no memory bank exists for this branch but exists for another branch, consider if knowledge should be shared.
 </thinking>
 if_no_memory_bank: | 1. **Inform the User:**  
  "No Memory Bank repository was found for this project. I recommend creating one to maintain project context." 2. **Offer Initialization:**
@@ -138,22 +138,6 @@ I need to update the Memory Bank with a new rule using `add-rule`.
 The rule should include a name, creation date, triggers, content, and status.
 </thinking>
 format: "add-rule [repository] --branch [branch] --id rule-[category]-v[X.Y.Z] --name \"[Rule Name]\" --created \"[YYYY-MM-DD]\" --triggers [\"trigger1\",\"trigger2\"] --content \"[Rule Content]\" --status \"active\""
-
-export_memory_bank:
-trigger: "When you need to backup the memory bank or share knowledge between environments."
-action: |
-<thinking>
-I need to export the memory bank to YAML format for backup or knowledge sharing.
-</thinking>
-format: "export-memory-bank [repository] --branch [branch]"
-
-import_memory_bank:
-trigger: "When you need to initialize from a template or restore from backup."
-action: |
-<thinking>
-I need to import YAML content into the memory bank.
-</thinking>
-format: "import-memory-bank [repository] --branch [branch] --content \"[YAML Content]\" --type \"[metadata|context|component|decision|rule]\" --id \"[Item ID]\""
 
 # Graph Traversal Tools
 
