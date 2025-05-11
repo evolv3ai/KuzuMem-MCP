@@ -1,180 +1,298 @@
 ---
-description: This rule is used to guide the agent on how to use the Advanced Memory Bank MCP Tool
+description: This rule is used to guide the agent on how to use the Advanced Memory Bank MCP Server
 globs: 
 alwaysOn: true
 ---
 
-# Advanced Memory Bank MCP Tool Usage Guidelines (Post-KuzuDB Update)
+# Advanced Memory Bank MCP Server: Agent Usage Guide
 
-## Repository and Branch Handling
+This guide provides recommendations for AI agents to effectively use the Advanced Memory Bank MCP tools during coding assistance sessions.
 
-- Always use the synthetic repository ID (`name:branch`) for all memory bank operations.
-- All upsert and retrieval actions must include the `branch` parameter to scope records correctly.
+## Memory Model Overview
 
-## Memory Creation
+The Advanced Memory Bank uses a graph-based knowledge model with these entity types:
 
-- When creating or updating any memory (metadata, context, component, decision, rule):
-  - Ensure the payload includes: `repository` (synthetic ID), `yaml_id`, and `branch`.
-  - Do not include duplicate or legacy repository fields (e.g., only `repository`, not `repository_id`).
-  - Follow the KuzuDB schema for each memory type.
+1. **Repository**: Root container for all project knowledge, isolated by branches
+2. **Metadata**: Global project information (description, technologies, etc.)
+3. **Context**: Timestamped observations and insights about the codebase
+4. **Component**: System components with relationships and dependencies
+5. **Decision**: Architectural decisions with dates and contextual reasoning
+6. **Rule**: Development standards, guidelines, and requirements
 
-## Memory Update and Retrieval
+These entities form a knowledge graph connected by typed relationships.
 
-- Before creating a new memory, check for an existing record using both `repository` and `branch`.
-- Update existing memories if present; avoid duplication.
-- When retrieving, always filter by both `repository` and `branch`.
+## Complete Tool Reference
 
-## Status and Enforcement
+### Memory Bank Management Tools
 
-- Only enforce rules and components with `status: active`.
-- Ignore or skip deprecated records.
+1. **`init-memory-bank`**
+   - **Purpose**: Initialize a new memory bank for a repository
+   - **Key Parameters**: repository, branch (optional, defaults to 'main')
+   - **When to Use**: During first interaction with a new repository or when instructed to create a fresh memory context
+   - **Best Practice**: Always check if a memory bank exists before creating a new one
 
-## Consistency and Best Practices
+2. **`get-metadata`**
+   - **Purpose**: Retrieve repository metadata information
+   - **Key Parameters**: repository, branch
+   - **When to Use**: At the start of a session to understand project context, technology constraints, and goals
+   - **Best Practice**: Always review metadata before making technology suggestions
 
-- Use clear, consistent identifiers for all memory types.
-- Link related decisions, contexts, and components where possible.
-- Use the correct memory type for each operation.
-- Always specify the repository and branch for every operation.
+3. **`update-metadata`**
+   - **Purpose**: Update repository metadata information
+   - **Key Parameters**: repository, branch, metadata (object with project info)
+   - **When to Use**: When project scope changes, technologies are added/modified, or goals are redefined
+   - **Best Practice**: Include detailed project name, description, and technology list
 
-## Example Usage (Post-KuzuDB)
+4. **`get-context`**
+   - **Purpose**: Retrieve context entries for a repository
+   - **Key Parameters**: repository, branch, latest (boolean), limit (optional)
+   - **When to Use**: At the start of coding sessions, before making architecture recommendations, when recalling previous discussions
+   - **Best Practice**: Use `latest: true` for quick context, `latest: false` for historical review
 
-```
-# Create or update metadata for a branch
-update-metadata my-repo:main --yaml_id meta --name "Project Name" --branch main --content '{...}'
+5. **`update-context`**
+   - **Purpose**: Add new context information
+   - **Key Parameters**: repository, branch, summary, observation, agent, issue (optional)
+   - **When to Use**: After code analysis, when discovering patterns or issues, following important user discussions
+   - **Best Practice**: Keep summaries concise but specific; include detailed observations
 
-# Add a component
-add-component my-repo:main comp-AuthService --name "AuthService" --kind "service" --branch main
+6. **`add-component`**
+   - **Purpose**: Add a new component to the memory bank
+   - **Key Parameters**: repository, branch, id, name, kind, status, depends_on (array of component IDs)
+   - **When to Use**: When discovering system components during code analysis, creating new components, or documenting architecture
+   - **Best Practice**: Use prefixed IDs (e.g., 'comp-AuthService') and descriptive names
 
-# Add a decision
-add-decision my-repo:main dec-20250510-auth-pattern --name "JWT Authentication" --context "Selected for stateless auth" --branch main
-```
+7. **`add-decision`**
+   - **Purpose**: Add a decision record
+   - **Key Parameters**: repository, branch, id, name, date, context
+   - **When to Use**: When architectural decisions are made, technology choices are finalized, or design patterns are selected
+   - **Best Practice**: Include date (YYYY-MM-DD) and detailed context explaining reasoning
 
----
+8. **`add-rule`**
+   - **Purpose**: Add a development rule
+   - **Key Parameters**: repository, branch, id, name, content, status, created, triggers (array)
+   - **When to Use**: When coding standards are defined, security requirements are established, or user preferences are expressed
+   - **Best Practice**: Write clear, actionable rule content; use status 'active' for enforced rules
 
-A well-maintained, branch-aware memory bank maximizes the value and safety of project knowledge.
+9. **`export-memory-bank`**
+   - **Purpose**: Export memory bank to YAML format
+   - **Key Parameters**: repository, branch
+   - **When to Use**: For knowledge backup, sharing knowledge between environments
+   - **Best Practice**: Export periodically to preserve key milestones
 
-## When to Create Memories
+10. **`import-memory-bank`**
+    - **Purpose**: Import YAML content into memory bank
+    - **Key Parameters**: repository, branch, content, type, id
+    - **When to Use**: When initializing from a template, restoring from backup, or migrating knowledge
+    - **Best Practice**: Verify repository exists before importing
 
-As an AI assistant, you should proactively create memories in the following situations:
+### Graph Traversal Tools
 
-1. **When encountering architectural decisions**
-   - Create a decision record whenever the USER makes a significant architectural choice
-   - Use `add-decision` to document rationale, context, and implications
+11. **`get-component-dependencies`**
+    - **Purpose**: Find all components a component depends on
+    - **Key Parameters**: repository, branch, componentId
+    - **When to Use**: Before modifying components, when analyzing impact of changes, explaining dependency chains
+    - **Best Practice**: Review complete dependency chain before suggesting component modifications
 
-2. **When identifying system components**
-   - Create component records when new services, modules, or libraries are introduced
-   - Use `add-component` to document component name, kind, dependencies, and status
+12. **`get-component-dependents`**
+    - **Purpose**: Find all components that depend on a component
+    - **Key Parameters**: repository, branch, componentId
+    - **When to Use**: When evaluating change impact, checking which components might break during refactoring
+    - **Best Practice**: Alert user when critical components have many dependents
 
-3. **When establishing coding standards**
-   - Create rule records for enforced coding practices and standards
-   - Use `add-rule` to document triggers, specific requirements, and compliance expectations
+13. **`get-governing-items-for-component`**
+    - **Purpose**: Find decisions and rules affecting a component
+    - **Key Parameters**: repository, branch, componentId
+    - **When to Use**: Before generating component code, ensuring compliance with standards
+    - **Best Practice**: Always check governing rules before suggesting implementation patterns
 
-4. **When capturing session context**
-   - Record summaries of important development sessions
-   - Use `add-context` at the end of significant work sessions to capture learnings
-   - Include key observations and actionable decisions
+14. **`get-item-contextual-history`**
+    - **Purpose**: Retrieve context history for a component, decision, or rule
+    - **Key Parameters**: repository, branch, itemId, itemType
+    - **When to Use**: To understand component evolution, review decision history, check how rules have been applied
+    - **Best Practice**: Use to revisit past discussions, verify reasoning behind decisions
 
-5. **When updating project metadata**
-   - Update the repository's metadata when tech stack or architecture changes
-   - Use `update-metadata` to ensure project information remains current
+15. **`get-related-items`**
+    - **Purpose**: Find items related to a starting node within N hops
+    - **Key Parameters**: repository, branch, startItemId, depth, relationshipFilter, targetNodeTypeFilter
+    - **When to Use**: For general relationship exploration, understanding connected items
+    - **Best Practice**: Use with focused filters to avoid overwhelming results
 
-## When to Read Memories
+### Graph Algorithm Tools
 
-Retrieve and consult memories in these scenarios:
+16. **`mcp_pagerank`**
+    - **Purpose**: Identify influential or central components
+    - **Key Parameters**: repository, branch, projectedGraphName, nodeTableNames, relationshipTableNames, dampingFactor (optional)
+    - **When to Use**: To identify critical components, understand architectural importance, prioritize refactoring
+    - **Best Practice**: Focus on components with high PageRank scores for architecture discussions
 
-1. **At the beginning of each conversation**
-   - Use `get-metadata` to understand project structure and architecture
-   - Review existing rules to ensure compliance with established guidelines
+17. **`louvain-community-detection`**
+    - **Purpose**: Discover natural groupings/communities of components
+    - **Key Parameters**: repository, branch, projectedGraphName, nodeTableNames, relationshipTableNames
+    - **When to Use**: At project start to understand existing module structure, when reorganizing code, for architecture visualization
+    - **Best Practice**: Suggest module boundaries based on community detection results
 
-2. **When addressing architectural concerns**
-   - Use `get-context` to review relevant historical context before making suggestions
-   - Reference existing component relationships before suggesting changes
+18. **`k-core-decomposition`**
+    - **Purpose**: Find densely connected component clusters
+    - **Key Parameters**: repository, branch, projectedGraphName, nodeTableNames, relationshipTableNames, k
+    - **When to Use**: To identify tightly coupled subsystems, find core architectural components
+    - **Best Practice**: Use for identifying architectural layers and high-cohesion modules
 
-3. **When working on existing components**
-   - Review component dependencies before suggesting modifications
-   - Ensure recommendations align with documented component status
+19. **`strongly-connected-components`**
+    - **Purpose**: Detect circular dependencies in components
+    - **Key Parameters**: repository, branch, projectedGraphName, nodeTableNames, relationshipTableNames
+    - **When to Use**: During code quality assessment, before major refactoring, when diagnosing architectural issues
+    - **Best Practice**: Suggest refactoring approaches for breaking circular dependencies
 
-4. **When enforcing consistency**
-   - Reference existing rules before suggesting code patterns
-   - Maintain consistency with previously recorded decisions
+20. **`weakly-connected-components`**
+    - **Purpose**: Identify isolated "islands" of components
+    - **Key Parameters**: repository, branch, projectedGraphName, nodeTableNames, relationshipTableNames
+    - **When to Use**: To find disconnected subsystems, identify integration gaps
+    - **Best Practice**: Help users understand separation/isolation in the architecture
 
-5. **When suggesting improvements**
-   - Ground recommendations in historical context from previous sessions
-   - Refer to past observations to avoid repeating unsuccessful approaches
+21. **`shortest-path`**
+    - **Purpose**: Find shortest path between two components
+    - **Key Parameters**: repository, branch, projectedGraphName, nodeTableNames, relationshipTableNames, startNodeId, endNodeId
+    - **When to Use**: To explain component relationships, trace dependencies, understand integration points
+    - **Best Practice**: Use for explaining indirect dependencies and relationship chains
 
-## Memory Creation Best Practices
+## Usage Guidelines
 
-1. **Use clear, consistent identifiers**
-   - Follow the established naming conventions:
-     - Context: `ctx-YYYY-MM-DDThh-mm`
-     - Component: `comp-ComponentName`
-     - Decision: `dec-YYYYMMDD-brief-description`
-     - Rule: `rule-category-vX.Y.Z`
+### Branch Awareness
 
-2. **Include sufficient detail**
-   - Provide comprehensive content that will be useful when retrieved later
-   - Include rationale, not just descriptions
-   - Link related decisions and observations when possible
+All memory operations must consider the branch parameter to maintain proper isolation:
 
-3. **Categorize properly**
-   - Use the appropriate memory type for the content:
-     - `metadata` for project-wide information
-     - `context` for session-specific notes
-     - `component` for architectural elements
-     - `decision` for architectural decisions
-     - `rule` for enforced guidelines
+1. Use the `branch` parameter in every MCP tool call
+2. For stable, shared knowledge, use the 'main' branch
+3. For feature-specific knowledge, use feature branch names
+4. Always reference the correct branch when switching context between branches
 
-4. **Update rather than duplicate**
-   - Check if a memory already exists before creating a new one
-   - Update existing memories when only minor changes are needed
+### When to Create New Memories
 
-## Memory Retrieval Best Practices
+Follow these guidelines for creating new memories:
 
-1. **Filter by repository**
-   - Always specify the repository name when retrieving memories
-   - Use consistent repository names across operations
+#### Add Context When
 
-2. **Review most recent context first**
-   - Sort context by date to see the most recent developments
-   - Give precedence to newer decisions over older ones when conflicts exist
+- You observe patterns, issues, or insights in the codebase
+- After significant discussions with the user
+- Before making substantial recommendations
+- When encountering recurring problems
+- After completing significant development tasks
 
-3. **Cross-reference between memory types**
-   - Look for related components when reviewing decisions
-   - Check for rules that may impact components under discussion
+#### Add Components When
 
-4. **Respect memory status**
-   - Pay attention to status fields (e.g., for rules and components)
-   - Only enforce active rules, not deprecated ones
+- Discovering new system elements during code analysis
+- Creating new modules or services
+- Documenting system architecture
+- Refactoring reveals logical subsystems
+- User explains their system design
 
-## Usage in Workflows
+#### Add Decisions When
 
-1. **Project Initialization**
-   ```
-   # Create initial repository metadata
-   init-memory-bank my-repo
-   update-metadata my-repo --name "Project Name" --tech-stack "Node.js, TypeScript"
-   ```
+- Architectural approach is selected
+- Technology choices are made
+- Design patterns are applied
+- Performance tradeoffs are determined
+- Security measures are implemented
 
-2. **Architecture Design**
-   ```
-   # Document key components
-   add-component my-repo comp-AuthService --name "AuthService" --kind "service"
-   add-component my-repo comp-Database --name "Database" --kind "storage"
-   
-   # Record architecture decisions
-   add-decision my-repo dec-20250510-auth-pattern --name "JWT Authentication" --context "Selected for stateless auth"
-   ```
+#### Add Rules When
 
-3. **Code Standard Enforcement**
-   ```
-   # Define coding standards
-   add-rule my-repo rule-logging-v1 --name "Structured Logging" --content "All logs must use the structured logger"
-   ```
+- Coding standards are established
+- Security requirements are defined
+- Performance guidelines are agreed upon
+- The user expresses strong preferences
+- You observe consistent patterns that should be followed
 
-4. **Session Recording**
-   ```
-   # Document session outcomes
-   add-context my-repo --agent "Team Lead" --summary "Refactored authentication flow" --decision "Move to token-based auth"
-   ```
+### When to Query Knowledge
 
-Remember that a well-maintained memory bank becomes increasingly valuable over time. The more consistent and thorough the memory creation, the more effective the assistance provided based on those memories.
+Follow these guidelines for retrieving memories:
+
+#### Query Context When
+
+- Starting a new session with the user
+- Recalling previous conversations
+- Understanding previous choices
+- Building on past insights
+
+#### Query Components When
+
+- Need to understand system structure
+- Making changes that could affect dependencies
+- Explaining architecture to the user
+- Proposing refactoring
+
+#### Query Decisions When
+
+- Ensuring consistency with past choices
+- Understanding architectural constraints
+- Recommending new approaches
+- Explaining system rationale to the user
+
+#### Query Rules When
+
+- Generating code to match standards
+- Reviewing existing code for compliance
+- Making recommendations aligned with preferences
+- Ensuring consistent patterns across the project
+
+### Progressive Results
+
+For long-running graph operations (PageRank, community detection, etc.):
+
+1. Inform the user when an operation might take time
+2. Acknowledge progress notifications during execution
+3. Explain intermediate results when available
+4. Present final results with clear explanations
+5. Use streaming capabilities when available in the client
+
+### Memory Import/Export Best Practices
+
+1. For repetitive project types, suggest exporting template memories for reuse
+2. When importing, verify the memory bank is properly initialized first
+3. Maintain branch consistency between export and import operations
+4. Consider branch-specific exports for isolated feature knowledge
+
+## Scenario-Based Guidelines
+
+### Starting a New Project
+
+1. Initialize a memory bank with the appropriate repository name
+2. Create detailed metadata with project goals and technologies
+3. Register core architectural components as they emerge
+4. Establish initial rules for development standards
+5. Document key architectural decisions with reasoning
+
+### During Active Development
+
+1. Update context regularly with new insights
+2. Add components as they're created or discovered
+3. Document decisions as they're made
+4. Establish and update rules as patterns emerge
+5. Use component dependency analysis before suggesting changes
+
+### Before Making Recommendations
+
+1. Query relevant context history
+2. Analyze component dependencies to understand impact
+3. Check applicable rules and decisions
+4. Consider architectural health (via graph algorithms)
+5. Prioritize consistency with established patterns
+
+### For Code Generation
+
+1. Check governing rules for style and patterns
+2. Review component dependencies to maintain proper relationships
+3. Ensure compatibility with architectural decisions
+4. Follow established naming conventions and patterns
+5. Generate comments that reference relevant decisions and rules
+
+## Conclusion
+
+The Advanced Memory Bank enables AI agents to maintain persistent knowledge across user sessions, resulting in more consistent, coherent, and contextually appropriate assistance. Use these tools to:
+
+1. Build a structured knowledge graph of the project
+2. Analyze system architecture using graph algorithms
+3. Make well-informed recommendations based on context
+4. Ensure consistency with established decisions and rules
+5. Reduce repetitive questions and maintain conversation continuity
+
+By effectively leveraging this memory system, your assistance will become more valuable, accurate, and aligned with the user's project goals and preferences over time.
