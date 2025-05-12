@@ -1,38 +1,38 @@
-KuzuMemo_MCP_strategy:
+KuzuMem_MCP_strategy:
 initialization: |
 <thinking> - **CHECK FOR ADVANCED MEMORY BANK (KuzuDB/Branch-aware):**
 </thinking>
 <thinking>
-_First, check if the KuzuMemo-MCP MCP server is registered.
+_First, check if the KuzuMem-MCP MCP server is registered.
 _ Remember branch parameter directly corresponds to Git branches in the project.
 _Memory is fully isolated between branches and synthetic IDs use pattern: name + ':' + branch.
 </thinking>
 <list_resources>
-<server_name>KuzuMemo-MCP</server_name>
+<server_name>KuzuMem-MCP</server_name>
 </list_resources>
 <thinking>
-_ If the KuzuMemo-MCP server is found, determine current Git branch the user is on.
+_ If the KuzuMem-MCP server is found, determine current Git branch the user is on.
 _Check if a repository exists for this project with that branch.
 _ If a repository exists, skip to `if_memory_bank_exists`.
 </thinking>
 <thinking> - **CHECK FOR ADVANCED MEMORY BANK:**
 </thinking>
 <thinking>
-_First, check if the KuzuMemo-MCP MCP server is registered.
+_First, check if the KuzuMem-MCP MCP server is registered.
 _ For the current project, check if repositories exist in any branch.
 </thinking>
 <list_resources>
-<server_name>KuzuMemo-MCP</server_name>
+<server_name>KuzuMem-MCP</server_name>
 </list_resources>
 <thinking>
-_If the KuzuMemo-MCP server is found, check if a repository exists for this project.
+_If the KuzuMem-MCP server is found, check if a repository exists for this project.
 _ If a repository exists but not for current branch, note this for the user.
 
 * If a repository exists for current branch, skip immediately to `if_memory_bank_exists`.
 </thinking>
 
 if_no_memory_bank: | 1. **Inform the User:**  
- "No KuzuMemo-MCP repository was found for this project on the current Git branch. I recommend creating one to maintain architectural knowledge and technical decisions. Would you like to switch to Architect mode to initialize one?" 2. **Conditional Actions:**
+ "No KuzuMem-MCP repository was found for this project on the current Git branch. I recommend creating one to maintain architectural knowledge and technical decisions. Would you like to switch to Architect mode to initialize one?" 2. **Conditional Actions:**
 *If the user declines:
 <thinking>
 I need to proceed with the task without Memory Bank functionality.
@@ -160,7 +160,7 @@ post_umb_actions: - "Memory Bank fully synchronized for current branch" - "Imple
 override_file_restrictions: true
 override_mode_restrictions: true
 
-KuzuMemo_MCP_best_practices:
+KuzuMem_MCP_best_practices:
 id_conventions: | - Component: `comp-[DescriptiveName]` (e.g., comp-AuthService, comp-DataAccess) - Decision: `dec-[YYYYMMDD]-[brief-description]` for major decisions with date reference - Rule: `rule-[category]-[version]` where version can follow semantic versioning
 branch_awareness: | - Branch parameter directly corresponds to Git branches in the project - Memory is fully isolated between branches (e.g., 'main', 'feature/auth', 'bugfix/login') - Synthetic repository IDs use pattern: name + ':' + branch as required by KuzuDB - Knowledge from one branch is not visible to other branches unless explicitly copied - Always include branch parameter in every MCP tool call
 code_component_documentation: | - Document all major classes, modules, and services as components - Clearly identify dependencies between components using depends_on parameter - Specify the component kind (service, library, utility, etc.) - Maintain active/deprecated/planned status for evolving components - Link components to decisions using related-items queries when appropriate

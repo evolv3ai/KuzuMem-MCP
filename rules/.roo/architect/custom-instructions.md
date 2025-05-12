@@ -1,30 +1,30 @@
-KuzuMemo_MCP_strategy:
+KuzuMem_MCP_strategy:
 initialization: |
-<thinking> - **CHECK FOR KuzuMemo-MCP USAGE (KuzuDB/Branch-aware):**
+<thinking> - **CHECK FOR KuzuMem-MCP USAGE (KuzuDB/Branch-aware):**
 </thinking>
 <thinking>
-_Check if the MCP server with KuzuMemo-MCP is registered.
+_Check if the MCP server with KuzuMem-MCP is registered.
 _Check if a memory bank repository exists for the current project and branch.
 _All operations must include branch parameter (defaulting to 'main') to maintain proper isolation.
 _Repository operations use a synthetic ID composed of name and branch.
 </thinking>
 <list_resources>
-<server_name>KuzuMemo-MCP</server_name>
+<server_name>KuzuMem-MCP</server_name>
 </list_resources>
 <thinking>
 _If memory bank repository exists, skip to `if_memory_bank_exists`.
 _Check both the repository name and branch parameter.
 _For feature-specific work, check feature branch first, then main branch.
 </thinking>
-<thinking> - **CHECK FOR KuzuMemo-MCP USAGE:**
+<thinking> - **CHECK FOR KuzuMem-MCP USAGE:**
 </thinking>
 <thinking>
-_First, check if the MCP server with KuzuMemo-MCP is registered.
+_First, check if the MCP server with KuzuMem-MCP is registered.
 _Check if a memory bank repository exists for the current project, considering the appropriate branch.
 _Remember that all knowledge is isolated by branch in KuzuDB graph model.
 </thinking>
 <list_resources>
-<server_name>KuzuMemo-MCP</server_name>
+<server_name>KuzuMem-MCP</server_name>
 </list_resources>
 <thinking>
 _If memory bank repository exists, skip immediately to `if_memory_bank_exists`.
@@ -239,7 +239,7 @@ core_update_process: | 1. Current Session Review: - Analyze complete chat histor
 task_focus: "During a UMB update, focus on capturing any architectural decisions, component changes, or rule modifications made during the chat session. Use the appropriate MCP tools to record these changes in the memory bank repository."
 post_umb_actions: - "Memory Bank fully synchronized" - "All architectural context preserved" - "Session decisions recorded" - "Component relationships updated" - "Rules and standards established"
 
-KuzuMemo_MCP_best_practices:
+KuzuMem_MCP_best_practices:
 id_conventions: | - Component: `comp-[DescriptiveName]` (e.g., comp-AuthService, comp-DataAccess) - Decision: `dec-[YYYYMMDD]-[brief-description]` for major decisions with date reference - Rule: `rule-[category]-[version]` where version can follow semantic versioning
 branch_handling: | - Branch parameter directly corresponds to Git branches in the project - When user switches Git branches, switch memory bank branch parameter to match - Always include branch parameter in every MCP tool call to maintain isolation - Memory is fully isolated between branches (e.g., 'main', 'feature/auth', 'bugfix/login') - Synthetic repository IDs use pattern: name + ':' + branch as required by KuzuDB - Knowledge from one branch is not visible to other branches unless explicitly copied
 component_guidelines: | - Clearly define component dependencies using the depends_on parameter - Set explicit status (active/deprecated/planned) for components - Use descriptive names that reflect component purpose - Maintain proper hierarchy with parent-child relationships

@@ -1,22 +1,22 @@
-KuzuMemo_MCP_strategy:
+KuzuMem_MCP_strategy:
 initialization: |
 <thinking> - **CHECK FOR ADVANCED MEMORY BANK (KuzuDB/Branch-aware):**
 </thinking>
 <thinking>
-_First, check if the KuzuMemo-MCP MCP server is registered.
+_First, check if the KuzuMem-MCP MCP server is registered.
 _ Remember branch parameter directly corresponds to Git branches in the project.
 _Memory is fully isolated between branches and synthetic IDs use pattern: name + ':' + branch.
 </thinking>
 <list_resources>
-<server_name>KuzuMemo-MCP</server_name>
+<server_name>KuzuMem-MCP</server_name>
 </list_resources>
 <thinking>
-_ If the KuzuMemo-MCP server is found, determine current Git branch the user is on.
+_ If the KuzuMem-MCP server is found, determine current Git branch the user is on.
 _Check if a repository exists for this project with that branch.
 _ If a repository exists, skip to `if_memory_bank_exists`.
 </thinking>
 if_no_memory_bank: | 1. **Inform the User:**  
- "No KuzuMemo-MCP repository was found for this project on the current Git branch. I recommend creating one to maintain debugging history and error patterns. Would you like to switch to Architect mode to initialize one?" 2. **Conditional Actions:**
+ "No KuzuMem-MCP repository was found for this project on the current Git branch. I recommend creating one to maintain debugging history and error patterns. Would you like to switch to Architect mode to initialize one?" 2. **Conditional Actions:**
 _If the user declines:
 <thinking>
 I need to proceed with the task without Memory Bank functionality.
@@ -139,7 +139,7 @@ post_umb_actions: - "Memory Bank fully synchronized for current branch" - "Bug p
 override_file_restrictions: true
 override_mode_restrictions: true
 
-KuzuMemo_MCP_best_practices:
+KuzuMem_MCP_best_practices:
 id_conventions: | - Component: `comp-[DescriptiveName]` (e.g., comp-AuthService, comp-DataAccess) - Decision: `dec-[YYYYMMDD]-[bug-id-description]` for major bug fixes with date reference - Rule: `rule-[testing]-v[X.Y.Z]` for testing rules with semantic versioning
 branch_awareness: | - Branch parameter directly corresponds to Git branches in the project - Memory is fully isolated between branches (e.g., 'main', 'feature/auth', 'bugfix/login') - Synthetic repository IDs use pattern: name + ':' + branch as required by KuzuDB - Bug fixes and patterns in one branch are not visible to other branches unless explicitly copied - Always include branch parameter in every MCP tool call
 debugging_patterns: | - Document recurring bug types with clear patterns - Record resolution strategies that succeeded - Note testing approaches that caught specific bugs - Tag components prone to particular error types - Link related bugs using graph relationships
