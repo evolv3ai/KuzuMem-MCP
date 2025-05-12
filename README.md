@@ -1,34 +1,49 @@
-# Advanced Memory Bank MCP Tool
+# KuzuMem-MCP
 
-A TypeScript implementation of a distributed YAML memory bank as an MCP (Model Context Protocol) tool, storing memories in a database with repository filtering capabilities. Fully compliant with MCP specification for seamless integration with IDEs and AI agents.
+A TypeScript implementation of a distributed memory bank as an MCP (Model Context Protocol) tool, storing memories in a **KùzuDB graph database** with repository and branch filtering capabilities. Branch isolation is achieved by using a graph-unique identifier for entities, enabling a centralized memory bank while allowing repository-specific and branch-specific views. Fully compliant with MCP specification for seamless integration with IDEs and AI agents.
+
+## Why it's not using the official TypeScript MCP SDK?
+
+The official TypeScript MCP SDK is a great project and we will use it in the future. However, we are using a custom implementation for the following reasons:
+
+- To learn the intricacies of the MCP Protocol
+- To have a more flexible and custom implementation
+- Wanted to start small with CLI and HTTP server implementation and then add more features later
 
 ## Features
 
 - **Thread-Safe Singleton Pattern** - Ensures each resource is instantiated only once, with proper thread safety
-- **Distributed YAML Structure** - Follows the advanced memory bank specification
-- **Repository Filtering** - All operations can be filtered by repository name
+- **Distributed Graph Structure** - Follows the advanced memory bank specification using a KùzuDB graph.
+- **Repository & Branch Awareness** - All operations are contextualized by repository name and branch, with entities uniquely identified by a composite key (`repositoryName:branchName:itemId`).
 - **Asynchronous Operations** - Uses async/await for better performance
-- **Both API & CLI** - Access via REST API or command line
-- **Multiple Database Support** - Works with SQLite (default) or PostgreSQL
-- **Fully MCP Compliant** - All tools follow the Model Context Protocol for IDE integration
-- **Modular Tool Structure** - Each tool is defined in its own module for better maintainability
-- **MCP/JSON-RPC Communication** - Supports both HTTP and stdio communication for versatile integration
+- **Multiple Access Interfaces** - Access via a RESTful HTTP API, a CLI, and multiple MCP server implementations.
+- **KùzuDB Backend** - Utilizes KùzuDB for graph-based memory storage and querying.
+- **Fully MCP Compliant** - All tools follow the Model Context Protocol for client integration.
+- **Modular Architecture** - Clear separation between MCP servers, service layer, memory operations, and repositories.
+- **MCP/JSON-RPC Communication** - Supports:
+  - HTTP with per-tool batch-oriented endpoints (`src/mcp/server.ts` via `src/app.ts` at `/mcp/tools/...`).
+  - HTTP Streaming (SSE) via a unified `/mcp` endpoint for progressive results (`src/mcp-httpstream-server.ts`).
+  - Stdio for direct IDE/Agent integration, supporting both batch and progressive results (`src/mcp-stdio-server.ts`).
+- **Progressive Results Streaming** - Supports `tools/progress` notifications for long-running graph operations over Stdio and HTTP Streaming.
+- **Graph & Traversal Tools** - Includes tools for dependency analysis, pathfinding, and graph algorithms.
+
+## Documentation
+
+This README provides basic setup and usage information. For detailed documentation on architecture, advanced usage patterns, and graph database capabilities, please see [Extended Documentation](docs/README2.md) and [Graph Schema](docs/graph-schema.md).
+For details on tools supporting progressive results, see [MCP Tools Streaming Support](src/mcp/tools/README.md).
 
 ## Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/solita-internal/advanced-memory-tool-mcp
-cd advanced-memory-tool-mcp
+git clone https://github.com/solita-internal/kuzumem-mcp
+cd kuzumem-mcp
 
 # Install dependencies
 npm install
 
 # Build the project
 npm run build
-
-# Run database migrations
-npm run migrate
 ```
 
 ## Configuration
@@ -36,396 +51,184 @@ npm run migrate
 Create a `.env` file in the root directory with the following variables:
 
 ```env
-# Database Configuration
-DB_CLIENT=sqlite3                  # or 'pg' for PostgreSQL
-DB_FILENAME=./memory-bank.sqlite   # SQLite only
-
-# For PostgreSQL (uncomment if needed)
-# DB_HOST=localhost
-# DB_PORT=5432
-# DB_USER=postgres
-# DB_PASSWORD=your_password
-# DB_NAME=memory_bank
+# KùzuDB Configuration (for on-disk database)
+DB_FILENAME=./memory-bank.kuzu   # Path to the KùzuDB database folder
 
 # Server Configuration
-PORT=3000
+PORT=3000                       # For the main HTTP MCP server and REST API
+HTTP_STREAM_PORT=3001           # For the MCP HTTP Streaming Server
 HOST=localhost
+
+# Debug Logging for MCP Servers (0=Error, 1=Warn, 2=Info, 3=Debug, 4=Trace)
+DEBUG=1
 ```
 
-## Usage
-
-### Starting the Server
-
-```bash
-npm start
-```
-
-## MCP Server Implementation
-
-This project implements the Model Context Protocol specification with three server types:
-
-### HTTP Server
-
-The standard server that exposes MCP endpoints over HTTP, ideal for web-based integrations.
-
-```bash
-# Start the HTTP server
-npm start
-```
-
-### HTTP Streaming Server
-
-Implements the MCP protocol with HTTP streaming support following the TypeScript SDK approach. Enables real-time feedback and progressive results.
-
-```bash
-# Start the HTTP streaming server
-npx ts-node src/mcp-httpstream-server.ts
-```
-
-The HTTP streaming server provides:
-
-- Standard MCP endpoints (`initialize`, `tools/list`, etc.)
-- Non-streaming endpoints at `/tools/:toolName`
-- Streaming endpoints at `/tools/:toolName/stream`
-- Server-sent events with progress updates during tool execution
-- Event types: `start`, `progress`, `result`, and `error`
-
-### stdio Server
-
-A stdio-based implementation that follows JSON-RPC 2.0 for direct integration with AI tools and IDEs:
-
-```bash
-# Start the stdio server directly
-npx ts-node src/mcp-stdio-server.ts
-```
-
-All server implementations support these MCP endpoints:
-
-- `initialize` - Protocol handshake and capability discovery
-- `tools/list` - Discovery of available tools with full schema definitions
-- `resources/list` - Resource listing (if applicable)
-- `resources/templates/list` - Resource template listing (if applicable)
-
-### Debug Logging
-
-The MCP stdio server includes a comprehensive debug logging system:
-
-```env
-# Set debug level in .env or as environment variable
-DEBUG=0   # Minimum logging (errors only)
-DEBUG=1   # Basic operation logging
-DEBUG=2   # Verbose with request/response details
-DEBUG=3   # Full data logging (development only)
-```
-
-### Using with Coding IDEs
-
-You can use this MCP server as a provider in f.ex. [Windsurf](https://github.com/windsurf-ai/windsurf), the open-source AI coding agent platform.
-
-#### 1. Register the MCP Server with this configuration
-
-In your IDE, add this MCP server configuration to your workspace or global MCP config file:
+Add the following to your IDEs MCP configuration:
 
 ```json
 {
-  "mcpServers": {
-    "advanced-memory-bank-mcp": {
+  "KuzuMemo-MCP": {
       "command": "npx",
       "args": [
         "-y",
         "ts-node",
-        "/absolute_path/to/advanced-memory-tool/src/mcp-stdio-server.ts"
+        "/path_to_your_project/<repo_name>/src/mcp-stdio-server.ts" //or src/mcp-httpstream-server.ts
       ],
       "env": {
         "PORT": "3000",
-        "DB_CLIENT": "sqlite3",
-        "DB_FILENAME": "./memory-bank.sqlite",
-        "DEBUG": "0"
-      },
-      "transportType": "stdio"
+        "DB_CLIENT": "kuzu",
+        "DB_FILENAME": "./memory-bank.kuzu"
+      }
     }
-  }
 }
 ```
 
-- The `command` and `args` fields tell IDE how to start your MCP server process.
-- The `env` block configures environment variables for your server.
-- Adjust the `args` if your entry point is different (e.g., `dist/server.js` after build).
+![IDE MCP Configuration](docs/client_view.png)
 
-For more details, see the documentation of the IDE you use.
+## Usage
 
-#### 2. Agent Rules for IDE Integration
+### Starting the Servers for local testing
 
-The repository includes custom rules for different AI agent modes to optimize memory management:
+- **Main HTTP Server (for REST API & Batch MCP via per-tool endpoints):** (`src/app.ts` which uses `src/mcp/server.ts` for `/mcp/tools/...`)
 
-```text
-rules/
-├── .windsurf/rules/      # Rules for Windsurf AI
-│   └── advanced-memory-bank.md    # Memory bank usage guide
-└── .roo/                 # Rules for RooCode AI
-    ├── architect/        # Architecture mode instructions
-    ├── ask/              # Q&A mode instructions
-    ├── code/             # Coding mode instructions
-    └── debugger/         # Debugging mode instructions
-```
+  ```bash
+  npm start
+  ```
 
-These rules guide AI agents on when to:
+- **HTTP Streaming MCP Server (for MCP clients wanting SSE via unified `/mcp`):** (`src/mcp-httpstream-server.ts`)
 
-- Create different types of memories (decisions, components, contexts, rules)
-- Read from the memory bank to inform responses
-- Follow consistent naming conventions
-- Cross-reference between different memory types
+  ```bash
+  npx ts-node src/mcp-httpstream-server.ts
+  ```
 
-The rules are specialized for different AI operational modes to ensure appropriate memory management throughout the development lifecycle.
+- **stdio MCP Server (for direct IDE/Agent integration, supports streaming):** (`src/mcp-stdio-server.ts`)
 
-#### 3. Use MCP Server with the IDE
+  ```bash
+  npx ts-node src/mcp-stdio-server.ts
+  ```
 
-Once registered, the coding Agent can:
+## MCP Server Implementation
 
-- Query memories: `<IDE> memory list --server advanced-memory-bank-mcp`
-- Add new context, components, decisions, or rules via IDE's UI or CLI
-- Automatically integrate the memory bank into your agent workflows using the rules available in the repository.
+All server implementations support these MCP capabilities:
 
-### 3. Environment Variables
+- `initialize` - Protocol handshake and capability discovery.
+- `tools/list` - Discovery of available tools with full schema definitions.
+- `tools/call` (for stdio and the http-stream unified `/mcp` endpoint) - Execution of any listed tool, with support for `tools/progress` streaming from graph operations.
+- Dedicated HTTP POST endpoints for each tool (e.g., `/mcp/tools/<tool-name>`) in the main HTTP server (`src/app.ts` via `src/mcp/server.ts`) which are batch-oriented.
 
-Ensure your `.env` is configured for your database and server settings. Example:
+### Using the CLI
 
-```env
-DB_CLIENT=sqlite3
-DB_FILENAME=./memory-bank.sqlite
-PORT=3000
-HOST=localhost
-```
-
-### 4. Using the CLI
-
-The advanced-memory-bank-mcp tool provides a command-line interface for all operations:
+The CLI allows interaction with the memory bank. **Note**: CLI commands generally require `repository` and `id` (logical item ID) arguments, and often a `branch` option.
 
 ```bash
-# Initialize a memory bank for a repository
+# Initialize a memory bank for a repository (defaults to main branch)
 npm run cli init my-repo
 
-# Export memory bank to YAML files
-npm run cli export my-repo -o ./exported-memory
-
-# Import memory bank from YAML files
-npm run cli import my-repo ./some-file.yaml
-
-# Add to today's context
-npm run cli add-context my-repo -a "agent-name" -s "Summary" -d "New decision" -o "Observation"
-
-# Add a component
-npm run cli add-component my-repo comp-AuthService -n "AuthService" -k "service" -d "lib-JwtVerifier"
-
-# Add a decision
-npm run cli add-decision my-repo dec-20250510-pattern -n "Decision Name" -d "2025-05-10" -c "Context info"
-
-# Add a rule
-npm run cli add-rule my-repo rule-logging-v1 -n "Logging Rule" -c "2025-05-10" -t "trigger1,trigger2" -o "Rule content"
+# Example: Add a component
+npm run cli add-component my-repo comp-AuthService -n "AuthService" -k "service" -b "feature-branch"
 ```
 
-### 5. Using the API
+### Using the API (HTTP MCP Server - `src/mcp/server.ts`)
 
-The advanced-memory-bank-mcp tool provides a REST API for all operations:
+The primary way to interact with tools is via specific POST endpoints on the HTTP MCP server (default port 3000).
 
-#### Initialize a Memory Bank
+**Base URL**: `http://localhost:3000/tools`
 
-```http
-POST /api/memory/repositories/:repository/init
-```
+**Common Tool Parameters (in JSON request body)**:
 
-#### Metadata Operations
+- `repository`: string (repository name, e.g., "my-project")
+- `branch`: string (optional, defaults to "main"; specifies the branch context for the item)
+- `id`: string (the logical/user-defined ID for the item, e.g., "comp-auth", "my-rule-001")
 
-```http
-GET /api/memory/repositories/:repository/metadata
-PUT /api/memory/repositories/:repository/metadata
-```
+**Tool Endpoints (POST requests):**
 
-#### Context Operations
+- `/init-memory-bank` - Body: `{ "repository": "repo-name", "branch": "main" }`
+- `/get-metadata` - Body: `{ "repository": "repo-name", "branch": "main" }` (Metadata logical ID is implicitly "meta")
+- `/update-metadata` - Body: `{ "repository": "repo-name", "branch": "main", "metadata": { "project": { "name": "New Name" } } }`
+- `/get-context` - Body: `{ "repository": "repo-name", "branch": "main", "latest": true/false, "limit": 10 }`
+- `/update-context` - Body: `{ "repository": "repo-name", "branch": "main", "id": "context-YYYY-MM-DD", "summary": "...", ... }`
+- `/add-component` - Body: `{ "repository": "repo-name", "branch": "main", "id": "your-component-id", "name": "...", ... }`
+- `/add-decision` - Body: `{ "repository": "repo-name", "branch": "main", "id": "your-decision-id", "name": "...", ... }`
+- `/add-rule` - Body: `{ "repository": "repo-name", "branch": "main", "id": "your-rule-id", "name": "...", ... }`
 
-```http
-GET /api/memory/repositories/:repository/contexts/today
-PUT /api/memory/repositories/:repository/contexts/today
-GET /api/memory/repositories/:repository/contexts
-```
+- **Traversal & Graph Tools (parameters like `componentId`, `itemId`, `startNodeId` refer to the logical `id`):**
+  - `/get-component-dependencies` - Body: `{ "repository", "branch"?, "componentId" }`
+  - `/get-component-dependents` - Body: `{ "repository", "branch"?, "componentId" }`
+  - `/get-item-contextual-history` - Body: `{ "repository", "branch"?, "itemId", "itemType": ("Component"|"Decision"|"Rule") }`
+  - `/get-governing-items-for-component` - Body: `{ "repository", "branch"?, "componentId" }`
+  - `/get-related-items` - Body: `{ "repository", "branch"?, "startItemId", "params": { "relationshipTypes"?, "depth"?, "direction"? } }`
+  - `/shortest-path` - Body: `{ "repository", "branch"?, "startNodeId", "endNodeId", "params": { "relationshipTypes"?, "direction"? } }`
+  - `/k-core-decomposition` - Body: `{ "repository", "branch"?, "k"? }`
+  - `/louvain-community-detection` - Body: `{ "repository", "branch"? }`
+  - `/pagerank` - Body: `{ "repository", "branch"?, "dampingFactor"?, "iterations"? }`
+  - `/strongly-connected-components` - Body: `{ "repository", "branch"? }`
+  - `/weakly-connected-components` - Body: `{ "repository", "branch"? }`
 
-#### Component Operations
-
-```http
-PUT /api/memory/repositories/:repository/components/:id
-GET /api/memory/repositories/:repository/components
-```
-
-#### Decision Operations
-
-```http
-PUT /api/memory/repositories/:repository/decisions/:id
-GET /api/memory/repositories/:repository/decisions?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
-```
-
-#### Rule Operations
-
-```http
-PUT /api/memory/repositories/:repository/rules/:id
-GET /api/memory/repositories/:repository/rules
-```
-
-#### Export/Import Operations
-
-```http
-GET /api/memory/repositories/:repository/export
-POST /api/memory/repositories/:repository/import
-```
-
-### 6. Architecture
+## Architecture
 
 This project follows a clean architecture with separation of concerns:
 
-### 7. Database Layer
+### Database Layer
 
-Uses Knex.js to provide a database-agnostic interface with support for:
+- Uses **KùzuDB**, an embedded graph database.
+- Interaction via the `KuzuDBClient` which executes **Cypher** queries.
 
-- SQLite (default for simplicity)
-- PostgreSQL (for production environments)
+### Repository Layer
 
-### 8. Repository Layer
+Thread-safe singleton repositories for each memory type and core graph entities:
 
-Thread-safe singleton repositories for each memory type:
+- `RepositoryRepository` (for `Repository` nodes)
+- `MetadataRepository`
+- `ContextRepository`
+- `ComponentRepository` (also handles component-centric graph queries like dependencies, dependents, related items, shortest path, and placeholders for graph algorithms)
+- `DecisionRepository`
+- `RuleRepository`
 
-- RepositoryRepository
-- MetadataRepository
-- ContextRepository
-- ComponentRepository
-- DecisionRepository
-- RuleRepository
+### Memory Operations Layer (`src/services/memory-operations/`)
 
-### 9. Service Layer
+A new layer introduced to encapsulate specific business logic for groups of operations, called by `MemoryService`.
 
-- MemoryService - Core business logic for memory operations
-- YamlService - Serialization/deserialization of YAML content
+- `metadata.ops.ts`
+- `context.ops.ts`
+- `component.ops.ts` (includes new traversal ops)
+- `decision.ops.ts`
+- `rule.ops.ts`
+- `import-export.ops.ts`
+- `graph.ops.ts` (for graph algorithms and generic traversals)
 
-### 10. API Layer
+### Service Layer
 
-Express-based REST API with validation using Zod
+- `MemoryService` - Core business logic, now acts as an orchestrator, delegating to Memory Operations Layer functions. Manages repository instances.
 
-### 11. Database Schema
+### MCP Layer (`src/mcp/`)
 
-The Memory Bank system uses a relational database with the following structure:
-
-```mermaid
-erDiagram
-    repositories ||--o{ metadata : "contains"
-    repositories ||--o{ contexts : "contains"
-    repositories ||--o{ components : "contains"
-    repositories ||--o{ decisions : "contains"
-    repositories ||--o{ rules : "contains"
-
-    repositories {
-        int id PK
-        string name UK
-        timestamp created_at
-        timestamp updated_at
-    }
-
-    metadata {
-        int id PK
-        int repository_id FK
-        string yaml_id
-        json content
-        timestamp created_at
-        timestamp updated_at
-    }
-
-    contexts {
-        int id PK
-        int repository_id FK
-        string yaml_id
-        date iso_date
-        string agent
-        string related_issue
-        string summary
-        json decisions
-        json observations
-        timestamp created_at
-        timestamp updated_at
-    }
-
-    components {
-        int id PK
-        int repository_id FK
-        string yaml_id
-        string name
-        string kind
-        json depends_on
-        string status
-        timestamp created_at
-        timestamp updated_at
-    }
-
-    decisions {
-        int id PK
-        int repository_id FK
-        string yaml_id
-        string name
-        text context
-        date date
-        timestamp created_at
-        timestamp updated_at
-    }
-
-    rules {
-        int id PK
-        int repository_id FK
-        string yaml_id
-        string name
-        date created
-        json triggers
-        text content
-        string status
-        timestamp created_at
-        timestamp updated_at
-    }
-```
-
-### Schema Design
-
-The database schema follows these design principles:
-
-1. **Repository-centric structure** - All memory items belong to a repository
-2. **YAML-ID indexing** - Each memory item has a unique YAML ID within its repository
-3. **JSON content storage** - Complex structures are stored as JSON
-4. **Timestamped entities** - All records track creation and update times
-5. **Type-safe access** - The schema uses appropriate data types for each field
-
-### MCP Layer
-
-- **Tool Definitions** - Modular tool definitions with full MCP schema compatibility
-- **Server Implementations** - Both HTTP, HTTPStream and stdio-based servers for different integration types
-- **Protocol Compliance** - Full support for the MCP specification including resources and tools endpoints
+- **Tool Definitions (`src/mcp/tools/`)**: Modular tool definitions ([see details](src/mcp/tools/README.md)) with full MCP schema compatibility. Includes new graph and traversal tools.
+- **Tool Handlers (`src/mcp/tool-handlers.ts`)**: Centralized logic for executing any defined MCP tool, shared by different server implementations.
+- **Streaming Support Infrastructure (`src/mcp/streaming/`, `src/mcp/services/tool-execution.service.ts`)**:
+  - `progress-handler.ts`: Defines `ProgressHandler` and `ProgressTransport` interfaces for managing streaming.
+  - `stdio-transport.ts`: Implements `ProgressTransport` for stdio.
+  - `http-transport.ts`: Implements `ProgressTransport` for HTTP SSE.
+  - `tool-execution.service.ts`: Orchestrates tool calls with progress handling.
+  - `operations/`: Directory containing Operation Classes for streamable tools.
+- **Server Implementations**:
+  - `src/mcp/server.ts` (`MemoryMcpServer`): Provides MCP via Express.js with dedicated batch-oriented POST endpoints per tool (typically mounted under `/mcp/tools/...` by `src/app.ts`).
+  - `src/mcp-httpstream-server.ts`: Standalone HTTP server with a unified `/mcp` endpoint supporting Server-Sent Events (SSE) for streaming `tools/progress` and final responses.
+  - `src/mcp-stdio-server.ts`: Stdio-based server supporting both batch and streaming (`tools/progress`) responses for `tools/call`.
+- **Types (`src/mcp/types/`)**: Shared MCP type definitions (e.g., `McpTool`, `ToolHandler`).
 
 ### CLI Layer
 
-Commander-based CLI with async operation support
+Commander-based CLI with async operation support, interacting with `MemoryService`.
 
-## MCP Tool Structure
+## KùzuDB Graph Schema
 
-The MCP tools are organized in a modular directory structure:
+The memory bank uses a graph structure in KùzuDB. Refer to [Graph Schema](docs/graph-schema.md) for the detailed node and relationship definitions.
 
-```text
-src/mcp/
-├── types/
-│   └── index.ts           # MCP shared types
-├── tools/
-│   ├── index.ts           # Re-exports all tools
-│   ├── init-memory.ts     # Init memory bank tool
-│   ├── metadata-tools.ts  # get-metadata & update-metadata
-│   ├── context-tools.ts   # get-context & update-context
-│   ├── component-tool.ts  # add-component
-│   ├── decision-tool.ts   # add-decision
-│   ├── rule-tool.ts       # add-rule
-│   └── import-export.ts   # export-memory-bank & import-memory-bank
-└── index.ts               # Main entry point
-```
+Key aspects:
+
+- **Nodes**: `Repository`, `Metadata`, `Context`, `Component`, `Decision`, `Rule`.
+- **Primary Keys**: `Repository` nodes use `id` (format: `name:branch`). Other entities (`Metadata`, `Context`, `Component`, `Decision`, `Rule`) use a `graph_unique_id` (format: `repositoryName:itemBranch:logicalId`) as their `PRIMARY KEY` to ensure uniqueness across repositories and branches. They also store their logical `id` and `branch` as separate properties.
+- **Relationships**: Various `HAS_...` and semantic relationships like `DEPENDS_ON`, `CONTEXT_OF`, etc., link these nodes.
 
 ## License
 
@@ -435,117 +238,10 @@ MIT
 
 Please read the contributing guidelines before submitting a pull request.
 
-## Table Schema Definitions
-
-This section provides detailed information about the database tables used in the Memory Bank system.
-
-### Table: repositories
-
-The central table that stores information about each repository.
-
-| Column | Type | Constraints | Description |
-| ------ | ---- | ----------- | ----------- |
-| id | INTEGER | PRIMARY KEY | Unique identifier for the repository |
-| name | TEXT | NOT NULL, UNIQUE | Name of the repository |
-| created_at | TIMESTAMP | DEFAULT NOW() | When the repository was created |
-| updated_at | TIMESTAMP | DEFAULT NOW() | When the repository was last updated |
-
-### Table: metadata
-
-Stores metadata information associated with repositories.
-
-| Column | Type | Constraints | Description |
-| ------ | ---- | ----------- | ----------- |
-| id | INTEGER | PRIMARY KEY | Unique identifier for the metadata |
-| repository_id | INTEGER | NOT NULL, FOREIGN KEY | Reference to the repository |
-| yaml_id | TEXT | NOT NULL | Identifier in the YAML structure |
-| content | JSON | NOT NULL | Structured metadata content |
-| created_at | TIMESTAMP | DEFAULT NOW() | When the metadata was created |
-| updated_at | TIMESTAMP | DEFAULT NOW() | When the metadata was last updated |
-
-Unique constraint: (repository_id, yaml_id)
-
-### Table: contexts
-
-Stores context information, typically associated with a specific date.
-
-| Column | Type | Constraints | Description |
-| ------ | ---- | ----------- | ----------- |
-| id | INTEGER | PRIMARY KEY | Unique identifier for the context |
-| repository_id | INTEGER | NOT NULL, FOREIGN KEY | Reference to the repository |
-| yaml_id | TEXT | NOT NULL | Identifier in the YAML structure |
-| iso_date | DATE | NOT NULL | Date associated with the context |
-| agent | TEXT | NULL | Agent that generated the context |
-| related_issue | TEXT | NULL | Issue reference related to the context |
-| summary | TEXT | NULL | Summary of the context |
-| decisions | JSON | NULL | Array of decisions made |
-| observations | JSON | NULL | Array of observations made |
-| created_at | TIMESTAMP | DEFAULT NOW() | When the context was created |
-| updated_at | TIMESTAMP | DEFAULT NOW() | When the context was last updated |
-
-Unique constraint: (repository_id, yaml_id)
-Index: iso_date
-
-### Table: components
-
-Stores architectural component information.
-
-| Column | Type | Constraints | Description |
-| ------ | ---- | ----------- | ----------- |
-| id | INTEGER | PRIMARY KEY | Unique identifier for the component |
-| repository_id | INTEGER | NOT NULL, FOREIGN KEY | Reference to the repository |
-| yaml_id | TEXT | NOT NULL | Identifier in the YAML structure |
-| name | TEXT | NOT NULL | Name of the component |
-| kind | TEXT | NULL | Type/kind of the component |
-| depends_on | JSON | NULL | Array of dependencies |
-| status | TEXT | DEFAULT 'active' | Status of the component |
-| created_at | TIMESTAMP | DEFAULT NOW() | When the component was created |
-| updated_at | TIMESTAMP | DEFAULT NOW() | When the component was last updated |
-
-Unique constraint: (repository_id, yaml_id)
-
-### Table: decisions
-
-Stores architectural decision records.
-
-| Column | Type | Constraints | Description |
-| ------ | ---- | ----------- | ----------- |
-| id | INTEGER | PRIMARY KEY | Unique identifier for the decision |
-| repository_id | INTEGER | NOT NULL, FOREIGN KEY | Reference to the repository |
-| yaml_id | TEXT | NOT NULL | Identifier in the YAML structure |
-| name | TEXT | NOT NULL | Name/title of the decision |
-| context | TEXT | NULL | Context surrounding the decision |
-| date | DATE | NOT NULL | Date when the decision was made |
-| created_at | TIMESTAMP | DEFAULT NOW() | When the decision was created |
-| updated_at | TIMESTAMP | DEFAULT NOW() | When the decision was last updated |
-
-Unique constraint: (repository_id, yaml_id)
-
-### Table: rules
-
-Stores agent rules and guidelines.
-
-| Column | Type | Constraints | Description |
-| ------ | ---- | ----------- | ----------- |
-| id | INTEGER | PRIMARY KEY | Unique identifier for the rule |
-| repository_id | INTEGER | NOT NULL, FOREIGN KEY | Reference to the repository |
-| yaml_id | TEXT | NOT NULL | Identifier in the YAML structure |
-| name | TEXT | NOT NULL | Name/title of the rule |
-| created | DATE | NOT NULL | Date when the rule was created |
-| triggers | JSON | NULL | Array of events that triggered the rule |
-| content | TEXT | NULL | The actual rule content/description |
-| status | TEXT | DEFAULT 'active' | Status of the rule |
-| created_at | TIMESTAMP | DEFAULT NOW() | When the rule record was created |
-| updated_at | TIMESTAMP | DEFAULT NOW() | When the rule record was last updated |
-
-Unique constraint: (repository_id, yaml_id)
-
-### Relationships
-
-- All tables have a foreign key relationship to `repositories(id)` with `ON DELETE CASCADE` behavior
-- Each entity type (metadata, context, component, decision, rule) has a unique constraint on `(repository_id, yaml_id)` to prevent duplicates
-- The `contexts` table has an additional index on `iso_date` to optimize date-based queries
-
 ## Future Improvements
 
-Add support for GraphLayer in the SQLite database to create proper graph representation of the memories.
+- **Enhance CLI** to support branch selection for all relevant commands more explicitly.
+- **Refine Graph Algorithm Streaming**: Further refactor `MemoryService` and Kùzu calls within Operation Classes to provide more granular progress for algorithms where KùzuDB allows iterative result yielding.
+- **Add Full-Text Search (FTS) Capabilities** - Planned implementation to enable efficient keyword-based search across all memory items using KùzuDB's FTS extension.
+- **Vector Embeddings Support** - Planned implementation; would enable semantic similarity search and NLP-based memory retrieval using KùzuDB's vector capabilities.
+- **Official TypeScript MCP SDK Migration** - Consider migrating to the official TypeScript MCP SDK to benefit from the latest features and community support, now that foundational understanding of the protocol is established.

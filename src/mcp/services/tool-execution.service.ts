@@ -1,0 +1,85 @@
+import { ToolHandler } from '../types';
+import { MemoryService } from '../../services/memory.service';
+import { ProgressHandler } from '../streaming/progress-handler';
+
+/**
+ * Singleton service for executing tools with progress support
+ */
+export class ToolExecutionService {
+  private static instance: ToolExecutionService;
+  private memoryService: MemoryService | null = null;
+
+  private constructor() {}
+
+  /**
+   * Get the singleton instance of ToolExecutionService
+   */
+  public static async getInstance(): Promise<ToolExecutionService> {
+    if (!ToolExecutionService.instance) {
+      ToolExecutionService.instance = new ToolExecutionService();
+    }
+    return ToolExecutionService.instance;
+  }
+
+  /**
+   * Initialize the memory service if not already initialized
+   */
+  private async ensureMemoryService(): Promise<MemoryService> {
+    if (!this.memoryService) {
+      this.memoryService = await MemoryService.getInstance();
+    }
+    return this.memoryService;
+  }
+
+  /**
+   * Execute a tool with progress support
+   */
+  public async executeTool(
+    toolName: string,
+    toolArgs: any,
+    toolHandlers: Record<string, ToolHandler>,
+    progressHandler?: ProgressHandler,
+    debugLog?: (level: number, message: string, data?: any) => void,
+  ): Promise<any> {
+    const memoryService = await this.ensureMemoryService();
+
+    try {
+      const handler = toolHandlers[toolName];
+      if (!handler) {
+        const errorMsg = `Tool execution handler not implemented for '${toolName}'.`;
+        if (progressHandler) {
+          // For unhandled tool, send error via both progress and final response
+          const errorPayload = { error: errorMsg };
+          progressHandler.sendFinalProgress(errorPayload);
+          progressHandler.sendFinalResponse(errorPayload, true);
+          return null;
+        }
+        return { error: errorMsg }; // Batch error response
+      }
+
+      // Execute the tool handler with progress support
+      // The handler is now responsible for calling sendFinalProgress and sendFinalResponse
+      // and returning null if it used the progressHandler.
+      return await handler(toolArgs, memoryService, progressHandler);
+    } catch (err: any) {
+      const errorMsg = `Error executing tool '${toolName}': ${err.message || String(err)}`;
+      if (debugLog) {
+        debugLog(0, errorMsg, err.stack);
+      } else {
+        console.error(errorMsg, err.stack);
+      }
+
+      if (progressHandler) {
+        // If an error is thrown from the handler (or OperationClass it calls),
+        // and a progressHandler exists, use it to send final error messages.
+        const errorPayload = { error: errorMsg }; // This is for the batch response part
+        const progressErrorPayload = { error: errorMsg, status: 'error' }; // This can be richer for the progress notification
+        progressHandler.sendFinalProgress(progressErrorPayload);
+        progressHandler.sendFinalResponse(errorPayload, true);
+        return null; // Signal that error was handled via progress mechanism
+      }
+      // If no progressHandler, return error as a batch response
+      return { error: errorMsg };
+    }
+  }
+}

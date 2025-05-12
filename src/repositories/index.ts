@@ -11,5 +11,5 @@ export {
   ContextRepository,
   ComponentRepository,
   DecisionRepository,
-  RuleRepository
+  RuleRepository,
 };

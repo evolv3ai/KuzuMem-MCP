@@ -2,34 +2,38 @@ import { McpTool } from '../types';
 
 /**
  * Get Metadata Tool
- * Used to retrieve metadata for a repository
+ * Used to retrieve metadata for a repository (branch-aware for KuzuDB)
  */
 export const getMetadataTool: McpTool = {
-  name: "get-metadata",
-  description: "Get metadata for a repository",
+  name: 'get-metadata',
+  description: 'Get metadata for a repository',
   parameters: {
-    type: "object",
+    type: 'object',
     properties: {
       repository: {
-        type: "string",
-        description: "Repository name",
+        type: 'string',
+        description: 'Repository name',
+      },
+      branch: {
+        type: 'string',
+        description: "Repository branch (defaults to 'main')",
       },
     },
-    required: ["repository"],
+    required: ['repository', 'branch'],
   },
   annotations: {
-    title: "Get Metadata",
+    title: 'Get Metadata',
     readOnlyHint: true,
     destructiveHint: false,
     idempotentHint: true,
     openWorldHint: false,
   },
   returns: {
-    type: "object",
+    type: 'object',
     properties: {
       metadata: {
-        type: "object",
-        description: "Metadata content",
+        type: 'object',
+        description: 'Metadata content',
       },
     },
   },
@@ -37,42 +41,46 @@ export const getMetadataTool: McpTool = {
 
 /**
  * Update Metadata Tool
- * Used to update metadata for a repository
+ * Used to update metadata for a repository (branch-aware for KuzuDB)
  */
 export const updateMetadataTool: McpTool = {
-  name: "update-metadata",
-  description: "Update metadata for a repository",
+  name: 'update-metadata',
+  description: 'Update metadata for a repository',
   parameters: {
-    type: "object",
+    type: 'object',
     properties: {
       repository: {
-        type: "string",
-        description: "Repository name",
+        type: 'string',
+        description: 'Repository name',
+      },
+      branch: {
+        type: 'string',
+        description: "Repository branch (defaults to 'main')",
       },
       metadata: {
-        type: "object",
-        description: "Metadata content to update",
+        type: 'object',
+        description: 'Metadata content to update',
       },
     },
-    required: ["repository", "metadata"],
+    required: ['repository', 'branch', 'metadata'],
   },
   annotations: {
-    title: "Update Metadata",
+    title: 'Update Metadata',
     readOnlyHint: false,
     destructiveHint: true,
     idempotentHint: true,
     openWorldHint: false,
   },
   returns: {
-    type: "object",
+    type: 'object',
     properties: {
       success: {
-        type: "boolean",
-        description: "Whether the update was successful",
+        type: 'boolean',
+        description: 'Whether the update was successful',
       },
       metadata: {
-        type: "object",
-        description: "Updated metadata content",
+        type: 'object',
+        description: 'Updated metadata content',
       },
     },
   },

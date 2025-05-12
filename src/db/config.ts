@@ -1,5 +1,3 @@
-import knex from 'knex';
-import type { Knex } from 'knex';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
@@ -7,55 +5,51 @@ import fs from 'fs';
 // Load environment variables
 dotenv.config();
 
-// Default to SQLite if not specified
-const client = process.env.DB_CLIENT || 'sqlite3';
+/**
+ * KuzuDB Configuration
+ * Simple configuration for KuzuDB database path
+ */
 
-// Define a consistent absolute path for the database file
+// Define a consistent absolute path for the KuzuDB database file
 // This ensures the same path is used regardless of how the application is run
-let dbFilename = process.env.DB_FILENAME || 'memory-bank.sqlite';
+
+// Use DB_FILENAME as the primary environment variable, falling back to KUZU_DB_PATH, then a default.
+let dbPath = process.env.DB_FILENAME || process.env.KUZU_DB_PATH || 'memory-bank.kuzu';
 
 // Convert to absolute path if relative
-if (!path.isAbsolute(dbFilename)) {
+if (!path.isAbsolute(dbPath)) {
   // Always use the project root directory as base
   const projectRoot = path.resolve(__dirname, '../..');
-  dbFilename = path.join(projectRoot, dbFilename);
+  dbPath = path.join(projectRoot, dbPath);
 }
 
-// Store the resolved path back in environment variables for consistency
-process.env.DB_FILENAME = dbFilename;
+// Store the resolved path back in DB_FILENAME for consistency if it was set via KUZU_DB_PATH or default
+if (process.env.DB_FILENAME !== dbPath) {
+  process.env.DB_FILENAME = dbPath;
+}
+// Also update KUZU_DB_PATH for any part of the code that might still use it, though DB_FILENAME is preferred now.
+if (process.env.KUZU_DB_PATH !== dbPath) {
+  process.env.KUZU_DB_PATH = dbPath;
+}
 
 // Ensure database directory exists
-if (client === 'sqlite3') {
-  const dbDir = path.dirname(dbFilename);
-  
-  // Create directory if it doesn't exist
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
-    console.log(`Created database directory: ${dbDir}`);
-  }
-  
-  // Log the database path for debugging
-  console.log(`Using SQLite database at: ${dbFilename}`);
+const dbDir = path.dirname(dbPath);
+
+// Create directory if it doesn't exist
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+  console.log(`Created KuzuDB directory: ${dbDir}`);
 }
 
-const config: Knex.Config = {
-  client,
-  connection: client === 'sqlite3' 
-    ? {
-        filename: dbFilename
-      }
-    : {
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT || '5432'),
-        user: process.env.DB_USER || 'postgres',
-        password: process.env.DB_PASSWORD || 'password',
-        database: process.env.DB_NAME || 'memory_bank',
-      },
-  migrations: {
-    tableName: 'knex_migrations',
-    directory: path.join(__dirname, 'migrations'),
-  },
-  useNullAsDefault: client === 'sqlite3',
+// Log the database path for debugging
+console.log(`Using KuzuDB database at: ${dbPath}`);
+
+/**
+ * KuzuDB configuration object
+ */
+const config = {
+  dbPath,
+  // Add any additional KuzuDB configuration properties here if needed
 };
 
 export default config;

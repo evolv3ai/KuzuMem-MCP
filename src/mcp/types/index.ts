@@ -4,6 +4,9 @@
  * See: https://modelcontextprotocol.io
  */
 
+import { ProgressHandler } from '../streaming/progress-handler';
+import { MemoryService } from '../../services/memory.service';
+
 /**
  * MCP Tool Interface
  * Base interface for all MCP tools
@@ -56,3 +59,12 @@ export interface McpServerMetadata {
   description: string;
   tools: string[];
 }
+
+/**
+ * Tool handler function signature with progress support
+ */
+export type ToolHandler = (
+  args: unknown,
+  memoryService: MemoryService,
+  progressHandler?: ProgressHandler,
+) => Promise<unknown>;

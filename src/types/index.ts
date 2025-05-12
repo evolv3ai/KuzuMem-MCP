@@ -2,37 +2,43 @@ import { z } from 'zod';
 
 // Base entity type
 export interface BaseEntity {
-  id?: number;
-  repository_id: number;
-  yaml_id: string;
+  id: string;
   created_at?: Date;
   updated_at?: Date;
+  repository: string;
+  branch: string;
 }
 
 // Repository type
 export interface Repository {
-  id?: number;
+  id: string;
   name: string;
+  branch: string;
   created_at?: Date;
   updated_at?: Date;
 }
 
 // Metadata type
 export interface Metadata extends BaseEntity {
+  name: string;
   content: {
     id: string;
     project: {
       name: string;
       created: string;
+      description?: string;
     };
     tech_stack: Record<string, string>;
     architecture: string;
     memory_spec_version: string;
   };
+  created_at?: Date;
+  updated_at?: Date;
 }
 
 // Context type
 export interface Context extends BaseEntity {
+  name: string;
   iso_date: string;
   agent?: string;
   related_issue?: string;
@@ -47,6 +53,19 @@ export interface Component extends BaseEntity {
   kind?: string;
   depends_on?: string[];
   status: 'active' | 'deprecated' | 'planned';
+}
+
+// Explicitly export ComponentStatus for use in ComponentInput and elsewhere
+export type ComponentStatus = 'active' | 'deprecated' | 'planned';
+
+export interface ComponentInput {
+  id: string;
+  name: string;
+  branch?: string;
+  kind?: string;
+  status: ComponentStatus;
+  content?: string | Record<string, any> | null;
+  depends_on?: string[] | null;
 }
 
 // Decision type
@@ -74,15 +93,20 @@ export type MemoryItem = Metadata | Context | Component | Decision | Rule;
 // Zod schemas for validation
 export const repositorySchema = z.object({
   name: z.string().min(1),
+  branch: z.string().min(1),
 });
 
 export const metadataSchema = z.object({
-  yaml_id: z.string().min(1),
+  id: z.string().min(1),
+  repository: z.string().min(1),
+  branch: z.string().min(1),
+  name: z.string().min(1),
   content: z.object({
     id: z.string().min(1),
     project: z.object({
       name: z.string().min(1),
       created: z.string(),
+      description: z.string().optional(),
     }),
     tech_stack: z.record(z.string()),
     architecture: z.string(),
@@ -91,7 +115,10 @@ export const metadataSchema = z.object({
 });
 
 export const contextSchema = z.object({
-  yaml_id: z.string().min(1),
+  id: z.string().min(1),
+  repository: z.string().min(1),
+  branch: z.string().min(1),
+  name: z.string().min(1),
   iso_date: z.string(),
   agent: z.string().optional(),
   related_issue: z.string().optional(),
@@ -101,7 +128,9 @@ export const contextSchema = z.object({
 });
 
 export const componentSchema = z.object({
-  yaml_id: z.string().min(1),
+  id: z.string().min(1),
+  repository: z.string().min(1),
+  branch: z.string().min(1),
   name: z.string().min(1),
   kind: z.string().optional(),
   depends_on: z.array(z.string()).optional(),
@@ -109,14 +138,18 @@ export const componentSchema = z.object({
 });
 
 export const decisionSchema = z.object({
-  yaml_id: z.string().min(1),
+  id: z.string().min(1),
+  repository: z.string().min(1),
+  branch: z.string().min(1),
   name: z.string().min(1),
   context: z.string().optional(),
   date: z.string(),
 });
 
 export const ruleSchema = z.object({
-  yaml_id: z.string().min(1),
+  id: z.string().min(1),
+  repository: z.string().min(1),
+  branch: z.string().min(1),
   name: z.string().min(1),
   created: z.string(),
   triggers: z.array(z.string()).optional(),

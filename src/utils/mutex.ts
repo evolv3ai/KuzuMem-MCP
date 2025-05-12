@@ -9,24 +9,24 @@ export class Mutex {
   async acquire(): Promise<() => void> {
     // Create a new promise that will be resolved when the lock is released
     let releaseFunction: () => void;
-    
+
     // Wait for any previous lock to be released
     const waitForPreviousLock = this._locking.then(() => {
       this._locked = true;
     });
-    
+
     // Set up the next lock
     let resolver: () => void;
-    this._locking = new Promise<void>(resolve => {
+    this._locking = new Promise<void>((resolve) => {
       resolver = resolve;
     });
-    
+
     // Create release function
     releaseFunction = () => {
       this._locked = false;
       resolver();
     };
-    
+
     // Wait for previous lock and return the release function
     await waitForPreviousLock;
     return releaseFunction;
