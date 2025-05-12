@@ -14,6 +14,8 @@ build/
 !jest.config.js
 !examples/*.js
 !scripts/init-db-direct.js
+!.eslintrc.js
+!.prettierrc.js
 
 # Environment variables
 .env
@@ -65,16 +67,12 @@ temp/
 .rollup.cache/
 .cache/
 
-# Memory bank YAML exports
-exports/
-memory-exports/
-
 # Debug files
 .debug/
 debug/
 
-# Memory Bank database file
-memory-bank.sqlite
-
 # Task Master AI MCP Tool
 tasks/
+
+# KuzuDB
+*.kuzu/

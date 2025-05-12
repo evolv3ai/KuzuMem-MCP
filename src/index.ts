@@ -1,4 +1,8 @@
 import { startServer } from './app';
+import { initializeKuzuDB } from './db/kuzu';
 
-// Start the server
-startServer();
+// Ensure KuzuDB schema is created before server starts
+(async () => {
+  await initializeKuzuDB();
+  startServer();
+})();

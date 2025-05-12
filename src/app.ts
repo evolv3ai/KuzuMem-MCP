@@ -31,7 +31,7 @@ const initializeMcpServer = async (): Promise<void> => {
   try {
     const mcpServer = new MemoryMcpServer();
     const mcpRouter = await mcpServer.initialize();
-    
+
     // Mount MCP server at /mcp endpoint
     app.use('/mcp', mcpRouter);
     console.log('MCP server initialized successfully');
@@ -43,12 +43,9 @@ const initializeMcpServer = async (): Promise<void> => {
 // Start server
 const startServer = async () => {
   try {
-    // Run migrations
-    await db.migrate.latest();
-    
-    // Initialize MCP server
+    // Initialize MCP server (KuzuDB handles schema dynamically)
     await initializeMcpServer();
-    
+
     app.listen(port, () => {
       console.log(`Memory Bank MCP server running at http://${host}:${port}`);
       console.log(`MCP endpoints available at http://${host}:${port}/mcp`);

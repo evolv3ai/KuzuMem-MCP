@@ -2,62 +2,66 @@ import { McpTool } from '../types';
 
 /**
  * Add Component Tool
- * Used to add a component to a repository
+ * Used to add a component to a repository (branch-aware for KuzuDB)
  */
 export const addComponentTool: McpTool = {
-  name: "add-component",
+  name: 'add-component',
   description: "Add a new component to a repository's memory bank",
   parameters: {
-    type: "object",
+    type: 'object',
     properties: {
       repository: {
-        type: "string",
-        description: "Repository name",
+        type: 'string',
+        description: 'Repository name',
+      },
+      branch: {
+        type: 'string',
+        description: "Repository branch (defaults to 'main')",
       },
       id: {
-        type: "string",
-        description: "Component ID",
+        type: 'string',
+        description: 'Component ID',
       },
       name: {
-        type: "string",
-        description: "Component name",
+        type: 'string',
+        description: 'Component name',
       },
       kind: {
-        type: "string",
-        description: "Component kind",
+        type: 'string',
+        description: 'Component kind',
       },
       depends_on: {
-        type: "array",
-        description: "Component dependencies",
+        type: 'array',
+        description: 'Component dependencies',
         items: {
-          type: "string",
+          type: 'string',
         },
       },
       status: {
-        type: "string",
-        description: "Component status",
-        enum: ["active", "deprecated", "planned"],
+        type: 'string',
+        description: 'Component status',
+        enum: ['active', 'deprecated', 'planned'],
       },
     },
-    required: ["repository", "id", "name"],
+    required: ['repository', 'branch', 'id', 'name'],
   },
   annotations: {
-    title: "Add Component",
+    title: 'Add Component',
     readOnlyHint: false,
     destructiveHint: false,
     idempotentHint: false,
     openWorldHint: false,
   },
   returns: {
-    type: "object",
+    type: 'object',
     properties: {
       success: {
-        type: "boolean",
-        description: "Whether the operation was successful",
+        type: 'boolean',
+        description: 'Whether the operation was successful',
       },
       component: {
-        type: "object",
-        description: "Added component content",
+        type: 'object',
+        description: 'Added component content',
       },
     },
   },
