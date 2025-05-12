@@ -1,16 +1,16 @@
 ---
 description: This rule is used to guide the agent on how to use the Advanced Memory Bank MCP Server
 globs: 
-alwaysOn: true
+alwaysApply: false
 ---
 
-# Advanced Memory Bank MCP Server: Agent Usage Guide
+# KuzuMem-MCP: Agent Usage Guide
 
-This guide provides recommendations for AI agents to effectively use the Advanced Memory Bank MCP tools during coding assistance sessions.
+This guide provides recommendations for AI agents to effectively use the KuzuMem-MCP tools during coding assistance sessions.
 
 ## Memory Model Overview
 
-The Advanced Memory Bank uses a graph-based knowledge model with these entity types:
+The KuzuMem-MCP uses a graph-based knowledge model with these entity types:
 
 1. **Repository**: Root container for all project knowledge, isolated by branches
 2. **Metadata**: Global project information (description, technologies, etc.)
@@ -276,7 +276,7 @@ For long-running graph operations (PageRank, community detection, etc.):
 
 ## Conclusion
 
-The Advanced Memory Bank enables AI agents to maintain persistent knowledge across user sessions, resulting in more consistent, coherent, and contextually appropriate assistance. Use these tools to:
+The KuzuMem-MCP enables AI agents to maintain persistent knowledge across user sessions, resulting in more consistent, coherent, and contextually appropriate assistance. Use these tools to:
 
 1. Build a structured knowledge graph of the project
 2. Analyze system architecture using graph algorithms
