@@ -4,16 +4,17 @@
  * Based on the TypeScript SDK: https://github.com/modelcontextprotocol/typescript-sdk
  */
 
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
-import { MemoryService } from './services/memory.service';
+import { toolHandlers } from './mcp/tool-handlers';
+import { createProgressHandler, ProgressHandler } from './mcp/streaming/progress-handler';
+import { HttpStreamingProgressTransport } from './mcp/streaming/http-transport';
+import { ToolExecutionService } from './mcp/services/tool-execution.service';
 
 // Extend Express Request interface to include our custom properties using ES2015 module augmentation
-import type { Request as ExpressRequest } from 'express';
-
 declare module 'express-serve-static-core' {
   interface Request {
     requestId?: string;
@@ -70,7 +71,7 @@ function log(level: LogLevel, message: string, data?: any, requestId?: string): 
 }
 
 // Legacy debug logger for backward compatibility
-function debugLog(level: number, message: string, data?: any): void {
+function debugLog(level: number, message: string, data?: any, reqId?: string): void {
   const logLevel =
     level === 0
       ? LogLevel.ERROR
@@ -82,7 +83,7 @@ function debugLog(level: number, message: string, data?: any): void {
             ? LogLevel.DEBUG
             : LogLevel.TRACE;
 
-  log(logLevel, message, data);
+  log(logLevel, message, data, reqId);
 }
 
 // Helper for tool errors
@@ -162,8 +163,10 @@ export async function configureServer(app: express.Application): Promise<void> {
   });
 
   // MCP protocol version negotiation
-  app.post('/initialize', (req, res) => {
+  app.post('/initialize', (req: Request, res: Response) => {
     const requestedVersion = req.body?.protocolVersion || '0.1';
+    const requestId = req.body?.id || null;
+
     log(
       LogLevel.INFO,
       `Received initialize request with protocolVersion: ${requestedVersion}`,
@@ -172,14 +175,18 @@ export async function configureServer(app: express.Application): Promise<void> {
     );
 
     res.json({
-      protocolVersion: requestedVersion,
-      capabilities: {
-        memory: { list: true },
-        tools: { list: true, call: true },
-      },
-      serverInfo: {
-        name: 'memory-bank-mcp',
-        version: '1.0.0',
+      jsonrpc: '2.0',
+      id: requestId,
+      result: {
+        protocolVersion: requestedVersion,
+        capabilities: {
+          memory: { list: true },
+          tools: { list: true, call: true },
+        },
+        serverInfo: {
+          name: 'KuzuMem-MCP',
+          version: '1.0.0',
+        },
       },
     });
   });
@@ -231,237 +238,223 @@ export async function configureServer(app: express.Application): Promise<void> {
   });
 
   // MCP-compliant unified /mcp endpoint
-  app.post('/mcp', async (req, res) => {
-    // Validate Origin header (DNS rebinding protection)
-    const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost').split(',');
-    const origin = req.get('Origin');
-    if (!origin || !allowedOrigins.includes(origin)) {
-      log(LogLevel.WARN, `Rejected connection due to invalid Origin: ${origin}`, {}, req.requestId);
-      res.status(403).json({ error: 'Forbidden: Invalid Origin header' });
-      return;
-    }
-
-    const sessionId = req.get('Mcp-Session-Id');
+  app.post('/mcp', async (req: Request, res: Response, next: NextFunction) => {
+    const wantsSSE = req.get('Accept')?.includes('text/event-stream');
     const body = req.body;
-    log(LogLevel.INFO, `Received /mcp POST`, body, req.requestId);
-
-    // Batch support
     const isBatch = Array.isArray(body);
     const messages = isBatch ? body : [body];
-    const responses: any[] = [];
+    const requestContextId = req.requestId;
 
-    // Handle POST: notifications/responses only
+    // Early exit for notifications/responses from client
     const onlyNotificationsOrResponses = messages.every((msg) => !msg.method);
     if (onlyNotificationsOrResponses) {
-      // Accept and return 202
       res.status(202).end();
       return;
     }
 
-    // If any requests, respond with SSE or JSON
-    const wantsSSE = req.get('Accept') && req.get('Accept')!.includes('text/event-stream');
     if (wantsSSE) {
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
-      let eventCounter = 0;
-      const sendEvent = (event: string, data: any) => {
-        const eventId = `${Date.now()}-${eventCounter++}`;
-        res.write(`id: ${eventId}\n`);
-        res.write(`event: ${event}\n`);
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
-      };
-      const lastEventId = req.get('Last-Event-ID');
-      if (lastEventId) {
-        log(
-          LogLevel.INFO,
-          `Client requested stream resume from Last-Event-ID: ${lastEventId}`,
-          {},
-          req.requestId,
-        );
-        // TODO: Implement replay logic if required
-      }
-      try {
-        const memoryService = await MemoryService.getInstance();
-        for (const msg of messages) {
-          // Strict JSON-RPC 2.0 validation
-          if (!msg || msg.jsonrpc !== '2.0' || !msg.method) {
-            sendEvent('error', {
-              code: -32600,
-              message: 'Invalid Request: Must be JSON-RPC 2.0 with method',
-              id: msg && msg.id !== undefined ? msg.id : null,
-            });
-            continue;
-          }
-          // Dispatch tool/resource logic by method
-          const { method, id } = msg;
-          const params = msg.params || {};
-          params.branch = params.branch ?? 'main';
-          let result, error;
+
+      // For batch requests in SSE, we process each message and send its events.
+      // The connection will be held open until all messages are processed.
+      let clientDisconnected = false;
+      req.on('close', () => {
+        clientDisconnected = true;
+        log(LogLevel.INFO, 'Client disconnected from SSE stream', {}, requestContextId);
+      });
+
+      for (const msg of messages) {
+        if (clientDisconnected) {
+          log(
+            LogLevel.INFO,
+            'SSE Client disconnected during batch processing, aborting further messages.',
+            { msgId: msg.id },
+            requestContextId,
+          );
+          break;
+        }
+
+        const currentMessageId = msg.id || crypto.randomUUID();
+        const wrappedDebugLog = (level: number, messageText: string, data?: any) => {
+          const internalLogLevel =
+            level === 0
+              ? LogLevel.ERROR
+              : level === 1
+                ? LogLevel.WARN
+                : level === 2
+                  ? LogLevel.INFO
+                  : level === 3
+                    ? LogLevel.DEBUG
+                    : LogLevel.TRACE;
+          log(internalLogLevel, messageText, data, requestContextId);
+        };
+
+        if (msg.method === 'tools/call' && msg.params?.name) {
+          const toolName = msg.params.name;
+          const toolArgs = msg.params.arguments || {};
+
+          const streamingTransport = new HttpStreamingProgressTransport(res, wrappedDebugLog);
+          const progressHandler = createProgressHandler(currentMessageId, streamingTransport);
+
+          log(
+            LogLevel.DEBUG,
+            `Processing tools/call for ${toolName} via SSE`,
+            { toolArgs },
+            requestContextId,
+          );
+
           try {
-            switch (method) {
-              case 'init-memory-bank':
-                if (!params || !params.repository) {
-                  throw new Error('Missing repository parameter');
-                }
-                await memoryService.initMemoryBank(params.repository, params.branch);
-                result = { success: true };
-                break;
-              case 'get-metadata':
-                if (!params || !params.repository) {
-                  throw new Error('Missing repository parameter');
-                }
-                result = await memoryService.getMetadata(params.repository, params.branch);
-                break;
-              case 'get-context':
-                if (!params || !params.repository) {
-                  throw new Error('Missing repository parameter');
-                }
-                if (params.latest) {
-                  const ctx = await memoryService.getLatestContexts(
-                    params.repository,
-                    params.branch,
-                    1,
-                  );
-                  result = { context: ctx };
-                } else {
-                  const ctx = await memoryService.getLatestContexts(
-                    params.repository,
-                    params.branch,
-                    params.limit || 10,
-                  );
-                  result = { context: ctx };
-                }
-                break;
-              case 'update-context':
-                if (!params || !params.repository) {
-                  throw new Error('Missing repository parameter');
-                }
-                result = await memoryService.updateTodayContext(
-                  params.repository,
-                  {
-                    agent: params.agent,
-                    related_issue: params.issue,
-                    summary: params.summary,
-                    decisions: params.decision ? [params.decision] : undefined,
-                    observations: params.observation ? [params.observation] : undefined,
-                  },
-                  params.branch,
+            const toolExecutionService = await ToolExecutionService.getInstance();
+            const toolResult = await toolExecutionService.executeTool(
+              toolName,
+              toolArgs,
+              toolHandlers,
+              progressHandler,
+              wrappedDebugLog,
+            );
+
+            if (toolResult !== null) {
+              const isError = !!toolResult?.error;
+              if (isBatch) {
+                log(
+                  LogLevel.WARN,
+                  'Batch SSE processing note: HttpStreamingProgressTransport will end response after first handled message.',
+                  { msgId: currentMessageId },
+                  requestContextId,
                 );
-                if (!result) {
-                  throw new Error(
-                    `Failed to update context for repository ${params.repository} (branch: ${params.branch})`,
-                  );
-                }
-                result = { success: true, context: result };
-                break;
-              case 'add-component':
-                if (!params || !params.repository || !params.id || !params.name) {
-                  throw new Error('Missing required component parameters');
-                }
-                result = await memoryService.upsertComponent(params.repository, params.branch, {
-                  id: params.id,
-                  name: params.name,
-                  kind: params.kind,
-                  depends_on: params.depends_on,
-                  status: params.status || 'active',
-                });
-                if (!result) {
-                  throw new Error(
-                    `Failed to add component to repository ${params.repository} (branch: ${params.branch})`,
-                  );
-                }
-                result = { success: true, component: result };
-                break;
-              case 'add-decision':
-                if (!params || !params.repository || !params.id || !params.name || !params.date) {
-                  throw new Error('Missing required decision parameters');
-                }
-                result = await memoryService.upsertDecision(params.repository, params.branch, {
-                  id: params.id,
-                  name: params.name,
-                  context: params.context,
-                  date: params.date,
-                });
-                if (!result) {
-                  throw new Error(
-                    `Failed to add decision to repository ${params.repository} (branch: ${params.branch})`,
-                  );
-                }
-                result = { success: true, decision: result };
-                break;
-              case 'add-rule':
-                if (
-                  !params ||
-                  !params.repository ||
-                  !params.id ||
-                  !params.name ||
-                  !params.created
-                ) {
-                  throw new Error('Missing required rule parameters');
-                }
-                result = await memoryService.upsertRule(
-                  params.repository,
-                  {
-                    id: params.id,
-                    name: params.name,
-                    created: params.created,
-                    triggers: params.triggers,
-                    content: params.content,
-                    status: params.status || 'active',
-                  },
-                  params.branch,
-                );
-                if (!result) {
-                  throw new Error(
-                    `Failed to add rule to repository ${params.repository} (branch: ${params.branch})`,
-                  );
-                }
-                result = { success: true, rule: result };
-                break;
-              case 'mcp_get_component_dependencies':
-                if (!params || !params.repository || !params.branch || !params.componentId) {
-                  throw new Error('Missing required parameters for get_component_dependencies');
-                }
-                result = await memoryService.getComponentDependencies(
-                  params.repository,
-                  params.branch,
-                  params.componentId,
-                );
-                if (!result) {
-                  throw new Error(
-                    `Failed to get dependencies for component ${params.componentId} in repository ${params.repository} (branch: ${params.branch})`,
-                  );
-                }
-                result = { dependencies: result };
-                break;
+              }
+              progressHandler.sendFinalProgress(toolResult);
+              progressHandler.sendFinalResponse(toolResult, isError);
             }
-          } catch (err: any) {
-            log(LogLevel.ERROR, `ERROR: ${err.message || String(err)}`, err, req.requestId);
-            sendEvent('error', {
-              code: -32000,
-              message: `Internal error: ${err.message || String(err)}`,
-              id,
-            });
-            responses.push({
-              jsonrpc: '2.0',
-              id,
-              error: { code: -32000, message: `Internal error: ${err.message || String(err)}` },
-            });
-            continue;
+          } catch (error: any) {
+            log(
+              LogLevel.ERROR,
+              `Unhandled Error in SSE tools/call for ${toolName}: ${error.message}`,
+              { stack: error.stack },
+              requestContextId,
+            );
+            if (!res.writableEnded && !clientDisconnected) {
+              const errorPayload = {
+                jsonrpc: '2.0',
+                id: currentMessageId,
+                error: { code: -32000, message: error.message || 'Tool execution server error' },
+              };
+              res.write(`event: mcpResponse\ndata: ${JSON.stringify(errorPayload)}\n\n`);
+              res.end();
+            }
           }
-          sendEvent('response', { id, result });
-          responses.push({ jsonrpc: '2.0', id, result });
-        }
-        if (isBatch) {
-          res.json(responses);
+        } else if (msg.method) {
+          log(
+            LogLevel.WARN,
+            `Received non-tools/call method '${msg.method}' in SSE /mcp endpoint`,
+            msg,
+            requestContextId,
+          );
+          if (!res.writableEnded && !clientDisconnected) {
+            const errorPayload = {
+              jsonrpc: '2.0',
+              id: msg.id,
+              error: { code: -32601, message: `Method ${msg.method} not supported here.` },
+            };
+            res.write(`event: mcpResponse\ndata: ${JSON.stringify(errorPayload)}\n\n`);
+            if (!isBatch || (isBatch && messages.indexOf(msg) === messages.length - 1)) {
+              res.end();
+            }
+          }
         } else {
-          res.json(responses[0]);
+          if (!res.writableEnded && !clientDisconnected) {
+            const errorPayload = {
+              jsonrpc: '2.0',
+              id: msg.id,
+              error: { code: -32600, message: 'Invalid Request' },
+            };
+            res.write(`event: mcpResponse\ndata: ${JSON.stringify(errorPayload)}\n\n`);
+            if (!isBatch || (isBatch && messages.indexOf(msg) === messages.length - 1)) {
+              res.end();
+            }
+          }
         }
-      } catch (err: any) {
-        log(LogLevel.ERROR, `ERROR: ${err.message || String(err)}`, err, req.requestId);
-        res.status(500).json({ error: `Internal error: ${err.message || String(err)}` });
       }
+
+      if (isBatch && !res.writableEnded && !clientDisconnected) {
+        log(
+          LogLevel.DEBUG,
+          'Ensuring SSE stream is closed after batch processing.',
+          {},
+          requestContextId,
+        );
+        res.end();
+      }
+    } else {
+      log(LogLevel.DEBUG, 'Processing /mcp request as standard JSON', {}, requestContextId);
+      const responses: any[] = [];
+      for (const msg of messages) {
+        const currentMessageId = msg.id || crypto.randomUUID();
+        const wrappedDebugLog = (level: number, messageText: string, data?: any) => {
+          const internalLogLevel =
+            level === 0
+              ? LogLevel.ERROR
+              : level === 1
+                ? LogLevel.WARN
+                : level === 2
+                  ? LogLevel.INFO
+                  : level === 3
+                    ? LogLevel.DEBUG
+                    : LogLevel.TRACE;
+          log(internalLogLevel, messageText, data, requestContextId);
+        };
+        let responsePayload;
+
+        if (msg.method === 'tools/call' && msg.params?.name) {
+          const toolName = msg.params.name;
+          const toolArgs = msg.params.arguments || {};
+          try {
+            const toolExecutionService = await ToolExecutionService.getInstance();
+            const toolResult = await toolExecutionService.executeTool(
+              toolName,
+              toolArgs,
+              toolHandlers,
+              undefined,
+              wrappedDebugLog,
+            );
+            responsePayload = { jsonrpc: '2.0', id: currentMessageId, result: toolResult };
+          } catch (error: any) {
+            log(
+              LogLevel.ERROR,
+              `Error in JSON tools/call for ${toolName}: ${error.message}`,
+              { stack: error.stack },
+              requestContextId,
+            );
+            responsePayload = {
+              jsonrpc: '2.0',
+              id: currentMessageId,
+              error: { code: -32000, message: error.message || 'Tool execution failed' },
+            };
+          }
+        } else if (msg.method) {
+          log(
+            LogLevel.WARN,
+            `Received non-tools/call method '${msg.method}' in JSON /mcp endpoint`,
+            msg,
+            requestContextId,
+          );
+          responsePayload = {
+            jsonrpc: '2.0',
+            id: msg.id,
+            error: { code: -32601, message: `Method ${msg.method} not supported for JSON /mcp.` },
+          };
+        } else {
+          responsePayload = {
+            jsonrpc: '2.0',
+            id: msg.id,
+            error: { code: -32600, message: 'Invalid Request' },
+          };
+        }
+        responses.push(responsePayload);
+      }
+      res.json(isBatch ? responses : responses[0]);
     }
   });
 

@@ -2,62 +2,58 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-const TEST_DB_FILENAME_DEFAULT = 'test-memory-bank.kuzu';
-let testDbPath: string;
+// No longer use a global testDbPath or default filename here, it will be provided.
 
-function getTestDbPath(): string {
-  if (!testDbPath) {
-    // Allow overriding via environment variable for flexibility in CI/different setups
-    const dbFileName = process.env.E2E_TEST_DB_FILENAME || TEST_DB_FILENAME_DEFAULT;
-    // Ensure it's in a writable location, e.g., relative to project root or a temp dir.
-    // For simplicity, relative to project root for now.
-    testDbPath = path.resolve(process.cwd(), dbFileName);
+export async function setupTestDB(testDbFilename: string): Promise<string> {
+  if (!testDbFilename) {
+    throw new Error('testDbFilename must be provided to setupTestDB.');
   }
-  return testDbPath;
-}
 
-export async function setupTestDB(): Promise<string> {
-  const currentTestDbPath = getTestDbPath();
-  process.env.DB_FILENAME = currentTestDbPath; // Server will use this path
+  // Construct path relative to project root for test databases
+  const projectRoot = path.resolve(process.cwd()); // Or use a fixed relative path like __dirname, ../../..
+  const specificTestDbPath = path.join(projectRoot, testDbFilename);
+
+  // THIS IS THE KEY LINE: Set the environment variable that the server's db/config.ts will read.
+  process.env.DB_FILENAME = specificTestDbPath;
 
   try {
-    // Check if path exists and what it is
-    const stats = await fs.stat(currentTestDbPath).catch(() => null);
+    const stats = await fs.stat(specificTestDbPath).catch(() => null);
     if (stats) {
       if (stats.isDirectory()) {
         console.log(
-          `E2E Test DB: Path ${currentTestDbPath} is a directory. Removing recursively...`,
+          `E2E Test DB: Path ${specificTestDbPath} is a directory. Removing recursively...`,
         );
-        await fs.rm(currentTestDbPath, { recursive: true, force: true });
-        console.log(`E2E Test DB: Directory ${currentTestDbPath} removed.`);
+        await fs.rm(specificTestDbPath, { recursive: true, force: true });
+        console.log(`E2E Test DB: Directory ${specificTestDbPath} removed.`);
       } else {
-        console.log(`E2E Test DB: Path ${currentTestDbPath} is a file. Deleting...`);
-        await fs.unlink(currentTestDbPath);
-        console.log(`E2E Test DB: File ${currentTestDbPath} deleted.`);
+        console.log(`E2E Test DB: Path ${specificTestDbPath} is a file. Deleting...`);
+        await fs.unlink(specificTestDbPath);
+        console.log(`E2E Test DB: File ${specificTestDbPath} deleted.`);
       }
     }
-    console.log(`E2E Test DB: Ensured path ${currentTestDbPath} is clear for KuzuDB.`);
+    console.log(`E2E Test DB: Ensured path ${specificTestDbPath} is clear for KuzuDB.`);
   } catch (error: any) {
-    // This catch is mainly for fs.stat if it somehow throws an unexpected error other than not found
-    console.warn(`E2E Test DB: Error during pre-cleanup of ${currentTestDbPath}:`, error.message);
+    console.warn(`E2E Test DB: Error during pre-cleanup of ${specificTestDbPath}:`, error.message);
   }
 
-  console.log(`E2E Test DB: Server will use KuzuDB at ${currentTestDbPath}`);
-  return currentTestDbPath;
+  console.log(`E2E Test DB: Server will be configured to use KuzuDB at ${specificTestDbPath}`);
+  return specificTestDbPath; // Return the path that was set and cleared
 }
 
-export async function cleanupTestDB(): Promise<void> {
-  const currentTestDbPath = getTestDbPath();
+export async function cleanupTestDB(specificTestDbPath: string): Promise<void> {
+  // No longer uses a global testDbPath, expects the path to be passed in.
+  if (!specificTestDbPath) {
+    console.warn('E2E Test DB Cleanup: No DB path provided, skipping cleanup.');
+    return;
+  }
   try {
-    // Attempt to remove recursively in case it became a directory
-    await fs.rm(currentTestDbPath, { recursive: true, force: true });
-    console.log(`E2E Test DB: Cleaned up path ${currentTestDbPath}.`);
+    await fs.rm(specificTestDbPath, { recursive: true, force: true });
+    console.log(`E2E Test DB: Cleaned up path ${specificTestDbPath}.`);
   } catch (error: any) {
-    // Check if the error is because the file/directory doesn't exist, which is fine for cleanup.
     if (error.code !== 'ENOENT') {
-      console.warn(`E2E Test DB: Could not clean up ${currentTestDbPath}:`, error.message);
+      console.warn(`E2E Test DB: Could not clean up ${specificTestDbPath}:`, error.message);
     } else {
-      console.log(`E2E Test DB: Path ${currentTestDbPath} did not exist, no cleanup needed.`);
+      console.log(`E2E Test DB: Path ${specificTestDbPath} did not exist, no cleanup needed.`);
     }
   }
 }

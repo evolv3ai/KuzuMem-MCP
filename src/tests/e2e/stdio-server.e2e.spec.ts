@@ -12,9 +12,9 @@ jest.setTimeout(90000); // 90 seconds, increased for potentially long graph algo
 
 describe('MCP STDIO Server E2E Tests', () => {
   let client: McpStdioClient;
-  // Using a simpler, fixed repository name for E2E tests
   const testRepository = 'e2e-stdio-server-test-repo';
   const testBranch = 'main';
+  let dbPath: string;
 
   // Shared state for tests that build on each other
   let testComponentId: string | null = null;
@@ -22,8 +22,11 @@ describe('MCP STDIO Server E2E Tests', () => {
   let testRuleId: string | null = null;
 
   beforeAll(async () => {
-    const dbPath = await setupTestDB(); // Cleans and sets up DB_FILENAME for test
+    // Provide a specific filename for this test suite's database
+    dbPath = await setupTestDB('stdio_e2e_test.kuzu');
     client = new McpStdioClient();
+    // Pass the dbPath to the server if it needs it explicitly,
+    // though setupTestDB already sets process.env.DB_FILENAME
     await client.startServer({ DEBUG: '0', DB_FILENAME: dbPath });
     expect(client.isServerReady()).toBe(true);
 
@@ -289,7 +292,9 @@ describe('MCP STDIO Server E2E Tests', () => {
     if (client) {
       await client.stopServer();
     }
-    // await cleanupTestDB(); // Optional: cleanup DB file after tests
+    if (dbPath) {
+      await cleanupTestDB(dbPath);
+    }
   });
 
   it('T_STDIO_001: should initialize the server correctly', async () => {

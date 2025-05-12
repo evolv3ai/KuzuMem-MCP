@@ -13,26 +13,31 @@ The official TypeScript MCP SDK is a great project and we will use it in the fut
 ## Features
 
 - **Thread-Safe Singleton Pattern** - Ensures each resource is instantiated only once, with proper thread safety
-- **Distributed YAML Structure** - Follows the advanced memory bank specification
+- **Distributed Graph Structure** - Follows the advanced memory bank specification using a KùzuDB graph.
 - **Repository & Branch Awareness** - All operations are contextualized by repository name and branch, with entities uniquely identified by a composite key (`repositoryName:branchName:itemId`).
 - **Asynchronous Operations** - Uses async/await for better performance
-- **Both API & CLI** - Access via REST API (MCP-compliant POST endpoints) or command line
+- **Multiple Access Interfaces** - Access via a RESTful HTTP API, a CLI, and multiple MCP server implementations.
 - **KùzuDB Backend** - Utilizes KùzuDB for graph-based memory storage and querying.
-- **Fully MCP Compliant** - All tools follow the Model Context Protocol for IDE integration
+- **Fully MCP Compliant** - All tools follow the Model Context Protocol for client integration.
 - **Modular Architecture** - Clear separation between MCP servers, service layer, memory operations, and repositories.
-- **MCP/JSON-RPC Communication** - Supports HTTP, HTTP Streaming, and stdio communication for versatile integration
+- **MCP/JSON-RPC Communication** - Supports:
+  - HTTP with per-tool batch-oriented endpoints (`src/mcp/server.ts` via `src/app.ts` at `/mcp/tools/...`).
+  - HTTP Streaming (SSE) via a unified `/mcp` endpoint for progressive results (`src/mcp-httpstream-server.ts`).
+  - Stdio for direct IDE/Agent integration, supporting both batch and progressive results (`src/mcp-stdio-server.ts`).
+- **Progressive Results Streaming** - Supports `tools/progress` notifications for long-running graph operations over Stdio and HTTP Streaming.
 - **Graph & Traversal Tools** - Includes tools for dependency analysis, pathfinding, and graph algorithms.
 
 ## Documentation
 
-This README provides basic setup and usage information. For detailed documentation on architecture, advanced usage patterns, and graph database capabilities, please see [Extended Documentation](docs/graph-schema.md) and `graph-schema.md`.
+This README provides basic setup and usage information. For detailed documentation on architecture, advanced usage patterns, and graph database capabilities, please see [Extended Documentation](docs/README2.md) and [Graph Schema](docs/graph-schema.md).
+For details on tools supporting progressive results, see [MCP Tools Streaming Support](src/mcp/tools/README.md).
 
 ## Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/solita-internal/advanced-memory-tool-mcp
-cd advanced-memory-tool-mcp
+git clone https://github.com/solita-internal/kuzumem-mcp
+cd kuzumem-mcp
 
 # Install dependencies
 npm install
@@ -62,19 +67,19 @@ DEBUG=1
 
 ### Starting the Servers
 
-- **Main HTTP MCP Server (for REST API & some MCP integrations):**
+- **Main HTTP Server (for REST API & Batch MCP via per-tool endpoints):** (`src/app.ts` which uses `src/mcp/server.ts` for `/mcp/tools/...`)
 
   ```bash
   npm start
   ```
 
-- **HTTP Streaming MCP Server (for MCP clients wanting SSE):**
+- **HTTP Streaming MCP Server (for MCP clients wanting SSE via unified `/mcp`):** (`src/mcp-httpstream-server.ts`)
 
   ```bash
   npx ts-node src/mcp-httpstream-server.ts
   ```
 
-- **stdio MCP Server (for direct IDE/Agent integration):**
+- **stdio MCP Server (for direct IDE/Agent integration, supports streaming):** (`src/mcp-stdio-server.ts`)
 
   ```bash
   npx ts-node src/mcp-stdio-server.ts
@@ -86,8 +91,8 @@ All server implementations support these MCP capabilities:
 
 - `initialize` - Protocol handshake and capability discovery.
 - `tools/list` - Discovery of available tools with full schema definitions.
-- `tools/call` (for stdio and http-stream unified endpoint) - Execution of any listed tool.
-- Dedicated HTTP POST endpoints for each tool (e.g., `/tools/<tool-name>`) in the main HTTP server.
+- `tools/call` (for stdio and the http-stream unified `/mcp` endpoint) - Execution of any listed tool, with support for `tools/progress` streaming from graph operations.
+- Dedicated HTTP POST endpoints for each tool (e.g., `/mcp/tools/<tool-name>`) in the main HTTP server (`src/app.ts` via `src/mcp/server.ts`) which are batch-oriented.
 
 ### Using the CLI
 
@@ -175,13 +180,19 @@ A new layer introduced to encapsulate specific business logic for groups of oper
 
 ### MCP Layer (`src/mcp/`)
 
-- **Tool Definitions (`src/mcp/tools/`)**: Modular tool definitions with full MCP schema compatibility. Includes new graph and traversal tools.
+- **Tool Definitions (`src/mcp/tools/`)**: Modular tool definitions ([see details](src/mcp/tools/README.md)) with full MCP schema compatibility. Includes new graph and traversal tools.
 - **Tool Handlers (`src/mcp/tool-handlers.ts`)**: Centralized logic for executing any defined MCP tool, shared by different server implementations.
+- **Streaming Support Infrastructure (`src/mcp/streaming/`, `src/mcp/services/tool-execution.service.ts`)**:
+  - `progress-handler.ts`: Defines `ProgressHandler` and `ProgressTransport` interfaces for managing streaming.
+  - `stdio-transport.ts`: Implements `ProgressTransport` for stdio.
+  - `http-transport.ts`: Implements `ProgressTransport` for HTTP SSE.
+  - `tool-execution.service.ts`: Orchestrates tool calls with progress handling.
+  - `operations/`: Directory containing Operation Classes for streamable tools.
 - **Server Implementations**:
-  - `src/mcp/server.ts`: Express-based HTTP server with dedicated POST endpoints per tool.
-  - `src/mcp-httpstream-server.ts`: HTTP streaming server with a unified `/mcp` endpoint.
-  - `src/mcp-stdio-server.ts`: Stdio-based server.
-- **Types (`src/mcp/types/`)**: Shared MCP type definitions.
+  - `src/mcp/server.ts` (`MemoryMcpServer`): Provides MCP via Express.js with dedicated batch-oriented POST endpoints per tool (typically mounted under `/mcp/tools/...` by `src/app.ts`).
+  - `src/mcp-httpstream-server.ts`: Standalone HTTP server with a unified `/mcp` endpoint supporting Server-Sent Events (SSE) for streaming `tools/progress` and final responses.
+  - `src/mcp-stdio-server.ts`: Stdio-based server supporting both batch and streaming (`tools/progress`) responses for `tools/call`.
+- **Types (`src/mcp/types/`)**: Shared MCP type definitions (e.g., `McpTool`, `ToolHandler`).
 
 ### CLI Layer
 
@@ -189,7 +200,7 @@ Commander-based CLI with async operation support, interacting with `MemoryServic
 
 ## KùzuDB Graph Schema
 
-The memory bank uses a graph structure in KùzuDB. Refer to `graph-schema.md` for the detailed node and relationship definitions.
+The memory bank uses a graph structure in KùzuDB. Refer to [Graph Schema](docs/graph-schema.md) for the detailed node and relationship definitions.
 
 Key aspects:
 
@@ -207,8 +218,8 @@ Please read the contributing guidelines before submitting a pull request.
 
 ## Future Improvements
 
-- Enhance CLI to support branch selection for all relevant commands more explicitly.
-- **Variable naming convention updates, some of the used table variables are based on legacy YAML-file/SQLite based version**
+- **Enhance CLI** to support branch selection for all relevant commands more explicitly.
+- **Refine Graph Algorithm Streaming**: Further refactor `MemoryService` and Kùzu calls within Operation Classes to provide more granular progress for algorithms where KùzuDB allows iterative result yielding.
 - **Add Full-Text Search (FTS) Capabilities** - Planned implementation to enable efficient keyword-based search across all memory items using KùzuDB's FTS extension.
 - **Vector Embeddings Support** - Planned implementation; would enable semantic similarity search and NLP-based memory retrieval using KùzuDB's vector capabilities.
-- **Official TypeScript MCP SDK Migration** - Planned migration to the official TypeScript MCP SDK to benefit from the latest features. Opted out originally to have a more flexible and custom implementation and to learn the intricasies of MCP Protocol.
+- **Official TypeScript MCP SDK Migration** - Consider migrating to the official TypeScript MCP SDK to benefit from the latest features and community support, now that foundational understanding of the protocol is established.
