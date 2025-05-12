@@ -52,71 +52,74 @@ export async function updateMetadataOp(
 ): Promise<Metadata | null> {
   const repository = await repositoryRepo.findByName(repositoryName, branch);
   if (!repository || !repository.id) {
-    // Ensure repository.id is checked
     console.warn(`Repository not found: ${repositoryName}/${branch} in updateMetadataOp`);
     return null;
   }
 
-  // findMetadata takes repositoryName and branch
-  const existingMetadata = await metadataRepo.findMetadata(repositoryName, branch, 'meta');
+  const existingMetadataNode = await metadataRepo.findMetadata(repositoryName, branch, 'meta');
+  const currentContentObject = existingMetadataNode?.content || {};
 
-  if (!existingMetadata) {
-    console.warn(
-      `No existing metadata found for ${repositoryName}/${branch} to update. Will attempt to create.`,
-    );
+  // Start with a full default structure from the type, including optional fields for clarity during merge
+  let baseContent: Metadata['content'] = {
+    id: 'meta',
+    project: {
+      name: repositoryName,
+      created: new Date().toISOString().split('T')[0],
+      description: '', // Default empty description
+    },
+    tech_stack: { language: 'Unknown', framework: 'Unknown', datastore: 'Unknown' },
+    architecture: 'unknown',
+    memory_spec_version: '3.0.0',
+  };
+
+  // Layer 1: Merge existing content (if any) over the defaults
+  if (existingMetadataNode && existingMetadataNode.content) {
+    baseContent = {
+      ...baseContent,
+      ...(existingMetadataNode.content as Metadata['content']), // existingContent is an object
+      project: {
+        ...baseContent.project, // Defaults for project
+        ...(existingMetadataNode.content.project || {}),
+      },
+      tech_stack: {
+        ...baseContent.tech_stack, // Defaults for tech_stack
+        ...(existingMetadataNode.content.tech_stack || {}),
+      },
+    };
   }
 
-  // If existingMetadata is null, newContentObject will base off an empty content structure or defaults.
-  // existingMetadata.content is already an object, no need to parse it from string here.
-  const currentContentObject: Partial<Metadata['content']> = existingMetadata
-    ? existingMetadata.content
-    : {
-        project: { name: repositoryName, created: new Date().toISOString().split('T')[0] },
-        tech_stack: {},
-        id: 'meta',
-        memory_spec_version: '3.0.0',
-      };
-  // Removed the check for typeof existingMetadata.content !== 'string' as it should be an object.
-
+  // Layer 2: Merge the update payload over the combined default/existing content
   const newContentObject: Metadata['content'] = {
-    ...(currentContentObject as Metadata['content']), // Cast to full type after defaulting
-    ...metadataUpdatePayload,
+    ...baseContent,
+    ...metadataUpdatePayload, // Spread update payload last for top-level simple fields
     project: {
-      ...((currentContentObject as Metadata['content']).project || {
-        name: repositoryName,
-        created: new Date().toISOString().split('T')[0],
-      }), // Ensure project object and its fields exist
+      // Deep merge project again with update payload
+      ...baseContent.project,
       ...(metadataUpdatePayload.project || {}),
     },
     tech_stack: {
-      ...((currentContentObject as Metadata['content']).tech_stack || {}),
+      // Deep merge tech_stack again with update payload
+      ...baseContent.tech_stack,
       ...(metadataUpdatePayload.tech_stack || {}),
     },
-    // Ensure required fields for Metadata['content'] are present
-    id: currentContentObject.id || metadataUpdatePayload.id || 'meta',
-    memory_spec_version:
-      currentContentObject.memory_spec_version ||
-      metadataUpdatePayload.memory_spec_version ||
-      '3.0.0',
-    architecture:
-      currentContentObject.architecture || metadataUpdatePayload.architecture || 'unknown',
   };
-  // Ensure project.name and project.created are always set if not provided
-  if (!newContentObject.project.name) {
-    newContentObject.project.name = repositoryName;
-  }
-  if (!newContentObject.project.created) {
-    newContentObject.project.created = new Date().toISOString().split('T')[0];
-  }
+
+  // Final enforcement of essential fields if somehow lost or not in payload
+  newContentObject.id = newContentObject.id || 'meta';
+  newContentObject.project.name = newContentObject.project.name || repositoryName;
+  newContentObject.project.created =
+    newContentObject.project.created || new Date().toISOString().split('T')[0];
+  // description will be from metadataUpdatePayload.project, then baseContent.project, then default empty string
+  newContentObject.memory_spec_version = newContentObject.memory_spec_version || '3.0.0';
+  // architecture is now correctly prioritized from metadataUpdatePayload by the spread order over baseContent
 
   const finalMetadataToUpsert: Metadata = {
-    id: existingMetadata?.id || 'meta', // Logical ID
-    name: existingMetadata?.name || repositoryName, // Default name to repo name
-    repository: repository.id, // Repository Node PK
-    branch: branch, // Branch for this metadata instance
+    id: existingMetadataNode?.id || 'meta',
+    name: existingMetadataNode?.name || repositoryName,
+    repository: repository.id,
+    branch: branch,
     content: newContentObject,
-    // created_at, updated_at will be handled by repository
-  } as Metadata; // Cast as Omit<...> is complex here
+  } as Metadata;
 
   return metadataRepo.upsertMetadata(finalMetadataToUpsert);
 }

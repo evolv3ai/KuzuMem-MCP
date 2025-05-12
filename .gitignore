@@ -67,10 +67,6 @@ temp/
 .rollup.cache/
 .cache/
 
-# Memory bank YAML exports
-exports/
-memory-exports/
-
 # Debug files
 .debug/
 debug/

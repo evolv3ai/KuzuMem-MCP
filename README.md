@@ -1,6 +1,14 @@
-# Advanced Memory Bank MCP Tool
+# KuzuMem-MCP
 
 A TypeScript implementation of a distributed memory bank as an MCP (Model Context Protocol) tool, storing memories in a **KùzuDB graph database** with repository and branch filtering capabilities. Branch isolation is achieved by using a graph-unique identifier for entities, enabling a centralized memory bank while allowing repository-specific and branch-specific views. Fully compliant with MCP specification for seamless integration with IDEs and AI agents.
+
+## Why it's not using the official TypeScript MCP SDK?
+
+The official TypeScript MCP SDK is a great project and we will use it in the future. However, we are using a custom implementation for the following reasons:
+
+- To learn the intricacies of the MCP Protocol
+- To have a more flexible and custom implementation
+- Wanted to start small with CLI and HTTP server implementation and then add more features later
 
 ## Features
 
@@ -202,4 +210,5 @@ Please read the contributing guidelines before submitting a pull request.
 - Enhance CLI to support branch selection for all relevant commands more explicitly.
 - **Variable naming convention updates, some of the used table variables are based on legacy YAML-file/SQLite based version**
 - **Add Full-Text Search (FTS) Capabilities** - Planned implementation to enable efficient keyword-based search across all memory items using KùzuDB's FTS extension.
-- **Vector Embeddings Support** - Under consideration pending clear use cases; would enable semantic similarity search and NLP-based memory retrieval using KùzuDB's vector capabilities.
+- **Vector Embeddings Support** - Planned implementation; would enable semantic similarity search and NLP-based memory retrieval using KùzuDB's vector capabilities.
+- **Official TypeScript MCP SDK Migration** - Planned migration to the official TypeScript MCP SDK to benefit from the latest features. Opted out originally to have a more flexible and custom implementation and to learn the intricasies of MCP Protocol.

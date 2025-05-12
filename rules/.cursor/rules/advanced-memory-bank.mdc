@@ -1,5 +1,5 @@
 ---
-description: 
+description: This rule is used to guide the agent on how to use the Advanced Memory Bank MCP Server
 globs: 
 alwaysApply: true
 ---
