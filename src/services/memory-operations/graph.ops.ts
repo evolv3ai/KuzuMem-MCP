@@ -116,22 +116,21 @@ export async function weaklyConnectedComponentsOp(
  */
 export async function shortestPathOp(
   repositoryName: string,
-  branch: string, // This branch is for startNode and endNode
-  startNodeId: string, // Logical ID
-  endNodeId: string, // Logical ID
+  branch: string,
+  startNodeId: string,
+  endNodeId: string,
   params: {
     relationshipTypes?: string[];
     direction?: 'OUTGOING' | 'INCOMING' | 'BOTH';
+    algorithm?: string;
+    projectedGraphName?: string;
+    nodeTableNames?: string[];
+    relationshipTableNames?: string[];
   },
-  repositoryRepo: RepositoryRepository, // Not strictly needed if repo takes repositoryName directly
+  repositoryRepo: RepositoryRepository,
   componentRepo: ComponentRepository,
-): Promise<any[]> {
-  // ComponentRepository.findShortestPath expects (repositoryName, startNodeId, startNodeBranch, endNodeId, params)
-  // The 'branch' param here applies to both start and end node for path context.
-  return componentRepo.findShortestPath(repositoryName, startNodeId, branch, endNodeId, {
-    relationshipTypes: params.relationshipTypes,
-    direction: params.direction,
-  });
+): Promise<{ path: Component[]; length: number; error?: string | null }> {
+  return componentRepo.findShortestPath(repositoryName, startNodeId, branch, endNodeId, params);
 }
 
 /**

@@ -26,6 +26,7 @@ export interface Metadata extends BaseEntity {
     project: {
       name: string;
       created: string;
+      description?: string;
     };
     tech_stack: Record<string, string>;
     architecture: string;
@@ -105,6 +106,7 @@ export const metadataSchema = z.object({
     project: z.object({
       name: z.string().min(1),
       created: z.string(),
+      description: z.string().optional(),
     }),
     tech_stack: z.record(z.string()),
     architecture: z.string(),

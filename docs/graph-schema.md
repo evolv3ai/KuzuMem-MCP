@@ -1,6 +1,6 @@
 # KuzuDB Graph Schema (Post-Refactor for Branch Awareness)
 
-**Key Concept: Composite Unique IDs**
+## Key Concept: Composite Unique IDs
 
 To ensure branch awareness and uniqueness of items (Metadata, Context, Component, Decision, Rule) across different repositories and branches, a `graph_unique_id` is used as the `PRIMARY KEY` for these node tables. This ID is a string constructed programmatically by combining the repository name, the item's specific branch, and the item's logical ID.
 

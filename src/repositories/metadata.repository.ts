@@ -61,8 +61,7 @@ export class MetadataRepository {
     const graphUniqueId = formatGraphUniqueId(repositoryName, branch, metadataId);
     const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
 
-    const query = `MATCH (m:Metadata {graph_unique_id: '${escapedGraphUniqueId}'}) RETURN m LIMIT 1`;
-    // console.error for query logging can be added if needed for debugging
+    const query = `MATCH (m:Metadata {graph_unique_id: '${escapedGraphUniqueId}'}) RETURN m.id as id, m.name as name, m.content as contentString, m.branch as branch, m.created_at as created_at, m.updated_at as updated_at, labels(m)[0] as label LIMIT 1`;
 
     const result = await KuzuDBClient.executeQuery(query);
     if (!result || typeof result.getAll !== 'function') {
@@ -73,11 +72,46 @@ export class MetadataRepository {
       return null;
     }
 
-    const metadataData = rows[0].m ?? rows[0]['m'];
+    // Kuzu rows are objects with keys matching the RETURN aliases
+    const rawData = rows[0];
+    let parsedContent: object | string = {}; // Default to object, or keep as string if unparseable
+
+    if (rawData.contentString && typeof rawData.contentString === 'string') {
+      console.error(
+        `DEBUG: MetadataRepository.findMetadata - Raw contentString from DB for ${graphUniqueId}: ${rawData.contentString}`,
+      );
+      try {
+        parsedContent = JSON.parse(rawData.contentString);
+        // Second parse attempt if the first parse resulted in a string that is also JSON (doubly stringified)
+        if (typeof parsedContent === 'string') {
+          console.error(
+            `DEBUG: MetadataRepository.findMetadata - Content was doubly stringified. Attempting second parse for ${graphUniqueId}.`,
+          );
+          parsedContent = JSON.parse(parsedContent);
+        }
+      } catch (e) {
+        console.error(
+          `Failed to parse metadata content for ${graphUniqueId}:`,
+          e,
+          'Raw content:',
+          rawData.contentString,
+        );
+        parsedContent = { error: 'Failed to parse content', rawContent: rawData.contentString };
+      }
+    } else {
+      console.warn(`No content string found or not a string for metadata ${graphUniqueId}`);
+      parsedContent = rawData.content; // Fallback or keep as is if not string
+    }
+
     return {
-      ...metadataData,
-      id: metadataData.id, // Ensure logical id is mapped
-      graph_unique_id: undefined, // Do not expose internal DB PK
+      id: rawData.id,
+      name: rawData.name,
+      content: parsedContent, // Use the parsed object
+      branch: rawData.branch,
+      created_at: rawData.created_at,
+      updated_at: rawData.updated_at,
+      // _label: rawData.label, // Kuzu might not directly return _label like this, but labels(m)[0]
+      // graph_unique_id is not needed in the returned Metadata object as per type
     } as Metadata;
   }
 
