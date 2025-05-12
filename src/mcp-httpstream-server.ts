@@ -257,137 +257,183 @@ export async function configureServer(app: express.Application): Promise<void> {
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
 
-      // For batch requests in SSE, we process each message and send its events.
-      // The connection will be held open until all messages are processed.
       let clientDisconnected = false;
       req.on('close', () => {
         clientDisconnected = true;
         log(LogLevel.INFO, 'Client disconnected from SSE stream', {}, requestContextId);
       });
 
-      for (const msg of messages) {
-        if (clientDisconnected) {
-          log(
-            LogLevel.INFO,
-            'SSE Client disconnected during batch processing, aborting further messages.',
-            { msgId: msg.id },
-            requestContextId,
-          );
-          break;
-        }
-
-        const currentMessageId = msg.id || crypto.randomUUID();
-        const wrappedDebugLog = (level: number, messageText: string, data?: any) => {
-          const internalLogLevel =
-            level === 0
-              ? LogLevel.ERROR
-              : level === 1
-                ? LogLevel.WARN
-                : level === 2
-                  ? LogLevel.INFO
-                  : level === 3
-                    ? LogLevel.DEBUG
-                    : LogLevel.TRACE;
-          log(internalLogLevel, messageText, data, requestContextId);
-        };
-
-        if (msg.method === 'tools/call' && msg.params?.name) {
-          const toolName = msg.params.name;
-          const toolArgs = msg.params.arguments || {};
-
-          const streamingTransport = new HttpStreamingProgressTransport(res, wrappedDebugLog);
-          const progressHandler = createProgressHandler(currentMessageId, streamingTransport);
-
+      (async () => {
+        // Wrap message processing in an async IIFE to manage loop and final res.end()
+        for (const msg of messages) {
+          if (clientDisconnected) {
+            log(
+              LogLevel.INFO,
+              'SSE Client disconnected during batch, aborting remaining messages.',
+              { msgId: msg.id },
+              requestContextId,
+            );
+            break;
+          }
+          const currentMessageId = msg.id || crypto.randomUUID();
           log(
             LogLevel.DEBUG,
-            `Processing tools/call for ${toolName} via SSE`,
-            { toolArgs },
+            `SSE: Processing message ${currentMessageId} in batch.`,
+            msg,
             requestContextId,
           );
 
-          try {
-            const toolExecutionService = await ToolExecutionService.getInstance();
-            const toolResult = await toolExecutionService.executeTool(
-              toolName,
-              toolArgs,
-              toolHandlers,
-              progressHandler,
-              wrappedDebugLog,
-            );
+          const wrappedDebugLog = (level: number, messageText: string, data?: any) => {
+            const internalLogLevel =
+              level === 0
+                ? LogLevel.ERROR
+                : level === 1
+                  ? LogLevel.WARN
+                  : level === 2
+                    ? LogLevel.INFO
+                    : level === 3
+                      ? LogLevel.DEBUG
+                      : LogLevel.TRACE;
+            log(internalLogLevel, messageText, data, requestContextId);
+          };
 
-            if (toolResult !== null) {
-              const isError = !!toolResult?.error;
-              if (isBatch) {
+          if (msg.method === 'tools/call' && msg.params?.name) {
+            const toolName = msg.params.name;
+            const toolArgs = msg.params.arguments || {};
+            const streamingTransport = new HttpStreamingProgressTransport(res, wrappedDebugLog);
+            const progressHandler = createProgressHandler(currentMessageId, streamingTransport);
+
+            log(
+              LogLevel.DEBUG,
+              `SSE: Calling ToolExecutionService for ${toolName} (msgId: ${currentMessageId})`,
+              { toolArgs },
+              requestContextId,
+            );
+            try {
+              const toolExecutionService = await ToolExecutionService.getInstance();
+              const toolResult = await toolExecutionService.executeTool(
+                toolName,
+                toolArgs,
+                toolHandlers,
+                progressHandler,
+                wrappedDebugLog,
+              );
+              log(
+                LogLevel.DEBUG,
+                `SSE: ToolExecutionService returned for ${toolName} (msgId: ${currentMessageId})`,
+                { toolResultIsNull: toolResult === null },
+                requestContextId,
+              );
+
+              if (toolResult !== null) {
+                const isError = !!toolResult?.error;
                 log(
-                  LogLevel.WARN,
-                  'Batch SSE processing note: HttpStreamingProgressTransport will end response after first handled message.',
-                  { msgId: currentMessageId },
+                  LogLevel.DEBUG,
+                  `SSE: Handling non-null toolResult for ${toolName} (msgId: ${currentMessageId}), isError: ${isError}`,
+                  {},
                   requestContextId,
                 );
+                progressHandler.sendFinalProgress(toolResult);
+                progressHandler.sendFinalResponse(toolResult, isError);
               }
-              progressHandler.sendFinalProgress(toolResult);
-              progressHandler.sendFinalResponse(toolResult, isError);
+              log(
+                LogLevel.DEBUG,
+                `SSE: Finished processing tool/call for ${toolName} (msgId: ${currentMessageId})`,
+                {},
+                requestContextId,
+              );
+            } catch (error: any) {
+              log(
+                LogLevel.ERROR,
+                `SSE: Unhandled Error in tools/call for ${toolName} (msgId: ${currentMessageId}): ${error.message}`,
+                { stack: error.stack },
+                requestContextId,
+              );
+              if (!res.writableEnded && !clientDisconnected) {
+                const errorPayload = {
+                  jsonrpc: '2.0',
+                  id: currentMessageId,
+                  error: { code: -32000, message: error.message || 'Tool execution server error' },
+                };
+                res.write(`event: mcpResponse\ndata: ${JSON.stringify(errorPayload)}\n\n`);
+              }
             }
-          } catch (error: any) {
+          } else if (msg.method) {
             log(
-              LogLevel.ERROR,
-              `Unhandled Error in SSE tools/call for ${toolName}: ${error.message}`,
-              { stack: error.stack },
+              LogLevel.WARN,
+              `SSE: Received non-tools/call method '${msg.method}' (msgId: ${msg.id})`,
+              msg,
               requestContextId,
             );
             if (!res.writableEnded && !clientDisconnected) {
               const errorPayload = {
                 jsonrpc: '2.0',
-                id: currentMessageId,
-                error: { code: -32000, message: error.message || 'Tool execution server error' },
+                id: msg.id,
+                error: { code: -32601, message: `Method ${msg.method} not supported here.` },
               };
               res.write(`event: mcpResponse\ndata: ${JSON.stringify(errorPayload)}\n\n`);
-              res.end();
+            }
+          } else {
+            log(
+              LogLevel.WARN,
+              `SSE: Invalid message (no method) (msgId: ${msg.id})`,
+              msg,
+              requestContextId,
+            );
+            if (!res.writableEnded && !clientDisconnected) {
+              const errorPayload = {
+                jsonrpc: '2.0',
+                id: msg.id,
+                error: { code: -32600, message: 'Invalid Request' },
+              };
+              res.write(`event: mcpResponse\ndata: ${JSON.stringify(errorPayload)}\n\n`);
             }
           }
-        } else if (msg.method) {
           log(
-            LogLevel.WARN,
-            `Received non-tools/call method '${msg.method}' in SSE /mcp endpoint`,
-            msg,
+            LogLevel.DEBUG,
+            `SSE: End of loop for message ${currentMessageId}. writableEnded: ${res.writableEnded}`,
+            {},
             requestContextId,
           );
-          if (!res.writableEnded && !clientDisconnected) {
-            const errorPayload = {
-              jsonrpc: '2.0',
-              id: msg.id,
-              error: { code: -32601, message: `Method ${msg.method} not supported here.` },
-            };
-            res.write(`event: mcpResponse\ndata: ${JSON.stringify(errorPayload)}\n\n`);
-            if (!isBatch || (isBatch && messages.indexOf(msg) === messages.length - 1)) {
-              res.end();
-            }
-          }
-        } else {
-          if (!res.writableEnded && !clientDisconnected) {
-            const errorPayload = {
-              jsonrpc: '2.0',
-              id: msg.id,
-              error: { code: -32600, message: 'Invalid Request' },
-            };
-            res.write(`event: mcpResponse\ndata: ${JSON.stringify(errorPayload)}\n\n`);
-            if (!isBatch || (isBatch && messages.indexOf(msg) === messages.length - 1)) {
-              res.end();
-            }
-          }
-        }
-      }
+        } // End for loop over messages
 
-      if (isBatch && !res.writableEnded && !clientDisconnected) {
+        if (!res.writableEnded && !clientDisconnected) {
+          log(
+            LogLevel.INFO,
+            'SSE: All messages processed, client still connected. Ending stream now.',
+            {},
+            requestContextId,
+          );
+          res.end();
+        } else if (res.writableEnded) {
+          log(
+            LogLevel.INFO,
+            'SSE: Stream already ended by a transport or error handler.',
+            {},
+            requestContextId,
+          );
+        } else if (clientDisconnected) {
+          log(
+            LogLevel.INFO,
+            'SSE: Client disconnected before stream could be formally ended.',
+            {},
+            requestContextId,
+          );
+        }
+      })().catch((loopError) => {
+        // Catch any unexpected errors from the async IIFE itself
         log(
-          LogLevel.DEBUG,
-          'Ensuring SSE stream is closed after batch processing.',
-          {},
+          LogLevel.ERROR,
+          'Critical error in SSE message processing loop',
+          loopError,
           requestContextId,
         );
-        res.end();
-      }
+        if (!res.writableEnded && !clientDisconnected) {
+          res.status(500).end('Internal Server Error during SSE processing');
+        }
+      });
     } else {
+      // Handle non-SSE (standard JSON) batch or single request
       log(LogLevel.DEBUG, 'Processing /mcp request as standard JSON', {}, requestContextId);
       const responses: any[] = [];
       for (const msg of messages) {

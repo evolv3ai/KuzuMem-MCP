@@ -53,14 +53,14 @@ export class KuzuDBClient {
 
   /**
    * Helper method to execute queries with proper error handling
-   * Based on the official KuzuDB documentation, queries are executed directly on the connection
+   * Assumes conn.query() returns a Promise when no callback is supplied.
    */
   public static async executeQuery(query: string): Promise<any> {
     try {
       const conn = this.getConnection();
-      // Only two arguments: query string and callback
       console.error('KuzuDBClient.executeQuery Triggered. Query:', query);
-      return await conn.query(query, () => {});
+      // Call conn.query without the empty callback, relying on its Promise behavior
+      return await conn.query(query);
     } catch (error) {
       console.error(`Error executing query: ${query}`, error);
       throw error;

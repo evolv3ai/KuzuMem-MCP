@@ -45,7 +45,8 @@ export class HttpStreamingProgressTransport implements ProgressTransport {
   }
 
   /**
-   * Send a standard JSON-RPC response as an SSE event and end the stream.
+   * Send a standard JSON-RPC response as an SSE event.
+   * Does NOT end the stream; the caller is responsible for that.
    */
   sendResponse(requestId: number | string, content: any, isError: boolean): void {
     this.ensureStreamingStarted();
@@ -53,18 +54,17 @@ export class HttpStreamingProgressTransport implements ProgressTransport {
     const rpcResponse = {
       jsonrpc: '2.0',
       id: requestId,
-      // Conditional property setting for result or error
       ...(isError ? { error: content } : { result: content }),
     };
 
     this.debugLog(
       1,
-      `Sending final SSE event response for request ${requestId}, isError: ${isError}`,
+      `Sending SSE event (mcpResponse) for request ${requestId}, isError: ${isError}`,
     );
-    // Using a distinct event name for the final JSON-RPC response payload.
     this.response.write(`event: mcpResponse\ndata: ${JSON.stringify(rpcResponse)}\n\n`);
 
-    // End the response after sending the final result event
-    this.response.end();
+    // DO NOT CALL this.response.end(); here.
+    // The main request handler (e.g., in mcp-httpstream-server.ts) will manage ending the stream.
+    // This allows for batch processing over a single SSE connection.
   }
 }

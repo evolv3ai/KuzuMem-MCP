@@ -63,9 +63,31 @@ HOST=localhost
 DEBUG=1
 ```
 
+Add the following to your IDEs MCP configuration:
+
+```json
+{
+  "KuzuMemo-MCP": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "ts-node",
+        "/path_to_your_project/<repo_name>/src/mcp-stdio-server.ts" //or src/mcp-httpstream-server.ts
+      ],
+      "env": {
+        "PORT": "3000",
+        "DB_CLIENT": "kuzu",
+        "DB_FILENAME": "./memory-bank.kuzu"
+      }
+    }
+}
+```
+
+![IDE MCP Configuration](docs/client_view.png)
+
 ## Usage
 
-### Starting the Servers
+### Starting the Servers for local testing
 
 - **Main HTTP Server (for REST API & Batch MCP via per-tool endpoints):** (`src/app.ts` which uses `src/mcp/server.ts` for `/mcp/tools/...`)
 
