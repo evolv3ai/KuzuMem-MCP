@@ -64,7 +64,8 @@ export interface McpServerMetadata {
  * Tool handler function signature with progress support
  */
 export type ToolHandler = (
-  args: unknown,
-  memoryService: MemoryService,
-  progressHandler?: ProgressHandler,
-) => Promise<unknown>;
+  toolArgs: any, // Standard tool arguments from the MCP call
+  memoryService: MemoryService, // Instance of the memory service
+  progressHandler?: ProgressHandler, // Optional handler for streaming progress
+  clientProjectRoot?: string, // NEW: Optional, to be supplied by ToolExecutionService
+) => Promise<unknown>; // Return type of the handler

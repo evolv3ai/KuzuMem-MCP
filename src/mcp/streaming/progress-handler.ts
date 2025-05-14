@@ -1,3 +1,8 @@
+import { HttpStreamingProgressTransport } from './http-transport';
+
+// Define a simple type for the debug log function if not already globally available
+type GenericDebugLogger = (level: number, message: string, data?: any) => void;
+
 /**
  * Interface for transmitting progress notifications via any transport
  */
@@ -5,54 +10,98 @@ export interface ProgressTransport {
   /**
    * Send a progress notification through the transport
    */
-  sendProgressNotification(requestId: number | string, content: any, isFinal: boolean): void;
-
-  /**
-   * Send a final response through the transport
-   */
-  sendResponse(requestId: number | string, result: any, isError: boolean): void;
+  sendNotification(payload: object, eventName?: string): void;
 }
 
 /**
  * Interface for progress handler that tools can use
  */
-export interface ProgressHandler {
-  /**
-   * Report incremental progress during tool execution
-   */
-  progress(content: any): void;
+export class ProgressHandler {
+  constructor(
+    private toolCallId: string,
+    private transport: ProgressTransport,
+    private debugLog: GenericDebugLogger,
+  ) {}
 
   /**
-   * Send the final progress notification (isFinal: true).
-   * The content here is typically the wrapper object from the Operation Class.
+   * Sends a tools/progress notification.
+   * @param progressEventData The actual data payload for the progress event (e.g., status, message, specific tool data like ranks).
+   *                          If this object contains `isFinal: true`, it will be marked as such in the MCP notification.
    */
-  sendFinalProgress(content: any): void;
+  public progress(progressEventData: any): void {
+    // The content of RichTextChunk should be a string.
+    // If progressEventData is an object, it should be stringified.
+    const richTextPayload =
+      typeof progressEventData === 'string' ? progressEventData : JSON.stringify(progressEventData);
+
+    const mcpProgressParams = {
+      id: this.toolCallId,
+      content: [{ type: 'RichText', text: richTextPayload }],
+      isFinal: progressEventData.isFinal === true, // Ensure isFinal is explicitly boolean
+    };
+
+    const notification = {
+      jsonrpc: '2.0',
+      method: 'tools/progress',
+      params: mcpProgressParams,
+    };
+
+    this.debugLog(
+      3,
+      `ProgressHandler: Sending tools/progress notification for ${this.toolCallId}`,
+      notification,
+    );
+    this.transport.sendNotification(notification, 'mcpNotification');
+  }
 
   /**
-   * Send the standard JSON-RPC response for the tool call.
-   * The result here is the core data payload expected by batch clients.
+   * Sends the final mcpResponse event for the tool call.
+   * @param resultData The data for the result or error field.
+   * @param isError True if resultData represents an error, false otherwise.
    */
-  sendFinalResponse(result: any, isError: boolean): void;
+  public sendFinalResponse(resultData: any, isError: boolean): void {
+    const responsePayload = {
+      jsonrpc: '2.0',
+      id: this.toolCallId,
+      ...(isError ? { error: resultData } : { result: resultData }),
+    };
+    this.debugLog(
+      3,
+      `ProgressHandler: Sending final mcpResponse for ${this.toolCallId}, isError: ${isError}`,
+      responsePayload,
+    );
+    this.transport.sendNotification(responsePayload, 'mcpResponse');
+  }
+
+  // Deprecate or remove sendProgressNotification and sendResponse if functionality is covered by progress() and sendFinalResponse()
+  // For now, keeping them but they should ideally be consolidated.
+
+  /** @deprecated Use progress() with an object that includes an isFinal property. */
+  sendProgressNotification(content: any, isFinal: boolean): void {
+    this.debugLog(2, 'ProgressHandler: sendProgressNotification is deprecated. Use progress().', {
+      toolCallId: this.toolCallId,
+      isFinal,
+    });
+    this.progress({ ...content, isFinal });
+  }
+
+  /** @deprecated Use sendFinalResponse(). */
+  sendResponse(content: any, isError: boolean): void {
+    this.debugLog(2, 'ProgressHandler: sendResponse is deprecated. Use sendFinalResponse().', {
+      toolCallId: this.toolCallId,
+      isError,
+    });
+    this.sendFinalResponse(content, isError);
+  }
 }
 
 /**
  * Create a progress handler for a specific request and transport
  */
 export function createProgressHandler(
-  requestId: number | string,
+  toolCallId: string,
   transport: ProgressTransport,
+  debugLog: GenericDebugLogger,
 ): ProgressHandler {
-  return {
-    progress: (content: any) => {
-      transport.sendProgressNotification(requestId, content, false);
-    },
-    sendFinalProgress: (content: any) => {
-      // Send final progress notification (isFinal: true)
-      transport.sendProgressNotification(requestId, content, true);
-    },
-    sendFinalResponse: (result: any, isError: boolean) => {
-      // Send the standard JSON-RPC response for the tool call
-      transport.sendResponse(requestId, result, isError);
-    },
-  };
+  return new ProgressHandler(toolCallId, transport, debugLog);
 }

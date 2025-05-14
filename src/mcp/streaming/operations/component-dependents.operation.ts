@@ -9,7 +9,8 @@ export class ComponentDependentsOperation {
    * Execute the component dependents operation with streaming support
    */
   public static async execute(
-    repository: string,
+    clientProjectRoot: string,
+    repositoryName: string,
     branch: string,
     componentId: string,
     memoryService: MemoryService,
@@ -17,14 +18,16 @@ export class ComponentDependentsOperation {
   ): Promise<any> {
     try {
       // Validate required args
-      if (!repository || !componentId) {
-        return { error: 'Missing required parameters: repository and componentId are required' };
+      if (!repositoryName || !componentId) {
+        return {
+          error: 'Missing required parameters: repositoryName and componentId are required',
+        };
       }
 
       if (progressHandler) {
         progressHandler.progress({
           status: 'initializing',
-          message: `Starting dependent analysis for ${componentId} in ${repository}:${branch}`,
+          message: `Starting dependent analysis for ${componentId} in ${repositoryName}:${branch} (Project: ${clientProjectRoot})`,
         });
       }
 
@@ -37,32 +40,40 @@ export class ComponentDependentsOperation {
       // Placeholder for actual logic that might involve complex graph traversal and path reconstruction
       // which would be the source of multiple progressHandler.progress() calls.
       const allDependents = await memoryService.getComponentDependents(
-        repository,
+        repositoryName,
         branch,
         componentId,
       );
 
-      if (progressHandler) {
-        // Example: if allDependents is a large array, one could send them in chunks
-        // For now, sending a single progress update before completion.
-        progressHandler.progress({
-          status: 'in_progress',
-          message: `Retrieved ${allDependents.length} dependent(s) for ${componentId}`,
-          count: allDependents.length,
-          dependents: allDependents, // Or a chunk of it
-        });
-      }
-
-      const result = {
+      const resultPayload = {
         status: 'complete',
-        repository,
+        clientProjectRoot,
+        repository: repositoryName,
         branch,
         componentId,
         totalDependents: allDependents.length,
         dependents: allDependents,
       };
 
-      return result;
+      if (progressHandler) {
+        // Send in_progress (could be chunked if data is large)
+        progressHandler.progress({
+          status: 'in_progress',
+          message: `Retrieved ${allDependents.length} dependent(s) for ${componentId}`,
+          count: allDependents.length,
+          dependents: allDependents, // Or a chunk of it
+        });
+
+        // Send final progress event
+        progressHandler.progress({ ...resultPayload, isFinal: true });
+
+        // Send the final JSON-RPC response via progressHandler
+        progressHandler.sendFinalResponse(resultPayload, false);
+        return null; // Indicate response was sent via progressHandler
+      }
+
+      // If no progressHandler, return the result directly (for non-SSE calls)
+      return resultPayload;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       throw new Error(`Failed to get component dependents: ${errorMessage}`);

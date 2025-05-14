@@ -1,30 +1,23 @@
 import { Rule } from '../types';
-import { Mutex } from '../utils/mutex';
 import { KuzuDBClient } from '../db/kuzu';
-import { formatGraphUniqueId, parseGraphUniqueId } from '../utils/id.utils';
+import { formatGraphUniqueId } from '../utils/id.utils';
 
 /**
- * Thread-safe singleton repository for Rule, using KuzuDB and Cypher queries
+ * Repository for Rule, using KuzuDB and Cypher queries.
+ * Each instance is now tied to a specific KuzuDBClient.
  */
 export class RuleRepository {
-  private static instance: RuleRepository;
-  private static lock = new Mutex();
-  private conn: any;
+  private kuzuClient: KuzuDBClient;
 
-  private constructor() {
-    this.conn = KuzuDBClient.getConnection();
-  }
-
-  static async getInstance(): Promise<RuleRepository> {
-    const release = await RuleRepository.lock.acquire();
-    try {
-      if (!RuleRepository.instance) {
-        RuleRepository.instance = new RuleRepository();
-      }
-      return RuleRepository.instance;
-    } finally {
-      release();
+  /**
+   * Constructor requires an initialized KuzuDBClient instance.
+   * @param kuzuClient An initialized KuzuDBClient.
+   */
+  public constructor(kuzuClient: KuzuDBClient) {
+    if (!kuzuClient) {
+      throw new Error('RuleRepository requires an initialized KuzuDBClient instance.');
     }
+    this.kuzuClient = kuzuClient;
   }
 
   private escapeStr(value: any): string {
@@ -44,13 +37,16 @@ export class RuleRepository {
 
   private formatRule(ruleData: any): Rule {
     let created_str = ruleData.created;
-    if (ruleData.created instanceof Date) {
+    if (ruleData.created && typeof ruleData.created.toISOString === 'function') {
       created_str = ruleData.created.toISOString().split('T')[0];
+    } else if (typeof ruleData.created === 'string') {
+      created_str = ruleData.created;
     }
     return {
       ...ruleData,
       id: ruleData.id,
       created: created_str,
+      triggers: Array.isArray(ruleData.triggers) ? ruleData.triggers : [],
       graph_unique_id: undefined,
     } as Rule;
   }
@@ -65,7 +61,7 @@ export class RuleRepository {
       MATCH (repo:Repository {id: '${escapedRepoNodeId}'})-[:HAS_RULE]->(r:Rule {status: 'active', branch: '${escapedRuleBranch}'})
       RETURN r ORDER BY r.created DESC
     `;
-    const result = await KuzuDBClient.executeQuery(query);
+    const result = await this.kuzuClient.executeQuery(query);
     if (!result || typeof result.getAll !== 'function') {
       return [];
     }
@@ -98,10 +94,10 @@ export class RuleRepository {
     const graphUniqueId = formatGraphUniqueId(logicalRepositoryName, ruleBranch, logicalId);
     const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
 
-    const escapedRepoNodeId = this.escapeStr(repositoryNodeId); // For MATCH (repo:Repository)
+    const escapedRepoNodeId = this.escapeStr(repositoryNodeId);
     const escapedLogicalId = this.escapeStr(logicalId);
     const escapedName = this.escapeStr(rule.name);
-    const escapedCreated = this.escapeStr(rule.created); // Expects 'YYYY-MM-DD'
+    const escapedCreated = this.escapeStr(rule.created);
     const cypherTriggersList = this.formatStringArrayForCypher(rule.triggers);
     const escapedContent = this.escapeStr(rule.content);
     const escapedStatus = this.escapeStr(rule.status || 'active');
@@ -133,7 +129,7 @@ export class RuleRepository {
       MERGE (repo)-[:HAS_RULE]->(r)
       RETURN r`;
 
-    await KuzuDBClient.executeQuery(query);
+    await this.kuzuClient.executeQuery(query);
     return this.findByIdAndBranch(logicalRepositoryName, logicalId, ruleBranch);
   }
 
@@ -152,7 +148,7 @@ export class RuleRepository {
       MATCH (r:Rule {graph_unique_id: '${escapedGraphUniqueId}'})
       RETURN r LIMIT 1
     `;
-    const result = await KuzuDBClient.executeQuery(query);
+    const result = await this.kuzuClient.executeQuery(query);
     if (!result || typeof result.getAll !== 'function') {
       return null;
     }
@@ -179,7 +175,7 @@ export class RuleRepository {
       RETURN r
       ORDER BY r.created DESC, r.name ASC
     `;
-    const result = await KuzuDBClient.executeQuery(query);
+    const result = await this.kuzuClient.executeQuery(query);
     if (!result || typeof result.getAll !== 'function') {
       return [];
     }

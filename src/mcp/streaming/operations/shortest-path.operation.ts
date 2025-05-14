@@ -1,15 +1,6 @@
 import { MemoryService } from '../../../services/memory.service';
 import { ProgressHandler } from '../progress-handler';
 
-interface ShortestPathParams {
-  relationshipTypes?: string[];
-  direction?: 'outgoing' | 'incoming' | 'both';
-  algorithm?: string;
-  projectedGraphName?: string;
-  nodeTableNames?: string[];
-  relationshipTableNames?: string[];
-}
-
 /**
  * Operation class for finding the shortest path between two nodes with streaming support.
  */
@@ -18,128 +9,107 @@ export class ShortestPathOperation {
    * Execute the shortest path operation with streaming support.
    */
   public static async execute(
-    repository: string,
+    clientProjectRoot: string,
+    repositoryName: string,
     branch: string,
+    projectedGraphName: string,
+    nodeTableNames: string[],
+    relationshipTableNames: string[],
     startNodeId: string,
     endNodeId: string,
-    params: ShortestPathParams = {},
+    params: any, // Keep generic params for potential future Kuzu options
     memoryService: MemoryService,
     progressHandler?: ProgressHandler,
   ): Promise<any> {
-    const {
-      relationshipTypes,
-      direction = 'outgoing',
-      algorithm,
-      projectedGraphName,
-      nodeTableNames,
-      relationshipTableNames,
-    } = params;
+    try {
+      if (
+        !repositoryName ||
+        !projectedGraphName ||
+        !nodeTableNames ||
+        !relationshipTableNames ||
+        !startNodeId ||
+        !endNodeId
+      ) {
+        return { error: 'Missing required parameters for Shortest Path' };
+      }
 
-    // Initial validation, returning an error object for the handler to process
-    if (!repository || !startNodeId || !endNodeId) {
-      return {
-        error: 'Missing required parameters: repository, startNodeId, and endNodeId are required',
-        status: 'error',
-      };
-    }
+      if (progressHandler) {
+        progressHandler.progress({
+          status: 'initializing',
+          message: `Starting shortest path search from ${startNodeId} to ${endNodeId} in graph ${projectedGraphName} (${repositoryName}:${branch}, Project: ${clientProjectRoot})`,
+        });
+      }
 
-    if (progressHandler) {
-      progressHandler.progress({
-        status: 'initializing',
-        message: `Initializing shortest path search from ${startNodeId} to ${endNodeId} in ${repository}:${branch}`,
-        startNodeId,
-        endNodeId,
-        direction,
-        relationshipTypes,
-        algorithm,
+      const enrichedParams = {
+        ...params,
         projectedGraphName,
         nodeTableNames,
         relationshipTableNames,
-      });
-    }
+      };
 
-    let operationStatus = 'complete';
-    let path: any[] = [];
-    let pathLength = 0;
-    let pathFound = false;
-    let errorMessage: string | null = null;
-
-    try {
-      const servicePathResult = await (memoryService as any).shortestPath?.(
-        repository,
+      const shortestPathResult = await memoryService.shortestPath(
+        repositoryName,
         branch,
         startNodeId,
         endNodeId,
-        {
-          relationshipTypes,
-          direction,
-          algorithm,
-          projectedGraphName,
-          nodeTableNames,
-          relationshipTableNames,
-        },
+        enrichedParams,
       );
 
-      // Ensure servicePathResult and its path property are valid
-      if (servicePathResult && Array.isArray(servicePathResult.path)) {
-        path = servicePathResult.path;
-        pathLength =
-          typeof servicePathResult.length === 'number' ? servicePathResult.length : path.length;
-        pathFound = path.length > 0;
-        if (servicePathResult.error) {
-          // If service itself indicates an error in its valid structure
-          errorMessage = servicePathResult.error;
-          operationStatus = 'error';
-          pathFound = false; // Ensure pathFound is false if service reports error
-        }
-      } else if (servicePathResult && servicePathResult.error) {
-        errorMessage = servicePathResult.error;
-        operationStatus = 'error';
-      } else {
-        // Path not found or unexpected result from service, treat as no path found
-        // (path, pathLength, pathFound already defaulted to no path)
-        // Optionally log a warning if servicePathResult was truthy but malformed
-      }
-    } catch (err: any) {
-      errorMessage = err.message || 'Error during shortest path service call';
-      operationStatus = 'error';
-      // path, pathLength, pathFound already defaulted to no path state
-    }
+      // Determine pathFound based on the result
+      const pathFound = !!(shortestPathResult?.path && shortestPathResult.path.length > 0);
+      const path = shortestPathResult?.path || [];
+      const length = shortestPathResult?.length || 0;
 
-    if (progressHandler) {
-      progressHandler.progress({
-        status: operationStatus === 'error' ? 'error' : 'in_progress', // or 'complete' if only one progress update
-        message: errorMessage
-          ? `Error: ${errorMessage}`
-          : pathFound
-            ? `Path found with length ${pathLength}`
-            : 'No path found',
-        pathFound,
-        pathLength,
-        path: operationStatus === 'error' ? [] : path, // Send empty path on error
-        ...(errorMessage && { errorDetail: errorMessage }),
-      });
-    }
-
-    // This is the wrapper object returned to the tool handler
-    return {
-      status: operationStatus,
-      repository,
-      branch,
-      startNodeId,
-      endNodeId,
-      paramsUsed: {
-        direction,
-        relationshipTypes,
-        algorithm,
+      const resultPayload = {
+        status: 'complete',
+        clientProjectRoot,
+        repository: repositoryName,
+        branch,
         projectedGraphName,
-        nodeTableNames,
-        relationshipTableNames,
-      },
-      pathFound,
-      pathLength,
-      path,
-      ...(errorMessage && { error: errorMessage }),
-    };
+        startNodeId,
+        endNodeId,
+        results: {
+          pathFound,
+          path,
+          length,
+          error: shortestPathResult?.error || null, // Include error if present in Kuzu result
+        },
+      };
+
+      if (progressHandler) {
+        // Send in_progress with available path information
+        progressHandler.progress({
+          status: 'in_progress',
+          message: `Shortest path search processing for ${projectedGraphName}...`,
+          pathFound: pathFound,
+          path: path,
+          length: length,
+        });
+
+        // Send final progress event (which is effectively the same data now)
+        progressHandler.progress({ ...resultPayload, isFinal: true });
+
+        // Send the final JSON-RPC response via progressHandler
+        progressHandler.sendFinalResponse(resultPayload, false);
+        return null; // Indicate response was sent via progressHandler
+      }
+
+      // If no progressHandler, return the result directly
+      return resultPayload;
+    } catch (error: any) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (progressHandler) {
+        const errorPayload = { error: `Shortest path search failed: ${errorMessage}` };
+        progressHandler.progress({
+          ...errorPayload,
+          status: 'error',
+          message: errorPayload.error,
+          isFinal: true,
+        });
+        progressHandler.sendFinalResponse(errorPayload, true);
+        return null; // Indicate error was handled via progress mechanism
+      }
+      throw new Error(`Shortest path search failed: ${errorMessage}`);
+    }
   }
 }

@@ -4,7 +4,7 @@ import {
   // For now, let's include ComponentRepository if graph ops are on components.
   ComponentRepository,
 } from '../../repositories';
-import { Component, Context, Decision } from '../../types'; // Added Context and Decision imports
+import { Component, Context, Decision, Rule } from '../../types'; // Added Context and Decision imports
 
 // This file is a placeholder for graph-related operations.
 // Implementations will depend on the capabilities of the underlying repositories
@@ -12,7 +12,61 @@ import { Component, Context, Decision } from '../../types'; // Added Context and
 // and the specific requirements of the graph-based tools.
 
 /**
- * Placeholder for K-Core Decomposition operation.
+ * Retrieves the contextual history for a given item.
+ */
+export async function getItemContextualHistoryOp(
+  repositoryName: string,
+  branch: string,
+  itemId: string,
+  itemType: 'Component' | 'Decision' | 'Rule',
+  repositoryRepo: RepositoryRepository,
+  componentRepo: ComponentRepository,
+): Promise<any> {
+  return componentRepo.getItemContextualHistory(repositoryName, itemId, branch, itemType);
+}
+
+/**
+ * Retrieves governing items (decisions, rules) for a component.
+ */
+export async function getGoverningItemsForComponentOp(
+  repositoryName: string,
+  branch: string,
+  componentId: string,
+  repositoryRepo: RepositoryRepository,
+  componentRepo: ComponentRepository,
+): Promise<any> {
+  return componentRepo.getGoverningItemsForComponent(repositoryName, componentId, branch);
+}
+
+/**
+ * Retrieves related items within a certain number of hops in the graph.
+ */
+export async function getRelatedItemsOp(
+  repositoryName: string,
+  branch: string,
+  itemId: string,
+  params: {
+    relationshipTypes?: string[];
+    depth?: number;
+    direction?: 'OUTGOING' | 'INCOMING' | 'BOTH';
+  },
+  repositoryRepo: RepositoryRepository,
+  componentRepo: ComponentRepository,
+): Promise<any> {
+  const { relationshipTypes, depth, direction } = params;
+  return componentRepo.getRelatedItems(
+    repositoryName,
+    itemId,
+    branch,
+    relationshipTypes,
+    depth,
+    direction,
+  );
+}
+
+/**
+ * Executes K-Core Decomposition algorithm.
+ * NOTE: Signature must match memory.service.ts expectations.
  */
 export async function kCoreDecompositionOp(
   repositoryName: string,
@@ -36,7 +90,8 @@ export async function kCoreDecompositionOp(
 }
 
 /**
- * Placeholder for Louvain Community Detection operation.
+ * Executes Louvain Community Detection algorithm.
+ * NOTE: Signature must match memory.service.ts expectations.
  */
 export async function louvainCommunityDetectionOp(
   repositoryName: string,
@@ -52,7 +107,8 @@ export async function louvainCommunityDetectionOp(
 }
 
 /**
- * Placeholder for PageRank operation.
+ * Executes PageRank algorithm.
+ * NOTE: Signature must match memory.service.ts expectations.
  */
 export async function pageRankOp(
   repositoryName: string,
@@ -78,7 +134,8 @@ export async function pageRankOp(
 }
 
 /**
- * Placeholder for Strongly Connected Components operation.
+ * Executes Strongly Connected Components algorithm.
+ * NOTE: Signature must match memory.service.ts expectations.
  */
 export async function stronglyConnectedComponentsOp(
   repositoryName: string,
@@ -95,7 +152,8 @@ export async function stronglyConnectedComponentsOp(
 }
 
 /**
- * Placeholder for Weakly Connected Components operation.
+ * Executes Weakly Connected Components algorithm.
+ * NOTE: Signature must match memory.service.ts expectations.
  */
 export async function weaklyConnectedComponentsOp(
   repositoryName: string,
@@ -112,7 +170,8 @@ export async function weaklyConnectedComponentsOp(
 }
 
 /**
- * Placeholder for Shortest Path operation.
+ * Finds the shortest path between two nodes.
+ * NOTE: Signature must match memory.service.ts expectations.
  */
 export async function shortestPathOp(
   repositoryName: string,
@@ -131,60 +190,4 @@ export async function shortestPathOp(
   componentRepo: ComponentRepository,
 ): Promise<{ path: Component[]; length: number; error?: string | null }> {
   return componentRepo.findShortestPath(repositoryName, startNodeId, branch, endNodeId, params);
-}
-
-/**
- * Placeholder for Get Item Contextual History operation.
- */
-export async function getItemContextualHistoryOp(
-  repositoryName: string,
-  branch: string, // Branch for the item and its contexts
-  itemId: string, // Logical ID
-  itemType: 'Component' | 'Decision' | 'Rule',
-  repositoryRepo: RepositoryRepository, // Not strictly needed
-  componentRepo: ComponentRepository, // ContextRepo should be used if history is for non-components
-): Promise<Context[]> {
-  // ComponentRepository.getItemContextualHistory expects (repositoryName, itemId, itemBranch, itemType)
-  return componentRepo.getItemContextualHistory(repositoryName, itemId, branch, itemType);
-}
-
-/**
- * Placeholder for Get Governing Items for Component operation.
- */
-export async function getGoverningItemsForComponentOp(
-  repositoryName: string,
-  branch: string, // Branch of the component
-  componentId: string, // Logical ID
-  repositoryRepo: RepositoryRepository, // Not strictly needed
-  componentRepo: ComponentRepository,
-): Promise<Decision[]> {
-  // ComponentRepository.getGoverningItemsForComponent expects (repositoryName, componentId, componentBranch)
-  return componentRepo.getGoverningItemsForComponent(repositoryName, componentId, branch);
-}
-
-/**
- * Placeholder for Get Related Items operation.
- */
-export async function getRelatedItemsOp(
-  repositoryName: string,
-  branch: string, // Branch of the startItem and relatedItems
-  itemId: string, // Logical ID of the startItem
-  params: {
-    relationshipTypes?: string[];
-    depth?: number;
-    direction?: 'INCOMING' | 'OUTGOING' | 'BOTH';
-  },
-  repositoryRepo: RepositoryRepository, // Not strictly needed
-  componentRepo: ComponentRepository,
-): Promise<Component[]> {
-  const { relationshipTypes, depth, direction } = params;
-  // ComponentRepository.getRelatedItems expects (repositoryName, componentId, componentBranch, relTypes?, depth?, dir?)
-  return componentRepo.getRelatedItems(
-    repositoryName,
-    itemId,
-    branch,
-    relationshipTypes,
-    depth,
-    direction,
-  );
 }

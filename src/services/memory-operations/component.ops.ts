@@ -21,7 +21,7 @@ interface UpsertComponentData {
  *
  * @param repositoryName - The name of the repository.
  * @param branch - The branch of the repository.
- * @param componentData - Data for the component to be upserted.
+ * @param componentData - Data for the component to be upserted (from ComponentInput).
  * @param repositoryRepo - Instance of RepositoryRepository.
  * @param componentRepo - Instance of ComponentRepository.
  * @returns A Promise resolving to the upserted Component object or null if repository not found.
@@ -29,7 +29,7 @@ interface UpsertComponentData {
 export async function upsertComponentOp(
   repositoryName: string,
   branch: string,
-  componentData: UpsertComponentData,
+  componentData: ComponentInput, // Input from service layer is ComponentInput
   repositoryRepo: RepositoryRepository,
   componentRepo: ComponentRepository,
 ): Promise<Component | null> {
@@ -39,13 +39,18 @@ export async function upsertComponentOp(
     return null;
   }
 
+  // Transform ComponentInput to what ComponentRepository.upsertComponent expects (ComponentInput itself)
+  // The key is ensuring `depends_on` is handled if it's null.
   const inputForRepo: ComponentInput = {
     id: componentData.id,
     name: componentData.name,
     kind: componentData.kind,
     status: componentData.status || 'active',
-    depends_on: componentData.depends_on || [],
-    branch: branch,
+    // Handle null for depends_on: if null, pass undefined or [], repository layer handles it.
+    // ComponentRepository.upsertComponent already handles this via `component.depends_on || []`.
+    // So, we can pass it directly, or ensure it becomes undefined if null.
+    depends_on: componentData.depends_on === null ? undefined : componentData.depends_on,
+    branch: branch, // Ensure branch is explicitly passed from the operation context
   };
 
   return componentRepo.upsertComponent(repository.id, inputForRepo);

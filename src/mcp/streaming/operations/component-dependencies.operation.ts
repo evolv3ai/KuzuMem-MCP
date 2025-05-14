@@ -9,7 +9,8 @@ export class ComponentDependenciesOperation {
    * Execute the component dependencies operation with streaming support
    */
   public static async execute(
-    repository: string,
+    clientProjectRoot: string,
+    repositoryName: string,
     branch: string,
     componentId: string,
     depth: number = 1,
@@ -18,22 +19,24 @@ export class ComponentDependenciesOperation {
   ): Promise<any> {
     try {
       // Validate required args
-      if (!repository || !componentId) {
-        return { error: 'Missing required parameters: repository and componentId are required' };
+      if (!repositoryName || !componentId) {
+        return {
+          error: 'Missing required parameters: repositoryName and componentId are required',
+        };
       }
 
       // Report initialization progress
       if (progressHandler) {
         progressHandler.progress({
           status: 'initializing',
-          message: `Starting dependency analysis for ${componentId} in ${repository}:${branch}`,
+          message: `Starting dependency analysis for ${componentId} in ${repositoryName}:${branch} (Project: ${clientProjectRoot})`,
           depth,
         });
       }
 
       // First level of dependencies
       const firstLevelDeps = await memoryService.getComponentDependencies(
-        repository,
+        repositoryName,
         branch,
         componentId,
       );
@@ -68,9 +71,9 @@ export class ComponentDependenciesOperation {
 
           // Get next level
           const nextLevelDeps = await memoryService.getComponentDependencies(
-            repository,
+            repositoryName,
             branch,
-            dep.id, // Assuming dep has an 'id' property
+            dep.id,
           );
 
           // Add to all dependencies, avoiding duplicates
@@ -95,10 +98,11 @@ export class ComponentDependenciesOperation {
         }
       }
 
-      // Final result
-      const result = {
+      // Final result payload
+      const resultPayload = {
         status: 'complete',
-        repository,
+        clientProjectRoot,
+        repository: repositoryName,
         branch,
         componentId,
         depth,
@@ -106,10 +110,30 @@ export class ComponentDependenciesOperation {
         dependencies: allDependencies,
       };
 
-      return result;
+      if (progressHandler) {
+        // Send final progress event
+        progressHandler.progress({ ...resultPayload, isFinal: true });
+
+        // Send the final JSON-RPC response via progressHandler
+        progressHandler.sendFinalResponse(resultPayload, false);
+        return null; // Indicate response was sent via progressHandler
+      }
+
+      // If no progressHandler, return the result directly
+      return resultPayload;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      // Let the ToolExecutionService handle completing the progressHandler with the error
+      if (progressHandler) {
+        const errorPayload = { error: `Failed to get component dependencies: ${errorMessage}` };
+        progressHandler.progress({
+          ...errorPayload,
+          status: 'error',
+          message: errorPayload.error,
+          isFinal: true,
+        });
+        progressHandler.sendFinalResponse(errorPayload, true);
+        return null; // Indicate error was handled via progress mechanism
+      }
       throw new Error(`Failed to get component dependencies: ${errorMessage}`);
     }
   }

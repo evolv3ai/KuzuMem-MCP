@@ -9,3 +9,4 @@ export * from './louvain-community-detection.operation';
 export * from './pagerank.operation';
 export * from './strongly-connected-components.operation';
 export * from './weakly-connected-components.operation';
+export * from './simple-echo.operation';

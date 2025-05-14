@@ -1,30 +1,23 @@
 import { Decision } from '../types';
-import { Mutex } from '../utils/mutex';
 import { KuzuDBClient } from '../db/kuzu';
 import { formatGraphUniqueId, parseGraphUniqueId } from '../utils/id.utils';
 
 /**
- * Thread-safe singleton repository for Decision, using KuzuDB and Cypher queries
+ * Repository for Decision, using KuzuDB and Cypher queries.
+ * Each instance is now tied to a specific KuzuDBClient.
  */
 export class DecisionRepository {
-  private static instance: DecisionRepository;
-  private static lock = new Mutex();
-  private conn: any;
+  private kuzuClient: KuzuDBClient;
 
-  private constructor() {
-    this.conn = KuzuDBClient.getConnection();
-  }
-
-  static async getInstance(): Promise<DecisionRepository> {
-    const release = await DecisionRepository.lock.acquire();
-    try {
-      if (!DecisionRepository.instance) {
-        DecisionRepository.instance = new DecisionRepository();
-      }
-      return DecisionRepository.instance;
-    } finally {
-      release();
+  /**
+   * Constructor requires an initialized KuzuDBClient instance.
+   * @param kuzuClient An initialized KuzuDBClient.
+   */
+  public constructor(kuzuClient: KuzuDBClient) {
+    if (!kuzuClient) {
+      throw new Error('DecisionRepository requires an initialized KuzuDBClient instance.');
     }
+    this.kuzuClient = kuzuClient;
   }
 
   private escapeStr(value: any): string {
@@ -66,7 +59,7 @@ export class DecisionRepository {
       WHERE d.date >= date('${escapedStartDate}') AND d.date <= date('${escapedEndDate}') 
       RETURN d ORDER BY d.date DESC
     `;
-    const result = await KuzuDBClient.executeQuery(query);
+    const result = await this.kuzuClient.executeQuery(query);
     if (!result || typeof result.getAll !== 'function') {
       return [];
     }
@@ -130,7 +123,7 @@ export class DecisionRepository {
       MERGE (repo)-[:HAS_DECISION]->(d)
       RETURN d`;
 
-    await KuzuDBClient.executeQuery(query);
+    await this.kuzuClient.executeQuery(query);
     return this.findByIdAndBranch(logicalRepositoryName, logicalId, decisionBranch);
   }
 
@@ -149,7 +142,7 @@ export class DecisionRepository {
       MATCH (d:Decision {graph_unique_id: '${escapedGraphUniqueId}'})
       RETURN d LIMIT 1
     `;
-    const result = await KuzuDBClient.executeQuery(query);
+    const result = await this.kuzuClient.executeQuery(query);
     if (!result || typeof result.getAll !== 'function') {
       return null;
     }
@@ -176,7 +169,7 @@ export class DecisionRepository {
       RETURN d
       ORDER BY d.date DESC, d.name ASC
     `;
-    const result = await KuzuDBClient.executeQuery(query);
+    const result = await this.kuzuClient.executeQuery(query);
     if (!result || typeof result.getAll !== 'function') {
       return [];
     }
