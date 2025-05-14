@@ -9,8 +9,10 @@ import { StdioProgressTransport } from './mcp/streaming/stdio-transport';
 import { ToolExecutionService } from './mcp/services/tool-execution.service';
 
 // Determine Client Project Root at startup (for context only, not for DB initialization)
-const detectedClientProjectRoot = process.cwd();
-console.error(`MCP stdio server detected client project root: ${detectedClientProjectRoot}`);
+const serverCwd = process.cwd();
+console.error(
+  `MCP stdio server CWD (Current Working Directory): ${serverCwd}. Note: Actual memory bank paths are determined by 'init-memory-bank' calls per repository/branch.`,
+);
 
 // Map to store clientProjectRoot for each repository and branch
 // Key: "repositoryName:branchName", Value: "clientProjectRootPath"
@@ -284,27 +286,31 @@ rl.on('line', async (line) => {
           );
 
           if (toolResult !== null) {
+            // Successful tool execution (or tool returning its own error structure within the result)
             sendResponse({
               jsonrpc: '2.0',
               id: String(request.id),
               result: {
                 content: [{ type: 'text', text: JSON.stringify(toolResult, null, 2) }],
-                isError: !!toolResult?.error,
+                isError: !!toolResult?.error, // This custom flag is part of the expected content structure
               },
             });
           }
+          // If toolResult is null, it implies progressHandler handled the final response, or it was a notification-style call
         } catch (err: any) {
           debugLog(
             0,
-            `FATAL ERROR (tools/call in stdio-server): ${err.message || String(err)}`,
+            `FATAL ERROR (tools/call in stdio-server catch block): ${err.message || String(err)}`,
             err.stack,
           );
+          // Send a standard JSON-RPC error response
           sendResponse({
             jsonrpc: '2.0',
-            id: request.id,
-            result: {
-              content: [{ type: 'text', text: `Server error: ${err.message || String(err)}` }],
-              isError: true,
+            id: request.id, // Use original request.id
+            error: {
+              code: -32000, // Generic server error
+              message: `Server error executing tool '${toolName}': ${err.message || String(err)}`,
+              data: err.stack, // Optional: include stack trace or other data
             },
           });
         }
