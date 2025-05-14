@@ -27,6 +27,10 @@ declare module 'express-serve-static-core' {
 // Load environment variables
 dotenv.config();
 
+// Map to store clientProjectRoot for each repository and branch, similar to stdio server
+// Key: "repositoryName:branchName", Value: "clientProjectRootPath"
+const repositoryRootMap = new Map<string, string>();
+
 const HTTP_STREAM_PROJECT_ROOT = process.env.HTTP_STREAM_PROJECT_ROOT;
 if (!HTTP_STREAM_PROJECT_ROOT) {
   console.error(
@@ -329,8 +333,62 @@ export async function configureServer(app: express.Application): Promise<void> {
             let effectiveClientProjectRoot: string | undefined;
             if (toolName === 'init-memory-bank') {
               effectiveClientProjectRoot = toolArgs.clientProjectRoot;
+              if (effectiveClientProjectRoot && toolArgs.repository && toolArgs.branch) {
+                const repoBranchKey = `${toolArgs.repository}:${toolArgs.branch}`;
+                repositoryRootMap.set(repoBranchKey, effectiveClientProjectRoot);
+                wrappedDebugLog(
+                  LogLevel.DEBUG,
+                  `Stored clientProjectRoot for ${repoBranchKey}: ${effectiveClientProjectRoot}`,
+                );
+              } else {
+                wrappedDebugLog(
+                  LogLevel.ERROR,
+                  `Error: init-memory-bank called without required arguments for storing clientProjectRoot (repository, branch, clientProjectRoot).`,
+                );
+                // Error handling for init-memory-bank missing args will be caught by the !effectiveClientProjectRoot check below
+              }
             } else {
-              effectiveClientProjectRoot = toolArgs.clientProjectRoot;
+              // For other tools, retrieve clientProjectRoot from the map first
+              if (toolArgs.repository && toolArgs.branch) {
+                const repoBranchKey = `${toolArgs.repository}:${toolArgs.branch}`;
+                effectiveClientProjectRoot = repositoryRootMap.get(repoBranchKey);
+                if (effectiveClientProjectRoot) {
+                  wrappedDebugLog(
+                    LogLevel.DEBUG,
+                    `Retrieved clientProjectRoot for ${repoBranchKey} from map: ${effectiveClientProjectRoot}`,
+                  );
+                } else {
+                  // If not in map, try toolArgs.clientProjectRoot (current behavior)
+                  effectiveClientProjectRoot = toolArgs.clientProjectRoot;
+                  if (effectiveClientProjectRoot) {
+                    wrappedDebugLog(
+                      LogLevel.DEBUG,
+                      `Using clientProjectRoot from toolArgs for ${repoBranchKey}: ${effectiveClientProjectRoot} (not found in map)`,
+                    );
+                  } else {
+                    // As a last resort, try X-Client-Project-Root header if implemented (currently not fully implemented in this snippet for assignment)
+                    // For now, if not in map and not in toolArgs, it will fail the check below.
+                    wrappedDebugLog(
+                      LogLevel.WARN,
+                      `clientProjectRoot not found in map or toolArgs for ${repoBranchKey}`,
+                    );
+                  }
+                }
+              } else {
+                // Fallback to toolArgs.clientProjectRoot if repo/branch not in toolArgs (less ideal, relies on client sending it)
+                effectiveClientProjectRoot = toolArgs.clientProjectRoot;
+                if (effectiveClientProjectRoot) {
+                  wrappedDebugLog(
+                    LogLevel.WARN,
+                    `Tool '${toolName}' did not provide repository/branch for map lookup, using clientProjectRoot from toolArgs: ${effectiveClientProjectRoot}`,
+                  );
+                } else {
+                  wrappedDebugLog(
+                    LogLevel.WARN,
+                    `Tool '${toolName}' did not provide repository/branch for map lookup, and no clientProjectRoot in toolArgs.`,
+                  );
+                }
+              }
             }
 
             // ##### ADD DETAILED DEBUG LOG HERE #####
@@ -559,8 +617,48 @@ export async function configureServer(app: express.Application): Promise<void> {
           let effectiveClientProjectRoot: string | undefined;
           if (toolName === 'init-memory-bank') {
             effectiveClientProjectRoot = toolArgs.clientProjectRoot;
+            if (effectiveClientProjectRoot && toolArgs.repository && toolArgs.branch) {
+              const repoBranchKey = `${toolArgs.repository}:${toolArgs.branch}`;
+              repositoryRootMap.set(repoBranchKey, effectiveClientProjectRoot);
+              wrappedDebugLog(
+                LogLevel.DEBUG,
+                `Stored clientProjectRoot for ${repoBranchKey}: ${effectiveClientProjectRoot}`,
+              );
+            }
+            // Error for missing args handled by !effectiveClientProjectRoot check
           } else {
-            effectiveClientProjectRoot = toolArgs.clientProjectRoot;
+            if (toolArgs.repository && toolArgs.branch) {
+              const repoBranchKey = `${toolArgs.repository}:${toolArgs.branch}`;
+              effectiveClientProjectRoot = repositoryRootMap.get(repoBranchKey);
+              if (effectiveClientProjectRoot) {
+                wrappedDebugLog(
+                  LogLevel.DEBUG,
+                  `Retrieved clientProjectRoot for ${repoBranchKey} from map: ${effectiveClientProjectRoot}`,
+                );
+              } else {
+                effectiveClientProjectRoot = toolArgs.clientProjectRoot;
+                if (effectiveClientProjectRoot) {
+                  wrappedDebugLog(
+                    LogLevel.DEBUG,
+                    `Using clientProjectRoot from toolArgs for ${repoBranchKey}: ${effectiveClientProjectRoot} (not found in map)`,
+                  );
+                }
+                // Further fallback to header could be here
+              }
+            } else {
+              effectiveClientProjectRoot = toolArgs.clientProjectRoot; // Fallback if no repo/branch in args
+              if (effectiveClientProjectRoot) {
+                wrappedDebugLog(
+                  LogLevel.WARN,
+                  `Tool '${toolName}' did not provide repository/branch for map lookup, using clientProjectRoot from toolArgs: ${effectiveClientProjectRoot}`,
+                );
+              } else {
+                wrappedDebugLog(
+                  LogLevel.WARN,
+                  `Tool '${toolName}' did not provide repository/branch for map lookup, and no clientProjectRoot in toolArgs.`,
+                );
+              }
+            }
           }
 
           // ##### ADD DETAILED DEBUG LOG HERE #####

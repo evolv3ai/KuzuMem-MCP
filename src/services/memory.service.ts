@@ -565,7 +565,7 @@ export class MemoryService {
     const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
     const componentRepo = this.repositoryProvider.getComponentRepository(clientProjectRoot);
 
-    console.error(
+    console.log(
       `DEBUG: memory.service.ts: getItemContextualHistory received itemType = >>>${itemType}<<<`,
     );
     return graphOps.getItemContextualHistoryOp(
