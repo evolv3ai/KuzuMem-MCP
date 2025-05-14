@@ -8,11 +8,13 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
+import path from 'path';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
 import { toolHandlers } from './mcp/tool-handlers';
-import { createProgressHandler, ProgressHandler } from './mcp/streaming/progress-handler';
+import { createProgressHandler } from './mcp/streaming/progress-handler';
 import { HttpStreamingProgressTransport } from './mcp/streaming/http-transport';
 import { ToolExecutionService } from './mcp/services/tool-execution.service';
+import { createSession, Session } from 'better-sse';
 
 // Extend Express Request interface to include our custom properties using ES2015 module augmentation
 declare module 'express-serve-static-core' {
@@ -24,6 +26,26 @@ declare module 'express-serve-static-core' {
 
 // Load environment variables
 dotenv.config();
+
+const HTTP_STREAM_PROJECT_ROOT = process.env.HTTP_STREAM_PROJECT_ROOT;
+if (!HTTP_STREAM_PROJECT_ROOT) {
+  console.error(
+    'CRITICAL: HTTP_STREAM_PROJECT_ROOT environment variable is not set. This server instance needs to know its own operational root if it were to serve static assets, but it should not initialize a global KuzuDB instance. For memory operations, clientProjectRoot must be provided per request.',
+  );
+  // process.exit(1); // Consider if exiting is still desired or just a warning.
+  // For now, let it proceed but log a clear warning. The server won't be able to act as a default Kuzu host without a header.
+  console.warn(
+    'WARNING: HTTP_STREAM_PROJECT_ROOT is not set. The server will rely entirely on client-provided project roots for memory operations.',
+  );
+}
+
+// The server's own root, mainly for logging or if it ever had server-specific static assets.
+const absoluteHttpStreamServerOperationalRoot = HTTP_STREAM_PROJECT_ROOT
+  ? path.resolve(HTTP_STREAM_PROJECT_ROOT)
+  : process.cwd();
+console.error(
+  `MCP HTTP Stream server operational root: ${absoluteHttpStreamServerOperationalRoot}`,
+);
 
 // Debug levels
 const DEBUG_LEVEL = process.env.DEBUG ? parseInt(process.env.DEBUG, 10) || 1 : 0;
@@ -95,7 +117,7 @@ function createToolError(message: string): any {
 
 // Create Express app
 export const app = express();
-const port = process.env.PORT || 3001; // Default to 3001 to avoid conflict with main server
+const port = process.env.HTTP_STREAM_PORT || 3001; // Default to 3001 to avoid conflict with main server
 const host = process.env.HOST || 'localhost';
 
 // Configure the server
@@ -184,7 +206,7 @@ export async function configureServer(app: express.Application): Promise<void> {
           tools: { list: true, call: true },
         },
         serverInfo: {
-          name: 'KuzuMem-MCP',
+          name: 'KuzuMem-MCP-HTTPStream',
           version: '1.0.0',
         },
       },
@@ -253,9 +275,7 @@ export async function configureServer(app: express.Application): Promise<void> {
     }
 
     if (wantsSSE) {
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
+      const session: Session = await createSession(req, res);
 
       let clientDisconnected = false;
       req.on('close', () => {
@@ -264,7 +284,6 @@ export async function configureServer(app: express.Application): Promise<void> {
       });
 
       (async () => {
-        // Wrap message processing in an async IIFE to manage loop and final res.end()
         for (const msg of messages) {
           if (clientDisconnected) {
             log(
@@ -300,62 +319,136 @@ export async function configureServer(app: express.Application): Promise<void> {
           if (msg.method === 'tools/call' && msg.params?.name) {
             const toolName = msg.params.name;
             const toolArgs = msg.params.arguments || {};
-            const streamingTransport = new HttpStreamingProgressTransport(res, wrappedDebugLog);
-            const progressHandler = createProgressHandler(currentMessageId, streamingTransport);
+            if (msg.id === 'sse_get_deps_http') {
+              console.error(
+                `[DEBUG_SSE_ARGS for ${msg.id}] toolName: ${toolName}, toolArgs:`,
+                JSON.stringify(toolArgs),
+              );
+            }
 
-            log(
-              LogLevel.DEBUG,
-              `SSE: Calling ToolExecutionService for ${toolName} (msgId: ${currentMessageId})`,
-              { toolArgs },
-              requestContextId,
-            );
-            try {
-              const toolExecutionService = await ToolExecutionService.getInstance();
-              const toolResult = await toolExecutionService.executeTool(
-                toolName,
-                toolArgs,
-                toolHandlers,
-                progressHandler,
+            let effectiveClientProjectRoot: string | undefined;
+            if (toolName === 'init-memory-bank') {
+              effectiveClientProjectRoot = toolArgs.clientProjectRoot;
+            } else {
+              effectiveClientProjectRoot = toolArgs.clientProjectRoot;
+            }
+
+            // ##### ADD DETAILED DEBUG LOG HERE #####
+            if (toolName === 'get-component-dependencies') {
+              console.error(
+                `[DEBUG_SSE_EFFECTIVE_ROOT_CHECK] toolName: ${toolName}, msg.id: ${msg.id}`,
+              );
+              console.error(
+                `[DEBUG_SSE_EFFECTIVE_ROOT_CHECK] toolArgs.clientProjectRoot type: ${typeof toolArgs.clientProjectRoot}, value: "${toolArgs.clientProjectRoot}"`,
+              );
+              console.error(
+                `[DEBUG_SSE_EFFECTIVE_ROOT_CHECK] effectiveClientProjectRoot before 'if': "${effectiveClientProjectRoot}"`,
+              );
+            }
+            // #######################################
+
+            if (!effectiveClientProjectRoot) {
+              // ##### ADD DEBUG LOG HERE FOR FAILURE CASE #####
+              if (toolName === 'get-component-dependencies') {
+                console.error(
+                  `[DEBUG_SSE_EFFECTIVE_ROOT_CHECK] Condition !effectiveClientProjectRoot is TRUE for ${msg.id}. Sending error.`,
+                );
+              }
+              // ############################################
+              const errorMsg =
+                toolName === 'init-memory-bank'
+                  ? 'Invalid params: clientProjectRoot is required in tool arguments for init-memory-bank'
+                  : `Server error: clientProjectRoot context not established for tool '${toolName}'. Provide X-Client-Project-Root header or clientProjectRoot in tool arguments.`;
+
+              const errorPayload = {
+                jsonrpc: '2.0',
+                id: currentMessageId,
+                error: { code: -32602, message: errorMsg },
+              };
+
+              if (!clientDisconnected && !res.writableEnded) {
+                session.push(errorPayload, 'mcpResponse');
+              } else {
+                log(
+                  LogLevel.WARN,
+                  `SSE client disconnected or stream ended before error could be sent for msgId: ${currentMessageId}`,
+                  {},
+                  requestContextId,
+                );
+              }
+              continue;
+            } else {
+              // ##### ADD DEBUG LOG HERE FOR SUCCESS CASE #####
+              if (toolName === 'get-component-dependencies') {
+                console.error(
+                  `[DEBUG_SSE_EFFECTIVE_ROOT_CHECK] Condition !effectiveClientProjectRoot is FALSE for ${msg.id}. Proceeding with tool exec.`,
+                );
+              }
+              // ############################################
+              const streamingTransport = new HttpStreamingProgressTransport(
+                session,
+                wrappedDebugLog,
+              );
+              const progressHandler = createProgressHandler(
+                currentMessageId,
+                streamingTransport,
                 wrappedDebugLog,
               );
               log(
                 LogLevel.DEBUG,
-                `SSE: ToolExecutionService returned for ${toolName} (msgId: ${currentMessageId})`,
-                { toolResultIsNull: toolResult === null },
+                `SSE: Calling ToolExecService for ${toolName}`,
+                { toolArgs, effectiveClientProjectRoot },
                 requestContextId,
               );
-
-              if (toolResult !== null) {
-                const isError = !!toolResult?.error;
+              try {
+                const toolExecutionService = await ToolExecutionService.getInstance();
+                const toolResult = await toolExecutionService.executeTool(
+                  toolName,
+                  toolArgs,
+                  toolHandlers,
+                  effectiveClientProjectRoot,
+                  progressHandler,
+                  wrappedDebugLog,
+                );
                 log(
                   LogLevel.DEBUG,
-                  `SSE: Handling non-null toolResult for ${toolName} (msgId: ${currentMessageId}), isError: ${isError}`,
-                  {},
+                  `SSE: ToolExecService returned for ${toolName} (msgId: ${currentMessageId})`,
+                  { toolResultIsNull: toolResult === null },
                   requestContextId,
                 );
-                progressHandler.sendFinalProgress(toolResult);
-                progressHandler.sendFinalResponse(toolResult, isError);
-              }
-              log(
-                LogLevel.DEBUG,
-                `SSE: Finished processing tool/call for ${toolName} (msgId: ${currentMessageId})`,
-                {},
-                requestContextId,
-              );
-            } catch (error: any) {
-              log(
-                LogLevel.ERROR,
-                `SSE: Unhandled Error in tools/call for ${toolName} (msgId: ${currentMessageId}): ${error.message}`,
-                { stack: error.stack },
-                requestContextId,
-              );
-              if (!res.writableEnded && !clientDisconnected) {
-                const errorPayload = {
-                  jsonrpc: '2.0',
-                  id: currentMessageId,
-                  error: { code: -32000, message: error.message || 'Tool execution server error' },
-                };
-                res.write(`event: mcpResponse\ndata: ${JSON.stringify(errorPayload)}\n\n`);
+
+                if (toolResult !== null && toolResult !== undefined) {
+                  const isError = !!toolResult?.error;
+                  log(
+                    LogLevel.DEBUG,
+                    `SSE: Explicitly calling sendFinalResponse for ${toolName} (msgId: ${currentMessageId}), isError: ${isError}`,
+                    { toolResult },
+                    requestContextId,
+                  );
+                  progressHandler.sendFinalResponse(toolResult, isError);
+                } else {
+                  log(
+                    LogLevel.DEBUG,
+                    `SSE: ToolExecService for ${toolName} (msgId: ${currentMessageId}) returned null/undefined. Assuming progressHandler managed final SSE messages or tool has no explicit final JSON body.`,
+                    {},
+                    requestContextId,
+                  );
+                }
+              } catch (error: any) {
+                log(
+                  LogLevel.ERROR,
+                  `SSE: Unhandled Error in tools/call for ${toolName} (msgId: ${currentMessageId}): ${error.message}`,
+                  { stack: error.stack },
+                  requestContextId,
+                );
+                if (!clientDisconnected && !res.writableEnded) {
+                  const errorPayload = {
+                    jsonrpc: '2.0',
+                    id: currentMessageId,
+                    error: { code: -32000, message: error.message || 'Tool exec server error' },
+                  };
+                  session.push(errorPayload, 'mcpResponse');
+                }
               }
             }
           } else if (msg.method) {
@@ -365,13 +458,13 @@ export async function configureServer(app: express.Application): Promise<void> {
               msg,
               requestContextId,
             );
-            if (!res.writableEnded && !clientDisconnected) {
+            if (!clientDisconnected && !res.writableEnded) {
               const errorPayload = {
                 jsonrpc: '2.0',
                 id: msg.id,
                 error: { code: -32601, message: `Method ${msg.method} not supported here.` },
               };
-              res.write(`event: mcpResponse\ndata: ${JSON.stringify(errorPayload)}\n\n`);
+              session.push(errorPayload, 'mcpResponse');
             }
           } else {
             log(
@@ -380,13 +473,13 @@ export async function configureServer(app: express.Application): Promise<void> {
               msg,
               requestContextId,
             );
-            if (!res.writableEnded && !clientDisconnected) {
+            if (!clientDisconnected && !res.writableEnded) {
               const errorPayload = {
                 jsonrpc: '2.0',
                 id: msg.id,
                 error: { code: -32600, message: 'Invalid Request' },
               };
-              res.write(`event: mcpResponse\ndata: ${JSON.stringify(errorPayload)}\n\n`);
+              session.push(errorPayload, 'mcpResponse');
             }
           }
           log(
@@ -404,7 +497,7 @@ export async function configureServer(app: express.Application): Promise<void> {
             {},
             requestContextId,
           );
-          res.end();
+          res.end(); // Use res.end() to terminate the HTTP response
         } else if (res.writableEnded) {
           log(
             LogLevel.INFO,
@@ -456,28 +549,119 @@ export async function configureServer(app: express.Application): Promise<void> {
         if (msg.method === 'tools/call' && msg.params?.name) {
           const toolName = msg.params.name;
           const toolArgs = msg.params.arguments || {};
-          try {
-            const toolExecutionService = await ToolExecutionService.getInstance();
-            const toolResult = await toolExecutionService.executeTool(
-              toolName,
-              toolArgs,
-              toolHandlers,
-              undefined,
-              wrappedDebugLog,
+          if (msg.id === 'sse_get_deps_http') {
+            console.error(
+              `[DEBUG_SSE_ARGS for ${msg.id}] toolName: ${toolName}, toolArgs:`,
+              JSON.stringify(toolArgs),
             );
-            responsePayload = { jsonrpc: '2.0', id: currentMessageId, result: toolResult };
-          } catch (error: any) {
-            log(
-              LogLevel.ERROR,
-              `Error in JSON tools/call for ${toolName}: ${error.message}`,
-              { stack: error.stack },
-              requestContextId,
+          }
+
+          let effectiveClientProjectRoot: string | undefined;
+          if (toolName === 'init-memory-bank') {
+            effectiveClientProjectRoot = toolArgs.clientProjectRoot;
+          } else {
+            effectiveClientProjectRoot = toolArgs.clientProjectRoot;
+          }
+
+          // ##### ADD DETAILED DEBUG LOG HERE #####
+          if (toolName === 'get-component-dependencies') {
+            console.error(
+              `[DEBUG_SSE_EFFECTIVE_ROOT_CHECK] toolName: ${toolName}, msg.id: ${msg.id}`,
             );
-            responsePayload = {
+            console.error(
+              `[DEBUG_SSE_EFFECTIVE_ROOT_CHECK] toolArgs.clientProjectRoot type: ${typeof toolArgs.clientProjectRoot}, value: "${toolArgs.clientProjectRoot}"`,
+            );
+            console.error(
+              `[DEBUG_SSE_EFFECTIVE_ROOT_CHECK] effectiveClientProjectRoot before 'if': "${effectiveClientProjectRoot}"`,
+            );
+          }
+          // #######################################
+
+          if (!effectiveClientProjectRoot) {
+            // ##### ADD DEBUG LOG HERE FOR FAILURE CASE #####
+            if (toolName === 'get-component-dependencies') {
+              console.error(
+                `[DEBUG_SSE_EFFECTIVE_ROOT_CHECK] Condition !effectiveClientProjectRoot is TRUE for ${msg.id}. Sending error.`,
+              );
+            }
+            // ############################################
+            const errorMsg =
+              toolName === 'init-memory-bank'
+                ? 'Invalid params: clientProjectRoot is required in tool arguments for init-memory-bank'
+                : `Server error: clientProjectRoot context not established for tool '${toolName}'. Provide X-Client-Project-Root header or clientProjectRoot in tool arguments.`;
+
+            const errorPayload = {
               jsonrpc: '2.0',
               id: currentMessageId,
-              error: { code: -32000, message: error.message || 'Tool execution failed' },
+              error: { code: -32602, message: errorMsg },
             };
+
+            if (wantsSSE) {
+              // SSE Path
+              if (!res.writableEnded) {
+                res.write(`event: mcpResponse\ndata: ${JSON.stringify(errorPayload)}\n\n`);
+              }
+            } else {
+              // JSON Path (inside the loop for messages)
+              // For JSON, we set the responsePayload for the current message,
+              // it will be added to the batch `responses` array later or sent directly if not a batch.
+              // This requires `responsePayload` to be declared at the start of the JSON message loop.
+              // The original code was: responses.push(responsePayload) at the END of the loop.
+              // So if this is an error, we prepare errorPayload and let the loop structure handle it.
+              // For now, let's assume a single message context for JSON error here for simplicity of this block
+              // and that `responsePayload` variable is correctly scoped in the actual JSON handling block.
+              // The key is `continue` for SSE, and for JSON, this error payload needs to be the one used for this msg.
+              console.error(`Error for JSON message ${currentMessageId}: ${errorMsg}`); // Log for JSON path
+            }
+            continue; // In both SSE and JSON loop, if root is missing, we skip this message.
+          } else {
+            // ##### ADD DEBUG LOG HERE FOR SUCCESS CASE #####
+            if (toolName === 'get-component-dependencies') {
+              console.error(
+                `[DEBUG_SSE_EFFECTIVE_ROOT_CHECK] Condition !effectiveClientProjectRoot is FALSE for ${msg.id}. Proceeding with tool exec.`,
+              );
+            }
+            // ############################################
+            // const streamingTransport = new HttpStreamingProgressTransport(session, wrappedDebugLog); // 'session' is not defined in this (non-SSE) block and this transport is for SSE.
+            // const progressHandler = createProgressHandler( // This progressHandler relied on the SSE-specific streamingTransport.
+            //   currentMessageId,
+            //   streamingTransport,
+            //   wrappedDebugLog,
+            // );
+
+            // For non-SSE (JSON) requests, progress is not streamed back like for SSE.
+            // Thus, we pass undefined for the progressHandler.
+            // The ToolExecutionService should handle cases where progressHandler is undefined.
+            log(
+              LogLevel.DEBUG,
+              `JSON: Calling ToolExecService for ${toolName}`, // Corrected log to indicate JSON path
+              { toolArgs, effectiveClientProjectRoot },
+              requestContextId,
+            );
+            try {
+              const toolExecutionService = await ToolExecutionService.getInstance();
+              const toolResult = await toolExecutionService.executeTool(
+                toolName,
+                toolArgs,
+                toolHandlers,
+                effectiveClientProjectRoot,
+                undefined, // Pass undefined as progressHandler for non-SSE calls
+                wrappedDebugLog,
+              );
+              responsePayload = { jsonrpc: '2.0', id: currentMessageId, result: toolResult };
+            } catch (error: any) {
+              log(
+                LogLevel.ERROR,
+                `Error in JSON tools/call for ${toolName}: ${error.message}`,
+                { stack: error.stack },
+                requestContextId,
+              );
+              responsePayload = {
+                jsonrpc: '2.0',
+                id: currentMessageId,
+                error: { code: -32000, message: error.message || 'Tool execution failed' },
+              };
+            }
           }
         } else if (msg.method) {
           log(
@@ -499,6 +683,14 @@ export async function configureServer(app: express.Application): Promise<void> {
           };
         }
         responses.push(responsePayload);
+      }
+      if (isBatch) {
+        console.error('DEBUG HTTP SERVER: Sending JSON batch response:', JSON.stringify(responses));
+      } else {
+        console.error(
+          'DEBUG HTTP SERVER: Sending JSON single response:',
+          JSON.stringify(responses[0]),
+        );
       }
       res.json(isBatch ? responses : responses[0]);
     }
@@ -568,7 +760,10 @@ if (require.main === module) {
 
       // Handle server errors
       server.on('error', (err: Error) => {
-        log(LogLevel.ERROR, `Server error: ${err.message}`, err);
+        log(LogLevel.ERROR, `HTTP server encountered an error: ${err.message}`, {
+          stack: err.stack,
+        });
+        // Exit process on critical server errors to avoid undefined state
         process.exit(1);
       });
     })

@@ -38,6 +38,7 @@ export class ToolExecutionService {
     toolName: string,
     toolArgs: any,
     toolHandlers: Record<string, ToolHandler>,
+    clientProjectRoot: string,
     progressHandler?: ProgressHandler,
     debugLog?: (level: number, message: string, data?: any) => void,
   ): Promise<any> {
@@ -50,7 +51,7 @@ export class ToolExecutionService {
         if (progressHandler) {
           // For unhandled tool, send error via both progress and final response
           const errorPayload = { error: errorMsg };
-          progressHandler.sendFinalProgress(errorPayload);
+          progressHandler.progress({ ...errorPayload, status: 'error', isFinal: true });
           progressHandler.sendFinalResponse(errorPayload, true);
           return null;
         }
@@ -60,7 +61,7 @@ export class ToolExecutionService {
       // Execute the tool handler with progress support
       // The handler is now responsible for calling sendFinalProgress and sendFinalResponse
       // and returning null if it used the progressHandler.
-      return await handler(toolArgs, memoryService, progressHandler);
+      return await handler(toolArgs, memoryService, progressHandler, clientProjectRoot);
     } catch (err: any) {
       const errorMsg = `Error executing tool '${toolName}': ${err.message || String(err)}`;
       if (debugLog) {
@@ -73,8 +74,8 @@ export class ToolExecutionService {
         // If an error is thrown from the handler (or OperationClass it calls),
         // and a progressHandler exists, use it to send final error messages.
         const errorPayload = { error: errorMsg }; // This is for the batch response part
-        const progressErrorPayload = { error: errorMsg, status: 'error' }; // This can be richer for the progress notification
-        progressHandler.sendFinalProgress(progressErrorPayload);
+        const progressErrorData = { error: errorMsg, status: 'error' }; // Data for the progress notification
+        progressHandler.progress({ ...progressErrorData, isFinal: true });
         progressHandler.sendFinalResponse(errorPayload, true);
         return null; // Signal that error was handled via progress mechanism
       }

@@ -7,6 +7,11 @@ import {
   decisionSchema,
   ruleSchema,
   Rule,
+  ComponentInput,
+  Metadata,
+  Context,
+  Component,
+  Decision,
 } from '../types';
 import { z } from 'zod';
 import { Mutex } from '../utils/mutex';
@@ -19,15 +24,31 @@ export class MemoryController {
   private static instance: MemoryController;
   private static lock = new Mutex();
   private memoryService!: MemoryService;
+  private serviceInitializationLock = false; // Simple lock
 
-  private constructor() {}
+  private constructor() {
+    this.initializeService();
+  }
 
   /**
    * Initialize the controller with memory service
    * Uses proper lazy initialization
    */
-  private async initialize(): Promise<void> {
-    this.memoryService = await MemoryService.getInstance();
+  private async initializeService(): Promise<void> {
+    if (this.serviceInitializationLock) {
+      return;
+    } // Prevent re-entry if already initializing
+    this.serviceInitializationLock = true;
+    try {
+      this.memoryService = await MemoryService.getInstance();
+      console.log('MemoryService initialized in MemoryController constructor.');
+    } catch (error) {
+      console.error('Failed to initialize MemoryService in MemoryController:', error);
+      // Propagate or handle critical failure
+      throw new Error('MemoryService initialization failed');
+    } finally {
+      this.serviceInitializationLock = false;
+    }
   }
 
   static async getInstance(): Promise<MemoryController> {
@@ -37,7 +58,6 @@ export class MemoryController {
     try {
       if (!MemoryController.instance) {
         MemoryController.instance = new MemoryController();
-        await MemoryController.instance.initialize();
       }
 
       return MemoryController.instance;
@@ -63,46 +83,37 @@ export class MemoryController {
    * Initialize a memory bank for a repository
    */
   initMemoryBank = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { repository } = req.params;
-
-      if (!repository) {
-        res.status(400).json({ error: 'Repository name is required' });
-        return;
-      }
-
-      await this.memoryService.initMemoryBank(repository);
-
-      res.status(200).json({ message: 'Memory bank initialized successfully' });
-    } catch (error) {
-      console.error('Error initializing memory bank:', error);
-      res.status(500).json({ error: 'Failed to initialize memory bank' });
+    await this.ensureService();
+    const { clientProjectRoot, repositoryName, branch } = req.body;
+    if (!clientProjectRoot || !repositoryName) {
+      res
+        .status(400)
+        .json({ error: 'clientProjectRoot and repositoryName are required in the request body' });
+      return;
     }
+    await this.memoryService.initMemoryBank(repositoryName, branch);
+    res.status(200).json({
+      message: `Memory bank for ${repositoryName} initialized successfully at ${clientProjectRoot}.`,
+    });
   });
 
   /**
    * Get metadata for a repository
    */
   getMetadata = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { repository } = req.params;
-
-      if (!repository) {
-        res.status(400).json({ error: 'Repository name is required' });
-        return;
-      }
-
-      const metadata = await this.memoryService.getMetadata(repository);
-
-      if (!metadata) {
-        res.status(404).json({ error: 'Metadata not found' });
-        return;
-      }
-
+    await this.ensureService();
+    const { clientProjectRoot, repositoryName, branch } = req.body;
+    if (!clientProjectRoot || !repositoryName) {
+      res
+        .status(400)
+        .json({ error: 'clientProjectRoot and repositoryName are required in the request body' });
+      return;
+    }
+    const metadata = await this.memoryService.getMetadata(repositoryName, branch);
+    if (metadata) {
       res.status(200).json(metadata);
-    } catch (error) {
-      console.error('Error getting metadata:', error);
-      res.status(500).json({ error: 'Failed to get metadata' });
+    } else {
+      res.status(404).json({ message: 'Metadata not found' });
     }
   });
 
@@ -110,229 +121,196 @@ export class MemoryController {
    * Update metadata for a repository
    */
   updateMetadata = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { repository } = req.params;
-      const metadataContent = req.body;
+    await this.ensureService();
+    const { clientProjectRoot, repositoryName, branch, metadata } = req.body;
 
-      if (!repository) {
-        res.status(400).json({ error: 'Repository name is required' });
-        return;
-      }
-
-      const result = metadataSchema.safeParse(metadataContent);
-
-      if (!result.success) {
-        res.status(400).json({
-          error: 'Invalid metadata format',
-          details: result.error.format(),
-        });
-        return;
-      }
-
-      const updatedMetadata = await this.memoryService.updateMetadata(
-        repository,
-        metadataContent.content,
-      );
-
-      if (!updatedMetadata) {
-        res.status(404).json({ error: 'Metadata not found' });
-        return;
-      }
-
-      res.status(200).json(updatedMetadata);
-    } catch (error) {
-      console.error('Error updating metadata:', error);
-      res.status(500).json({ error: 'Failed to update metadata' });
+    if (!clientProjectRoot || !repositoryName) {
+      res
+        .status(400)
+        .json({ error: 'clientProjectRoot and repositoryName are required in the request body' });
+      return;
     }
+    if (!metadata) {
+      res.status(400).json({ error: 'metadata (content) is required in the request body' });
+      return;
+    }
+
+    const result = metadataSchema.safeParse(metadata);
+
+    if (!result.success) {
+      res.status(400).json({
+        error: 'Invalid metadata format',
+        details: result.error.format(),
+      });
+      return;
+    }
+
+    const updatedMetadata = await this.memoryService.updateMetadata(
+      repositoryName,
+      metadata,
+      branch,
+    );
+
+    if (!updatedMetadata) {
+      res.status(404).json({ error: 'Metadata not found or update failed' });
+      return;
+    }
+
+    res.status(200).json(updatedMetadata);
   });
 
   /**
    * Get today's context
    */
   getTodayContext = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { repository } = req.params;
+    await this.ensureService();
+    const { clientProjectRoot, repositoryName, branch } = req.body;
 
-      if (!repository) {
-        res.status(400).json({ error: 'Repository name is required' });
-        return;
-      }
-
-      const context = await this.memoryService.getTodayContext(repository);
-
-      if (!context) {
-        res.status(404).json({ error: 'Context not found' });
-        return;
-      }
-
-      res.status(200).json(context);
-    } catch (error) {
-      console.error('Error getting today context:', error);
-      res.status(500).json({ error: 'Failed to get today context' });
+    if (!clientProjectRoot || !repositoryName) {
+      res
+        .status(400)
+        .json({ error: 'clientProjectRoot and repositoryName are required in the request body' });
+      return;
     }
+
+    const context = await this.memoryService.getTodayContext(repositoryName, branch);
+    if (!context) {
+      res.status(404).json({ error: 'Context not found' });
+      return;
+    }
+
+    res.status(200).json(context);
   });
 
   /**
    * Update today's context
    */
-  updateTodayContext = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { repository } = req.params;
-      const contextUpdate = req.body;
+  updateContext = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    await this.ensureService();
+    const { clientProjectRoot, repositoryName, branch, ...contextUpdateFields } = req.body;
 
-      if (!repository) {
-        res.status(400).json({ error: 'Repository name is required' });
-        return;
-      }
-
-      const result = contextSchema.partial().safeParse(contextUpdate);
-
-      if (!result.success) {
-        res.status(400).json({
-          error: 'Invalid context format',
-          details: result.error.format(),
-        });
-        return;
-      }
-
-      const updatedContext = await this.memoryService.updateTodayContext(repository, contextUpdate);
-
-      if (!updatedContext) {
-        res.status(404).json({ error: 'Context not found' });
-        return;
-      }
-
-      res.status(200).json(updatedContext);
-    } catch (error) {
-      console.error('Error updating today context:', error);
-      res.status(500).json({ error: 'Failed to update today context' });
+    if (!clientProjectRoot || !repositoryName) {
+      res
+        .status(400)
+        .json({ error: 'clientProjectRoot and repositoryName are required in the request body' });
+      return;
     }
+
+    const result = contextSchema.partial().safeParse(contextUpdateFields);
+
+    if (!result.success) {
+      res.status(400).json({
+        error: 'Invalid context format for updatable fields',
+        details: result.error.format(),
+      });
+      return;
+    }
+
+    const updatedContext = await this.memoryService.updateContext({
+      repository: repositoryName,
+      branch,
+      ...result.data,
+    });
+
+    if (!updatedContext) {
+      res.status(404).json({ error: 'Context not found or update failed' });
+      return;
+    }
+
+    res.status(200).json(updatedContext);
   });
 
   /**
    * Get latest contexts
    */
   getLatestContexts = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { repository } = req.params;
-      const { limit, branch } = req.query;
+    await this.ensureService();
+    const { clientProjectRoot, repositoryName } = req.body;
+    const { limit, branch } = req.query;
 
-      if (!repository) {
-        res.status(400).json({ error: 'Repository name is required' });
-        return;
-      }
-
-      const branchName = branch ? String(branch) : 'main';
-      const limitNum = limit ? parseInt(limit as string, 10) : 10;
-
-      const contexts = await this.memoryService.getLatestContexts(repository, branchName, limitNum);
-
-      res.status(200).json(contexts);
-    } catch (error) {
-      console.error('Error getting latest contexts:', error);
-      res.status(500).json({ error: 'Failed to get latest contexts' });
+    if (!clientProjectRoot || !repositoryName) {
+      res
+        .status(400)
+        .json({ error: 'clientProjectRoot and repositoryName are required in the request body' });
+      return;
     }
-  });
 
-  /**
-   * Create or update a component
-   */
-  upsertComponent = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { repository, id } = req.params;
-      const componentInput = req.body;
-      const branch = componentInput.branch || (req.query.branch as string) || 'main';
+    const branchName = branch ? String(branch) : undefined;
+    const limitNum = limit ? parseInt(limit as string, 10) : undefined;
 
-      if (!repository || !id) {
-        res.status(400).json({ error: 'Repository name and component ID are required' });
-        return;
-      }
+    const contexts = await this.memoryService.getLatestContexts(
+      repositoryName,
+      branchName,
+      limitNum,
+    );
 
-      const componentDataForService = {
-        id: id,
-        name: componentInput.name,
-        kind: componentInput.kind,
-        depends_on: componentInput.depends_on,
-        status: componentInput.status || 'active',
-      };
-
-      const updatedComponent = await this.memoryService.upsertComponent(
-        repository,
-        branch,
-        componentDataForService,
-      );
-
-      if (!updatedComponent) {
-        res.status(404).json({ error: 'Failed to create or update component' });
-        return;
-      }
-
-      res.status(200).json(updatedComponent);
-    } catch (error) {
-      console.error('Error upserting component:', error);
-      res.status(500).json({ error: 'Failed to create or update component' });
-    }
+    res.status(200).json(contexts);
   });
 
   /**
    * Get active components
    */
   getActiveComponents = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { repository } = req.params;
-      const branch = (req.query.branch as string) || 'main';
+    await this.ensureService();
+    const { clientProjectRoot, repositoryName } = req.body;
+    const branch = (req.query.branch as string) || 'main';
 
-      if (!repository) {
-        res.status(400).json({ error: 'Repository name is required' });
-        return;
-      }
-
-      const components = await this.memoryService.getActiveComponents(repository, branch);
-
-      res.status(200).json(components);
-    } catch (error) {
-      console.error('Error getting active components:', error);
-      res.status(500).json({ error: 'Failed to get active components' });
+    if (!clientProjectRoot || !repositoryName) {
+      res
+        .status(400)
+        .json({ error: 'clientProjectRoot and repositoryName are required in the request body' });
+      return;
     }
+
+    const components = await this.memoryService.getActiveComponents(repositoryName, branch);
+    res.status(200).json(components);
   });
 
   /**
    * Create or update a decision
    */
   upsertDecision = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { repository, id } = req.params;
-      const decisionInput = req.body;
-      const branch = decisionInput.branch || (req.query.branch as string) || 'main';
+    await this.ensureService();
+    const { clientProjectRoot, repositoryName } = req.body;
+    const { id } = req.params;
+    const decisionInput = req.body;
 
-      if (!repository || !id) {
-        res.status(400).json({ error: 'Repository name and decision ID are required' });
-        return;
-      }
+    const branch = decisionInput.branch || (req.query.branch as string) || 'main';
 
-      const decisionDataForService = {
-        id: id,
-        name: decisionInput.name,
-        context: decisionInput.context,
-        date: decisionInput.date,
-      };
-
-      const updatedDecision = await this.memoryService.upsertDecision(
-        repository,
-        branch,
-        decisionDataForService,
-      );
-
-      if (!updatedDecision) {
-        res.status(404).json({ error: 'Failed to create or update decision' });
-        return;
-      }
-
-      res.status(200).json(updatedDecision);
-    } catch (error) {
-      console.error('Error upserting decision:', error);
-      res.status(500).json({ error: 'Failed to create or update decision' });
+    if (!clientProjectRoot || !repositoryName) {
+      res
+        .status(400)
+        .json({ error: 'clientProjectRoot and repositoryName are required in the request body' });
+      return;
     }
+    if (!id) {
+      res.status(400).json({ error: 'Decision ID is required as a route parameter' });
+      return;
+    }
+
+    const decisionDataForService = {
+      id: id,
+      name: decisionInput.name,
+      context: decisionInput.context,
+      date: decisionInput.date,
+    };
+    if (!decisionDataForService.name || !decisionDataForService.date) {
+      res.status(400).json({ error: 'Decision name and date are required in the request body' });
+      return;
+    }
+
+    const updatedDecision = await this.memoryService.upsertDecision(
+      repositoryName,
+      branch,
+      decisionDataForService,
+    );
+
+    if (!updatedDecision) {
+      res.status(404).json({ error: 'Failed to create or update decision' });
+      return;
+    }
+
+    res.status(200).json(updatedDecision);
   });
 
   /**
@@ -340,33 +318,32 @@ export class MemoryController {
    */
   getDecisionsByDateRange = this.asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      try {
-        const { repository } = req.params;
-        const { startDate, endDate, branch } = req.query;
-        const branchName = (branch as string) || 'main';
+      await this.ensureService();
+      const { clientProjectRoot, repositoryName } = req.body;
+      const { startDate, endDate, branch } = req.query;
 
-        if (!repository) {
-          res.status(400).json({ error: 'Repository name is required' });
-          return;
-        }
+      const branchName = (branch as string) || undefined;
 
-        if (!startDate || !endDate) {
-          res.status(400).json({ error: 'Start date and end date are required' });
-          return;
-        }
-
-        const decisions = await this.memoryService.getDecisionsByDateRange(
-          repository,
-          branchName,
-          startDate as string,
-          endDate as string,
-        );
-
-        res.status(200).json(decisions);
-      } catch (error) {
-        console.error('Error getting decisions by date range:', error);
-        res.status(500).json({ error: 'Failed to get decisions by date range' });
+      if (!clientProjectRoot || !repositoryName) {
+        res
+          .status(400)
+          .json({ error: 'clientProjectRoot and repositoryName are required in the request body' });
+        return;
       }
+
+      if (!startDate || !endDate) {
+        res.status(400).json({ error: 'startDate and endDate query parameters are required' });
+        return;
+      }
+
+      const decisions = await this.memoryService.getDecisionsByDateRange(
+        repositoryName,
+        branchName,
+        startDate as string,
+        endDate as string,
+      );
+
+      res.status(200).json(decisions);
     },
   );
 
@@ -374,47 +351,59 @@ export class MemoryController {
    * Create or update a rule
    */
   upsertRule = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { repository, id } = req.params;
-      const ruleInput = req.body;
-      const branch = ruleInput.branch || (req.query.branch as string) || 'main';
+    await this.ensureService();
+    const { clientProjectRoot, repositoryName } = req.body;
+    const { id } = req.params;
+    const ruleInput = req.body;
 
-      if (!repository || !id) {
-        res.status(400).json({ error: 'Repository name and rule ID are required' });
-        return;
-      }
+    const branch = ruleInput.branch || (req.query.branch as string) || 'main';
 
-      const ruleDataForService = {
-        id: id,
-        name: ruleInput.name,
-        created: ruleInput.created,
-        triggers: ruleInput.triggers,
-        content: ruleInput.content,
-        status: ruleInput.status || 'active',
-      };
-
-      const updatedRule = await this.memoryService.upsertRule(
-        repository,
-        ruleDataForService as Rule,
-        branch,
-      );
-
-      if (!updatedRule) {
-        res.status(404).json({ error: 'Failed to create or update rule' });
-        return;
-      }
-
-      res.status(200).json(updatedRule);
-    } catch (error) {
-      console.error('Error upserting rule:', error);
-      res.status(500).json({ error: 'Failed to create or update rule' });
+    if (!clientProjectRoot || !repositoryName) {
+      res
+        .status(400)
+        .json({ error: 'clientProjectRoot and repositoryName are required in the request body' });
+      return;
     }
+    if (!id) {
+      res.status(400).json({ error: 'Rule ID is required as a route parameter' });
+      return;
+    }
+
+    const ruleDataForService = {
+      id: id,
+      name: ruleInput.name,
+      created: ruleInput.created,
+      triggers: ruleInput.triggers,
+      content: ruleInput.content,
+      status: ruleInput.status || 'active',
+    };
+
+    if (!ruleDataForService.name || !ruleDataForService.created) {
+      res
+        .status(400)
+        .json({ error: 'Rule name and created date are required in the request body' });
+      return;
+    }
+
+    const updatedRule = await this.memoryService.upsertRule(
+      repositoryName,
+      ruleDataForService as Omit<Rule, 'repository' | 'branch' | 'id'> & { id: string },
+      branch,
+    );
+
+    if (!updatedRule) {
+      res.status(404).json({ error: 'Failed to create or update rule' });
+      return;
+    }
+
+    res.status(200).json(updatedRule);
   });
 
   /**
    * Get active rules
    */
   getActiveRules = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    await this.ensureService();
     try {
       const { repository } = req.params;
       const branch = (req.query.branch as string) || 'main';
@@ -503,4 +492,16 @@ export class MemoryController {
   //     res.status(500).json({ error: 'Failed to import memory bank' });
   //   }
   // });
+
+  // Helper to ensure service is initialized
+  private async ensureService(): Promise<void> {
+    if (!this.memoryService) {
+      console.warn('MemoryService not yet available, attempting to initialize...');
+      await this.initializeService(); // Re-attempt initialization
+      if (!this.memoryService) {
+        // Check again after attempt
+        throw new Error('MemoryService could not be initialized on demand.');
+      }
+    }
+  }
 }

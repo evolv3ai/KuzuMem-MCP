@@ -6,9 +6,18 @@ import {
   DecisionRepository,
   RuleRepository,
 } from '../repositories';
-import { Repository, Metadata, Context, Component, Decision, Rule, MemoryType } from '../types';
+import {
+  Repository,
+  Metadata,
+  Context,
+  Component,
+  Decision,
+  Rule,
+  ComponentStatus,
+  ComponentInput,
+} from '../types';
 import { Mutex } from '../utils/mutex';
-import { initializeKuzuDB } from '../db/kuzu';
+import { KuzuDBClient, initializeKuzuDBSchema } from '../db/kuzu';
 
 // Import operation modules
 import * as metadataOps from './memory-operations/metadata.ops';
@@ -32,33 +41,47 @@ export class MemoryService {
   private decisionRepo!: DecisionRepository;
   private ruleRepo!: RuleRepository;
 
-  private constructor() {}
+  private constructor() {
+    // Repositories will be initialized in the initialize method
+  }
 
   /**
-   * Initialize the repositories asynchronously
+   * Initialize repositories with a KuzuDBClient
+   * @param kuzuClient The KuzuDBClient instance
+   */
+  private async initializeRepositories(kuzuClient: KuzuDBClient): Promise<void> {
+    // Initialize all repositories with the same KuzuDBClient
+    this.repositoryRepo = new RepositoryRepository(kuzuClient);
+    this.metadataRepo = new MetadataRepository(kuzuClient);
+    this.contextRepo = new ContextRepository(kuzuClient);
+    this.componentRepo = new ComponentRepository(kuzuClient);
+    this.decisionRepo = new DecisionRepository(kuzuClient);
+    this.ruleRepo = new RuleRepository(kuzuClient);
+  }
+
+  /**
+   * Initialize the service asynchronously
    * This ensures proper lazy initialization of dependencies
    */
   private async initialize(): Promise<void> {
-    // Initialize KuzuDB schema first if not already done
-    // initializeKuzuDB is idempotent (uses IF NOT EXISTS)
     try {
-      await initializeKuzuDB();
-      console.error('MemoryService: KuzuDB schema initialization attempted/verified.');
-    } catch (schemaError) {
-      console.error(
-        'MemoryService: CRITICAL ERROR during KuzuDB schema initialization:',
-        schemaError,
-      );
-      // Decide if we should throw and prevent service instantiation
-      throw schemaError;
-    }
+      // Determine the client project root for this MemoryService instance.
+      // For E2E tests, this will be dictated by an environment variable.
+      // Otherwise, use a sensible default (e.g., a temporary directory or a configured path).
+      const e2eDbPath = process.env.E2E_TEST_DB_PATH;
+      const serviceInstanceDbRoot = e2eDbPath || '/tmp/mcp-service-default-db'; // Fallback for non-E2E
 
-    this.repositoryRepo = await RepositoryRepository.getInstance();
-    this.metadataRepo = await MetadataRepository.getInstance();
-    this.contextRepo = await ContextRepository.getInstance();
-    this.componentRepo = await ComponentRepository.getInstance();
-    this.decisionRepo = await DecisionRepository.getInstance();
-    this.ruleRepo = await RuleRepository.getInstance();
+      console.error(`MemoryService: Initializing KuzuDBClient with root: ${serviceInstanceDbRoot}`);
+      const kuzuClient = new KuzuDBClient(serviceInstanceDbRoot);
+      await kuzuClient.initialize();
+
+      await this.initializeRepositories(kuzuClient);
+
+      console.error('MemoryService: Initialization complete');
+    } catch (error) {
+      console.error('MemoryService: Error during initialization:', error);
+      throw error;
+    }
   }
 
   static async getInstance(): Promise<MemoryService> {
@@ -75,34 +98,6 @@ export class MemoryService {
     } finally {
       // Always release the lock
       release();
-    }
-  }
-
-  /**
-   * Get or create a repository by name
-   */
-  /**
-   * Get existing repository by name and branch, or create it if it doesn't exist
-   * @param name Repository name
-   * @param branch Repository branch (defaults to 'main')
-   * @returns Repository or null if creation fails
-   */
-  async getOrCreateRepository(name: string, branch: string = 'main'): Promise<Repository | null> {
-    // First try to find existing repository with name and branch
-    const existingRepo = await this.repositoryRepo.findByName(name, branch);
-    if (existingRepo) {
-      return existingRepo;
-    }
-
-    // Create new repository with specified branch if it doesn't exist
-    try {
-      return await this.repositoryRepo.create({
-        name,
-        branch,
-      });
-    } catch (error) {
-      console.error(`Failed to create repository ${name}/${branch}:`, error);
-      return null;
     }
   }
 
@@ -139,6 +134,28 @@ export class MemoryService {
           memory_spec_version: '3.0.0',
         },
       } as Metadata);
+    }
+  }
+
+  /**
+   * Get or create a repository by name
+   */
+  async getOrCreateRepository(name: string, branch: string = 'main'): Promise<Repository | null> {
+    // First try to find existing repository with name and branch
+    const existingRepo = await this.repositoryRepo.findByName(name, branch);
+    if (existingRepo) {
+      return existingRepo;
+    }
+
+    // Create new repository with specified branch if it doesn't exist
+    try {
+      return await this.repositoryRepo.create({
+        name,
+        branch,
+      });
+    } catch (error) {
+      console.error(`Failed to create repository ${name}/${branch}:`, error);
+      return null;
     }
   }
 
@@ -288,14 +305,21 @@ export class MemoryService {
       id: string;
       name: string;
       kind?: string;
-      status?: 'active' | 'deprecated' | 'planned';
+      status?: ComponentStatus;
       depends_on?: string[];
     },
   ): Promise<Component | null> {
     return componentOps.upsertComponentOp(
       repositoryName,
       branch,
-      componentData,
+      {
+        id: componentData.id,
+        name: componentData.name,
+        kind: componentData.kind,
+        // Ensure status is not undefined by defaulting to 'active'
+        status: componentData.status || 'active',
+        depends_on: componentData.depends_on,
+      } as ComponentInput, // Cast to ComponentInput with required status
       this.repositoryRepo,
       this.componentRepo,
     );

@@ -7,49 +7,37 @@ dotenv.config();
 
 /**
  * KuzuDB Configuration
- * Simple configuration for KuzuDB database path
+ * Defines default relative paths for KuzuDB storage within a client project.
+ * The absolute path is constructed at runtime by combining the client's
+ * project root with these defaults.
  */
 
-// Define a consistent absolute path for the KuzuDB database file
-// This ensures the same path is used regardless of how the application is run
+// Default to empty string for DB_RELATIVE_DIR to place DB file directly in clientProjectRoot
+const KUZU_DB_RELATIVE_DIR = process.env.KUZU_DB_RELATIVE_DIR || '';
+// If KUZU_DB_FILENAME is not set via environment, default to a test-specific name.
+// For production/development, KUZU_DB_FILENAME should be explicitly set in .env to 'memory-bank.kuzu' or desired name.
+const KUZU_DB_FILENAME = process.env.KUZU_DB_FILENAME || 'test-memory-bank.kuzu';
 
-// Use DB_FILENAME as the primary environment variable, falling back to KUZU_DB_PATH, then a default.
-let dbPath = process.env.DB_FILENAME || process.env.KUZU_DB_PATH || 'memory-bank.kuzu';
-
-// Convert to absolute path if relative
-if (!path.isAbsolute(dbPath)) {
-  // Always use the project root directory as base
-  const projectRoot = path.resolve(__dirname, '../..');
-  dbPath = path.join(projectRoot, dbPath);
-}
-
-// Store the resolved path back in DB_FILENAME for consistency if it was set via KUZU_DB_PATH or default
-if (process.env.DB_FILENAME !== dbPath) {
-  process.env.DB_FILENAME = dbPath;
-}
-// Also update KUZU_DB_PATH for any part of the code that might still use it, though DB_FILENAME is preferred now.
-if (process.env.KUZU_DB_PATH !== dbPath) {
-  process.env.KUZU_DB_PATH = dbPath;
-}
-
-// Ensure database directory exists
-const dbDir = path.dirname(dbPath);
-
-// Create directory if it doesn't exist
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
-  console.log(`Created KuzuDB directory: ${dbDir}`);
-}
-
-// Log the database path for debugging
-console.log(`Using KuzuDB database at: ${dbPath}`);
+console.log(
+  `KuzuDB default relative directory (should be empty for root placement): '${KUZU_DB_RELATIVE_DIR}'`,
+);
+console.log(`KuzuDB default database filename: '${KUZU_DB_FILENAME}'`);
 
 /**
  * KuzuDB configuration object
  */
 const config = {
-  dbPath,
-  // Add any additional KuzuDB configuration properties here if needed
+  /**
+   * Default relative directory name for storing KuzuDB instances within a project.
+   * An empty string means the DB_FILENAME will be joined directly to clientProjectRoot.
+   * (e.g., '')
+   */
+  DB_RELATIVE_DIR: KUZU_DB_RELATIVE_DIR,
+  /**
+   * Default filename for the KuzuDB database file.
+   * (e.g., 'memory-bank.kuzu')
+   */
+  DB_FILENAME: KUZU_DB_FILENAME,
 };
 
 export default config;

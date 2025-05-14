@@ -16,14 +16,14 @@ export interface JsonRpcResponse {
   jsonrpc: '2.0';
   result?: any;
   error?: { code: number; message: string; data?: any };
-  id: string | number | null;
+  id: string | null;
 }
 
 export class McpStdioClient {
   private serverProcess?: ChildProcessWithoutNullStreams;
-  private responses: Map<string | number, (response: JsonRpcResponse) => void> = new Map();
-  private errorResolvers: Map<string | number, (error: Error) => void> = new Map();
-  private timeoutHandles: Map<string | number, NodeJS.Timeout> = new Map();
+  private responses: Map<string, (response: JsonRpcResponse) => void> = new Map();
+  private errorResolvers: Map<string, (reason?: any) => void> = new Map();
+  private timeoutHandles: Map<string, NodeJS.Timeout> = new Map();
   private messageIdCounter = 1;
   private responseBuffer = '';
   private static readonly SERVER_SCRIPT_PATH = path.join(projectRoot, 'src/mcp-stdio-server.ts');
@@ -87,50 +87,71 @@ export class McpStdioClient {
         );
         this.serverReady = true;
         this.resolveServerReady();
-        this.responseBuffer = ''; // Clear any buffer that might have accumulated before ready
+        this.responseBuffer = '';
         return;
       }
 
       if (this.serverReady) {
-        // No cross-line buffering. Attempt to parse the current line as a complete JSON object.
-        // Any non-JSON line or incomplete JSON line will be an error and discarded for this attempt.
-        let parsedJson: any;
-        try {
-          parsedJson = JSON.parse(line);
-          // If parse succeeds, this line was a complete JSON response.
-          this.responseBuffer = ''; // Should be empty if we're not buffering anyway
+        if (line.trim() === '') {
+          return;
+        }
 
-          if (
-            parsedJson.id !== undefined &&
-            parsedJson.id !== null &&
-            this.responses.has(parsedJson.id)
-          ) {
-            const callback = this.responses.get(parsedJson.id);
-            const timeoutHandle = this.timeoutHandles.get(parsedJson.id);
+        if (line.trim().startsWith('{') && line.trim().endsWith('}')) {
+          try {
+            const parsedJson = JSON.parse(line);
+            this.responseBuffer = '';
 
-            if (timeoutHandle) {
-              clearTimeout(timeoutHandle);
-              this.timeoutHandles.delete(parsedJson.id);
-            }
+            if (
+              parsedJson.id !== undefined &&
+              parsedJson.id !== null &&
+              this.responses.has(String(parsedJson.id))
+            ) {
+              const idStr = String(parsedJson.id);
+              const callback = this.responses.get(idStr);
+              const rejectError = this.errorResolvers.get(idStr);
+              const timeoutHandle = this.timeoutHandles.get(idStr);
 
-            if (callback) {
-              callback(parsedJson as JsonRpcResponse);
+              if (timeoutHandle) {
+                clearTimeout(timeoutHandle);
+                this.timeoutHandles.delete(idStr);
+              }
+
+              if (parsedJson.error && rejectError) {
+                console.log(
+                  `E2E STDIO Client: Rejecting request ${idStr} with JSON-RPC error:`,
+                  parsedJson.error,
+                );
+                rejectError(parsedJson);
+              } else if (callback) {
+                console.log(
+                  `E2E STDIO Client: Resolving request ${idStr} with result:`,
+                  parsedJson.result,
+                );
+                callback(parsedJson as JsonRpcResponse);
+              }
+              this.responses.delete(idStr);
+              this.errorResolvers.delete(idStr);
+            } else if (
+              parsedJson.method === 'tools/progress' ||
+              parsedJson.method === '$/progress'
+            ) {
+              console.log('E2E STDIO Progress Notification:', parsedJson.params);
+            } else if (parsedJson.id === null && parsedJson.error) {
+              console.error('E2E STDIO General Server Error (id:null):', parsedJson.error);
+            } else {
+              console.log(
+                `E2E STDIO Client: Received JSON with ID ${parsedJson.id} but no pending resolver or not a progress event.`,
+              );
             }
-            this.responses.delete(parsedJson.id);
-            this.errorResolvers.delete(parsedJson.id);
-          } else if (parsedJson.method) {
-            if (parsedJson.method === '$/progress') {
-              // console.log('E2E STDIO Progress Notification:', parsedJson.params);
-            }
-          } else if (parsedJson.id === null && parsedJson.error) {
-            console.error('E2E STDIO General Server Error:', parsedJson.error);
+          } catch (e: any) {
+            this.responseBuffer = '';
+            console.error(
+              `E2E STDIO Client: Error parsing line (that appeared to be JSON) as JSON: ${e.message}. Raw line: >>>${line}<<<`,
+            );
           }
-        } catch (e: any) {
-          // This line was not valid JSON. Log it and discard for this attempt.
-          // The responseBuffer should ideally be empty if we are not accumulating.
-          this.responseBuffer = ''; // Explicitly clear buffer on any parse error for this strategy
-          console.error(
-            `E2E STDIO Client: Error parsing incoming line as JSON: ${e.message}. Raw line: >>>${line}<<<`,
+        } else {
+          console.log(
+            `E2E STDIO Client: Received non-JSON stdout line from server (discarded): >>>${line}<<<`,
           );
         }
       }
@@ -192,7 +213,7 @@ export class McpStdioClient {
       throw new Error('E2E STDIO Client: Server process is not running or has been killed.');
     }
 
-    const id = this.messageIdCounter++;
+    const id = String(this.messageIdCounter++);
     const rpcRequest: JsonRpcRequest = {
       jsonrpc: '2.0',
       method,
@@ -235,7 +256,11 @@ export class McpStdioClient {
       });
       this.serverProcess.kill('SIGTERM');
       this.serverReady = false;
-      this.timeoutHandles.forEach((handle) => clearTimeout(handle));
+      this.timeoutHandles.forEach((handle, id) => {
+        clearTimeout(handle);
+        this.responses.delete(id);
+        this.errorResolvers.delete(id);
+      });
       this.timeoutHandles.clear();
       return this.serverStoppedPromise;
     }
@@ -244,5 +269,62 @@ export class McpStdioClient {
 
   isServerReady(): boolean {
     return this.serverReady;
+  }
+
+  private handleData(data: Buffer) {
+    const lines = data.toString().split('\n');
+    lines.forEach((line) => {
+      if (line.trim() === '') {
+        return;
+      }
+
+      if (line.trim().startsWith('{') && line.trim().endsWith('}')) {
+        try {
+          const response = JSON.parse(line);
+          console.log(`E2E STDIO Client: Received potential JSON line: ${line}`);
+
+          if (response.id && this.responses.has(String(response.id))) {
+            console.log(`E2E STDIO Client: Resolving request ${response.id}`);
+            const resolve = this.responses.get(String(response.id));
+            const rejectError = this.errorResolvers.get(String(response.id));
+            const timeoutHandle = this.timeoutHandles.get(String(response.id));
+
+            if (timeoutHandle) {
+              clearTimeout(timeoutHandle);
+            }
+
+            if (response.error) {
+              console.log(
+                `E2E STDIO Client: Response for ${response.id} is an error:`,
+                response.error,
+              );
+              if (rejectError) {
+                rejectError(response);
+              }
+            } else {
+              if (resolve) {
+                resolve(response);
+              }
+            }
+
+            this.responses.delete(String(response.id));
+            this.errorResolvers.delete(String(response.id));
+            this.timeoutHandles.delete(String(response.id));
+          } else if (response.method === 'tools/progress') {
+            console.log(`E2E STDIO Client: Received progress notification:`, response.params);
+          } else {
+            console.log(
+              `E2E STDIO Client: Received unexpected JSON response or notification: ${line}`,
+            );
+          }
+        } catch (e: any) {
+          console.log(
+            `E2E STDIO Client: Error parsing line that seemed like JSON: ${e.message}. Raw line: >>>${line}<<<`,
+          );
+        }
+      } else {
+        console.log(`E2E STDIO Client: Received non-JSON stdout line: >>>${line}<<<`);
+      }
+    });
   }
 }
