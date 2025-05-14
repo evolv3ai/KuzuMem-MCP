@@ -1,70 +1,45 @@
-import { Response } from 'express';
-import { ProgressTransport } from './progress-handler';
+import { Session } from 'better-sse';
+
+// Define a simple type for the debug log function if not already globally available
+type GenericDebugLogger = (level: number, message: string, data?: any) => void;
 
 /**
- * HTTP Streaming implementation of ProgressTransport
+ * HTTP Streaming Transport for MCP Progress Notifications using better-sse.
+ * This class is responsible for sending formatted MCP progress notifications
+ * over an established SSE session.
  */
-export class HttpStreamingProgressTransport implements ProgressTransport {
-  private hasStarted = false;
-
+export class HttpStreamingProgressTransport {
+  /**
+   * Creates an instance of HttpStreamingProgressTransport.
+   * @param session The better-sse Session object representing the client connection.
+   * @param debugLog A logger instance for debugging.
+   */
   constructor(
-    private response: Response,
-    private debugLog: (level: number, message: string, data?: any) => void,
+    private session: Session,
+    // Use a generic function type for the logger
+    private debugLog: GenericDebugLogger,
   ) {}
 
   /**
-   * Ensure streaming headers are set and streaming has started
+   * Sends a structured MCP notification payload as an SSE event.
+   * @param payload The complete JSON-RPC Notification object (e.g., for tools/progress or mcpResponse).
+   * @param eventName The SSE event name (e.g., 'mcpNotification' or 'mcpResponse').
    */
-  private ensureStreamingStarted(): void {
-    if (!this.hasStarted) {
-      this.response.setHeader('Content-Type', 'text/event-stream');
-      this.response.setHeader('Cache-Control', 'no-cache');
-      this.response.setHeader('Connection', 'keep-alive');
-      this.hasStarted = true;
+  public sendNotification(payload: object, eventName: string = 'mcpNotification'): void {
+    // Rely on better-sse's session.push to handle (or throw on) disconnected clients.
+    // The try-catch block will handle errors during push.
+    try {
+      this.session.push(payload, eventName);
+      // Use numeric log levels (e.g., 4 for TRACE/VERBOSE, adjust as per your convention)
+      this.debugLog(4, `SSE event '${eventName}' pushed successfully.`, payload);
+    } catch (error: any) {
+      // Use numeric log levels (e.g., 0 for ERROR)
+      this.debugLog(0, `Error pushing SSE event '${eventName}': ${error.message}`, {
+        error: error.toString(),
+        payload,
+      });
+      // It's possible better-sse throws an error if the client has disconnected.
+      // Depending on desired behavior, this error could be ignored or re-thrown if critical.
     }
-  }
-
-  /**
-   * Send a tools/progress notification via HTTP streaming
-   */
-  sendProgressNotification(requestId: number | string, content: any, isFinal: boolean): void {
-    this.ensureStreamingStarted();
-
-    const notification = {
-      jsonrpc: '2.0',
-      method: 'tools/progress',
-      params: {
-        id: requestId,
-        content: [{ type: 'text', text: JSON.stringify(content, null, 2) }],
-        isFinal,
-      },
-    };
-
-    this.debugLog(1, `Sending progress notification for request ${requestId}, isFinal: ${isFinal}`);
-    this.response.write(`event: mcpNotification\ndata: ${JSON.stringify(notification)}\n\n`);
-  }
-
-  /**
-   * Send a standard JSON-RPC response as an SSE event.
-   * Does NOT end the stream; the caller is responsible for that.
-   */
-  sendResponse(requestId: number | string, content: any, isError: boolean): void {
-    this.ensureStreamingStarted();
-
-    const rpcResponse = {
-      jsonrpc: '2.0',
-      id: requestId,
-      ...(isError ? { error: content } : { result: content }),
-    };
-
-    this.debugLog(
-      1,
-      `Sending SSE event (mcpResponse) for request ${requestId}, isError: ${isError}`,
-    );
-    this.response.write(`event: mcpResponse\ndata: ${JSON.stringify(rpcResponse)}\n\n`);
-
-    // DO NOT CALL this.response.end(); here.
-    // The main request handler (e.g., in mcp-httpstream-server.ts) will manage ending the stream.
-    // This allows for batch processing over a single SSE connection.
   }
 }

@@ -1,37 +1,30 @@
 import { Component, Context, Decision, Rule, ComponentStatus, ComponentInput } from '../types';
-import { Mutex } from '../utils/mutex';
 import { KuzuDBClient } from '../db/kuzu';
 import { formatGraphUniqueId } from '../utils/id.utils';
 
 /**
- * Thread-safe singleton repository for Component, using KuzuDB and Cypher queries
+ * Repository for Component, using KuzuDB and Cypher queries.
+ * An instance is tied to a specific KuzuDBClient.
  */
 export class ComponentRepository {
-  private static instance: ComponentRepository;
-  private static lock = new Mutex();
-  private conn: any;
+  private kuzuClient: KuzuDBClient;
 
-  private constructor() {
-    this.conn = KuzuDBClient.getConnection();
-  }
-
-  static async getInstance(): Promise<ComponentRepository> {
-    const release = await ComponentRepository.lock.acquire();
-    try {
-      if (!ComponentRepository.instance) {
-        ComponentRepository.instance = new ComponentRepository();
-      }
-      return ComponentRepository.instance;
-    } finally {
-      release();
+  /**
+   * Constructor now public and requires a KuzuDBClient.
+   * @param kuzuClient An initialized KuzuDBClient instance.
+   */
+  public constructor(kuzuClient: KuzuDBClient) {
+    if (!kuzuClient) {
+      throw new Error('ComponentRepository requires an initialized KuzuDBClient instance.');
     }
+    this.kuzuClient = kuzuClient;
   }
 
   private escapeStr(value: any): string {
     if (value === undefined || value === null) {
       return 'null';
     }
-    return String(value).replace(/'/g, "\\\\'").replace(/\\/g, '\\\\\\\\');
+    return String(value).replace(/'/g, "\\'").replace(/\\/g, '\\\\');
   }
 
   private escapeJsonProp(value: any): string {
@@ -63,7 +56,7 @@ export class ComponentRepository {
       MATCH (r:Repository {id: '${escapedRepoNodeId}'})-[:HAS_COMPONENT]->(c:Component {status: 'active', branch: '${escapedComponentBranch}'}) 
       RETURN c ORDER BY c.name ASC
     `;
-    const result = await KuzuDBClient.executeQuery(query);
+    const result = await this.kuzuClient.executeQuery(query);
     if (!result || typeof result.getAll !== 'function') {
       return [];
     }
@@ -112,13 +105,8 @@ export class ComponentRepository {
     const escapedRepoNodeId = this.escapeStr(repositoryNodeId);
 
     try {
-      await KuzuDBClient.executeQuery('BEGIN TRANSACTION');
+      await this.kuzuClient.executeQuery('BEGIN TRANSACTION');
       console.error(`DEBUG: upsertComponent - BEGAN TRANSACTION for ${graphUniqueId}`);
-
-      // Check existence using findByIdAndBranch (which is a separate query/transaction if not wrapped)
-      // For true atomicity, existence check should also be part of this transaction,
-      // or rely entirely on MERGE's atomicity for the node.
-      // Let's use MERGE for the main component node to simplify the transaction block.
 
       const upsertNodeQuery = `
         MATCH (repo:Repository {id: '${escapedRepoNodeId}'})
@@ -140,13 +128,13 @@ export class ComponentRepository {
           c.updated_at = timestamp('${kuzuTimestamp}')
         MERGE (repo)-[:HAS_COMPONENT]->(c)
       `;
-      await KuzuDBClient.executeQuery(upsertNodeQuery);
+      await this.kuzuClient.executeQuery(upsertNodeQuery);
       console.error(`DEBUG: upsertComponent - Upserted main node ${graphUniqueId}`);
 
       const deleteDepsQuery = `
           MATCH (c:Component {graph_unique_id: '${escapedGraphUniqueId}'})-[r:DEPENDS_ON]->()
           DELETE r`;
-      await KuzuDBClient.executeQuery(deleteDepsQuery);
+      await this.kuzuClient.executeQuery(deleteDepsQuery);
       console.error(`DEBUG: upsertComponent - Deleted existing deps for ${graphUniqueId}`);
 
       if (component.depends_on && component.depends_on.length > 0) {
@@ -170,15 +158,15 @@ export class ComponentRepository {
                   dep.created_at=timestamp('${kuzuTimestamp}'), 
                   dep.updated_at=timestamp('${kuzuTimestamp}')
               MERGE (repo)-[:HAS_COMPONENT]->(dep)`;
-          await KuzuDBClient.executeQuery(ensureDepNodeQuery);
+          await this.kuzuClient.executeQuery(ensureDepNodeQuery);
           console.error(
             `DEBUG: upsertComponent - Ensured/Created dependency node: ${escapedDepGraphUniqueId}`,
           );
 
           const checkCQuery = `MATCH (c:Component {graph_unique_id: '${escapedGraphUniqueId}'}) RETURN c.id AS componentId`;
           const checkDQuery = `MATCH (d:Component {graph_unique_id: '${escapedDepGraphUniqueId}'}) RETURN d.id AS depId`;
-          const cResult = await KuzuDBClient.executeQuery(checkCQuery);
-          const dResult = await KuzuDBClient.executeQuery(checkDQuery);
+          const cResult = await this.kuzuClient.executeQuery(checkCQuery);
+          const dResult = await this.kuzuClient.executeQuery(checkDQuery);
           const cRows = await cResult.getAll();
           const dRows = await dResult.getAll();
           console.error(
@@ -193,20 +181,20 @@ export class ComponentRepository {
           console.error(
             `DEBUG: upsertComponent - Attempting DEPENDS_ON: ${escapedGraphUniqueId} -> ${escapedDepGraphUniqueId}`,
           );
-          const relCreateResult = await KuzuDBClient.executeQuery(addDepRelQuery);
+          const relCreateResult = await this.kuzuClient.executeQuery(addDepRelQuery);
           const relCreateRows = await relCreateResult.getAll();
           console.error(
             `DEBUG: upsertComponent - Executed CREATE for DEPENDS_ON, rows returned: ${relCreateRows.length}, content: ${JSON.stringify(relCreateRows)}`,
           );
         }
       }
-      await KuzuDBClient.executeQuery('COMMIT');
+      await this.kuzuClient.executeQuery('COMMIT');
       console.error(`DEBUG: upsertComponent - COMMITTED TRANSACTION for ${graphUniqueId}`);
       return this.findByIdAndBranch(logicalRepositoryName, componentId, componentBranch);
     } catch (error) {
       console.error(`ERROR in upsertComponent for ${graphUniqueId}:`, error);
       try {
-        await KuzuDBClient.executeQuery('ROLLBACK');
+        await this.kuzuClient.executeQuery('ROLLBACK');
         console.error(`DEBUG: upsertComponent - ROLLED BACK TRANSACTION for ${graphUniqueId}`);
       } catch (rollbackError) {
         console.error(
@@ -234,7 +222,7 @@ export class ComponentRepository {
       MATCH (c:Component {graph_unique_id: '${escapedGraphUniqueId}'}) 
       RETURN c LIMIT 1`;
 
-    const result = await KuzuDBClient.executeQuery(query);
+    const result = await this.kuzuClient.executeQuery(query);
     if (!result || typeof result.getAll !== 'function') {
       return null;
     }
@@ -280,7 +268,7 @@ export class ComponentRepository {
     `;
     console.error('DEBUG: getComponentDependencies EXECUTING QUERY (direct):', query);
     // We also need to ensure dep.id is populated from the node, and graph_unique_id is not exposed.
-    const result = await KuzuDBClient.executeQuery(query);
+    const result = await this.kuzuClient.executeQuery(query);
     if (!result || typeof result.getAll !== 'function') {
       return [];
     }
@@ -325,7 +313,7 @@ export class ComponentRepository {
       RETURN DISTINCT dependentComp
     `;
     console.error('DEBUG: getComponentDependents EXECUTING QUERY (direct):', query);
-    const result = await KuzuDBClient.executeQuery(query);
+    const result = await this.kuzuClient.executeQuery(query);
     if (!result || typeof result.getAll !== 'function') {
       console.warn(
         `Query for getComponentDependents for ${componentId} (branch ${componentBranch}) in repo ${repositoryName} returned no result or invalid result type.`,
@@ -396,7 +384,7 @@ export class ComponentRepository {
     `;
 
     try {
-      const result = await KuzuDBClient.executeQuery(query);
+      const result = await this.kuzuClient.executeQuery(query);
       if (!result || typeof result.getAll !== 'function') {
         console.warn(
           `Query for getRelatedItems for ${componentId} (branch ${componentBranch}) in repo ${repositoryName} returned no result or invalid result type.`,
@@ -485,7 +473,7 @@ export class ComponentRepository {
     console.error(`DEBUG: ComponentRepository.findShortestPath query: ${query}`);
 
     try {
-      const result = await KuzuDBClient.executeQuery(query);
+      const result = await this.kuzuClient.executeQuery(query);
       if (!result || typeof result.getAll !== 'function') {
         console.warn(
           `Query for findShortestPath from ${startNodeId} to ${endNodeId} returned invalid result type.`,
@@ -524,20 +512,26 @@ export class ComponentRepository {
 
   // --- Graph Algorithm Methods ---
   async kCoreDecomposition(repositoryNodeId: string, k: number): Promise<any> {
-    // repositoryNodeId is repoName:repoBranch
-    const globalProjectedGraphName = 'AllComponentsAndDependencies';
+    const globalProjectedGraphName = 'AllComponentsAndDependencies'; // Consistent name for this set of operations
     try {
-      await KuzuDBClient.executeQuery(
+      await this.kuzuClient.executeQuery(
         `CALL project_graph('${globalProjectedGraphName}', ['Component'], ['DEPENDS_ON'])`,
       );
       console.error(
         `Ensured graph projection '${globalProjectedGraphName}' exists or was created.`,
       );
-    } catch (projectionError) {
-      console.warn(
-        `Could not ensure graph projection '${globalProjectedGraphName}'. It might already exist or an error occurred:`,
-        projectionError,
-      );
+    } catch (projectionError: any) {
+      if (projectionError.message && projectionError.message.includes('already exists')) {
+        console.warn(
+          `Graph projection '${globalProjectedGraphName}' already exists. Proceeding with existing projection.`,
+        );
+      } else {
+        console.error(
+          `Could not ensure graph projection '${globalProjectedGraphName}'. An unexpected error occurred:`,
+          projectionError,
+        );
+        throw projectionError; // Re-throw if it's not an "already exists" error
+      }
     }
 
     const escapedRepositoryNodeId = this.escapeStr(repositoryNodeId);
@@ -558,7 +552,7 @@ export class ComponentRepository {
     );
 
     try {
-      const result = await KuzuDBClient.executeQuery(query);
+      const result = await this.kuzuClient.executeQuery(query);
       if (!result || typeof result.getAll !== 'function') {
         return {
           message: `kCoreDecomposition for repo ${repositoryNodeId}, k=${kValue}: No result. Projection '${globalProjectedGraphName}' might need to be created.`,
@@ -596,15 +590,22 @@ export class ComponentRepository {
     // repositoryNodeId is repoName:repoBranch
     const globalProjectedGraphName = 'AllComponentsAndDependencies';
     try {
-      await KuzuDBClient.executeQuery(
+      await this.kuzuClient.executeQuery(
         `CALL project_graph('${globalProjectedGraphName}', ['Component'], ['DEPENDS_ON'])`,
       );
       console.error(`Ensured graph projection '${globalProjectedGraphName}' for Louvain.`);
-    } catch (projectionError) {
-      console.warn(
-        `Could not ensure graph projection '${globalProjectedGraphName}' for Louvain:`,
-        projectionError,
-      );
+    } catch (projectionError: any) {
+      if (projectionError.message && projectionError.message.includes('already exists')) {
+        console.warn(
+          `Graph projection '${globalProjectedGraphName}' already exists. Proceeding with existing projection for Louvain.`,
+        );
+      } else {
+        console.error(
+          `Could not ensure graph projection '${globalProjectedGraphName}' for Louvain. An unexpected error occurred:`,
+          projectionError,
+        );
+        throw projectionError;
+      }
     }
 
     const escapedRepositoryNodeId = this.escapeStr(repositoryNodeId);
@@ -625,7 +626,7 @@ export class ComponentRepository {
     );
 
     try {
-      const result = await KuzuDBClient.executeQuery(query);
+      const result = await this.kuzuClient.executeQuery(query);
       if (!result || typeof result.getAll !== 'function') {
         return {
           message: `louvainCommunityDetection for repo ${repositoryNodeId}: No result. Projection '${globalProjectedGraphName}'`,
@@ -663,15 +664,22 @@ export class ComponentRepository {
   ): Promise<any> {
     const globalProjectedGraphName = 'AllComponentsAndDependencies';
     try {
-      await KuzuDBClient.executeQuery(
+      await this.kuzuClient.executeQuery(
         `CALL project_graph('${globalProjectedGraphName}', ['Component'], ['DEPENDS_ON'])`,
       );
       console.error(`Ensured graph projection '${globalProjectedGraphName}' for PageRank.`);
-    } catch (projectionError) {
-      console.warn(
-        `Could not ensure graph projection '${globalProjectedGraphName}' for PageRank:`,
-        projectionError,
-      );
+    } catch (projectionError: any) {
+      if (projectionError.message && projectionError.message.includes('already exists')) {
+        console.warn(
+          `Graph projection '${globalProjectedGraphName}' already exists. Proceeding with existing projection for PageRank.`,
+        );
+      } else {
+        console.error(
+          `Could not ensure graph projection '${globalProjectedGraphName}' for PageRank. An unexpected error occurred:`,
+          projectionError,
+        );
+        throw projectionError;
+      }
     }
 
     const escapedRepositoryNodeId = this.escapeStr(repositoryNodeId);
@@ -704,7 +712,7 @@ export class ComponentRepository {
     );
 
     try {
-      const result = await KuzuDBClient.executeQuery(query);
+      const result = await this.kuzuClient.executeQuery(query);
       if (!result || typeof result.getAll !== 'function') {
         return {
           message: `pageRank for repo ${repositoryNodeId}: No result. Projection '${globalProjectedGraphName}'`,
@@ -734,18 +742,24 @@ export class ComponentRepository {
     repositoryNodeId: string,
     maxIterations?: number,
   ): Promise<any> {
-    // repositoryNodeId is repoName:repoBranch
     const globalProjectedGraphName = 'AllComponentsAndDependencies';
     try {
-      await KuzuDBClient.executeQuery(
+      await this.kuzuClient.executeQuery(
         `CALL project_graph('${globalProjectedGraphName}', ['Component'], ['DEPENDS_ON'])`,
       );
       console.error(`Ensured graph projection '${globalProjectedGraphName}' for SCC.`);
-    } catch (projectionError) {
-      console.warn(
-        `Could not ensure graph projection '${globalProjectedGraphName}' for SCC:`,
-        projectionError,
-      );
+    } catch (projectionError: any) {
+      if (projectionError.message && projectionError.message.includes('already exists')) {
+        console.warn(
+          `Graph projection '${globalProjectedGraphName}' already exists. Proceeding with existing projection for SCC.`,
+        );
+      } else {
+        console.error(
+          `Could not ensure graph projection '${globalProjectedGraphName}' for SCC. An unexpected error occurred:`,
+          projectionError,
+        );
+        throw projectionError;
+      }
     }
 
     const escapedRepositoryNodeId = this.escapeStr(repositoryNodeId);
@@ -765,7 +779,7 @@ export class ComponentRepository {
       query,
     );
     try {
-      const result = await KuzuDBClient.executeQuery(query);
+      const result = await this.kuzuClient.executeQuery(query);
       if (!result || typeof result.getAll !== 'function') {
         return {
           message: `SCC for repo ${repositoryNodeId}: No result. Projection '${globalProjectedGraphName}'`,
@@ -795,18 +809,24 @@ export class ComponentRepository {
     repositoryNodeId: string,
     maxIterations?: number,
   ): Promise<any> {
-    // repositoryNodeId is repoName:repoBranch
     const globalProjectedGraphName = 'AllComponentsAndDependencies';
     try {
-      await KuzuDBClient.executeQuery(
+      await this.kuzuClient.executeQuery(
         `CALL project_graph('${globalProjectedGraphName}', ['Component'], ['DEPENDS_ON'])`,
       );
       console.error(`Ensured graph projection '${globalProjectedGraphName}' for WCC.`);
-    } catch (projectionError) {
-      console.warn(
-        `Could not ensure graph projection '${globalProjectedGraphName}' for WCC:`,
-        projectionError,
-      );
+    } catch (projectionError: any) {
+      if (projectionError.message && projectionError.message.includes('already exists')) {
+        console.warn(
+          `Graph projection '${globalProjectedGraphName}' already exists. Proceeding with existing projection for WCC.`,
+        );
+      } else {
+        console.error(
+          `Could not ensure graph projection '${globalProjectedGraphName}' for WCC. An unexpected error occurred:`,
+          projectionError,
+        );
+        throw projectionError;
+      }
     }
 
     const escapedRepositoryNodeId = this.escapeStr(repositoryNodeId);
@@ -826,7 +846,7 @@ export class ComponentRepository {
       query,
     );
     try {
-      const result = await KuzuDBClient.executeQuery(query);
+      const result = await this.kuzuClient.executeQuery(query);
       if (!result || typeof result.getAll !== 'function') {
         return {
           message: `WCC for repo ${repositoryNodeId}: No result. Projection '${globalProjectedGraphName}'`,
@@ -913,7 +933,7 @@ export class ComponentRepository {
     `;
     // graph_unique_id attaches this query to specific repository and branch
     try {
-      const result = await KuzuDBClient.executeQuery(query);
+      const result = await this.kuzuClient.executeQuery(query);
       if (!result || typeof result.getAll !== 'function') {
         console.warn(
           `Query for getItemContextualHistory for ${itemId} (${itemType}, branch: ${itemBranch}) in repo ${repositoryName} returned no result.`,
@@ -960,7 +980,7 @@ export class ComponentRepository {
     // graph_unique_id attaches this query to specific repository and branch
 
     try {
-      const result = await KuzuDBClient.executeQuery(query);
+      const result = await this.kuzuClient.executeQuery(query);
       if (!result || typeof result.getAll !== 'function') {
         console.warn(
           `Query for getGoverningItemsForComponent for ${componentId} (branch: ${componentBranch}) in repo ${repositoryName} returned no result.`,
@@ -1003,7 +1023,7 @@ export class ComponentRepository {
       RETURN c`;
 
     try {
-      await KuzuDBClient.executeQuery(query);
+      await this.kuzuClient.executeQuery(query);
       return this.findByIdAndBranch(repositoryName, itemId, branch);
     } catch (error) {
       console.error(
@@ -1063,14 +1083,14 @@ export class ComponentRepository {
             c.name = '${escapedName}',
             c.kind = '${escapedKind}',
             c.status = '${escapedStatus}',
-            c.id = '${escapedLogicalId}',        // Also set logical id/branch on match for consistency
+            c.id = '${escapedLogicalId}',        
             c.branch = '${escapedComponentBranch}',
             c.updated_at = timestamp('${kuzuTimestamp}')
         MERGE (repo)-[:HAS_COMPONENT]->(c)
         RETURN c`;
 
     try {
-      await KuzuDBClient.executeQuery(upsertNodeQuery);
+      await this.kuzuClient.executeQuery(upsertNodeQuery);
     } catch (error) {
       console.error(
         `Error upserting component node ${componentId} in repo ${logicalRepositoryName} (branch: ${componentBranch}):`,
@@ -1083,7 +1103,7 @@ export class ComponentRepository {
     const deleteDepsQuery = `
         MATCH (c:Component {graph_unique_id: '${escapedGraphUniqueId}'})-[r:DEPENDS_ON]->()
         DELETE r`;
-    await KuzuDBClient.executeQuery(deleteDepsQuery);
+    await this.kuzuClient.executeQuery(deleteDepsQuery);
 
     if (component.depends_on && component.depends_on.length > 0) {
       for (const depId of component.depends_on) {
@@ -1096,15 +1116,15 @@ export class ComponentRepository {
             ON CREATE SET dep.id = '${this.escapeStr(depId)}', dep.branch = '${this.escapeStr(componentBranch)}', dep.name = 'Placeholder for ${this.escapeStr(depId)}', dep.kind='Unknown', dep.status='planned', dep.created_at=timestamp('${kuzuTimestamp}'), dep.updated_at=timestamp('${kuzuTimestamp}')
             MERGE (repo)-[:HAS_COMPONENT]->(dep)`;
 
-        await KuzuDBClient.executeQuery(ensureDepNodeQuery);
+        await this.kuzuClient.executeQuery(ensureDepNodeQuery);
         console.error(
           `DEBUG: upsertCompWithRel - Ensured/Created dependency node: ${escapedDepGraphUniqueId}`,
         );
 
         const checkCQuery = `MATCH (c:Component {graph_unique_id: '${escapedGraphUniqueId}'}) RETURN c.id AS componentId`;
         const checkDQuery = `MATCH (d:Component {graph_unique_id: '${escapedDepGraphUniqueId}'}) RETURN d.id AS depId`;
-        const cResult = await KuzuDBClient.executeQuery(checkCQuery);
-        const dResult = await KuzuDBClient.executeQuery(checkDQuery);
+        const cResult = await this.kuzuClient.executeQuery(checkCQuery);
+        const dResult = await this.kuzuClient.executeQuery(checkDQuery);
         const cRows = await cResult.getAll();
         const dRows = await dResult.getAll();
         console.error(
@@ -1119,7 +1139,7 @@ export class ComponentRepository {
         console.error(
           `DEBUG: upsertCompWithRel - Attempting DEPENDS_ON: ${escapedGraphUniqueId} -> ${escapedDepGraphUniqueId}`,
         );
-        const relCreateResult = await KuzuDBClient.executeQuery(addDepRelQuery);
+        const relCreateResult = await this.kuzuClient.executeQuery(addDepRelQuery);
         const relCreateRows = await relCreateResult.getAll();
         console.error(
           `DEBUG: upsertCompWithRel - Executed CREATE for DEPENDS_ON, rows returned: ${relCreateRows.length}, content: ${JSON.stringify(relCreateRows)}`,

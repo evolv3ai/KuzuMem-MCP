@@ -2,73 +2,81 @@ import { MemoryService } from '../../../services/memory.service';
 import { ProgressHandler } from '../progress-handler';
 
 /**
- * Operation class for finding Weakly Connected Components (WCCs) with streaming support.
+ * Operation class for Weakly Connected Components (WCC) analysis with streaming support.
  */
 export class WeaklyConnectedComponentsOperation {
   /**
    * Execute the WCC operation with streaming support.
    */
   public static async execute(
-    repository: string,
+    clientProjectRoot: string,
+    repositoryName: string,
     branch: string,
-    memoryService?: MemoryService, // Optional: KuzuDB might handle the algorithm directly
+    projectedGraphName: string,
+    nodeTableNames: string[],
+    relationshipTableNames: string[],
+    memoryService: MemoryService,
     progressHandler?: ProgressHandler,
-    // maxIterations?: number, // As per mcp-stdio-server.ts, this was passed to a similar function before
   ): Promise<any> {
     try {
-      // Validate required args
-      if (!repository) {
-        return { error: 'Missing required parameter: repository' };
+      if (!repositoryName || !projectedGraphName || !nodeTableNames || !relationshipTableNames) {
+        return { error: 'Missing required parameters for Weakly Connected Components' };
       }
 
       if (progressHandler) {
         progressHandler.progress({
           status: 'initializing',
-          message: `Starting Weakly Connected Components analysis for ${repository}:${branch}`,
+          message: `Starting Weakly Connected Components analysis for graph ${projectedGraphName} in ${repositoryName}:${branch} (Project: ${clientProjectRoot})`,
         });
       }
 
-      // Placeholder for actual MemoryService.getWeaklyConnectedComponents call.
-      // This method would interface with KuzuDB.
-      // Algorithms like BFS or DFS are often used iteratively for WCC.
-      // Progress could be reported as components are identified.
-      const wccResult = (await (memoryService as any)?.getWeaklyConnectedComponents?.(
-        repository,
+      const wccResults = await memoryService.getWeaklyConnectedComponents(
+        repositoryName,
         branch,
-        // maxIterations, // If applicable to the underlying Kuzu function
-      )) || { components: [] }; // Default to empty result
+        undefined, // maxIterations
+      );
 
-      // Example: If the algorithm identifies WCCs one by one or in batches
-      // for (const componentSet of wccDiscoveryProcess) {
-      // if (progressHandler) {
-      // progressHandler.progress({
-      // status: 'in_progress',
-      // message: `Identified a weakly connected component with ${componentSet.length} nodes.`,
-      // componentFound: componentSet,
-      // });
-      // }
-      // }
-
-      if (progressHandler) {
-        progressHandler.progress({
-          status: 'in_progress',
-          message: `WCC analysis complete. Found ${wccResult.components?.length || 0} weakly connected component(s).`,
-          wccCount: wccResult.components?.length || 0,
-          // components: wccResult.components // Potentially large, consider summarizing or sending in chunks
-        });
-      }
-
-      const result = {
+      const resultPayload = {
         status: 'complete',
-        repository,
+        clientProjectRoot,
+        repository: repositoryName,
         branch,
-        weaklyConnectedComponents: wccResult.components,
+        projectedGraphName,
+        results: wccResults, // Contains the list of components in WCC groups
       };
 
-      return result;
-    } catch (error) {
+      if (progressHandler) {
+        const componentsInWCC = wccResults?.components || [];
+        progressHandler.progress({
+          status: 'in_progress',
+          message: `Weakly Connected Components analysis processing for ${projectedGraphName}.`,
+          wccCount: componentsInWCC.length, // Add wccCount based on results
+        });
+
+        // Send final progress event
+        progressHandler.progress({ ...resultPayload, isFinal: true });
+
+        // Send the final JSON-RPC response via progressHandler
+        progressHandler.sendFinalResponse(resultPayload, false);
+        return null; // Indicate response was sent via progressHandler
+      }
+
+      // If no progressHandler, return the result directly
+      return resultPayload;
+    } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      throw new Error(`Weakly Connected Components analysis failed: ${errorMessage}`);
+      if (progressHandler) {
+        const errorPayload = { error: `WCC analysis failed: ${errorMessage}` };
+        progressHandler.progress({
+          ...errorPayload,
+          status: 'error',
+          message: errorPayload.error,
+          isFinal: true,
+        });
+        progressHandler.sendFinalResponse(errorPayload, true);
+        return null; // Indicate error was handled via progress mechanism
+      }
+      throw new Error(`WCC analysis failed: ${errorMessage}`);
     }
   }
 }

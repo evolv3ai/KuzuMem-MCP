@@ -17,13 +17,10 @@ const MEMORY_BANK_MCP_SERVER: McpServerMetadata = {
 };
 
 // Re-export everything
-export {
-  MemoryMcpServer,
-  MEMORY_BANK_MCP_SERVER,
-  MEMORY_BANK_MCP_TOOLS,
-  McpServerMetadata,
-  McpTool,
-};
+export { MemoryMcpServer, MEMORY_BANK_MCP_SERVER, MEMORY_BANK_MCP_TOOLS };
 
 // Re-export individual tools for direct access
 export * from './tools';
+
+// Export types separately
+export type { McpServerMetadata, McpTool };

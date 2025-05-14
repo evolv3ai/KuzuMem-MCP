@@ -5,48 +5,184 @@ import { Rule } from '../types'; // Import Rule type
 import fs from 'fs/promises';
 import path from 'path';
 
-// Create CLI program
 const program = new Command();
 let memoryService: MemoryService;
 
-// Initialize the memory service
-async function initializeMemoryService(): Promise<void> {
-  try {
-    memoryService = await MemoryService.getInstance();
-  } catch (error) {
-    console.error('Failed to initialize memory service:', error);
-    process.exit(1);
+async function initializeMemoryServiceInstance(): Promise<void> {
+  if (!memoryService) {
+    try {
+      memoryService = await MemoryService.getInstance();
+      console.log('CLI: Memory service singleton instance obtained.');
+    } catch (error) {
+      console.error('CLI: Failed to initialize memory service:', error);
+      process.exit(1);
+    }
   }
 }
 
 program
   .name('memory-bank-cli')
-  .description('CLI tool for interacting with the distributed YAML memory bank')
-  .version('1.0.0');
+  .description('CLI tool for interacting with KuzuDB memory banks per project')
+  .version('3.0.0')
+  .option(
+    '-p, --project-root <path>',
+    'Specify the client project root path (defaults to current working directory)',
+  );
 
-// Initialize a new memory bank
+function getEffectiveProjectRoot(): string {
+  const options = program.opts(); // Access global options
+  return options.projectRoot ? path.resolve(options.projectRoot) : process.cwd();
+}
+
 program
   .command('init')
-  .description('Initialize a new memory bank for a repository')
-  .argument('<repository>', 'Repository name')
-  .action(async (repository: string) => {
+  .description(
+    'Initialize a new memory bank for a repository in the specified or current project root',
+  )
+  .argument('<repositoryName>', 'Logical name for the repository (e.g., project folder name)')
+  .option('-b, --branch <branch>', 'Branch name for isolation', 'main')
+  .action(async (repositoryName: string, options) => {
+    await initializeMemoryServiceInstance();
+    const branch = options.branch;
     try {
-      await memoryService.initMemoryBank(repository);
-      console.log(`✅ Memory bank initialized for repository: ${repository}`);
+      await memoryService.initMemoryBank(repositoryName, branch);
+      console.log(
+        `✅ Memory bank initialized for repository: ${repositoryName} (branch: ${branch})`,
+      );
     } catch (error) {
       console.error('❌ Failed to initialize memory bank:', error);
       process.exit(1);
     }
   });
 
-// Helper function to process directory recursively
+program
+  .command('add-context')
+  .description("Add an entry to today's context for a repository within the project root")
+  .argument('<repositoryName>', 'Logical repository name')
+  .option('-a, --agent <agent>', 'Agent name')
+  .option('-i, --issue <issue>', 'Related issue number')
+  .option('-s, --summary <summary>', 'Context summary')
+  .option('-d, --decision <decision>', 'Add a decision')
+  .option('-o, --observation <observation>', 'Add an observation')
+  .option('--branch <branch>', 'Branch name', 'main')
+  .action(async (repositoryName: string, options) => {
+    await initializeMemoryServiceInstance();
+    const branch = options.branch;
+    const contextParams = {
+      repository: repositoryName,
+      branch,
+      agent: options.agent,
+      issue: options.issue,
+      summary: options.summary,
+      decision: options.decision,
+      observation: options.observation,
+    };
+    try {
+      await memoryService.updateContext(contextParams);
+      console.log(
+        `✅ Added to today's context for repository: ${repositoryName} (branch: ${branch})`,
+      );
+    } catch (error) {
+      console.error('❌ Failed to add to context:', error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('add-component')
+  .description('Add or update a component')
+  .argument('<repositoryName>', 'Logical repository name')
+  .argument('<id>', 'Component ID')
+  .requiredOption('-n, --name <name>', 'Component name')
+  .option('-k, --kind <kind>', 'Component kind')
+  .option('-d, --depends <dependencies>', 'Comma-separated list of dependencies')
+  .option('-s, --status <status>', 'Component status (active, deprecated, planned)', 'active')
+  .option('-b, --branch <branch>', 'Branch name', 'main')
+  .action(async (repositoryName: string, id: string, options) => {
+    await initializeMemoryServiceInstance();
+    const branch = options.branch;
+    const componentDataForService = {
+      id: id,
+      name: options.name,
+      kind: options.kind,
+      depends_on: options.depends ? options.depends.split(',') : [],
+      status: options.status as 'active' | 'deprecated' | 'planned',
+      branch: branch,
+    };
+    try {
+      await memoryService.upsertComponent(repositoryName, branch, componentDataForService);
+      console.log(`✅ Component ${id} added to repository: ${repositoryName} (branch: ${branch})`);
+    } catch (error) {
+      console.error('❌ Failed to add component:', error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('add-decision')
+  .description('Add or update a decision')
+  .argument('<repositoryName>', 'Logical repository name')
+  .argument('<id>', 'Decision ID')
+  .requiredOption('-n, --name <name>', 'Decision name')
+  .option('-c, --context <context>', 'Decision context')
+  .requiredOption('-d, --date <date>', 'Decision date (YYYY-MM-DD)')
+  .option('-b, --branch <branch>', 'Branch name', 'main')
+  .action(async (repositoryName: string, id: string, options) => {
+    await initializeMemoryServiceInstance();
+    const branch = options.branch;
+    const decisionDataForService = {
+      id: id,
+      name: options.name,
+      context: options.context,
+      date: options.date,
+    };
+    try {
+      await memoryService.upsertDecision(repositoryName, branch, decisionDataForService);
+      console.log(`✅ Decision ${id} added to repository: ${repositoryName} (branch: ${branch})`);
+    } catch (error) {
+      console.error('❌ Failed to add decision:', error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('add-rule')
+  .description('Add or update a rule')
+  .argument('<repositoryName>', 'Logical repository name')
+  .argument('<id>', 'Rule ID')
+  .requiredOption('-n, --name <name>', 'Rule name')
+  .requiredOption('-c, --created <date>', 'Rule creation date (YYYY-MM-DD)')
+  .option('-t, --triggers <triggers>', 'Comma-separated list of triggers')
+  .option('-o, --content <content>', 'Rule content')
+  .option('-s, --status <status>', 'Rule status (active, deprecated)', 'active')
+  .option('-b, --branch <branch>', 'Branch name', 'main')
+  .action(async (repositoryName: string, id: string, options) => {
+    await initializeMemoryServiceInstance();
+    const branch = options.branch;
+    const ruleDataForService = {
+      id: id,
+      name: options.name,
+      created: options.created,
+      triggers: options.triggers ? options.triggers.split(',') : [],
+      content: options.content,
+      status: options.status as 'active' | 'deprecated',
+    };
+    try {
+      await memoryService.upsertRule(repositoryName, ruleDataForService, branch);
+      console.log(`✅ Rule ${id} added to repository: ${repositoryName} (branch: ${branch})`);
+    } catch (error) {
+      console.error('❌ Failed to add rule:', error);
+      process.exit(1);
+    }
+  });
+
+// Helper functions (processDirectory, parseFilePath, getYamlType) remain unchanged if they are not directly calling MemoryService
+// ... (keep existing helper functions)
 async function processDirectory(dir: string): Promise<Record<string, string>> {
   const files: Record<string, string> = {};
   const entries = await fs.readdir(dir, { withFileTypes: true });
-
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
-
     if (entry.isDirectory()) {
       const subFiles = await processDirectory(fullPath);
       Object.assign(files, subFiles);
@@ -55,57 +191,34 @@ async function processDirectory(dir: string): Promise<Record<string, string>> {
       files[fullPath] = content;
     }
   }
-
   return files;
 }
 
-// Helper function to parse file path and determine type and ID
-function parseFilePath(filePath: string): {
-  type: string | null;
-  id: string | null;
-} {
+function parseFilePath(filePath: string): { type: string | null; id: string | null } {
   const normalizedPath = path.normalize(filePath);
-
-  // Check for metadata
   if (normalizedPath.includes('metadata.yaml')) {
     return { type: 'metadata', id: 'meta' };
   }
-
-  // Check for context
   if (normalizedPath.includes('/context/')) {
-    const fileName = path.basename(normalizedPath, path.extname(normalizedPath));
-    return { type: 'context', id: fileName };
+    return { type: 'context', id: path.basename(normalizedPath, path.extname(normalizedPath)) };
   }
-
-  // Check for component
   if (normalizedPath.includes('/components/')) {
-    const fileName = path.basename(normalizedPath, path.extname(normalizedPath));
-    return { type: 'component', id: fileName };
+    return { type: 'component', id: path.basename(normalizedPath, path.extname(normalizedPath)) };
   }
-
-  // Check for decision
   if (normalizedPath.includes('/decisions/')) {
-    const fileName = path.basename(normalizedPath, path.extname(normalizedPath));
-    return { type: 'decision', id: fileName };
+    return { type: 'decision', id: path.basename(normalizedPath, path.extname(normalizedPath)) };
   }
-
-  // Check for rule
   if (normalizedPath.includes('/rules/')) {
-    const fileName = path.basename(normalizedPath, path.extname(normalizedPath));
-    return { type: 'rule', id: fileName };
+    return { type: 'rule', id: path.basename(normalizedPath, path.extname(normalizedPath)) };
   }
-
   return { type: null, id: null };
 }
 
-// Helper function to determine YAML type from content
 function getYamlType(content: string): string | null {
   const firstLine = content.split('\n')[0];
   const match = firstLine.match(/---\s+!(\w+)/);
-
   if (match) {
     const type = match[1].toLowerCase();
-
     switch (type) {
       case 'metadata':
         return 'metadata';
@@ -121,176 +234,12 @@ function getYamlType(content: string): string | null {
         return null;
     }
   }
-
   return null;
 }
 
-// Add today's context entry
-program
-  .command('add-context')
-  .description("Add an entry to today's context")
-  .argument('<repository>', 'Repository name')
-  .option('-a, --agent <agent>', 'Agent name')
-  .option('-i, --issue <issue>', 'Related issue number')
-  .option('-s, --summary <summary>', 'Context summary')
-  .option('-d, --decision <decision>', 'Add a decision')
-  .option('-o, --observation <observation>', 'Add an observation')
-  .action(async (repository: string, options) => {
-    try {
-      const context = await memoryService.getTodayContext(repository);
-
-      if (!context) {
-        console.error("❌ Failed to get today's context");
-        process.exit(1);
-      }
-
-      const update: any = {};
-
-      if (options.agent) {
-        update.agent = options.agent;
-      }
-      if (options.issue) {
-        update.related_issue = options.issue;
-      }
-      if (options.summary) {
-        update.summary = options.summary;
-      }
-
-      if (options.decision) {
-        update.decisions = [...(context.decisions || []), options.decision];
-      }
-
-      if (options.observation) {
-        update.observations = [...(context.observations || []), options.observation];
-      }
-
-      await memoryService.updateTodayContext(repository, update);
-      console.log(`✅ Added to today's context for repository: ${repository}`);
-    } catch (error) {
-      console.error('❌ Failed to add to context:', error);
-      process.exit(1);
-    }
-  });
-
-// Add a component
-program
-  .command('add-component')
-  .description('Add or update a component')
-  .argument('<repository>', 'Repository name')
-  .argument('<id>', 'Component ID')
-  .requiredOption('-n, --name <name>', 'Component name')
-  .option('-k, --kind <kind>', 'Component kind')
-  .option('-d, --depends <dependencies>', 'Comma-separated list of dependencies')
-  .option('-s, --status <status>', 'Component status (active, deprecated, planned)', 'active')
-  .option('-b, --branch <branch>', 'Branch name', 'main')
-  .action(async (repository: string, id: string, options) => {
-    try {
-      const branch = (options.branch as string) || 'main';
-      const componentDataForService = {
-        id: id,
-        name: options.name,
-        kind: options.kind,
-        depends_on: options.depends ? options.depends.split(',') : undefined,
-        status: options.status as 'active' | 'deprecated' | 'planned',
-      };
-      await memoryService.upsertComponent(repository, branch, componentDataForService);
-      console.log(`✅ Component ${id} added to repository: ${repository} (branch: ${branch})`);
-    } catch (error) {
-      console.error('❌ Failed to add component:', error);
-      process.exit(1);
-    }
-  });
-
-// Add a decision
-program
-  .command('add-decision')
-  .description('Add or update a decision')
-  .argument('<repository>', 'Repository name')
-  .argument('<id>', 'Decision ID')
-  .requiredOption('-n, --name <name>', 'Decision name')
-  .option('-c, --context <context>', 'Decision context')
-  .requiredOption('-d, --date <date>', 'Decision date (YYYY-MM-DD)')
-  .option('-b, --branch <branch>', 'Branch name', 'main')
-  .action(async (repository: string, id: string, options) => {
-    try {
-      const branch = (options.branch as string) || 'main';
-      const decisionDataForService = {
-        id: id,
-        name: options.name,
-        context: options.context,
-        date: options.date,
-      };
-      await memoryService.upsertDecision(repository, branch, decisionDataForService);
-      console.log(`✅ Decision ${id} added to repository: ${repository} (branch: ${branch})`);
-    } catch (error) {
-      console.error('❌ Failed to add decision:', error);
-      process.exit(1);
-    }
-  });
-
-// Add a rule
-program
-  .command('add-rule')
-  .description('Add or update a rule')
-  .argument('<repository>', 'Repository name')
-  .argument('<id>', 'Rule ID')
-  .requiredOption('-n, --name <name>', 'Rule name')
-  .requiredOption('-c, --created <date>', 'Rule creation date (YYYY-MM-DD)')
-  .option('-t, --triggers <triggers>', 'Comma-separated list of triggers')
-  .option('-o, --content <content>', 'Rule content')
-  .option('-s, --status <status>', 'Rule status (active, deprecated)', 'active')
-  .option('-b, --branch <branch>', 'Branch name', 'main')
-  .action(async (repository: string, id: string, options) => {
-    try {
-      const branch = options.branch || 'main';
-      const ruleDataForService = {
-        id: id,
-        name: options.name,
-        created: options.created,
-        triggers: options.triggers ? options.triggers.split(',') : undefined,
-        content: options.content,
-        status: options.status as 'active' | 'deprecated',
-      };
-      await memoryService.upsertRule(repository, ruleDataForService as Rule, branch);
-      console.log(`✅ Rule ${id} added to repository: ${repository} (branch: ${branch})`);
-    } catch (error) {
-      console.error('❌ Failed to add rule:', error);
-      process.exit(1);
-    }
-  });
-
-// Helper to run async action handlers
-const runAsyncAction = async <T>(action: () => Promise<T>): Promise<T | void> => {
-  try {
-    // Ensure memory service is initialized
-    if (!memoryService) {
-      await initializeMemoryService();
-    }
-    return await action();
-  } catch (error) {
-    console.error('Error executing command:', error);
-    process.exit(1);
-  }
-};
-
-// Wrap all command actions to ensure memory service is initialized
-program.commands.forEach((cmd) => {
-  const originalAction = cmd.action;
-  cmd.action(function (...args) {
-    // Create a new function that initializes memory service first
-    const actionFn = async () => {
-      // @ts-expect-error - we know this is the original action callback
-      return originalAction.apply(this, args);
-    };
-    // The return type doesn't matter here since we're not using it
-    void runAsyncAction(actionFn);
-  });
-});
-
-// Parse command line arguments
 program.parse(process.argv);
 
-// Display help if no arguments provided
-if (process.argv.length <= 2) {
+if (process.argv.length <= 2 && !program.args.length) {
+  // Check if any command was invoked
   program.help();
 }

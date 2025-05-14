@@ -9,80 +9,94 @@ export class PageRankOperation {
    * Execute the PageRank operation with streaming support.
    */
   public static async execute(
-    repository: string,
+    clientProjectRoot: string,
+    repositoryName: string,
     branch: string,
-    dampingFactor: number = 0.85, // Default as per plan example
-    maxIterations: number = 20, // Default as per plan example
-    memoryService?: MemoryService, // Optional: KuzuDB might handle the algorithm directly
+    projectedGraphName: string,
+    nodeTableNames: string[],
+    relationshipTableNames: string[],
+    dampingFactor?: number,
+    maxIterations?: number,
+    memoryService?: MemoryService, // Make optional for flexibility, but check inside
     progressHandler?: ProgressHandler,
   ): Promise<any> {
-    try {
-      // Validate required args
-      if (!repository) {
-        return { error: 'Missing required parameter: repository' };
-      }
+    if (!memoryService) {
+      return { error: 'MemoryService instance is required for PageRankOperation' };
+    }
+    if (!repositoryName || !projectedGraphName || !nodeTableNames || !relationshipTableNames) {
+      return { error: 'Missing required parameters for PageRank' };
+    }
 
+    try {
       if (progressHandler) {
         progressHandler.progress({
           status: 'initializing',
-          message: `Starting PageRank analysis for ${repository}:${branch}`,
-          dampingFactor,
-          maxIterations,
+          message: `Starting PageRank for graph ${projectedGraphName} in ${repositoryName}:${branch} (Project: ${clientProjectRoot})`,
         });
       }
 
-      // Placeholder for actual MemoryService.pageRank call.
-      // This method would interface with KuzuDB.
-      // PageRank is iterative. MemoryService could expose progress per iteration.
-      // The plan's example for PageRankOperation directly simulated iteration progress.
-
-      // Simulate iteration progress as in the plan, assuming the actual call is made elsewhere or is complex.
-      // In a real scenario, this loop would be driven by the actual PageRank algorithm in MemoryService/KuzuDB.
-      for (let iteration = 1; iteration <= maxIterations; iteration++) {
-        // Simulate work for an iteration
-        // await memoryService.performPageRankIteration(...);
-        await new Promise((resolve) => setTimeout(resolve, 50)); // Simulate async work
-
-        if (progressHandler) {
-          progressHandler.progress({
-            status: 'in_progress',
-            message: `PageRank iteration ${iteration}/${maxIterations} complete.`,
-            currentIteration: iteration,
-            maxIterations,
-            percentComplete: Math.floor((iteration / maxIterations) * 100),
-            // Potentially include intermediate ranks or convergence info here
-          });
-        }
-      }
-
-      // After iterations, get the final ranks from MemoryService
-      const pageRankResult = (await (memoryService as any)?.getPageRankResults?.(
-        repository,
+      const pageRankResults = await memoryService.pageRank(
+        repositoryName,
         branch,
-        // Potentially pass parameters like dampingFactor, iterations if they were used by an underlying Kuzu function
-      )) || { ranks: [] }; // Default to empty result
+        dampingFactor,
+        maxIterations,
+        /* tolerance */ undefined,
+        /* normalizeInitial */ undefined,
+      );
+
+      // console.log(
+      //   'PageRankOperation: pageRankResults from service:',
+      //   JSON.stringify(pageRankResults, null, 2),
+      // );
+
+      const resultPayload = {
+        status: 'complete',
+        clientProjectRoot,
+        repository: repositoryName,
+        branch,
+        projectedGraphName,
+        results: pageRankResults, // This will contain the final ranks and any iteration info
+      };
 
       if (progressHandler) {
         progressHandler.progress({
-          status: 'finalizing',
-          message: `PageRank calculation complete. Retrieved ${pageRankResult.ranks?.length || 0} ranks.`,
-          ranksCount: pageRankResult.ranks?.length || 0,
+          status: 'in_progress',
+          message: `PageRank calculation processing for ${projectedGraphName}...`,
+          // Include summary from pageRankResults if available, e.g., iterations completed
+          iterationsCompleted: pageRankResults?.iterations || maxIterations || 'unknown',
+          // Ranks here would be the final ranks, consider if a sample is useful for in-progress
         });
+
+        // const ranksForProgress = pageRankResults?.ranks || [];
+        // console.log(
+        //   'PageRankOperation: ranks being sent in final progress:',
+        //   JSON.stringify(ranksForProgress, null, 2),
+        // );
+
+        // Send final progress event
+        progressHandler.progress({ ...resultPayload, isFinal: true });
+
+        // Send the final JSON-RPC response via progressHandler
+        progressHandler.sendFinalResponse(resultPayload, false);
+        return null; // Indicate response was sent via progressHandler
       }
 
-      const result = {
-        status: 'complete',
-        repository,
-        branch,
-        dampingFactor,
-        iterationsCompleted: maxIterations, // Or actual iterations if convergence was used
-        ranks: pageRankResult.ranks,
-      };
-
-      return result;
-    } catch (error) {
+      // If no progressHandler, return the result directly
+      return resultPayload;
+    } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      throw new Error(`PageRank calculation failed: ${errorMessage}`);
+      if (progressHandler) {
+        const errorPayload = { error: `PageRank failed: ${errorMessage}` };
+        progressHandler.progress({
+          ...errorPayload,
+          status: 'error',
+          message: errorPayload.error,
+          isFinal: true,
+        });
+        progressHandler.sendFinalResponse(errorPayload, true);
+        return null; // Indicate error was handled via progress mechanism
+      }
+      throw new Error(`PageRank failed: ${errorMessage}`);
     }
   }
 }

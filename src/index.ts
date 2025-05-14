@@ -1,8 +1,8 @@
 import { startServer } from './app';
-import { initializeKuzuDB } from './db/kuzu';
+// import { initializeKuzuDB } from './db/kuzu'; // Removed
 
-// Ensure KuzuDB schema is created before server starts
+// KuzuDB initialization is now handled by MemoryService on demand for each clientProjectRoot
 (async () => {
-  await initializeKuzuDB();
+  // await initializeKuzuDB(); // Removed call
   startServer();
 })();

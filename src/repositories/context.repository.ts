@@ -1,30 +1,23 @@
 import { Context } from '../types';
-import { Mutex } from '../utils/mutex';
 import { KuzuDBClient } from '../db/kuzu';
 import { formatGraphUniqueId, parseGraphUniqueId } from '../utils/id.utils';
 
 /**
- * Thread-safe singleton repository for Context, using KuzuDB and Cypher queries
+ * Repository for Context, using KuzuDB and Cypher queries.
+ * Each instance is now tied to a specific KuzuDBClient.
  */
 export class ContextRepository {
-  private static instance: ContextRepository;
-  private static lock = new Mutex();
-  private conn: any;
+  private kuzuClient: KuzuDBClient;
 
-  private constructor() {
-    this.conn = KuzuDBClient.getConnection();
-  }
-
-  static async getInstance(): Promise<ContextRepository> {
-    const release = await ContextRepository.lock.acquire();
-    try {
-      if (!ContextRepository.instance) {
-        ContextRepository.instance = new ContextRepository();
-      }
-      return ContextRepository.instance;
-    } finally {
-      release();
+  /**
+   * Constructor requires an initialized KuzuDBClient instance.
+   * @param kuzuClient An initialized KuzuDBClient.
+   */
+  public constructor(kuzuClient: KuzuDBClient) {
+    if (!kuzuClient) {
+      throw new Error('ContextRepository requires an initialized KuzuDBClient instance.');
     }
+    this.kuzuClient = kuzuClient;
   }
 
   private escapeStr(value: any): string {
@@ -63,7 +56,7 @@ export class ContextRepository {
       MATCH (repo:Repository {id: '${escapedRepoNodeId}'})-[:HAS_CONTEXT]->(c:Context {branch: '${escapedContextBranch}'})
       RETURN c ORDER BY c.created_at DESC LIMIT ${limit}
     `;
-    const result = await KuzuDBClient.executeQuery(query);
+    const result = await this.kuzuClient.executeQuery(query);
     if (!result || typeof result.getAll !== 'function') {
       return [];
     }
@@ -82,7 +75,7 @@ export class ContextRepository {
     repositoryName: string,
     contextBranch: string,
     isoDate: string,
-    contextLogicalId?: string, // Optional: if a specific logical ID is used other than date-derived
+    contextLogicalId?: string,
   ): Promise<Context | null> {
     const cId = contextLogicalId || `context-${isoDate}`;
     const graphUniqueId = formatGraphUniqueId(repositoryName, contextBranch, cId);
@@ -92,7 +85,7 @@ export class ContextRepository {
       MATCH (c:Context {graph_unique_id: '${escapedGraphUniqueId}'}) 
       RETURN c LIMIT 1
     `;
-    const result = await KuzuDBClient.executeQuery(query);
+    const result = await this.kuzuClient.executeQuery(query);
     if (!result || typeof result.getAll !== 'function') {
       return null;
     }
@@ -115,11 +108,9 @@ export class ContextRepository {
    * `context.id` is the logical ID of this Context entity.
    */
   async upsertContext(context: Context): Promise<Context | null> {
-    const repositoryNodeId = context.repository; // e.g. 'my-repo:main'
-
-    // Extract the logical repository name from the Repository Node ID
+    const repositoryNodeId = context.repository;
     const repoIdParts = repositoryNodeId.split(':');
-    if (repoIdParts.length === 0) {
+    if (repoIdParts.length < 2) {
       throw new Error(`Invalid repositoryNodeId format in context.repository: ${repositoryNodeId}`);
     }
     const logicalRepositoryName = repoIdParts[0];
@@ -158,7 +149,7 @@ export class ContextRepository {
       MERGE (repo)-[:HAS_CONTEXT]->(c)
       RETURN c`;
 
-    await KuzuDBClient.executeQuery(query);
+    await this.kuzuClient.executeQuery(query);
     return this.findByIdAndBranch(logicalRepositoryName, logicalId, contextBranch);
   }
 
@@ -167,7 +158,7 @@ export class ContextRepository {
    */
   async findByIdAndBranch(
     repositoryName: string,
-    itemId: string, // Logical ID of the context
+    itemId: string,
     itemBranch: string,
   ): Promise<Context | null> {
     const graphUniqueId = formatGraphUniqueId(repositoryName, itemBranch, itemId);
@@ -177,7 +168,7 @@ export class ContextRepository {
       MATCH (c:Context {graph_unique_id: '${escapedGraphUniqueId}'})
       RETURN c LIMIT 1
     `;
-    const result = await KuzuDBClient.executeQuery(query);
+    const result = await this.kuzuClient.executeQuery(query);
     if (!result || typeof result.getAll !== 'function') {
       return null;
     }
