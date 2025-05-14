@@ -48,6 +48,7 @@ export class ShortestPathOperation {
       };
 
       const shortestPathResult = await memoryService.shortestPath(
+        clientProjectRoot,
         repositoryName,
         branch,
         startNodeId,

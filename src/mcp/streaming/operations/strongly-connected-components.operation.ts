@@ -31,6 +31,7 @@ export class StronglyConnectedComponentsOperation {
       }
 
       const sccResults = await memoryService.getStronglyConnectedComponents(
+        clientProjectRoot,
         repositoryName,
         branch,
         undefined, // maxIterations

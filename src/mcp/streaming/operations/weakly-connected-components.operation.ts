@@ -31,6 +31,7 @@ export class WeaklyConnectedComponentsOperation {
       }
 
       const wccResults = await memoryService.getWeaklyConnectedComponents(
+        clientProjectRoot,
         repositoryName,
         branch,
         undefined, // maxIterations

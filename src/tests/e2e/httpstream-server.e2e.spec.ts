@@ -226,12 +226,15 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       // Use STREAM_PORT for the PORT env var for this server
       const defaultEnv = {
         PORT: String(STREAM_PORT),
-        DEBUG: '1',
+        DEBUG: '3', // Increase debug level for more verbose logging
         DB_FILENAME: dbPathForTest,
         ...envVars,
       };
 
-      serverProcess = spawn('npx', ['ts-node', serverFilePath], {
+      console.log('Starting HTTP Stream server from path:', serverFilePath);
+      console.log('With environment variables:', JSON.stringify(defaultEnv, null, 2));
+
+      serverProcess = spawn('npx', ['ts-node', '--transpile-only', serverFilePath], {
         env: { ...process.env, ...defaultEnv },
         shell: true,
         detached: false, // Changed to false for simpler process killing
@@ -239,9 +242,23 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
 
       let output = '';
       let resolved = false;
+      let startupTimeout: NodeJS.Timeout | null = null;
+
+      // Set a timeout to reject the promise if the server doesn't start within 30 seconds
+      startupTimeout = setTimeout(() => {
+        if (!resolved) {
+          console.error(
+            `HTTP Stream Server failed to start within timeout. Output so far:\n${output}`,
+          );
+          resolved = true;
+          reject(new Error('Server startup timeout'));
+        }
+      }, 30000);
+
       serverProcess.stdout?.on('data', (data) => {
         const sData = data.toString();
         output += sData;
+        console.log(`HTTPSTREAM_SERVER_STDOUT: ${sData}`);
         if (
           !resolved &&
           sData.includes(
@@ -249,6 +266,9 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
           )
         ) {
           console.log('HTTP Stream Server ready.');
+          if (startupTimeout) {
+            clearTimeout(startupTimeout);
+          }
           resolved = true;
           resolve();
         }
@@ -259,13 +279,21 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         console.error(`HTTPSTREAM_SERVER_STDERR: ${sData}`);
         if (!resolved && (sData.includes('EADDRINUSE') || sData.toLowerCase().includes('error'))) {
           // If an error occurs before resolving, reject to prevent test timeout
-          // resolved = true; // prevent multiple rejects
-          // reject(new Error(`Server failed to start: ${sData.substring(0,300)}`));
+          console.error('HTTP Stream Server failed to start due to an error');
+          if (startupTimeout) {
+            clearTimeout(startupTimeout);
+          }
+          resolved = true;
+          reject(new Error(`Server failed to start: ${sData.substring(0, 300)}`));
         }
       });
       serverProcess.on('error', (err) => {
         console.error('Failed to start HTTP Stream server process:', err);
         if (!resolved) {
+          if (startupTimeout) {
+            clearTimeout(startupTimeout);
+          }
+          resolved = true;
           reject(err);
         }
       });
@@ -274,6 +302,13 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
           console.warn(
             `HTTP Stream Server process exited unexpectedly with code ${code}, signal ${signal}. Output:\n${output}`,
           );
+          if (!resolved) {
+            if (startupTimeout) {
+              clearTimeout(startupTimeout);
+            }
+            resolved = true;
+            reject(new Error(`Server process exited with code ${code}`));
+          }
         }
       });
     });

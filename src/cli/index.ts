@@ -45,7 +45,8 @@ program
     await initializeMemoryServiceInstance();
     const branch = options.branch;
     try {
-      await memoryService.initMemoryBank(repositoryName, branch);
+      const clientProjectRoot = getEffectiveProjectRoot();
+      await memoryService.initMemoryBank(clientProjectRoot, repositoryName, branch);
       console.log(
         `✅ Memory bank initialized for repository: ${repositoryName} (branch: ${branch})`,
       );
@@ -68,6 +69,7 @@ program
   .action(async (repositoryName: string, options) => {
     await initializeMemoryServiceInstance();
     const branch = options.branch;
+    const clientProjectRoot = getEffectiveProjectRoot();
     const contextParams = {
       repository: repositoryName,
       branch,
@@ -78,7 +80,7 @@ program
       observation: options.observation,
     };
     try {
-      await memoryService.updateContext(contextParams);
+      await memoryService.updateContext(clientProjectRoot, contextParams);
       console.log(
         `✅ Added to today's context for repository: ${repositoryName} (branch: ${branch})`,
       );
@@ -101,16 +103,21 @@ program
   .action(async (repositoryName: string, id: string, options) => {
     await initializeMemoryServiceInstance();
     const branch = options.branch;
+    const clientProjectRoot = getEffectiveProjectRoot();
     const componentDataForService = {
       id: id,
       name: options.name,
       kind: options.kind,
       depends_on: options.depends ? options.depends.split(',') : [],
       status: options.status as 'active' | 'deprecated' | 'planned',
-      branch: branch,
     };
     try {
-      await memoryService.upsertComponent(repositoryName, branch, componentDataForService);
+      await memoryService.upsertComponent(
+        clientProjectRoot,
+        repositoryName,
+        branch,
+        componentDataForService,
+      );
       console.log(`✅ Component ${id} added to repository: ${repositoryName} (branch: ${branch})`);
     } catch (error) {
       console.error('❌ Failed to add component:', error);
@@ -130,6 +137,7 @@ program
   .action(async (repositoryName: string, id: string, options) => {
     await initializeMemoryServiceInstance();
     const branch = options.branch;
+    const clientProjectRoot = getEffectiveProjectRoot();
     const decisionDataForService = {
       id: id,
       name: options.name,
@@ -137,7 +145,12 @@ program
       date: options.date,
     };
     try {
-      await memoryService.upsertDecision(repositoryName, branch, decisionDataForService);
+      await memoryService.upsertDecision(
+        clientProjectRoot,
+        repositoryName,
+        branch,
+        decisionDataForService,
+      );
       console.log(`✅ Decision ${id} added to repository: ${repositoryName} (branch: ${branch})`);
     } catch (error) {
       console.error('❌ Failed to add decision:', error);
@@ -159,6 +172,7 @@ program
   .action(async (repositoryName: string, id: string, options) => {
     await initializeMemoryServiceInstance();
     const branch = options.branch;
+    const clientProjectRoot = getEffectiveProjectRoot();
     const ruleDataForService = {
       id: id,
       name: options.name,
@@ -168,7 +182,7 @@ program
       status: options.status as 'active' | 'deprecated',
     };
     try {
-      await memoryService.upsertRule(repositoryName, ruleDataForService, branch);
+      await memoryService.upsertRule(clientProjectRoot, repositoryName, ruleDataForService, branch);
       console.log(`✅ Rule ${id} added to repository: ${repositoryName} (branch: ${branch})`);
     } catch (error) {
       console.error('❌ Failed to add rule:', error);

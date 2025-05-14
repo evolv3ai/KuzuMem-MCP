@@ -31,7 +31,11 @@ export class LouvainCommunityDetectionOperation {
       }
 
       // Call the MemoryService's louvainCommunityDetection method with the correct signature
-      const louvainResults = await memoryService.louvainCommunityDetection(repositoryName, branch);
+      const louvainResults = await memoryService.louvainCommunityDetection(
+        clientProjectRoot,
+        repositoryName,
+        branch,
+      );
 
       const resultPayload = {
         status: 'complete',

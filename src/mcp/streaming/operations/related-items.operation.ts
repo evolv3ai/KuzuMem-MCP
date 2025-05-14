@@ -50,6 +50,7 @@ export class RelatedItemsOperation {
       };
 
       const relatedItems = await memoryService.getRelatedItems(
+        clientProjectRoot,
         repositoryName,
         branch,
         startItemId,
