@@ -12,6 +12,10 @@ import { ToolExecutionService } from './mcp/services/tool-execution.service';
 const detectedClientProjectRoot = process.cwd();
 console.error(`MCP stdio server detected client project root: ${detectedClientProjectRoot}`);
 
+// Map to store clientProjectRoot for each repository and branch
+// Key: "repositoryName:branchName", Value: "clientProjectRootPath"
+const repositoryRootMap = new Map<string, string>();
+
 // IMPORTANT: We do NOT initialize directories or memory service at startup!
 // Database initialization should only happen through the init-memory-bank tool
 // or when explicitly requested by a tool call
@@ -141,10 +145,91 @@ rl.on('line', async (line) => {
           break;
         }
 
-        // For init-memory-bank, clientProjectRoot comes from toolArgs.
-        // For others, we use detectedClientProjectRoot from server's context.
-        const effectiveClientProjectRoot =
-          toolName === 'init-memory-bank' ? toolArgs.clientProjectRoot : detectedClientProjectRoot;
+        let effectiveClientProjectRoot: string | undefined;
+
+        if (toolName === 'init-memory-bank') {
+          effectiveClientProjectRoot = toolArgs.clientProjectRoot;
+          if (effectiveClientProjectRoot && toolArgs.repository && toolArgs.branch) {
+            const repoBranchKey = `${toolArgs.repository}:${toolArgs.branch}`;
+            repositoryRootMap.set(repoBranchKey, effectiveClientProjectRoot);
+            debugLog(
+              2,
+              `Stored clientProjectRoot for ${repoBranchKey}: ${effectiveClientProjectRoot}`,
+            );
+          } else {
+            debugLog(
+              0,
+              `Error: init-memory-bank called without required arguments for storing clientProjectRoot (repository, branch, clientProjectRoot).`,
+            );
+            sendResponse({
+              jsonrpc: '2.0',
+              id: request.id,
+              result: {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Tool '${toolName}' called without repository, branch, or clientProjectRoot for mapping.`,
+                  },
+                ],
+                isError: true,
+              },
+            });
+            break;
+          }
+        } else {
+          // For other tools, retrieve clientProjectRoot from the map
+          if (toolArgs.repository && toolArgs.branch) {
+            const repoBranchKey = `${toolArgs.repository}:${toolArgs.branch}`;
+            effectiveClientProjectRoot = repositoryRootMap.get(repoBranchKey);
+            if (!effectiveClientProjectRoot) {
+              debugLog(
+                0,
+                `Error: clientProjectRoot not found in map for ${repoBranchKey}. Was init-memory-bank called for this repo/branch?`,
+              );
+              // Fallback to detectedClientProjectRoot (server CWD) if not found, though this is the problematic behavior we want to avoid.
+              // Ideally, this should be an error if strict mapping is required.
+              // For now, to maintain some prior behavior if uninitialized, let's log an error and consider it a failure.
+              sendResponse({
+                jsonrpc: '2.0',
+                id: request.id,
+                result: {
+                  content: [
+                    {
+                      type: 'text',
+                      text: `Memory for repository '${toolArgs.repository}' on branch '${toolArgs.branch}' not initialized. Please call 'init-memory-bank' first.`,
+                    },
+                  ],
+                  isError: true,
+                },
+              });
+              break;
+            }
+            debugLog(
+              2,
+              `Retrieved clientProjectRoot for ${repoBranchKey}: ${effectiveClientProjectRoot}`,
+            );
+          } else {
+            // If repository or branch are not in toolArgs, this is a problem for most tools.
+            debugLog(
+              0,
+              `Error: Tool '${toolName}' called without repository or branch arguments needed to find clientProjectRoot.`,
+            );
+            sendResponse({
+              jsonrpc: '2.0',
+              id: request.id,
+              result: {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Tool '${toolName}' requires repository and branch arguments.`,
+                  },
+                ],
+                isError: true,
+              },
+            });
+            break;
+          }
+        }
 
         if (!effectiveClientProjectRoot && toolName === 'init-memory-bank') {
           sendResponse({
@@ -161,8 +246,9 @@ rl.on('line', async (line) => {
         }
         if (!effectiveClientProjectRoot) {
           // Should not happen if init-memory-bank was called correctly first for other tools
+          // And if the logic above correctly assigns effectiveClientProjectRoot from the map
           console.error(
-            `CRITICAL: effectiveClientProjectRoot is not defined for tool ${toolName}. This indicates a problem with server launch context or tool argument passing.`,
+            `CRITICAL: effectiveClientProjectRoot is not defined for tool ${toolName}. This indicates a problem with server launch context, tool argument passing, or the repositoryRootMap logic.`,
           );
           sendResponse({
             jsonrpc: '2.0',
