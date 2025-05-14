@@ -86,6 +86,7 @@ Add the following to your IDEs MCP configuration:
         "HOST": "localhost",
         "DB_FILENAME": "memory-bank.kuzu",
         "HTTP_STREAM_PORT": "3001",
+        //"HTTP_STREAM_PROJECT_ROOT": "/" for SSE
       },
       "protocol": "stdio" // or "sse"
     }
