@@ -242,4 +242,4 @@ Feel free to contribute to the project.
 
 ## Target Graph Schema
 
-![New Graph Schema](docs/schema_evolution.png)
+![New Graph Schema](docs/schema_evolution.md)

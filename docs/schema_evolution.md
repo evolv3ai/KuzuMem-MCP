@@ -1,3 +1,6 @@
+# Schema Evolution
+
+```mermaid
 flowchart TD
   classDef pk fill:#f96,stroke:#333,stroke-width:2px
   classDef added fill:#c8e6c9,stroke:#333,stroke-width:2px
