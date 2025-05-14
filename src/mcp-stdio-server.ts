@@ -347,4 +347,4 @@ rl.on('line', async (line) => {
 process.on('SIGINT', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));
 
-console.log('MCP_STDIO_SERVER_READY_FOR_TESTING');
+// console.log('MCP_STDIO_SERVER_READY_FOR_TESTING'); // Removed to avoid non-JSON output on stdout
