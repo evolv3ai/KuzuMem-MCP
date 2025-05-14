@@ -79,7 +79,7 @@ Add the following to your IDEs MCP configuration:
       "args": [
         "-y",
         "ts-node",
-        "/Users/jokkeruokolainen/Documents/Solita/GenAI/Azure/MCP/advanced-memory-tool/src/mcp-stdio-server.ts" // or "src/mcp-httpstream-server.ts" if your IDE supports SSE
+        "/Users/<absolute_path>/src/mcp-stdio-server.ts" // or "src/mcp-httpstream-server.ts" if your IDE supports SSE
       ],
       "env": {
         "PORT": "3000",
