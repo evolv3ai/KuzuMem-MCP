@@ -284,7 +284,7 @@ This server implements Model Context Protocol standards:
 
 ```bash
 # Clone the repository
-git clone https://github.com/solita-internal/kuzumem-mcp
+git clone git@github.com:Jakedismo/KuzuMem-MCP.git
 cd kuzumem-mcp
 
 # Install dependencies
