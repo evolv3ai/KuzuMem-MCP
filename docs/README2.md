@@ -1,8 +1,8 @@
-# 🧠 Advanced Memory Bank MCP Server
+# 🧠 KuzuMem-MCP
 
 > **Enhance AI coding assistants with persistent, graph-based knowledge**
 
-The Advanced Memory Bank MCP server provides a structured approach to storing and retrieving repository knowledge, enabling AI coding assistants to maintain context across sessions and branches.
+The KuzuMem-MCP server provides a structured approach to storing and retrieving repository knowledge, enabling AI coding assistants to maintain context across sessions and branches.
 
 ## 🎯 Purpose & Goals
 
@@ -13,6 +13,7 @@ This project addresses several key challenges in AI-assisted development:
 - **Identify relationships** between components, decisions, and rules
 - **Provide graph-based memory storage** for enhanced context retrieval
 - **Enable AI tools** to understand project architecture
+- **Client isolation** for supporting multiple client projects with dedicated memory banks
 
 ## ✨ Key Benefits
 
@@ -48,6 +49,15 @@ MCP tools include capabilities for:
 - Component relationship mapping
 - Structural importance identification
 
+### 🏢 Client Project Isolation
+
+The enhanced architecture now supports:
+
+- Per-client database isolation for multi-project support
+- Dedicated memory banks stored within each client's project root
+- Lazy database initialization that only happens when explicitly requested
+- Improved database path handling with proper error messages
+
 ## 🔍 Advanced Graph Queries & Traversals
 
 The graph-based architecture enables powerful queries that would be difficult or impossible with traditional databases:
@@ -58,7 +68,12 @@ The graph-based architecture enables powerful queries that would be difficult or
 # Find all components that would be affected by changing the Authentication service
 $ curl -X POST http://localhost:3000/tools/get-component-dependents \
   -H "Content-Type: application/json" \
-  -d '{"repository": "my-app", "branch": "main", "componentId": "comp-AuthService"}'
+  -d '{
+    "clientProjectRoot": "/path/to/project", 
+    "repository": "my-app", 
+    "branch": "main", 
+    "componentId": "comp-AuthService"
+  }'
 
 # Result shows not just direct users of the Auth service, but the entire dependency chain
 {
@@ -77,7 +92,12 @@ $ curl -X POST http://localhost:3000/tools/get-component-dependents \
 # Find all decisions and rules affecting the UserProfile component
 $ curl -X POST http://localhost:3000/tools/get-governing-items-for-component \
   -H "Content-Type: application/json" \
-  -d '{"repository": "my-app", "branch": "main", "componentId": "comp-UserProfile"}'
+  -d '{
+    "clientProjectRoot": "/path/to/project",
+    "repository": "my-app", 
+    "branch": "main", 
+    "componentId": "comp-UserProfile"
+  }'
 
 # Results include decisions, rules and when/why they were made
 {
@@ -189,45 +209,6 @@ $ curl -X POST http://localhost:3000/tools/strongly-connected-components \
 
 These examples demonstrate how the graph-based architecture enables complex queries about component relationships, architectural decisions, and system structure that would be difficult or impossible with traditional databases. AI assistants can use these insights to provide more informed guidance about code changes, architectural evolution, and potential design weaknesses.
 
-## 📊 Graph Schema Architecture
-
-The foundation of the Advanced Memory Bank's capabilities is its graph-based data model. Unlike traditional relational databases, this approach allows for rich relationship modeling and efficient traversal operations.
-
-```mermaid
-flowchart TD
-  classDef pk fill:#f96,stroke:#333,stroke-width:2px
-  classDef branchPoint fill:#bbdefb,stroke:#333,stroke-width:2px
-
-  Repository["Repository[PK] id: name + ':' + branchname: STRING branch: STRING created_at: TIMESTAMP updated_at: TIMESTAMP"]
-  Metadata["Metadata[PK] yaml_id: STRING name: STRING content: STRING created_at: TIMESTAMP updated_at: TIMESTAMP"]
-  Context["Context[PK] yaml_id: STRING name: STRING summary: STRING created_at: TIMESTAMP updated_at: TIMESTAMP"]
-  Component["Component[PK] yaml_id: STRING name: STRING kind: STRING status: STRING created_at: TIMESTAMP updated_at: TIMESTAMP"]
-  Decision["Decision[PK] yaml_id: STRING name: STRING context: STRING date: DATE created_at: TIMESTAMP updated_at: TIMESTAMP"]
-  Rule["Rule[PK] yaml_id: STRING name: STRING content: STRING created: DATE status: STRING created_at: TIMESTAMP updated_at: TIMESTAMP"]
-
-  subgraph "Branch Isolation Mechanism"
-    BranchA["Repository[PK] id: 'repo1:main' name: 'repo1' branch: 'main'"]
-    BranchB["Repository[PK] id: 'repo1:feature' name: 'repo1' branch: 'feature'"]
-    BranchA -.-> MetadataA["Metadata for main branch"]
-    BranchB -.-> MetadataB["Metadata for feature branch"]
-  end
-
-  Repository -- "HAS_METADATA(Branch-isolated via Repository.id)" --> Metadata
-  Repository -- "HAS_CONTEXT(Branch-isolated via Repository.id)" --> Context
-  Repository -- "HAS_COMPONENT(Branch-isolated via Repository.id)" --> Component
-  Repository -- "HAS_DECISION(Branch-isolated via Repository.id)" --> Decision
-  Repository -- "HAS_RULE(Branch-isolated via Repository.id)" --> Rule
-
-  Component -- "DEPENDS_ON(Component dependency)" --> Component
-  Context -- "CONTEXT_OF(Links context to component)" --> Component
-  Context -- "CONTEXT_OF_DECISION(Links context to decision)" --> Decision
-  Context -- "CONTEXT_OF_RULE(Links context to rule)" --> Rule
-  Decision -- "DECISION_ON(Links decision to component)" --> Component
-
-  class Repository,BranchA,BranchB branchPoint
-  class Repository,Metadata,Context,Component,Decision,Rule pk
-```
-
 ### Key Schema Design Elements
 
 1. **Branch-Aware Repository Nodes**
@@ -272,6 +253,7 @@ This server implements Model Context Protocol standards:
 - **🧩 Modular Architecture** - Clean separation between layers
 - **🔄 JSON-RPC Communication** - Standard protocol support
 - **🗺️ Graph Traversal Tools** - Path finding and dependency analysis
+- **🔐 Client Project Isolation** - Each client project gets its own memory bank
 
 ## 📅 Feature Timeline
 
@@ -283,6 +265,11 @@ This server implements Model Context Protocol standards:
 - ✅ **Cypher Query Support** - Replaced SQL queries with Cypher for graph traversal
 - ✅ **Service/Repository Refactoring** - Updated all layers to support branch awareness
 - ✅ **Graph Traversal Tools** - Added component dependency and relationship tools
+- ✅ **Client Project Isolation** - Implemented per-client memory banks
+- ✅ **Repository Factory Pattern** - Centralized repository creation with proper caching
+- ✅ **Repository Provider** - Added intermediary between services and repositories
+- ✅ **Lazy Database Initialization** - Databases only created when explicitly requested
+- ✅ **Improved Error Handling** - Better error messages for database path issues
 
 ## 💡 Use Cases
 
@@ -291,13 +278,14 @@ This server implements Model Context Protocol standards:
 - **Decision History** - Track why implementation choices were made
 - **Impact Assessment** - Identify affected components when making changes
 - **Onboarding** - Help new team members understand system structure
+- **Multi-Project Support** - Maintain separate memory banks for different projects
 
 ## 🔧 Installation & Usage
 
 ```bash
 # Clone the repository
-git clone https://github.com/solita-internal/advanced-memory-tool-mcp
-cd advanced-memory-tool-mcp
+git clone https://github.com/solita-internal/kuzumem-mcp
+cd kuzumem-mcp
 
 # Install dependencies
 npm install
@@ -312,7 +300,7 @@ Create a `.env` file with:
 
 ```env
 # KùzuDB Configuration
-DB_FILENAME=./memory-bank.kuzu
+DB_FILENAME=memory-bank.kuzu
 
 # Server Configuration
 PORT=3000
@@ -335,12 +323,29 @@ The server provides tools for repository operations, memory management, and grap
 
 This project follows a multi-layer architecture:
 
-- **Database Layer:** KùzuDB graph database with Cypher queries
-- **Repository Layer:** Thread-safe singleton repositories for each memory type
-- **Memory Operations Layer:** Business logic for memory operations
-- **Service Layer:** Core orchestration through MemoryService
-- **MCP Layer:** Tool definitions, handlers, and server implementations
-- **CLI Layer:** Command-line interface for direct interaction
+- **Database Layer:**
+  - KùzuDB graph database with Cypher queries
+  - RepositoryFactory for centralized repository creation
+  - RepositoryProvider for client-specific repository management
+
+- **Repository Layer:**
+  - Thread-safe singleton repositories for each memory type
+  - Client-aware repository instances
+
+- **Memory Operations Layer:**
+  - Business logic for memory operations
+  - Client project root validation
+
+- **Service Layer:**
+  - Core orchestration through MemoryService
+  - Client project awareness for database operations
+
+- **MCP Layer:**
+  - Tool definitions, handlers, and server implementations
+  - Client project root propagation
+
+- **CLI Layer:**
+  - Command-line interface for direct interaction
 
 ## 🙏 Acknowledgements
 

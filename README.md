@@ -26,6 +26,8 @@ The official TypeScript MCP SDK is a great project and we will use it in the fut
   - Stdio for direct IDE/Agent integration, supporting both batch and progressive results (`src/mcp-stdio-server.ts`).
 - **Progressive Results Streaming** - Supports `tools/progress` notifications for long-running graph operations over Stdio and HTTP Streaming.
 - **Graph & Traversal Tools** - Includes tools for dependency analysis, pathfinding, and graph algorithms.
+- **Lazy Database Initialization** - Databases are only initialized when explicitly requested through the init-memory-bank tool, not during server startup.
+- **Client Project Root Isolation** - Each client project gets its own isolated database instance based on the provided project root path.
 
 ## Documentation
 
@@ -51,12 +53,16 @@ npm run build
 Create a `.env` file in the root directory with the following variables:
 
 ```env
-# KùzuDB Configuration (for on-disk database)
-DB_FILENAME=./memory-bank.kuzu   # Path to the KùzuDB database folder
+# Database Configuration
+# Default filename for KuzuDB database files created within client project roots
+DB_FILENAME="memory-bank.kuzu" 
 
 # Server Configuration
-PORT=3000                       # For the main HTTP MCP server and REST API
-HTTP_STREAM_PORT=3001           # For the MCP HTTP Streaming Server
+# Main server port
+PORT=3000
+# HTTP Stream server port (should be different from main port)
+HTTP_STREAM_PORT=3001
+# Host to bind server to
 HOST=localhost
 
 # Debug Logging for MCP Servers (0=Error, 1=Warn, 2=Info, 3=Debug, 4=Trace)
@@ -67,25 +73,25 @@ Add the following to your IDEs MCP configuration:
 
 ```json
 {
-  "KuzuMemo-MCP": {
-      "KuzuMemo-MCP": {
+  "mcpServers": {
+    "KuzuMemo-MCP": {
       "command": "npx",
       "args": [
         "-y",
         "ts-node",
-        "/Users/jokkeruokolainen/Documents/Solita/GenAI/Azure/MCP/advanced-memory-tool/src/mcp-stdio-server.ts"
+        "/Users/jokkeruokolainen/Documents/Solita/GenAI/Azure/MCP/advanced-memory-tool/src/mcp-stdio-server.ts" // or "src/mcp-httpstream-server.ts" if your IDE supports SSE
       ],
       "env": {
         "PORT": "3000",
-        "DB_CLIENT": "kuzu",
-        "DB_FILENAME": "./memory-bank.kuzu",
-        "HTTP_STREAM_PROJECT_ROOT": "./memory-bank",
+        "HOST": "localhost",
+        "DB_FILENAME": "memory-bank.kuzu",
+        "HTTP_STREAM_PORT": "3001",
         "PROJECT_ROOT_FOR_MAIN_SERVER": "./memory-bank",
-        "HTTP_STREAM_PORT": "3000"
+        "HTTP_STREAM_PROJECT_ROOT": "./memory-bank"
       },
-      "protocol": "stdio"  // or "http"
+      "protocol": "stdio" // or "sse"
     }
-    }
+  }
 }
 ```
 
@@ -98,20 +104,41 @@ Add the following to your IDEs MCP configuration:
 - **Main HTTP Server (for REST API & Batch MCP via per-tool endpoints):** (`src/app.ts` which uses `src/mcp/server.ts` for `/mcp/tools/...`)
 
   ```bash
+  # Make sure memory-bank directory exists
+  mkdir -p ./memory-bank
+  
+  # Start the main server
   npm start
   ```
 
 - **HTTP Streaming MCP Server (for MCP clients wanting SSE via unified `/mcp`):** (`src/mcp-httpstream-server.ts`)
 
   ```bash
+  # Make sure memory-bank directory exists
+  mkdir -p ./memory-bank
+  
+  # Start the HTTP stream server
   npx ts-node src/mcp-httpstream-server.ts
   ```
 
 - **stdio MCP Server (for direct IDE/Agent integration, supports streaming):** (`src/mcp-stdio-server.ts`)
 
   ```bash
+  # The stdio server will detect client project root from the environment
+  # or from the tools/call arguments for init-memory-bank
   npx ts-node src/mcp-stdio-server.ts
   ```
+
+## Database Initialization
+
+After the refactoring, database initialization now works as follows:
+
+1. Databases are explicitly initialized through the `init-memory-bank` tool, not during server startup
+2. Each database is stored within the client's project root directory
+3. The database path is constructed at runtime by concatenating:
+   - The client's project root (provided per request)
+   - The database filename (from DB_FILENAME environment variable)
+4. Server startup no longer fails if the database directory doesn't exist - it's created on demand
 
 ## MCP Server Implementation
 
@@ -122,53 +149,12 @@ All server implementations support these MCP capabilities:
 - `tools/call` (for stdio and the http-stream unified `/mcp` endpoint) - Execution of any listed tool, with support for `tools/progress` streaming from graph operations.
 - Dedicated HTTP POST endpoints for each tool (e.g., `/mcp/tools/<tool-name>`) in the main HTTP server (`src/app.ts` via `src/mcp/server.ts`) which are batch-oriented.
 
-### Using the CLI
-
-The CLI allows interaction with the memory bank. **Note**: CLI commands generally require `repository` and `id` (logical item ID) arguments, and often a `branch` option.
-
-```bash
-# Initialize a memory bank for a repository (defaults to main branch)
-npm run cli init my-repo
-
-# Example: Add a component
-npm run cli add-component my-repo comp-AuthService -n "AuthService" -k "service" -b "feature-branch"
-```
-
-### Using the API (HTTP MCP Server - `src/mcp/server.ts`)
-
-The primary way to interact with tools is via specific POST endpoints on the HTTP MCP server (default port 3000).
-
-**Base URL**: `http://localhost:3000/tools`
-
 **Common Tool Parameters (in JSON request body)**:
 
 - `repository`: string (repository name, e.g., "my-project")
 - `branch`: string (optional, defaults to "main"; specifies the branch context for the item)
 - `id`: string (the logical/user-defined ID for the item, e.g., "comp-auth", "my-rule-001")
-
-**Tool Endpoints (POST requests):**
-
-- `/init-memory-bank` - Body: `{ "repository": "repo-name", "branch": "main" }`
-- `/get-metadata` - Body: `{ "repository": "repo-name", "branch": "main" }` (Metadata logical ID is implicitly "meta")
-- `/update-metadata` - Body: `{ "repository": "repo-name", "branch": "main", "metadata": { "project": { "name": "New Name" } } }`
-- `/get-context` - Body: `{ "repository": "repo-name", "branch": "main", "latest": true/false, "limit": 10 }`
-- `/update-context` - Body: `{ "repository": "repo-name", "branch": "main", "id": "context-YYYY-MM-DD", "summary": "...", ... }`
-- `/add-component` - Body: `{ "repository": "repo-name", "branch": "main", "id": "your-component-id", "name": "...", ... }`
-- `/add-decision` - Body: `{ "repository": "repo-name", "branch": "main", "id": "your-decision-id", "name": "...", ... }`
-- `/add-rule` - Body: `{ "repository": "repo-name", "branch": "main", "id": "your-rule-id", "name": "...", ... }`
-
-- **Traversal & Graph Tools (parameters like `componentId`, `itemId`, `startNodeId` refer to the logical `id`):**
-  - `/get-component-dependencies` - Body: `{ "repository", "branch"?, "componentId" }`
-  - `/get-component-dependents` - Body: `{ "repository", "branch"?, "componentId" }`
-  - `/get-item-contextual-history` - Body: `{ "repository", "branch"?, "itemId", "itemType": ("Component"|"Decision"|"Rule") }`
-  - `/get-governing-items-for-component` - Body: `{ "repository", "branch"?, "componentId" }`
-  - `/get-related-items` - Body: `{ "repository", "branch"?, "startItemId", "params": { "relationshipTypes"?, "depth"?, "direction"? } }`
-  - `/shortest-path` - Body: `{ "repository", "branch"?, "startNodeId", "endNodeId", "params": { "relationshipTypes"?, "direction"? } }`
-  - `/k-core-decomposition` - Body: `{ "repository", "branch"?, "k"? }`
-  - `/louvain-community-detection` - Body: `{ "repository", "branch"? }`
-  - `/pagerank` - Body: `{ "repository", "branch"?, "dampingFactor"?, "iterations"? }`
-  - `/strongly-connected-components` - Body: `{ "repository", "branch"? }`
-  - `/weakly-connected-components` - Body: `{ "repository", "branch"? }`
+- `clientProjectRoot`: string (required for init-memory-bank, specifies the absolute path to the client project root)
 
 ## Architecture
 
@@ -178,6 +164,7 @@ This project follows a clean architecture with separation of concerns:
 
 - Uses **KùzuDB**, an embedded graph database.
 - Interaction via the `KuzuDBClient` which executes **Cypher** queries.
+- Database paths are now constructed at runtime using the client's project root.
 
 ### Repository Layer
 
@@ -205,6 +192,8 @@ A new layer introduced to encapsulate specific business logic for groups of oper
 ### Service Layer
 
 - `MemoryService` - Core business logic, now acts as an orchestrator, delegating to Memory Operations Layer functions. Manages repository instances.
+- `RepositoryFactory` - Creates and caches repository instances.
+- `RepositoryProvider` - Manages repositories per client project root, ensuring proper initialization.
 
 ### MCP Layer (`src/mcp/`)
 
@@ -220,7 +209,7 @@ A new layer introduced to encapsulate specific business logic for groups of oper
   - `src/mcp/server.ts` (`MemoryMcpServer`): Provides MCP via Express.js with dedicated batch-oriented POST endpoints per tool (typically mounted under `/mcp/tools/...` by `src/app.ts`).
   - `src/mcp-httpstream-server.ts`: Standalone HTTP server with a unified `/mcp` endpoint supporting Server-Sent Events (SSE) for streaming `tools/progress` and final responses.
   - `src/mcp-stdio-server.ts`: Stdio-based server supporting both batch and streaming (`tools/progress`) responses for `tools/call`.
-- **Types (`src/mcp/types/`)**: Shared MCP type definitions (e.g., `McpTool`, `ToolHandler`).
+- **Types(`src/mcp/types/`)**: Shared MCP type definitions (e.g., `McpTool`, `ToolHandler`).
 
 ### CLI Layer
 
@@ -242,12 +231,17 @@ MIT
 
 ## Contributing
 
-Please read the contributing guidelines before submitting a pull request.
+Feel free to contribute to the project.
 
 ## Future Improvements
 
 - **Enhance CLI** to support branch selection for all relevant commands more explicitly.
 - **Refine Graph Algorithm Streaming**: Further refactor `MemoryService` and Kùzu calls within Operation Classes to provide more granular progress for algorithms where KùzuDB allows iterative result yielding.
-- **Add Full-Text Search (FTS) Capabilities** - Planned implementation to enable efficient keyword-based search across all memory items using KùzuDB's FTS extension.
+- **Add Full-Text Search (FTS) Capabilities** - Planned implementation to enable efficient keyword-based search across all memory items using KùzuDB's FTS extension. Especially good when tags are implemented.
 - **Vector Embeddings Support** - Planned implementation; would enable semantic similarity search and NLP-based memory retrieval using KùzuDB's vector capabilities. Currently blocked due to KuzuDB Vector columns being immutable. Updating memories wouldn't update the vector embeddings. Making the feature a little redundant.
 - **Official TypeScript MCP SDK Migration** - Consider migrating to the official TypeScript MCP SDK to benefit from the latest features and community support, now that foundational understanding of the protocol is established.
+- **Graph Schema Evolution** - Extending the graph schema to support more complex memory types and relationships. Filenames, tags etc.
+
+## Target Graph Schema
+
+![New Graph Schema](docs/schema_evolution.png)
