@@ -40,6 +40,7 @@ export class ComponentDependentsOperation {
       // Placeholder for actual logic that might involve complex graph traversal and path reconstruction
       // which would be the source of multiple progressHandler.progress() calls.
       const allDependents = await memoryService.getComponentDependents(
+        clientProjectRoot,
         repositoryName,
         branch,
         componentId,

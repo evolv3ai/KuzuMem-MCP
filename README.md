@@ -68,17 +68,23 @@ Add the following to your IDEs MCP configuration:
 ```json
 {
   "KuzuMemo-MCP": {
+      "KuzuMemo-MCP": {
       "command": "npx",
       "args": [
         "-y",
         "ts-node",
-        "/path_to_your_project/<repo_name>/src/mcp-stdio-server.ts" //or src/mcp-httpstream-server.ts
+        "/Users/jokkeruokolainen/Documents/Solita/GenAI/Azure/MCP/advanced-memory-tool/src/mcp-stdio-server.ts"
       ],
       "env": {
         "PORT": "3000",
         "DB_CLIENT": "kuzu",
-        "DB_FILENAME": "./memory-bank.kuzu"
-      }
+        "DB_FILENAME": "./memory-bank.kuzu",
+        "HTTP_STREAM_PROJECT_ROOT": "./memory-bank",
+        "PROJECT_ROOT_FOR_MAIN_SERVER": "./memory-bank",
+        "HTTP_STREAM_PORT": "3000"
+      },
+      "protocol": "stdio"  // or "http"
+    }
     }
 }
 ```

@@ -32,7 +32,12 @@ export class KCoreDecompositionOperation {
       }
 
       // Call the MemoryService's kCoreDecomposition method with the correct signature
-      const kCoreResults = await memoryService.kCoreDecomposition(repositoryName, branch, k);
+      const kCoreResults = await memoryService.kCoreDecomposition(
+        clientProjectRoot,
+        repositoryName,
+        branch,
+        k,
+      );
 
       const resultPayload = {
         status: 'complete',

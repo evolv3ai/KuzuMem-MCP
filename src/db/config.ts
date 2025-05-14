@@ -14,9 +14,9 @@ dotenv.config();
 
 // Default to empty string for DB_RELATIVE_DIR to place DB file directly in clientProjectRoot
 const KUZU_DB_RELATIVE_DIR = process.env.KUZU_DB_RELATIVE_DIR || '';
-// If KUZU_DB_FILENAME is not set via environment, default to a test-specific name.
-// For production/development, KUZU_DB_FILENAME should be explicitly set in .env to 'memory-bank.kuzu' or desired name.
-const KUZU_DB_FILENAME = process.env.KUZU_DB_FILENAME || 'test-memory-bank.kuzu';
+// Use DB_FILENAME env var for tests, then KUZU_DB_FILENAME, then default to a test-specific name.
+const KUZU_DB_FILENAME =
+  process.env.DB_FILENAME || process.env.KUZU_DB_FILENAME || 'test-memory-bank.kuzu';
 
 console.log(
   `KuzuDB default relative directory (should be empty for root placement): '${KUZU_DB_RELATIVE_DIR}'`,

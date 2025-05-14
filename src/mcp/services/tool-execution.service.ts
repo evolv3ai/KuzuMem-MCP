@@ -42,6 +42,10 @@ export class ToolExecutionService {
     progressHandler?: ProgressHandler,
     debugLog?: (level: number, message: string, data?: any) => void,
   ): Promise<any> {
+    // Override KUZU_DB_RELATIVE_DIR so MemoryService picks up the correct clientProjectRoot for KuzuDB
+    if (clientProjectRoot) {
+      process.env.KUZU_DB_RELATIVE_DIR = clientProjectRoot;
+    }
     const memoryService = await this.ensureMemoryService();
 
     try {

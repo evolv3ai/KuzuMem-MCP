@@ -36,6 +36,7 @@ export class PageRankOperation {
       }
 
       const pageRankResults = await memoryService.pageRank(
+        clientProjectRoot,
         repositoryName,
         branch,
         dampingFactor,

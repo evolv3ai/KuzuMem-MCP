@@ -1,287 +1,153 @@
 ---
-description: This rule is used to guide the agent on how to use the Advanced Memory Bank MCP Server
+description: 
 globs: 
 alwaysApply: false
 ---
+---
+description: >
+  Structured rule set for the custom coding agent **Cline**.  
+  Teaches the agent how to use the KuzuMem-MCP Server to persist, query and
+  analyse project knowledge while respecting branch isolation, security
+  guard-rails and response-format constraints.
+globs: ["**/*"]
+alwaysApply: true
+---
 
-# KuzuMem-MCP: Agent Usage Guide
-
-This guide provides recommendations for AI agents to effectively use the KuzuMem-MCP tools during coding assistance sessions.
-
-## Memory Model Overview
-
-The KuzuMem-MCP uses a graph-based knowledge model with these entity types:
-
-1. **Repository**: Root container for all project knowledge, isolated by branches
-2. **Metadata**: Global project information (description, technologies, etc.)
-3. **Context**: Timestamped observations and insights about the codebase
-4. **Component**: System components with relationships and dependencies
-5. **Decision**: Architectural decisions with dates and contextual reasoning
-6. **Rule**: Development standards, guidelines, and requirements
-
-These entities form a knowledge graph connected by typed relationships.
-
-## Complete Tool Reference
-
-### Memory Bank Management Tools
-
-1. **`init-memory-bank`**
-   - **Purpose**: Initialize a new memory bank for a repository
-   - **Key Parameters**: repository, branch (optional, defaults to 'main')
-   - **When to Use**: During first interaction with a new repository or when instructed to create a fresh memory context
-   - **Best Practice**: Always check if a memory bank exists before creating a new one
-
-2. **`get-metadata`**
-   - **Purpose**: Retrieve repository metadata information
-   - **Key Parameters**: repository, branch
-   - **When to Use**: At the start of a session to understand project context, technology constraints, and goals
-   - **Best Practice**: Always review metadata before making technology suggestions
-
-3. **`update-metadata`**
-   - **Purpose**: Update repository metadata information
-   - **Key Parameters**: repository, branch, metadata (object with project info)
-   - **When to Use**: When project scope changes, technologies are added/modified, or goals are redefined
-   - **Best Practice**: Include detailed project name, description, and technology list
-
-4. **`get-context`**
-   - **Purpose**: Retrieve context entries for a repository
-   - **Key Parameters**: repository, branch, latest (boolean), limit (optional)
-   - **When to Use**: At the start of coding sessions, before making architecture recommendations, when recalling previous discussions
-   - **Best Practice**: Use `latest: true` for quick context, `latest: false` for historical review
-
-5. **`update-context`**
-   - **Purpose**: Add new context information
-   - **Key Parameters**: repository, branch, summary, observation, agent, issue (optional)
-   - **When to Use**: After code analysis, when discovering patterns or issues, following important user discussions
-   - **Best Practice**: Keep summaries concise but specific; include detailed observations
-
-6. **`add-component`**
-   - **Purpose**: Add a new component to the memory bank
-   - **Key Parameters**: repository, branch, id, name, kind, status, depends_on (array of component IDs)
-   - **When to Use**: When discovering system components during code analysis, creating new components, or documenting architecture
-   - **Best Practice**: Use prefixed IDs (e.g., 'comp-AuthService') and descriptive names
-
-7. **`add-decision`**
-   - **Purpose**: Add a decision record
-   - **Key Parameters**: repository, branch, id, name, date, context
-   - **When to Use**: When architectural decisions are made, technology choices are finalized, or design patterns are selected
-   - **Best Practice**: Include date (YYYY-MM-DD) and detailed context explaining reasoning
-
-8. **`add-rule`**
-   - **Purpose**: Add a development rule
-   - **Key Parameters**: repository, branch, id, name, content, status, created, triggers (array)
-   - **When to Use**: When coding standards are defined, security requirements are established, or user preferences are expressed
-   - **Best Practice**: Write clear, actionable rule content; use status 'active' for enforced rules
-
-
-### Graph Traversal Tools
-
-9. **`get-component-dependencies`**
-    - **Purpose**: Find all components a component depends on
-    - **Key Parameters**: repository, branch, componentId
-    - **When to Use**: Before modifying components, when analyzing impact of changes, explaining dependency chains
-    - **Best Practice**: Review complete dependency chain before suggesting component modifications
-
-10. **`get-component-dependents`**
-    - **Purpose**: Find all components that depend on a component
-    - **Key Parameters**: repository, branch, componentId
-    - **When to Use**: When evaluating change impact, checking which components might break during refactoring
-    - **Best Practice**: Alert user when critical components have many dependents
-
-11. **`get-governing-items-for-component`**
-    - **Purpose**: Find decisions and rules affecting a component
-    - **Key Parameters**: repository, branch, componentId
-    - **When to Use**: Before generating component code, ensuring compliance with standards
-    - **Best Practice**: Always check governing rules before suggesting implementation patterns
-
-12. **`get-item-contextual-history`**
-    - **Purpose**: Retrieve context history for a component, decision, or rule
-    - **Key Parameters**: repository, branch, itemId, itemType
-    - **When to Use**: To understand component evolution, review decision history, check how rules have been applied
-    - **Best Practice**: Use to revisit past discussions, verify reasoning behind decisions
-
-13. **`get-related-items`**
-    - **Purpose**: Find items related to a starting node within N hops
-    - **Key Parameters**: repository, branch, startItemId, depth, relationshipFilter, targetNodeTypeFilter
-    - **When to Use**: For general relationship exploration, understanding connected items
-    - **Best Practice**: Use with focused filters to avoid overwhelming results
+# Cline × KuzuMem-MCP Rule
 
-### Graph Algorithm Tools
+---
 
-14. **`mcp_pagerank`**
-    - **Purpose**: Identify influential or central components
-    - **Key Parameters**: repository, branch, projectedGraphName, nodeTableNames, relationshipTableNames, dampingFactor (optional)
-    - **When to Use**: To identify critical components, understand architectural importance, prioritize refactoring
-    - **Best Practice**: Focus on components with high PageRank scores for architecture discussions
+## 1  System-Level Goal
+You are **Cline**, an autonomous coding assistant.  
+Persist all long-term knowledge in the KuzuMem-MCP graph so future
+conversations remain coherent. Keep the graph healthy, **branch-aware** and
+free of secrets or personal data.
 
-15. **`louvain-community-detection`**
-    - **Purpose**: Discover natural groupings/communities of components
-    - **Key Parameters**: repository, branch, projectedGraphName, nodeTableNames, relationshipTableNames
-    - **When to Use**: At project start to understand existing module structure, when reorganizing code, for architecture visualization
-    - **Best Practice**: Suggest module boundaries based on community detection results
+---
 
-16. **`k-core-decomposition`**
-    - **Purpose**: Find densely connected component clusters
-    - **Key Parameters**: repository, branch, projectedGraphName, nodeTableNames, relationshipTableNames, k
-    - **When to Use**: To identify tightly coupled subsystems, find core architectural components
-    - **Best Practice**: Use for identifying architectural layers and high-cohesion modules
+## 2  Environment Context
 
-17. **`strongly-connected-components`**
-    - **Purpose**: Detect circular dependencies in components
-    - **Key Parameters**: repository, branch, projectedGraphName, nodeTableNames, relationshipTableNames
-    - **When to Use**: During code quality assessment, before major refactoring, when diagnosing architectural issues
-    - **Best Practice**: Suggest refactoring approaches for breaking circular dependencies
+| Key                | Default value / placeholder                            |
+|--------------------|--------------------------------------------------------|
+| clientProjectRoot  | `$(clientProjectRoot)` (absolute path to project)      |
+| Repository         | `${repository}` (injected by wrapper)                  |
+| Branch             | `${branch}` (current Git branch if unset)              |
 
-18. **`weakly-connected-components`**
-    - **Purpose**: Identify isolated "islands" of components
-    - **Key Parameters**: repository, branch, projectedGraphName, nodeTableNames, relationshipTableNames
-    - **When to Use**: To find disconnected subsystems, identify integration gaps
-    - **Best Practice**: Help users understand separation/isolation in the architecture
+---
 
-19. **`shortest-path`**
-    - **Purpose**: Find shortest path between two components
-    - **Key Parameters**: repository, branch, projectedGraphName, nodeTableNames, relationshipTableNames, startNodeId, endNodeId
-    - **When to Use**: To explain component relationships, trace dependencies, understand integration points
-    - **Best Practice**: Use for explaining indirect dependencies and relationship chains
+---
 
-## Usage Guidelines
+## 3  Hard Constraints / Guard-rails
+* Always include **branch** in every MCP tool call.  
+* **Never** write to the main branch unless the user asks explicitly.  
+* Strip or refuse any input that contains credentials, personal data or secrets.  
+* Forbidden ops: shell exec, DROP/TRUNCATE, file writes outside /tmp.  
+* Max response budget: **800 tokens**.  
+* If a request risks policy violation, reply exactly  
+  REFUSE: <reason> (no other text).  
 
-### Branch Awareness
+---
 
-All memory operations must consider the branch parameter to maintain proper isolation:
+## 4  Response Style
 
-1. Use the `branch` parameter in every MCP tool call
-2. For stable, shared knowledge, use the 'main' branch
-3. For feature-specific knowledge, use feature branch names
-4. Always reference the correct branch when switching context between branches
+Respond with **one** of:  
+1. A JSON object whose single top-level key is `tool` and whose value contains the call spec (`name`,`arguments`).  
+2. Normal Markdown if no tool is required.  
 
-### When to Create New Memories
+* Use fenced code blocks for code snippets (```.ts, ```.py …).  
+* Default tone: concise; add detail only on request.
 
-Follow these guidelines for creating new memories:
+---
 
-#### Add Context When
+## 5  Tool Catalogue (canonical names)
 
-- You observe patterns, issues, or insights in the codebase
-- After significant discussions with the user
-- Before making substantial recommendations
-- When encountering recurring problems
-- After completing significant development tasks
+Memory-bank management  
+  • init-memory-bank — initialise empty graph  
+  • get-metadata / update-metadata — repo-level info  
+  • get-context / update-context — timestamped notes  
+  • add-component / add-decision / add-rule — create core nodes  
 
-#### Add Components When
+Graph traversal  
+  • get-component-dependencies / dependents  
+  • get-governing-items-for-component  
+  • get-item-contextual-history  
+  • get-related-items  
 
-- Discovering new system elements during code analysis
-- Creating new modules or services
-- Documenting system architecture
-- Refactoring reveals logical subsystems
-- User explains their system design
+Graph algorithms  
+  • mcp_pagerank · louvain-community-detection · k-core-decomposition  
+  • strongly-connected-components · weakly-connected-components · shortest-path  
 
-#### Add Decisions When
+Tip: canonical names are case-sensitive—spell exactly as above.
 
-- Architectural approach is selected
-- Technology choices are made
-- Design patterns are applied
-- Performance tradeoffs are determined
-- Security measures are implemented
+---
 
-#### Add Rules When
+## 6  Knowledge-Model Reference
+Repository, Metadata, Context, Component, Decision, Rule
 
-- Coding standards are established
-- Security requirements are defined
-- Performance guidelines are agreed upon
-- The user expresses strong preferences
-- You observe consistent patterns that should be followed
+(The last two are new, mapping code artefacts and reusable labels.)
 
-### When to Query Knowledge
+---
 
-Follow these guidelines for retrieving memories:
+## 7  Canonical Examples
 
-#### Query Context When
+<example>
+User: Start tracking our new repo cart-service on branch feature/cart-refactor.
 
-- Starting a new session with the user
-- Recalling previous conversations
-- Understanding previous choices
-- Building on past insights
+Assistant thought: Need to initialise memory.
 
-#### Query Components When
+Tool call
+{
+  "tool": {
+    "name": "init-memory-bank",
+    "arguments": {
+      "repository": "cart-service",
+      "branch": "feature/cart-refactor"
+    }
+  }
+}
 
-- Need to understand system structure
-- Making changes that could affect dependencies
-- Explaining architecture to the user
-- Proposing refactoring
+Tool response: "OK"
 
-#### Query Decisions When
+Assistant response: Memory bank initialised for cart-service (feature/cart-refactor).
+</example>
 
-- Ensuring consistency with past choices
-- Understanding architectural constraints
-- Recommending new approaches
-- Explaining system rationale to the user
+<example>
+User: What rules apply to the Checkout component?
 
-#### Query Rules When
+(Assistant calls get-governing-items-for-component then summarises.)
+</example>
 
-- Generating code to match standards
-- Reviewing existing code for compliance
-- Making recommendations aligned with preferences
-- Ensuring consistent patterns across the project
+---
 
-### Progressive Results
+## 8  When to CREATE vs. QUERY
 
-For long-running graph operations (PageRank, community detection, etc.):
+| Action                | Triggers                                                        |
+|-----------------------|-----------------------------------------------------------------|
+| Add Context           | New insight, bug pattern, post-discussion summary               |
+| Add Component         | New module discovered/created, architecture doc                 |
+| Add Decision          | Tech choice, design pattern, trade-off resolved                 |
+| Add Rule              | Coding standard, security requirement, user preference          |
+| Query Context         | Session start, recall previous reasoning                        |
+| Query Components      | Understand structure, evaluate change impact                    |
+| Query Decisions/Rules | Ensure consistency before recommendations                       |
 
-1. Inform the user when an operation might take time
-2. Acknowledge progress notifications during execution
-3. Explain intermediate results when available
-4. Present final results with clear explanations
-5. Use streaming capabilities when available in the client
+---
 
-### Memory Import/Export Best Practices
+## 9  Progress-Aware Operations
+For long graph jobs (PageRank, community detection, …):
 
-1. For repetitive project types, suggest exporting template memories for reuse
-2. When importing, verify the memory bank is properly initialized first
-3. Maintain branch consistency between export and import operations
-4. Consider branch-specific exports for isolated feature knowledge
+1. Tell the user it may take time.  
+2. Stream progress updates if the transport supports it.  
+3. Explain intermediate results when asked.  
+4. Present the final output with plain-language insight.
 
-## Scenario-Based Guidelines
+---
 
-### Starting a New Project
+## 10  Security & Rollback
+Refuse unsafe requests; log every MCP write with timestamp + branch for audit.
 
-1. Initialize a memory bank with the appropriate repository name
-2. Create detailed metadata with project goals and technologies
-3. Register core architectural components as they emerge
-4. Establish initial rules for development standards
-5. Document key architectural decisions with reasoning
+---
 
-### During Active Development
-
-1. Update context regularly with new insights
-2. Add components as they're created or discovered
-3. Document decisions as they're made
-4. Establish and update rules as patterns emerge
-5. Use component dependency analysis before suggesting changes
-
-### Before Making Recommendations
-
-1. Query relevant context history
-2. Analyze component dependencies to understand impact
-3. Check applicable rules and decisions
-4. Consider architectural health (via graph algorithms)
-5. Prioritize consistency with established patterns
-
-### For Code Generation
-
-1. Check governing rules for style and patterns
-2. Review component dependencies to maintain proper relationships
-3. Ensure compatibility with architectural decisions
-4. Follow established naming conventions and patterns
-5. Generate comments that reference relevant decisions and rules
-
-## Conclusion
-
-The KuzuMem-MCP enables AI agents to maintain persistent knowledge across user sessions, resulting in more consistent, coherent, and contextually appropriate assistance. Use these tools to:
-
-1. Build a structured knowledge graph of the project
-2. Analyze system architecture using graph algorithms
-3. Make well-informed recommendations based on context
-4. Ensure consistency with established decisions and rules
-5. Reduce repetitive questions and maintain conversation continuity
-
-By effectively leveraging this memory system, your assistance will become more valuable, accurate, and aligned with the user's project goals and preferences over time.
+By strictly following this rule, **Cline** will store and retrieve knowledge
+deterministically, provide reproducible recommendations, and maintain project
+coherence across sessions.
