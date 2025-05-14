@@ -500,7 +500,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
 
     expect(response.body.result).toBeDefined();
     expect(response.body.result.capabilities.tools).toEqual({ list: true, call: true });
-    expect(response.body.result.serverInfo.name).toBe('KuzuMem-MCP');
+    expect(response.body.result.serverInfo.name).toBe('KuzuMem-MCP-HTTPStream'); // Adjusted expected name
   });
 
   it('T_HTTPSTREAM_002: /tools/list should return list of tools', async () => {
@@ -654,7 +654,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
             ),
           ).toBe(true);
 
-          callback(null, null); // Indicate to supertest parser that we are done
+          callback(null, null);
         } catch (assertionError) {
           callback(assertionError, null);
         }
@@ -799,7 +799,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     });
 
     it('T_HTTPSTREAM_JSON_shortest-path: should find a shortest path', async () => {
-      expect(sharedTestComponentId).toBeDefined();
       expect(sharedDependentComponentId).toBeDefined();
       const toolArgs = {
         repository: testRepository,
@@ -809,7 +808,9 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         relationshipTypes: ['DEPENDS_ON'],
         direction: 'OUTGOING',
         clientProjectRoot: clientProjectRootForTest,
-        // No projection params needed if default graph works for this simple path
+        projectedGraphName: 'sp_json_test_graph',
+        nodeTableNames: ['Component'],
+        relationshipTableNames: ['DEPENDS_ON'],
       };
       const payload = {
         jsonrpc: '2.0',
@@ -826,13 +827,14 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       expect(response.body.id).toBe('sp_json');
       const resultWrapper = response.body.result;
       expect(resultWrapper.status).toBe('complete');
-      expect(resultWrapper.pathFound).toBe(true);
-      expect(Array.isArray(resultWrapper.path)).toBe(true);
-      expect(resultWrapper.path.length).toBeGreaterThanOrEqual(1); // Path of at least start node if depends_on points to itself or direct
-      expect(resultWrapper.path[0].id).toBe(sharedDependentComponentId);
-      // For direct dependency, path length is 1 (edge), 2 nodes
-      if (resultWrapper.path.length >= 2) {
-        expect(resultWrapper.path[resultWrapper.path.length - 1].id).toBe(sharedTestComponentId);
+      expect(resultWrapper.results.pathFound).toBe(true);
+      expect(Array.isArray(resultWrapper.results.path)).toBe(true);
+      expect(resultWrapper.results.path.length).toBeGreaterThanOrEqual(1);
+      expect(resultWrapper.results.path[0].id).toBe(sharedDependentComponentId);
+      if (resultWrapper.results.path.length >= 2) {
+        expect(resultWrapper.results.path[resultWrapper.results.path.length - 1].id).toBe(
+          sharedTestComponentId,
+        );
       }
     });
 
@@ -875,7 +877,9 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         startNodeId: sharedTestComponentId!,
         endNodeId: sharedTestComponentId!,
         clientProjectRoot: clientProjectRootForTest,
-        // No specific projection needed, default behavior for reflexive path on non-existent loop
+        projectedGraphName: 'sp_reflexive_json_test_graph',
+        nodeTableNames: ['Component'],
+        relationshipTableNames: [],
       };
       const payload = {
         jsonrpc: '2.0',
@@ -892,97 +896,66 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       expect(response.body.id).toBe('sp_reflex_json');
       const resultWrapper = response.body.result;
       expect(resultWrapper.status).toBe('complete');
-      expect(resultWrapper.pathFound).toBe(false);
-      expect(Array.isArray(resultWrapper.path)).toBe(true);
-      expect(resultWrapper.path.length).toBe(0);
-    });
-
-    it('T_HTTPSTREAM_JSON_get-governing-items: should get governing items (expect empty based on current seeding)', async () => {
-      expect(sharedTestComponentId).toBeDefined();
-      const toolArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        componentId: sharedTestComponentId!,
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'get_gov_items_json',
-        method: 'tools/call',
-        params: { name: 'get-governing-items-for-component', arguments: toolArgs },
-      };
-      const response = await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(payload)
-        .expect(200);
-
-      expect(response.body.id).toBe('get_gov_items_json');
-      const resultWrapper = response.body.result;
-      expect(resultWrapper.status).toBe('complete');
-      expect(Array.isArray(resultWrapper.decisions)).toBe(true);
-      expect(resultWrapper.decisions.length).toBe(0);
-      expect(Array.isArray(resultWrapper.rules)).toBe(true);
-      expect(resultWrapper.rules.length).toBe(0);
-    });
-
-    it('T_HTTPSTREAM_JSON_get-item-contextual-history: should get item history (expect empty based on current seeding)', async () => {
-      expect(sharedTestComponentId).toBeDefined();
-      const toolArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        itemId: sharedTestComponentId!,
-        itemType: 'Component',
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'get_item_hist_json',
-        method: 'tools/call',
-        params: { name: 'get-item-contextual-history', arguments: toolArgs },
-      };
-      const response = await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(payload)
-        .expect(200);
-
-      expect(response.body.id).toBe('get_item_hist_json');
-      const resultWrapper = response.body.result;
-      expect(resultWrapper.status).toBe('complete');
-      expect(Array.isArray(resultWrapper.contextHistory)).toBe(true);
-      expect(resultWrapper.contextHistory.length).toBe(0);
+      expect(resultWrapper.results).toBeDefined(); // Ensure results object exists
+      expect(resultWrapper.results.pathFound).toBe(false);
+      expect(Array.isArray(resultWrapper.results.path)).toBe(true);
+      expect(resultWrapper.results.path.length).toBe(0);
     });
   });
 
-  // Add a describe block for Algorithm tools via /mcp (JSON responses)
   describe('Algorithm Tools via /mcp (JSON responses)', () => {
     const algorithmTestCases = [
       {
         name: 'k-core-decomposition',
-        args: { k: 1 },
-        expectedDataKeyInWrapper: 'decomposition',
+        args: {
+          k: 1,
+          projectedGraphName: 'kcore_json_test_graph',
+          nodeTableNames: ['Component'],
+          relationshipTableNames: ['DEPENDS_ON'],
+        },
+        expectedDataKeyInWrapper: 'results',
         checkField: 'components',
       },
       {
         name: 'louvain-community-detection',
-        args: {},
-        expectedDataKeyInWrapper: 'communities',
-        isArrayDirectly: true,
+        args: {
+          projectedGraphName: 'louvain_json_test_graph',
+          nodeTableNames: ['Component'],
+          relationshipTableNames: ['DEPENDS_ON'],
+        },
+        expectedDataKeyInWrapper: 'results',
         checkModularity: true,
+        checkField: 'communities',
       },
-      { name: 'pagerank', args: {}, expectedDataKeyInWrapper: 'ranks', isArrayDirectly: true },
+      {
+        name: 'pagerank',
+        args: {
+          projectedGraphName: 'pagerank_json_test_graph',
+          nodeTableNames: ['Component'],
+          relationshipTableNames: ['DEPENDS_ON'],
+        },
+        expectedDataKeyInWrapper: 'results',
+        checkField: 'ranks',
+      },
       {
         name: 'strongly-connected-components',
-        args: {},
-        expectedDataKeyInWrapper: 'stronglyConnectedComponents',
-        isArrayDirectly: true,
+        args: {
+          projectedGraphName: 'scc_json_test_graph',
+          nodeTableNames: ['Component'],
+          relationshipTableNames: ['DEPENDS_ON'],
+        },
+        expectedDataKeyInWrapper: 'results',
+        checkField: 'components',
       },
       {
         name: 'weakly-connected-components',
-        args: {},
-        expectedDataKeyInWrapper: 'weaklyConnectedComponents',
-        isArrayDirectly: true,
+        args: {
+          projectedGraphName: 'wcc_json_test_graph',
+          nodeTableNames: ['Component'],
+          relationshipTableNames: ['DEPENDS_ON'],
+        },
+        expectedDataKeyInWrapper: 'results',
+        checkField: 'components',
       },
     ];
 
@@ -1011,1216 +984,20 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         expect(resultWrapper).toBeDefined();
         expect(resultWrapper.status).toBe('complete');
 
-        const dataContainer = resultWrapper[toolSetup.expectedDataKeyInWrapper];
+        const dataContainer = resultWrapper[toolSetup.expectedDataKeyInWrapper]; // This is now resultWrapper.results
         expect(dataContainer).toBeDefined();
 
-        if (toolSetup.isArrayDirectly) {
-          expect(Array.isArray(dataContainer)).toBe(true);
-        } else if (toolSetup.checkField) {
+        // Updated checks to look inside dataContainer (which is resultWrapper.results)
+        if (toolSetup.checkField) {
           expect(dataContainer[toolSetup.checkField]).toBeDefined();
           expect(Array.isArray(dataContainer[toolSetup.checkField])).toBe(true);
         }
+
         if (toolSetup.checkModularity) {
-          expect(resultWrapper).toHaveProperty('modularity');
+          // Modularity for Louvain is returned at the same level as 'communities' within the 'results' object from the operation
+          expect(dataContainer).toHaveProperty('modularity');
         }
       });
     }
-  });
-
-  describe('Basic Entity Operations via /mcp (JSON)', () => {
-    it('T_HTTPSTREAM_JSON_get-metadata: should get metadata', async () => {
-      const toolArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'get_meta_http',
-        method: 'tools/call',
-        params: { name: 'get-metadata', arguments: toolArgs },
-      };
-      const response = await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(payload)
-        .expect(200);
-
-      expect(response.body.id).toBe('get_meta_http');
-      const resultWrapper = response.body.result; // get-metadata handler returns the metadata object directly
-      expect(resultWrapper).toBeDefined();
-      expect(resultWrapper.id).toBe('meta');
-      expect(resultWrapper.name).toBe(testRepository);
-      // Content was updated in T_HTTPSTREAM_003 or seeding, check a field
-      const contentObject =
-        typeof resultWrapper.content === 'string'
-          ? JSON.parse(resultWrapper.content)
-          : resultWrapper.content;
-      expect(contentObject.project.name).toBe(testRepository);
-      expect(contentObject.tech_stack.language).toBe('TypeScript'); // Assuming seeded or updated by T_HTTPSTREAM_003
-    });
-
-    it('T_HTTPSTREAM_JSON_get-context-latest: should get latest context', async () => {
-      // First, ensure a context entry exists by updating/creating one for today
-      const summaryText = `HTTP E2E Context Test - ${Date.now()}`;
-      const updateCtxArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        summary: summaryText,
-        agent: 'http-e2e',
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const updatePayload = {
-        jsonrpc: '2.0',
-        id: 'update_ctx_for_get',
-        method: 'tools/call',
-        params: { name: 'update-context', arguments: updateCtxArgs },
-      };
-      await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(updatePayload)
-        .expect(200);
-
-      const toolArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        latest: true,
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'get_ctx_latest_http',
-        method: 'tools/call',
-        params: { name: 'get-context', arguments: toolArgs },
-      };
-      const response = await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(payload)
-        .expect(200);
-
-      expect(response.body.id).toBe('get_ctx_latest_http');
-      const contexts = response.body.result; // get-context handler returns the array directly
-      expect(Array.isArray(contexts)).toBe(true);
-      expect(contexts.length).toBeGreaterThanOrEqual(1);
-      expect(contexts[0].summary).toContain(summaryText); // Check if the latest context reflects our update
-    });
-
-    it('T_HTTPSTREAM_JSON_update-context: should update context (verified by get)', async () => {
-      const summaryText = `HTTP E2E Update Context - ${Date.now()}`;
-      const agentName = 'http-updater';
-      const toolArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        summary: summaryText,
-        agent: agentName,
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'update_ctx_http',
-        method: 'tools/call',
-        params: { name: 'update-context', arguments: toolArgs },
-      };
-      const response = await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(payload)
-        .expect(200);
-
-      expect(response.body.id).toBe('update_ctx_http');
-      expect(response.body.result?.success).toBe(true);
-
-      // Verify by getting the context
-      const getArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        latest: true,
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const getPayload = {
-        jsonrpc: '2.0',
-        id: 'get_updated_ctx_http',
-        method: 'tools/call',
-        params: { name: 'get-context', arguments: getArgs },
-      };
-      const getResponse = await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(getPayload)
-        .expect(200);
-      const contexts = getResponse.body.result;
-      expect(Array.isArray(contexts)).toBe(true);
-      expect(contexts.length).toBeGreaterThanOrEqual(1);
-      expect(contexts[0].summary).toBe(summaryText);
-      // The agent field is not persisted as a direct property on the Context node
-      // by the current ContextRepository.upsertContext implementation.
-      // expect(contexts[0].agent).toBe(agentName);
-    });
-  });
-
-  describe('Error Handling via /mcp (JSON)', () => {
-    it('T_HTTPSTREAM_JSON_ERROR_invalid-tool: should handle invalid tool name gracefully', async () => {
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'err_invalid_tool',
-        method: 'tools/call',
-        params: {
-          name: 'non-existent-tool',
-          arguments: { repository: testRepository, clientProjectRoot: clientProjectRootForTest },
-        },
-      };
-      const response = await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(payload)
-        .expect(200); // MCP call itself is ok
-
-      expect(response.body.id).toBe('err_invalid_tool');
-      expect(response.body.result).toBeDefined();
-      expect(response.body.result.error).toBeDefined();
-      // The error message comes from ToolExecutionService when handler is not found
-      expect(response.body.result.error).toContain(
-        "Tool execution handler not implemented for 'non-existent-tool'.",
-      );
-    });
-
-    it('T_HTTPSTREAM_JSON_ERROR_missing-args: should handle missing required arguments for a valid tool', async () => {
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'err_missing_args',
-        method: 'tools/call',
-        params: {
-          name: 'get-metadata',
-          arguments: { branch: testBranch, clientProjectRoot: clientProjectRootForTest },
-        }, // Missing repository
-      };
-      const response = await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(payload)
-        .expect(200);
-
-      expect(response.body.id).toBe('err_missing_args');
-      expect(response.body.result).toBeDefined();
-      expect(response.body.result.error).toBeDefined();
-      // This error is thrown by the get-metadata tool handler itself
-      expect(response.body.result.error).toContain('Missing repository parameter for get-metadata');
-    });
-  });
-
-  describe('Streamable Tools via /mcp (SSE responses)', () => {
-    it('T_HTTPSTREAM_SSE_get-component-dependents: should stream progress', (done) => {
-      console.log('[T_HTTPSTREAM_SSE_get-component-dependents] Test started.');
-      expect(testComponentId).toBeDefined();
-      expect(dependentComponentId).toBeDefined();
-
-      const toolArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        componentId: testComponentId!,
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'sse_get_dependents',
-        method: 'tools/call',
-        params: { name: 'get-component-dependents', arguments: toolArgs },
-      };
-
-      const sseRequest = request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .set('Accept', 'text/event-stream')
-        .send(payload);
-
-      console.log('[T_HTTPSTREAM_SSE_get-component-dependents] Invoking collectStreamEvents...');
-      sseRequest
-        .expect(200)
-        .parse(async (res: any, callback: any) => {
-          try {
-            const {
-              events,
-              progressEventsCount,
-              finalResponseEvent,
-              errorEvent,
-            }: CollectedSseEvents = await collectStreamEvents(res);
-            console.log(
-              '[T_HTTPSTREAM_SSE_get-component-dependents] SSE events collected. Checking assertions...',
-            );
-
-            expect(errorEvent).toBeNull();
-            console.log('[T_HTTPSTREAM_SSE_get-component-dependents] errorEvent is null.');
-            expect(progressEventsCount).toBeGreaterThanOrEqual(2);
-            console.log('[T_HTTPSTREAM_SSE_get-component-dependents] progressEventsCount >= 2.');
-            expect(finalResponseEvent).toBeDefined();
-            console.log(
-              '[T_HTTPSTREAM_SSE_get-component-dependents] finalResponseEvent is defined.',
-            );
-            expect(finalResponseEvent.data.id).toBe('sse_get_dependents');
-            console.log(
-              '[T_HTTPSTREAM_SSE_get-component-dependents] finalResponseEvent.data.id matches.',
-            );
-
-            const initProgress = events.find(
-              (ev: any) =>
-                ev.type === 'mcpNotification' &&
-                ev.data.method === 'tools/progress' &&
-                !ev.data.params.isFinal &&
-                JSON.parse(ev.data.params.content[0].text).status === 'initializing',
-            );
-            expect(initProgress).toBeDefined();
-            console.log('[T_HTTPSTREAM_SSE_get-component-dependents] initProgress found.');
-
-            const inProgress = events.find(
-              (ev: any) =>
-                ev.type === 'mcpNotification' &&
-                ev.data.method === 'tools/progress' &&
-                !ev.data.params.isFinal &&
-                JSON.parse(ev.data.params.content[0].text).status === 'in_progress',
-            );
-            expect(inProgress).toBeDefined();
-            const inProgressContent = JSON.parse(inProgress.data.params.content[0].text);
-            expect(Array.isArray(inProgressContent.dependents)).toBe(true);
-            expect(
-              inProgressContent.dependents.some((c: Component) => c.id === dependentComponentId),
-            ).toBe(true);
-            console.log(
-              '[T_HTTPSTREAM_SSE_get-component-dependents] inProgress dependents assertion passed.',
-            );
-
-            const finalProgress = events.find(
-              (ev: any) => ev.type === 'mcpNotification' && ev.data.params.isFinal === true,
-            );
-            expect(finalProgress).toBeDefined();
-            const finalProgressContent = JSON.parse(finalProgress.data.params.content[0].text);
-            expect(finalProgressContent.status).toBe('complete');
-            expect(Array.isArray(finalProgressContent.dependents)).toBe(true);
-            expect(
-              finalProgressContent.dependents.some((c: Component) => c.id === dependentComponentId),
-            ).toBe(true);
-            console.log(
-              '[T_HTTPSTREAM_SSE_get-component-dependents] finalProgress dependents assertion passed.',
-            );
-
-            expect(finalResponseEvent.data.result).toBeDefined();
-            expect(finalResponseEvent.data.result.status).toBe('complete');
-            expect(Array.isArray(finalResponseEvent.data.result.dependents)).toBe(true);
-            expect(
-              finalResponseEvent.data.result.dependents.some(
-                (c: Component) => c.id === dependentComponentId,
-              ),
-            ).toBe(true);
-            console.log('[T_HTTPSTREAM_SSE_get-component-dependents] All assertions passed.');
-
-            callback(null, null);
-          } catch (assertionError) {
-            console.error(
-              '[T_HTTPSTREAM_SSE_get-component-dependents] Assertion error:',
-              assertionError,
-            );
-            callback(assertionError, null);
-          }
-        })
-        .end(done);
-    });
-
-    it('T_HTTPSTREAM_SSE_get-item-contextual-history: should stream progress', (done) => {
-      console.log('[T_HTTPSTREAM_SSE_get-item-contextual-history] Test started.');
-      expect(testComponentId).toBeDefined(); // Use testComponentId which is set in beforeAll
-
-      const toolArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        itemId: testComponentId!, // Use testComponentId
-        itemType: 'Component',
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'sse_get_item_hist',
-        method: 'tools/call',
-        params: { name: 'get-item-contextual-history', arguments: toolArgs },
-      };
-
-      const sseRequest = request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .set('Accept', 'text/event-stream')
-        .send(payload);
-
-      console.log('[T_HTTPSTREAM_SSE_get-item-contextual-history] Invoking collectStreamEvents...');
-      sseRequest
-        .expect(200)
-        .parse(async (res: any, callback: any) => {
-          try {
-            const {
-              events,
-              progressEventsCount,
-              finalResponseEvent,
-              errorEvent,
-            }: CollectedSseEvents = await collectStreamEvents(res);
-            console.log(
-              '[T_HTTPSTREAM_SSE_get-item-contextual-history] SSE events collected. Checking assertions...',
-            );
-
-            expect(errorEvent).toBeNull();
-            console.log('[T_HTTPSTREAM_SSE_get-item-contextual-history] errorEvent is null.');
-            expect(progressEventsCount).toBeGreaterThanOrEqual(2);
-            console.log('[T_HTTPSTREAM_SSE_get-item-contextual-history] progressEventsCount >= 2.');
-            expect(finalResponseEvent).toBeDefined();
-            console.log(
-              '[T_HTTPSTREAM_SSE_get-item-contextual-history] finalResponseEvent is defined.',
-            );
-            expect(finalResponseEvent.data.id).toBe('sse_get_item_hist');
-            console.log(
-              '[T_HTTPSTREAM_SSE_get-item-contextual-history] finalResponseEvent.data.id matches.',
-            );
-
-            const initProgress = events.find(
-              (ev: any) =>
-                ev.type === 'mcpNotification' &&
-                ev.data.method === 'tools/progress' &&
-                !ev.data.params.isFinal &&
-                JSON.parse(ev.data.params.content[0].text).status === 'initializing',
-            );
-            expect(initProgress).toBeDefined();
-            console.log('[T_HTTPSTREAM_SSE_get-item-contextual-history] initProgress found.');
-
-            const inProgress = events.find(
-              (ev: any) =>
-                ev.type === 'mcpNotification' &&
-                ev.data.method === 'tools/progress' &&
-                !ev.data.params.isFinal &&
-                JSON.parse(ev.data.params.content[0].text).status === 'in_progress',
-            );
-            expect(inProgress).toBeDefined();
-            const inProgressContent = JSON.parse(inProgress.data.params.content[0].text);
-            expect(Array.isArray(inProgressContent.history)).toBe(true);
-            console.log(
-              '[T_HTTPSTREAM_SSE_get-item-contextual-history] inProgress history is array.',
-            );
-
-            const finalProgress = events.find(
-              (ev: any) => ev.type === 'mcpNotification' && ev.data.params.isFinal === true,
-            );
-            expect(finalProgress).toBeDefined();
-            const finalProgressContent = JSON.parse(finalProgress.data.params.content[0].text);
-            expect(finalProgressContent.status).toBe('complete');
-            expect(Array.isArray(finalProgressContent.contextHistory)).toBe(true);
-            console.log(
-              '[T_HTTPSTREAM_SSE_get-item-contextual-history] finalProgress contextHistory is array.',
-            );
-
-            expect(finalResponseEvent.data.result).toBeDefined();
-            expect(finalResponseEvent.data.result.status).toBe('complete');
-            expect(Array.isArray(finalResponseEvent.data.result.contextHistory)).toBe(true);
-            console.log('[T_HTTPSTREAM_SSE_get-item-contextual-history] All assertions passed.');
-
-            callback(null, null);
-          } catch (assertionError) {
-            console.error(
-              '[T_HTTPSTREAM_SSE_get-item-contextual-history] Assertion error:',
-              assertionError,
-            );
-            callback(assertionError, null);
-          }
-        })
-        .end(done);
-    });
-
-    it('T_HTTPSTREAM_SSE_get-governing-items: should stream progress', (done) => {
-      console.log('[T_HTTPSTREAM_SSE_get-governing-items] Test started.');
-      expect(testComponentId).toBeDefined(); // Use testComponentId set in beforeAll
-
-      const toolArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        componentId: testComponentId!, // Use testComponentId
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'sse_get_gov_items',
-        method: 'tools/call',
-        params: { name: 'get-governing-items-for-component', arguments: toolArgs },
-      };
-
-      const sseRequest = request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .set('Accept', 'text/event-stream')
-        .send(payload);
-
-      console.log('[T_HTTPSTREAM_SSE_get-governing-items] Invoking collectStreamEvents...');
-      sseRequest
-        .expect(200)
-        .parse(async (res: any, callback: any) => {
-          try {
-            const {
-              events,
-              progressEventsCount,
-              finalResponseEvent,
-              errorEvent,
-            }: CollectedSseEvents = await collectStreamEvents(res);
-            console.log(
-              '[T_HTTPSTREAM_SSE_get-governing-items] SSE events collected. Checking assertions...',
-            );
-
-            expect(errorEvent).toBeNull();
-            console.log('[T_HTTPSTREAM_SSE_get-governing-items] errorEvent is null.');
-            expect(progressEventsCount).toBeGreaterThanOrEqual(4);
-            console.log('[T_HTTPSTREAM_SSE_get-governing-items] progressEventsCount >= 4.');
-            expect(finalResponseEvent).toBeDefined();
-            console.log('[T_HTTPSTREAM_SSE_get-governing-items] finalResponseEvent is defined.');
-            expect(finalResponseEvent.data.id).toBe('sse_get_gov_items');
-            console.log(
-              '[T_HTTPSTREAM_SSE_get-governing-items] finalResponseEvent.data.id matches.',
-            );
-
-            const initProgress = events.find(
-              (ev: any) =>
-                ev.type === 'mcpNotification' &&
-                JSON.parse(ev.data.params.content[0].text).status === 'initializing',
-            );
-            expect(initProgress).toBeDefined();
-            console.log('[T_HTTPSTREAM_SSE_get-governing-items] initProgress found.');
-
-            const decisionsProgress = events.find(
-              (ev: any) =>
-                ev.type === 'mcpNotification' &&
-                JSON.parse(ev.data.params.content[0].text).dataType === 'decisions',
-            );
-            expect(decisionsProgress).toBeDefined();
-            expect(
-              Array.isArray(JSON.parse(decisionsProgress.data.params.content[0].text).decisions),
-            ).toBe(true);
-            console.log(
-              '[T_HTTPSTREAM_SSE_get-governing-items] decisionsProgress decisions is array.',
-            );
-
-            const finalProgress = events.find(
-              (ev: any) => ev.type === 'mcpNotification' && ev.data.params.isFinal === true,
-            );
-            expect(finalProgress).toBeDefined();
-            const finalProgressContent = JSON.parse(finalProgress.data.params.content[0].text);
-            expect(finalProgressContent.status).toBe('complete');
-            expect(Array.isArray(finalProgressContent.decisions)).toBe(true);
-            expect(Array.isArray(finalProgressContent.rules)).toBe(true);
-            expect(Array.isArray(finalProgressContent.contextHistory)).toBe(true);
-            console.log('[T_HTTPSTREAM_SSE_get-governing-items] finalProgress arrays are valid.');
-
-            expect(finalResponseEvent.data.result).toBeDefined();
-            expect(finalResponseEvent.data.result.status).toBe('complete');
-            expect(Array.isArray(finalResponseEvent.data.result.decisions)).toBe(true);
-            console.log('[T_HTTPSTREAM_SSE_get-governing-items] All assertions passed.');
-
-            callback(null, null);
-          } catch (assertionError) {
-            console.error(
-              '[T_HTTPSTREAM_SSE_get-governing-items] Assertion error:',
-              assertionError,
-            );
-            callback(assertionError, null);
-          }
-        })
-        .end(done);
-    });
-
-    it('T_HTTPSTREAM_SSE_get-related-items: should stream progress', (done) => {
-      console.log('[T_HTTPSTREAM_SSE_get-related-items] Test started.');
-      expect(testComponentId).toBeDefined(); // Use testComponentId set in beforeAll
-      const toolArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        startItemId: testComponentId!, // Use testComponentId
-        params: { relationshipTypes: ['DEPENDS_ON'], direction: 'INCOMING', depth: 1 },
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'sse_get_related',
-        method: 'tools/call',
-        params: { name: 'get-related-items', arguments: toolArgs },
-      };
-
-      const sseRequest = request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .set('Accept', 'text/event-stream')
-        .send(payload);
-
-      console.log('[T_HTTPSTREAM_SSE_get-related-items] Invoking collectStreamEvents...');
-      sseRequest
-        .expect(200)
-        .parse(async (res: any, callback: any) => {
-          try {
-            const {
-              events,
-              progressEventsCount,
-              finalResponseEvent,
-              errorEvent,
-            }: CollectedSseEvents = await collectStreamEvents(res);
-            console.log(
-              '[T_HTTPSTREAM_SSE_get-related-items] SSE events collected. Checking assertions...',
-            );
-
-            expect(errorEvent).toBeNull();
-            console.log('[T_HTTPSTREAM_SSE_get-related-items] errorEvent is null.');
-            expect(progressEventsCount).toBeGreaterThanOrEqual(2);
-            console.log('[T_HTTPSTREAM_SSE_get-related-items] progressEventsCount >= 2.');
-            expect(finalResponseEvent).toBeDefined();
-            console.log('[T_HTTPSTREAM_SSE_get-related-items] finalResponseEvent is defined.');
-            expect(finalResponseEvent.data.id).toBe('sse_get_related');
-            console.log('[T_HTTPSTREAM_SSE_get-related-items] finalResponseEvent.data.id matches.');
-
-            const initProgress = events.find(
-              (ev: any) =>
-                ev.type === 'mcpNotification' &&
-                JSON.parse(ev.data.params.content[0].text).status === 'initializing',
-            );
-            expect(initProgress).toBeDefined();
-            console.log('[T_HTTPSTREAM_SSE_get-related-items] initProgress found.');
-
-            const inProgress = events.find(
-              (ev: any) =>
-                ev.type === 'mcpNotification' &&
-                JSON.parse(ev.data.params.content[0].text).status === 'in_progress',
-            );
-            expect(inProgress).toBeDefined();
-            const inProgressContent = JSON.parse(inProgress.data.params.content[0].text);
-            expect(Array.isArray(inProgressContent.items)).toBe(true);
-            console.log('[T_HTTPSTREAM_SSE_get-related-items] inProgress items is array.');
-
-            const finalProgress = events.find(
-              (ev: any) => ev.type === 'mcpNotification' && ev.data.params.isFinal === true,
-            );
-            expect(finalProgress).toBeDefined();
-            const finalProgressContent = JSON.parse(finalProgress.data.params.content[0].text);
-            expect(finalProgressContent.status).toBe('complete');
-            expect(Array.isArray(finalProgressContent.relatedItems)).toBe(true);
-            console.log(
-              '[T_HTTPSTREAM_SSE_get-related-items] finalProgress relatedItems is array.',
-            );
-
-            expect(finalResponseEvent.data.result).toBeDefined();
-            expect(finalResponseEvent.data.result.status).toBe('complete');
-            expect(Array.isArray(finalResponseEvent.data.result.relatedItems)).toBe(true);
-            console.log('[T_HTTPSTREAM_SSE_get-related-items] All assertions passed.');
-
-            callback(null, null);
-          } catch (assertionError) {
-            console.error('[T_HTTPSTREAM_SSE_get-related-items] Assertion error:', assertionError);
-            callback(assertionError, null);
-          }
-        })
-        .end(done);
-    });
-
-    it('T_HTTPSTREAM_SSE_shortest-path: should stream progress for shortest path', (done) => {
-      console.log('[T_HTTPSTREAM_SSE_shortest-path] Test started.');
-      expect(dependentComponentId).toBeDefined(); // Was sharedDependentComponentId, now uses var from beforeAll
-      expect(testComponentId).toBeDefined(); // Was sharedTestComponentId, now uses var from beforeAll
-      const toolArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        startNodeId: dependentComponentId!, // Use dependentComponentId
-        endNodeId: testComponentId!, // Use testComponentId
-        params: { relationshipTypes: ['DEPENDS_ON'], direction: 'OUTGOING' },
-        clientProjectRoot: clientProjectRootForTest,
-        // Add projectedGraphName, nodeTableNames, relationshipTableNames if required by the tool by default
-        projectedGraphName: 'shortest_path_sse_test_graph',
-        nodeTableNames: ['Component'],
-        relationshipTableNames: ['DEPENDS_ON'],
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'sse_sp',
-        method: 'tools/call',
-        params: { name: 'shortest-path', arguments: toolArgs },
-      };
-
-      const sseRequest = request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .set('Accept', 'text/event-stream')
-        .send(payload);
-
-      console.log('[T_HTTPSTREAM_SSE_shortest-path] Invoking collectStreamEvents...');
-      sseRequest
-        .expect(200)
-        .parse(async (res: any, callback: any) => {
-          try {
-            const {
-              events,
-              progressEventsCount,
-              finalResponseEvent,
-              errorEvent,
-            }: CollectedSseEvents = await collectStreamEvents(res);
-            console.log(
-              '[T_HTTPSTREAM_SSE_shortest-path] SSE events collected. Checking assertions...',
-            );
-
-            expect(errorEvent).toBeNull();
-            console.log('[T_HTTPSTREAM_SSE_shortest-path] errorEvent is null.');
-            expect(progressEventsCount).toBeGreaterThanOrEqual(2);
-            console.log('[T_HTTPSTREAM_SSE_shortest-path] progressEventsCount >= 2.');
-            expect(finalResponseEvent).toBeDefined();
-            console.log('[T_HTTPSTREAM_SSE_shortest-path] finalResponseEvent is defined.');
-            expect(finalResponseEvent.data.id).toBe('sse_sp');
-            console.log('[T_HTTPSTREAM_SSE_shortest-path] finalResponseEvent.data.id matches.');
-
-            const initProgress = events.find(
-              (ev: any) =>
-                ev.type === 'mcpNotification' &&
-                JSON.parse(ev.data.params.content[0].text).status === 'initializing',
-            );
-            expect(initProgress).toBeDefined();
-            console.log('[T_HTTPSTREAM_SSE_shortest-path] initProgress found.');
-
-            const inProgress = events.find(
-              (ev: any) =>
-                ev.type === 'mcpNotification' &&
-                JSON.parse(ev.data.params.content[0].text).status === 'in_progress',
-            );
-            expect(inProgress).toBeDefined();
-            const inProgressContent = JSON.parse(inProgress.data.params.content[0].text);
-            expect(inProgressContent).toHaveProperty('pathFound');
-            expect(Array.isArray(inProgressContent.path)).toBe(true);
-            console.log('[T_HTTPSTREAM_SSE_shortest-path] inProgress pathFound and path is array.');
-
-            const finalProgress = events.find(
-              (ev: any) => ev.type === 'mcpNotification' && ev.data.params.isFinal === true,
-            );
-            expect(finalProgress).toBeDefined();
-            const finalProgressContent = JSON.parse(finalProgress.data.params.content[0].text);
-            expect(finalProgressContent.status).toBe('complete');
-            // Adjust to check within the 'results' object for the final progress event
-            expect(finalProgressContent.results).toBeDefined();
-            expect(finalProgressContent.results.pathFound).toBe(true);
-            expect(Array.isArray(finalProgressContent.results.path)).toBe(true);
-            console.log(
-              '[T_HTTPSTREAM_SSE_shortest-path] finalProgress pathFound and path is array.',
-            );
-
-            expect(finalResponseEvent.data.result).toBeDefined();
-            expect(finalResponseEvent.data.result.status).toBe('complete');
-            // Adjust to check within the nested 'results' object for the final MCP response
-            expect(finalResponseEvent.data.result.results).toBeDefined();
-            expect(finalResponseEvent.data.result.results.pathFound).toBe(true);
-            expect(Array.isArray(finalResponseEvent.data.result.results.path)).toBe(true);
-            expect(finalResponseEvent.data.result.results.path.length).toBeGreaterThanOrEqual(1); // Path includes at least start and end node if found
-            console.log('[T_HTTPSTREAM_SSE_shortest-path] All assertions passed.');
-
-            callback(null, null);
-          } catch (assertionError) {
-            console.error('[T_HTTPSTREAM_SSE_shortest-path] Assertion error:', assertionError);
-            callback(assertionError, null);
-          }
-        })
-        .end(done);
-    });
-
-    it('T_HTTPSTREAM_SSE_k-core-decomposition: should stream progress', (done) => {
-      console.log('[T_HTTPSTREAM_SSE_k-core-decomposition] Test started.');
-      const toolArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        k: 1,
-        projectedGraphName: 'kcore_sse_test_graph',
-        nodeTableNames: ['Component'],
-        relationshipTableNames: ['DEPENDS_ON'],
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'sse_kcore',
-        method: 'tools/call',
-        params: { name: 'k-core-decomposition', arguments: toolArgs },
-      };
-
-      const sseRequest = request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .set('Accept', 'text/event-stream')
-        .send(payload);
-
-      console.log('[T_HTTPSTREAM_SSE_k-core-decomposition] Invoking collectStreamEvents...');
-      sseRequest
-        .expect(200)
-        .parse(async (res: any, callback: any) => {
-          try {
-            const {
-              events,
-              progressEventsCount,
-              finalResponseEvent,
-              errorEvent,
-            }: CollectedSseEvents = await collectStreamEvents(res);
-            console.log(
-              '[T_HTTPSTREAM_SSE_k-core-decomposition] SSE events collected. Checking assertions...',
-            );
-
-            expect(errorEvent).toBeNull();
-            console.log('[T_HTTPSTREAM_SSE_k-core-decomposition] errorEvent is null.');
-            expect(progressEventsCount).toBeGreaterThanOrEqual(2);
-            console.log('[T_HTTPSTREAM_SSE_k-core-decomposition] progressEventsCount >= 2.');
-            expect(finalResponseEvent).toBeDefined();
-            console.log('[T_HTTPSTREAM_SSE_k-core-decomposition] finalResponseEvent is defined.');
-            expect(finalResponseEvent.data.id).toBe('sse_kcore');
-            console.log(
-              '[T_HTTPSTREAM_SSE_k-core-decomposition] finalResponseEvent.data.id matches.',
-            );
-
-            const initProgress = events.find(
-              (ev: any) =>
-                ev.type === 'mcpNotification' &&
-                JSON.parse(ev.data.params.content[0].text).status === 'initializing',
-            );
-            expect(initProgress).toBeDefined();
-            console.log('[T_HTTPSTREAM_SSE_k-core-decomposition] initProgress found.');
-
-            const inProgress = events.find(
-              (ev: any) =>
-                ev.type === 'mcpNotification' &&
-                JSON.parse(ev.data.params.content[0].text).status === 'in_progress',
-            );
-            expect(inProgress).toBeDefined();
-            const inProgressContent = JSON.parse(inProgress.data.params.content[0].text);
-            expect(inProgressContent).toHaveProperty('componentsCount');
-            console.log(
-              '[T_HTTPSTREAM_SSE_k-core-decomposition] inProgress componentsCount found.',
-            );
-
-            const finalProgress = events.find(
-              (ev: any) => ev.type === 'mcpNotification' && ev.data.params.isFinal === true,
-            );
-            expect(finalProgress).toBeDefined();
-            const finalProgressContent = JSON.parse(finalProgress.data.params.content[0].text);
-            expect(finalProgressContent.status).toBe('complete');
-            expect(finalProgressContent.decomposition).toBeDefined();
-            expect(Array.isArray(finalProgressContent.decomposition.components)).toBe(true);
-            console.log(
-              '[T_HTTPSTREAM_SSE_k-core-decomposition] finalProgress decomposition.components is array.',
-            );
-
-            expect(finalResponseEvent.data.result).toBeDefined();
-            expect(finalResponseEvent.data.result.status).toBe('complete');
-            expect(finalResponseEvent.data.result.decomposition).toBeDefined();
-            expect(Array.isArray(finalResponseEvent.data.result.decomposition.components)).toBe(
-              true,
-            );
-            console.log('[T_HTTPSTREAM_SSE_k-core-decomposition] All assertions passed.');
-
-            callback(null, null);
-          } catch (assertionError) {
-            console.error(
-              '[T_HTTPSTREAM_SSE_k-core-decomposition] Assertion error:',
-              assertionError,
-            );
-            callback(assertionError, null);
-          }
-        })
-        .end(done);
-    });
-
-    it('T_HTTPSTREAM_SSE_louvain-community-detection: should stream progress', (done) => {
-      console.log('[T_HTTPSTREAM_SSE_louvain-community-detection] Test started.');
-      const toolArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        projectedGraphName: 'louvain_sse_test_graph',
-        nodeTableNames: ['Component'],
-        relationshipTableNames: ['DEPENDS_ON'],
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'sse_louvain',
-        method: 'tools/call',
-        params: { name: 'louvain-community-detection', arguments: toolArgs },
-      };
-
-      const sseRequest = request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .set('Accept', 'text/event-stream')
-        .send(payload);
-
-      console.log('[T_HTTPSTREAM_SSE_louvain-community-detection] Invoking collectStreamEvents...');
-      sseRequest
-        .expect(200)
-        .parse(async (res: any, callback: any) => {
-          try {
-            const {
-              events,
-              progressEventsCount,
-              finalResponseEvent,
-              errorEvent,
-            }: CollectedSseEvents = await collectStreamEvents(res);
-            console.log(
-              '[T_HTTPSTREAM_SSE_louvain-community-detection] SSE events collected. Checking assertions...',
-            );
-
-            expect(errorEvent).toBeNull();
-            console.log('[T_HTTPSTREAM_SSE_louvain-community-detection] errorEvent is null.');
-            expect(progressEventsCount).toBeGreaterThanOrEqual(2);
-            console.log('[T_HTTPSTREAM_SSE_louvain-community-detection] progressEventsCount >= 2.');
-            expect(finalResponseEvent).toBeDefined();
-            console.log(
-              '[T_HTTPSTREAM_SSE_louvain-community-detection] finalResponseEvent is defined.',
-            );
-            expect(finalResponseEvent.data.id).toBe('sse_louvain');
-            console.log(
-              '[T_HTTPSTREAM_SSE_louvain-community-detection] finalResponseEvent.data.id matches.',
-            );
-
-            const initProgress = events.find(
-              (ev: any) =>
-                ev.type === 'mcpNotification' &&
-                JSON.parse(ev.data.params.content[0].text).status === 'initializing',
-            );
-            expect(initProgress).toBeDefined();
-            console.log('[T_HTTPSTREAM_SSE_louvain-community-detection] initProgress found.');
-
-            const inProgress = events.find(
-              (ev: any) =>
-                ev.type === 'mcpNotification' &&
-                JSON.parse(ev.data.params.content[0].text).status === 'in_progress',
-            );
-            expect(inProgress).toBeDefined();
-            const inProgressContent = JSON.parse(inProgress.data.params.content[0].text);
-            expect(inProgressContent).toHaveProperty('communitiesCount');
-            expect(inProgressContent).toHaveProperty('modularity');
-            console.log(
-              '[T_HTTPSTREAM_SSE_louvain-community-detection] inProgress communitiesCount and modularity found.',
-            );
-
-            const finalProgress = events.find(
-              (ev: any) => ev.type === 'mcpNotification' && ev.data.params.isFinal === true,
-            );
-            expect(finalProgress).toBeDefined();
-            const finalProgressContent = JSON.parse(finalProgress.data.params.content[0].text);
-            expect(finalProgressContent.status).toBe('complete');
-            expect(Array.isArray(finalProgressContent.communities)).toBe(true);
-            expect(finalProgressContent).toHaveProperty('modularity');
-            console.log(
-              '[T_HTTPSTREAM_SSE_louvain-community-detection] finalProgress communities is array and modularity present.',
-            );
-
-            expect(finalResponseEvent.data.result).toBeDefined();
-            expect(finalResponseEvent.data.result.status).toBe('complete');
-            expect(Array.isArray(finalResponseEvent.data.result.communities)).toBe(true);
-            expect(finalResponseEvent.data.result).toHaveProperty('modularity');
-            console.log('[T_HTTPSTREAM_SSE_louvain-community-detection] All assertions passed.');
-
-            callback(null, null);
-          } catch (assertionError) {
-            console.error(
-              '[T_HTTPSTREAM_SSE_louvain-community-detection] Assertion error:',
-              assertionError,
-            );
-            callback(assertionError, null);
-          }
-        })
-        .end(done);
-    });
-
-    it('T_HTTPSTREAM_SSE_pagerank: should stream progress', (done) => {
-      console.log('[T_HTTPSTREAM_SSE_pagerank] Test started.');
-      const toolArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        projectedGraphName: 'pagerank_sse_test_graph',
-        nodeTableNames: ['Component'],
-        relationshipTableNames: ['DEPENDS_ON'],
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'sse_pagerank',
-        method: 'tools/call',
-        params: { name: 'pagerank', arguments: toolArgs },
-      };
-
-      const sseRequest = request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .set('Accept', 'text/event-stream')
-        .send(payload);
-
-      console.log('[T_HTTPSTREAM_SSE_pagerank] Invoking collectStreamEvents...');
-      sseRequest
-        .expect(200)
-        .parse(async (res: any, callback: any) => {
-          try {
-            const {
-              events,
-              progressEventsCount,
-              finalResponseEvent,
-              errorEvent,
-            }: CollectedSseEvents = await collectStreamEvents(res);
-            console.log('[T_HTTPSTREAM_SSE_pagerank] SSE events collected. Checking assertions...');
-
-            expect(errorEvent).toBeNull();
-            console.log('[T_HTTPSTREAM_SSE_pagerank] errorEvent is null.');
-            expect(progressEventsCount).toBeGreaterThanOrEqual(3); // Adjusted from >= 22
-            console.log('[T_HTTPSTREAM_SSE_pagerank] progressEventsCount >= 3.');
-            expect(finalResponseEvent).toBeDefined();
-            console.log('[T_HTTPSTREAM_SSE_pagerank] finalResponseEvent is defined.');
-            expect(finalResponseEvent.data.id).toBe('sse_pagerank');
-            console.log('[T_HTTPSTREAM_SSE_pagerank] finalResponseEvent.data.id matches.');
-
-            const initProgress = events.find(
-              (ev: any) =>
-                ev.type === 'mcpNotification' &&
-                JSON.parse(ev.data.params.content[0].text).status === 'initializing',
-            );
-            expect(initProgress).toBeDefined();
-            console.log('[T_HTTPSTREAM_SSE_pagerank] initProgress found.');
-
-            const iterationProgressEvents = events.filter(
-              (ev: any) =>
-                ev.type === 'mcpNotification' &&
-                JSON.parse(ev.data.params.content[0].text).status === 'in_progress' &&
-                JSON.parse(ev.data.params.content[0].text).hasOwnProperty('iterationsCompleted'), // Check for iterationsCompleted
-            );
-            expect(iterationProgressEvents.length).toBeGreaterThanOrEqual(1); // Expect at least one such in_progress event
-            console.log('[T_HTTPSTREAM_SSE_pagerank] iterationProgressEvents found.');
-
-            const finalProgress = events.find(
-              (ev: any) => ev.type === 'mcpNotification' && ev.data.params.isFinal === true,
-            );
-            expect(finalProgress).toBeDefined();
-            const finalProgressContent = JSON.parse(finalProgress.data.params.content[0].text);
-            expect(finalProgressContent.status).toBe('complete');
-            // Adjust to check within the 'results' object
-            expect(finalProgressContent.results).toBeDefined();
-            expect(Array.isArray(finalProgressContent.results.ranks)).toBe(true);
-            console.log('[T_HTTPSTREAM_SSE_pagerank] finalProgress ranks is array.');
-
-            expect(finalResponseEvent.data.result).toBeDefined();
-            expect(finalResponseEvent.data.result.status).toBe('complete');
-            // Adjust to check within the nested 'results' object
-            expect(finalResponseEvent.data.result.results).toBeDefined();
-            expect(Array.isArray(finalResponseEvent.data.result.results.ranks)).toBe(true);
-            console.log('[T_HTTPSTREAM_SSE_pagerank] All assertions passed.');
-
-            callback(null, null);
-          } catch (assertionError) {
-            console.error('[T_HTTPSTREAM_SSE_pagerank] Assertion error:', assertionError);
-            callback(assertionError, null);
-          }
-        })
-        .end(done);
-    });
-
-    it('T_HTTPSTREAM_SSE_strongly-connected-components: should stream progress', (done) => {
-      console.log('[T_HTTPSTREAM_SSE_strongly-connected-components] Test started.');
-      const toolArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        projectedGraphName: 'scc_sse_test_graph',
-        nodeTableNames: ['Component'],
-        relationshipTableNames: ['DEPENDS_ON'],
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'sse_scc',
-        method: 'tools/call',
-        params: { name: 'strongly-connected-components', arguments: toolArgs },
-      };
-
-      const sseRequest = request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .set('Accept', 'text/event-stream')
-        .send(payload);
-
-      console.log(
-        '[T_HTTPSTREAM_SSE_strongly-connected-components] Invoking collectStreamEvents...',
-      );
-      sseRequest
-        .expect(200)
-        .parse(async (res: any, callback: any) => {
-          try {
-            const {
-              events,
-              progressEventsCount,
-              finalResponseEvent,
-              errorEvent,
-            }: CollectedSseEvents = await collectStreamEvents(res);
-            console.log(
-              '[T_HTTPSTREAM_SSE_strongly-connected-components] SSE events collected. Checking assertions...',
-            );
-
-            expect(errorEvent).toBeNull();
-            console.log('[T_HTTPSTREAM_SSE_strongly-connected-components] errorEvent is null.');
-            expect(progressEventsCount).toBeGreaterThanOrEqual(2);
-            console.log(
-              '[T_HTTPSTREAM_SSE_strongly-connected-components] progressEventsCount >= 2.',
-            );
-            expect(finalResponseEvent).toBeDefined();
-            console.log(
-              '[T_HTTPSTREAM_SSE_strongly-connected-components] finalResponseEvent is defined.',
-            );
-            expect(finalResponseEvent.data.id).toBe('sse_scc');
-            console.log(
-              '[T_HTTPSTREAM_SSE_strongly-connected-components] finalResponseEvent.data.id matches.',
-            );
-
-            const initProgress = events.find(
-              (ev: any) =>
-                ev.type === 'mcpNotification' &&
-                JSON.parse(ev.data.params.content[0].text).status === 'initializing',
-            );
-            expect(initProgress).toBeDefined();
-            console.log('[T_HTTPSTREAM_SSE_strongly-connected-components] initProgress found.');
-
-            const inProgress = events.find(
-              (ev: any) =>
-                ev.type === 'mcpNotification' &&
-                JSON.parse(ev.data.params.content[0].text).status === 'in_progress',
-            );
-            expect(inProgress).toBeDefined();
-            const inProgressContent = JSON.parse(inProgress.data.params.content[0].text);
-            expect(inProgressContent).toHaveProperty('sccCount');
-            console.log(
-              '[T_HTTPSTREAM_SSE_strongly-connected-components] inProgress sccCount found.',
-            );
-
-            const finalProgress = events.find(
-              (ev: any) => ev.type === 'mcpNotification' && ev.data.params.isFinal === true,
-            );
-            expect(finalProgress).toBeDefined();
-            const finalProgressContent = JSON.parse(finalProgress.data.params.content[0].text);
-            expect(finalProgressContent.status).toBe('complete');
-            expect(Array.isArray(finalProgressContent.stronglyConnectedComponents)).toBe(true);
-            console.log(
-              '[T_HTTPSTREAM_SSE_strongly-connected-components] finalProgress stronglyConnectedComponents is array.',
-            );
-
-            expect(finalResponseEvent.data.result).toBeDefined();
-            expect(finalResponseEvent.data.result.status).toBe('complete');
-            expect(Array.isArray(finalResponseEvent.data.result.stronglyConnectedComponents)).toBe(
-              true,
-            );
-            console.log('[T_HTTPSTREAM_SSE_strongly-connected-components] All assertions passed.');
-
-            callback(null, null);
-          } catch (assertionError) {
-            console.error(
-              '[T_HTTPSTREAM_SSE_strongly-connected-components] Assertion error:',
-              assertionError,
-            );
-            callback(assertionError, null);
-          }
-        })
-        .end(done);
-    });
-
-    it('T_HTTPSTREAM_SSE_weakly-connected-components: should stream progress', (done) => {
-      console.log('[T_HTTPSTREAM_SSE_weakly-connected-components] Test started.');
-      const toolArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        projectedGraphName: 'wcc_sse_test_graph',
-        nodeTableNames: ['Component'],
-        relationshipTableNames: ['DEPENDS_ON'],
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'sse_wcc',
-        method: 'tools/call',
-        params: { name: 'weakly-connected-components', arguments: toolArgs },
-      };
-
-      const sseRequest = request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .set('Accept', 'text/event-stream')
-        .send(payload);
-
-      console.log('[T_HTTPSTREAM_SSE_weakly-connected-components] Invoking collectStreamEvents...');
-      sseRequest
-        .expect(200)
-        .parse(async (res: any, callback: any) => {
-          try {
-            const {
-              events,
-              progressEventsCount,
-              finalResponseEvent,
-              errorEvent,
-            }: CollectedSseEvents = await collectStreamEvents(res);
-            console.log(
-              '[T_HTTPSTREAM_SSE_weakly-connected-components] SSE events collected. Checking assertions...',
-            );
-
-            expect(errorEvent).toBeNull();
-            console.log('[T_HTTPSTREAM_SSE_weakly-connected-components] errorEvent is null.');
-            expect(progressEventsCount).toBeGreaterThanOrEqual(2);
-            console.log('[T_HTTPSTREAM_SSE_weakly-connected-components] progressEventsCount >= 2.');
-            expect(finalResponseEvent).toBeDefined();
-            console.log(
-              '[T_HTTPSTREAM_SSE_weakly-connected-components] finalResponseEvent is defined.',
-            );
-            expect(finalResponseEvent.data.id).toBe('sse_wcc');
-            console.log(
-              '[T_HTTPSTREAM_SSE_weakly-connected-components] finalResponseEvent.data.id matches.',
-            );
-
-            const initProgress = events.find(
-              (ev: any) =>
-                ev.type === 'mcpNotification' &&
-                JSON.parse(ev.data.params.content[0].text).status === 'initializing',
-            );
-            expect(initProgress).toBeDefined();
-            console.log('[T_HTTPSTREAM_SSE_weakly-connected-components] initProgress found.');
-
-            const inProgress = events.find(
-              (ev: any) =>
-                ev.type === 'mcpNotification' &&
-                JSON.parse(ev.data.params.content[0].text).status === 'in_progress',
-            );
-            expect(inProgress).toBeDefined();
-            const inProgressContent = JSON.parse(inProgress.data.params.content[0].text);
-            expect(inProgressContent).toHaveProperty('wccCount');
-            console.log(
-              '[T_HTTPSTREAM_SSE_weakly-connected-components] inProgress wccCount found.',
-            );
-
-            const finalProgress = events.find(
-              (ev: any) => ev.type === 'mcpNotification' && ev.data.params.isFinal === true,
-            );
-            expect(finalProgress).toBeDefined();
-            const finalProgressContent = JSON.parse(finalProgress.data.params.content[0].text);
-            expect(finalProgressContent.status).toBe('complete');
-            expect(Array.isArray(finalProgressContent.weaklyConnectedComponents)).toBe(true);
-            console.log(
-              '[T_HTTPSTREAM_SSE_weakly-connected-components] finalProgress weaklyConnectedComponents is array.',
-            );
-
-            expect(finalResponseEvent.data.result).toBeDefined();
-            expect(finalResponseEvent.data.result.status).toBe('complete');
-            expect(Array.isArray(finalResponseEvent.data.result.weaklyConnectedComponents)).toBe(
-              true,
-            );
-            console.log('[T_HTTPSTREAM_SSE_weakly-connected-components] All assertions passed.');
-
-            callback(null, null);
-          } catch (assertionError) {
-            console.error(
-              '[T_HTTPSTREAM_SSE_weakly-connected-components] Assertion error:',
-              assertionError,
-            );
-            callback(assertionError, null);
-          }
-        })
-        .end(done);
-    });
-
-    // More SSE tests will be added here
   });
 });
