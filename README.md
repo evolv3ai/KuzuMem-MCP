@@ -38,7 +38,7 @@ For details on tools supporting progressive results, see [MCP Tools Streaming Su
 
 ```bash
 # Clone the repository
-git clone https://github.com/solita-internal/kuzumem-mcp
+git clone git@github.com:Jakedismo/KuzuMem-MCP.git
 cd kuzumem-mcp
 
 # Install dependencies
