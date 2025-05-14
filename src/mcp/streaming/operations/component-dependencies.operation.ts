@@ -36,6 +36,7 @@ export class ComponentDependenciesOperation {
 
       // First level of dependencies
       const firstLevelDeps = await memoryService.getComponentDependencies(
+        clientProjectRoot,
         repositoryName,
         branch,
         componentId,
@@ -71,6 +72,7 @@ export class ComponentDependenciesOperation {
 
           // Get next level
           const nextLevelDeps = await memoryService.getComponentDependencies(
+            clientProjectRoot,
             repositoryName,
             branch,
             dep.id,

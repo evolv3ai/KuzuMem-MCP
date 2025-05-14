@@ -93,7 +93,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
     }
 
     // In implementation, use only repository and branch parameters as these are what the service expects
-    await memoryService.initMemoryBank(repository, branch);
+    await memoryService.initMemoryBank(actualClientProjectRoot, repository, branch);
 
     // Return the information that would be useful for client display
     return {
@@ -117,8 +117,8 @@ export const toolHandlers: Record<string, ToolHandler> = {
     if (!repository) {
       throw new Error('Missing repository parameter for get-metadata');
     }
-    // Method only takes repositoryName and branch
-    return memoryService.getMetadata(repository, branch);
+    // Method now takes clientProjectRoot, repositoryName and branch
+    return memoryService.getMetadata(actualClientProjectRoot, repository, branch);
   },
   'update-metadata': async (
     toolArgs,
@@ -138,8 +138,8 @@ export const toolHandlers: Record<string, ToolHandler> = {
     if (!metadata) {
       throw new Error('Missing metadata parameter for update-metadata');
     }
-    // Method takes repositoryName, metadata, and branch
-    await memoryService.updateMetadata(repository, metadata, branch);
+    // Method now takes clientProjectRoot, repositoryName, metadata, and branch
+    await memoryService.updateMetadata(actualClientProjectRoot, repository, metadata, branch);
     return {
       success: true,
       message: `Metadata updated for ${repository} (branch: ${branch})`,
@@ -160,8 +160,13 @@ export const toolHandlers: Record<string, ToolHandler> = {
     if (!repository) {
       throw new Error('Missing repository parameter for get-context');
     }
-    // Method takes repositoryName, branch, and limit
-    return memoryService.getLatestContexts(repository, branch, latest === true ? 1 : limit);
+    // Method now takes clientProjectRoot, repositoryName, branch, and limit
+    return memoryService.getLatestContexts(
+      actualClientProjectRoot,
+      repository,
+      branch,
+      latest === true ? 1 : limit,
+    );
   },
   'update-context': async (
     toolArgs,
@@ -188,8 +193,8 @@ export const toolHandlers: Record<string, ToolHandler> = {
       throw new Error('Missing repository for update-context');
     }
 
-    // updateContext method takes a params object
-    const updatedContext = await memoryService.updateContext({
+    // updateContext method now takes clientProjectRoot and a params object
+    const updatedContext = await memoryService.updateContext(actualClientProjectRoot, {
       repository,
       branch,
       summary,
@@ -229,8 +234,8 @@ export const toolHandlers: Record<string, ToolHandler> = {
       throw new Error('Missing required params for add-component (repository, id, name)');
     }
 
-    // upsertComponent takes repositoryName, branch and component data
-    await memoryService.upsertComponent(repository, branch, {
+    // upsertComponent now takes clientProjectRoot, repositoryName, branch and component data
+    await memoryService.upsertComponent(actualClientProjectRoot, repository, branch, {
       id: id,
       name,
       kind,
@@ -258,8 +263,8 @@ export const toolHandlers: Record<string, ToolHandler> = {
       throw new Error('Missing required params for add-decision (repository, id, name, date)');
     }
 
-    // upsertDecision takes repositoryName, branch and decision data
-    await memoryService.upsertDecision(repository, branch, {
+    // upsertDecision now takes clientProjectRoot, repositoryName, branch and decision data
+    await memoryService.upsertDecision(actualClientProjectRoot, repository, branch, {
       id: id,
       name,
       date,
@@ -295,8 +300,9 @@ export const toolHandlers: Record<string, ToolHandler> = {
       throw new Error('Missing required params for add-rule (repository, id, name, created)');
     }
 
-    // upsertRule takes repositoryName, rule data, and branch
+    // upsertRule now takes clientProjectRoot, repositoryName, rule data object, and branch
     await memoryService.upsertRule(
+      actualClientProjectRoot,
       repository,
       { id, name, created, content, status, triggers },
       branch,

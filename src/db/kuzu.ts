@@ -22,7 +22,19 @@ export class KuzuDBClient {
    * @param clientProjectRoot The absolute root path of the client project.
    */
   constructor(clientProjectRoot: string) {
-    if (!clientProjectRoot || !path.isAbsolute(clientProjectRoot)) {
+    // If clientProjectRoot is not provided or is empty, try to use the CLIENT_PROJECT_ROOT env var
+    if (!clientProjectRoot || clientProjectRoot.trim() === '') {
+      const envClientRoot = process.env.CLIENT_PROJECT_ROOT;
+      if (!envClientRoot || envClientRoot.trim() === '') {
+        throw new Error(
+          'KuzuDBClient requires a valid clientProjectRoot path. None provided and no CLIENT_PROJECT_ROOT environment variable set.',
+        );
+      }
+      clientProjectRoot = envClientRoot;
+      console.log(`KuzuDBClient using CLIENT_PROJECT_ROOT from environment: ${clientProjectRoot}`);
+    }
+
+    if (!path.isAbsolute(clientProjectRoot)) {
       throw new Error('KuzuDBClient requires an absolute clientProjectRoot path.');
     }
     // Construct the specific dbPath for this instance

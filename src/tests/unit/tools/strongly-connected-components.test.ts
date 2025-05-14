@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Unit test for the strongly-connected-components tool handler
  */
@@ -7,48 +6,68 @@ import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { toolHandlers } from '../../../mcp/tool-handlers';
 import { MemoryService } from '../../../services/memory.service';
 
-// Create a mock of the MemoryService
-jest.mock('../../../services/memory.service', () => {
-  return {
-    MemoryService: {
-      getInstance: jest.fn().mockResolvedValue({}),
-    },
-  };
-});
-
-// Mock the operation class used by the handler
+// Mock the operation class and its module before importing it
 jest.mock('../../../mcp/streaming/operations/strongly-connected-components.operation', () => ({
   StronglyConnectedComponentsOperation: {
     execute: jest.fn(),
   },
 }));
 
+// Import after mocking
 import { StronglyConnectedComponentsOperation } from '../../../mcp/streaming/operations/strongly-connected-components.operation';
+
+// Mock the memory service
+jest.mock('../../../services/memory.service');
+
+// Define the expected result type
+interface SccResult {
+  status: string;
+  stronglyConnectedComponents: any[];
+  [key: string]: any;
+}
+
+// Define the expected error type
+interface ErrorResult {
+  error: string;
+  [key: string]: any;
+}
 
 describe('strongly-connected-components tool handler', () => {
   const handler = toolHandlers['strongly-connected-components'];
   let mockMemoryService: any;
 
-  beforeEach(async () => {
+  // Create a properly typed version of the mock
+  const mockExecute = StronglyConnectedComponentsOperation.execute as jest.MockedFunction<
+    typeof StronglyConnectedComponentsOperation.execute
+  >;
+
+  beforeEach(() => {
     jest.clearAllMocks();
-    mockMemoryService = await MemoryService.getInstance();
+
+    // Create a simple mock memory service
+    mockMemoryService = {};
   });
 
   it('should validate required parameters', async () => {
     // Missing repository
-    const missingRepoArgs = { branch: 'main' };
-    const result = await handler(missingRepoArgs, mockMemoryService);
+    const missingRepoArgs = {
+      branch: 'main',
+      clientProjectRoot: '/test/client/root',
+    };
+    const result = (await handler(missingRepoArgs, mockMemoryService)) as ErrorResult;
+    expect(result).toHaveProperty('error');
     expect(result.error).toContain('repository');
-    expect(StronglyConnectedComponentsOperation.execute).not.toHaveBeenCalled();
+    expect(mockExecute).not.toHaveBeenCalled();
   });
 
   it('should call the operation and return its result', async () => {
-    const opResult = { status: 'complete', stronglyConnectedComponents: [] };
-    StronglyConnectedComponentsOperation.execute.mockResolvedValue(opResult);
+    const opResult: SccResult = { status: 'complete', stronglyConnectedComponents: [] };
+    mockExecute.mockResolvedValue(opResult);
 
     const args = {
       repository: 'test-repo',
       branch: 'main',
+      clientProjectRoot: '/test/client/root',
       projectedGraphName: 'scc-test',
       nodeTableNames: ['Component'],
       relationshipTableNames: ['DEPENDS_ON'],
@@ -57,21 +76,25 @@ describe('strongly-connected-components tool handler', () => {
     const result = await handler(args, mockMemoryService);
 
     expect(result).toBe(opResult);
-    expect(StronglyConnectedComponentsOperation.execute).toHaveBeenCalledWith(
+    expect(mockExecute).toHaveBeenCalledWith(
+      '/test/client/root',
       'test-repo',
       'main',
-      {},
+      'scc-test',
+      ['Component'],
+      ['DEPENDS_ON'],
       mockMemoryService,
       undefined,
     );
   });
 
   it('should use default branch when not provided', async () => {
-    const opResult = { status: 'complete', stronglyConnectedComponents: [] };
-    StronglyConnectedComponentsOperation.execute.mockResolvedValue(opResult);
+    const opResult: SccResult = { status: 'complete', stronglyConnectedComponents: [] };
+    mockExecute.mockResolvedValue(opResult);
 
     const args = {
       repository: 'test-repo',
+      clientProjectRoot: '/test/client/root',
       projectedGraphName: 'scc-test',
       nodeTableNames: ['Component'],
       relationshipTableNames: ['DEPENDS_ON'],
@@ -79,20 +102,26 @@ describe('strongly-connected-components tool handler', () => {
 
     await handler(args, mockMemoryService);
 
-    expect(StronglyConnectedComponentsOperation.execute).toHaveBeenCalledWith(
+    expect(mockExecute).toHaveBeenCalledWith(
+      '/test/client/root',
       'test-repo',
       'main',
-      {},
+      'scc-test',
+      ['Component'],
+      ['DEPENDS_ON'],
       mockMemoryService,
       undefined,
     );
   });
 
   it('should handle errors from the operation', async () => {
-    StronglyConnectedComponentsOperation.execute.mockRejectedValueOnce(new Error('Graph error'));
+    const testError = new Error('Graph error');
+    mockExecute.mockRejectedValue(testError);
+
     const args = {
       repository: 'test-repo',
       branch: 'main',
+      clientProjectRoot: '/test/client/root',
       projectedGraphName: 'scc-test',
       nodeTableNames: ['Component'],
       relationshipTableNames: ['DEPENDS_ON'],

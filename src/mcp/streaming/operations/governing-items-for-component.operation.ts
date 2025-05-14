@@ -32,6 +32,7 @@ export class GoverningItemsForComponentOperation {
       }
 
       const governingItemsResult = await memoryService.getGoverningItemsForComponent(
+        clientProjectRoot,
         repositoryName,
         branch,
         componentId,

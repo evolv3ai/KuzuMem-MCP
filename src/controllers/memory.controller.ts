@@ -91,7 +91,7 @@ export class MemoryController {
         .json({ error: 'clientProjectRoot and repositoryName are required in the request body' });
       return;
     }
-    await this.memoryService.initMemoryBank(repositoryName, branch);
+    await this.memoryService.initMemoryBank(clientProjectRoot, repositoryName, branch);
     res.status(200).json({
       message: `Memory bank for ${repositoryName} initialized successfully at ${clientProjectRoot}.`,
     });
@@ -109,7 +109,11 @@ export class MemoryController {
         .json({ error: 'clientProjectRoot and repositoryName are required in the request body' });
       return;
     }
-    const metadata = await this.memoryService.getMetadata(repositoryName, branch);
+    const metadata = await this.memoryService.getMetadata(
+      clientProjectRoot,
+      repositoryName,
+      branch,
+    );
     if (metadata) {
       res.status(200).json(metadata);
     } else {
@@ -146,6 +150,7 @@ export class MemoryController {
     }
 
     const updatedMetadata = await this.memoryService.updateMetadata(
+      clientProjectRoot,
       repositoryName,
       metadata,
       branch,
@@ -173,7 +178,11 @@ export class MemoryController {
       return;
     }
 
-    const context = await this.memoryService.getTodayContext(repositoryName, branch);
+    const context = await this.memoryService.getTodayContext(
+      clientProjectRoot,
+      repositoryName,
+      branch,
+    );
     if (!context) {
       res.status(404).json({ error: 'Context not found' });
       return;
@@ -206,7 +215,7 @@ export class MemoryController {
       return;
     }
 
-    const updatedContext = await this.memoryService.updateContext({
+    const updatedContext = await this.memoryService.updateContext(clientProjectRoot, {
       repository: repositoryName,
       branch,
       ...result.data,
@@ -239,8 +248,9 @@ export class MemoryController {
     const limitNum = limit ? parseInt(limit as string, 10) : undefined;
 
     const contexts = await this.memoryService.getLatestContexts(
+      clientProjectRoot,
       repositoryName,
-      branchName,
+      branchName || 'main',
       limitNum,
     );
 
@@ -262,7 +272,11 @@ export class MemoryController {
       return;
     }
 
-    const components = await this.memoryService.getActiveComponents(repositoryName, branch);
+    const components = await this.memoryService.getActiveComponents(
+      clientProjectRoot,
+      repositoryName,
+      branch,
+    );
     res.status(200).json(components);
   });
 
@@ -300,6 +314,7 @@ export class MemoryController {
     }
 
     const updatedDecision = await this.memoryService.upsertDecision(
+      clientProjectRoot,
       repositoryName,
       branch,
       decisionDataForService,
@@ -322,7 +337,7 @@ export class MemoryController {
       const { clientProjectRoot, repositoryName } = req.body;
       const { startDate, endDate, branch } = req.query;
 
-      const branchName = (branch as string) || undefined;
+      const branchName = (branch as string) || 'main';
 
       if (!clientProjectRoot || !repositoryName) {
         res
@@ -337,6 +352,7 @@ export class MemoryController {
       }
 
       const decisions = await this.memoryService.getDecisionsByDateRange(
+        clientProjectRoot,
         repositoryName,
         branchName,
         startDate as string,
@@ -386,6 +402,7 @@ export class MemoryController {
     }
 
     const updatedRule = await this.memoryService.upsertRule(
+      clientProjectRoot,
       repositoryName,
       ruleDataForService as Omit<Rule, 'repository' | 'branch' | 'id'> & { id: string },
       branch,
@@ -407,13 +424,19 @@ export class MemoryController {
     try {
       const { repository } = req.params;
       const branch = (req.query.branch as string) || 'main';
+      const clientProjectRoot = req.body.clientProjectRoot;
 
       if (!repository) {
         res.status(400).json({ error: 'Repository name is required' });
         return;
       }
 
-      const rules = await this.memoryService.getActiveRules(repository, branch);
+      if (!clientProjectRoot) {
+        res.status(400).json({ error: 'clientProjectRoot is required in the request body' });
+        return;
+      }
+
+      const rules = await this.memoryService.getActiveRules(clientProjectRoot, repository, branch);
 
       res.status(200).json(rules);
     } catch (error) {

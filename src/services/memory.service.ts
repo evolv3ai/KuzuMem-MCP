@@ -17,7 +17,9 @@ import {
   ComponentInput,
 } from '../types';
 import { Mutex } from '../utils/mutex';
-import { KuzuDBClient, initializeKuzuDBSchema } from '../db/kuzu';
+import { KuzuDBClient } from '../db/kuzu';
+import { RepositoryProvider } from '../db';
+import * as path from 'path';
 
 // Import operation modules
 import * as metadataOps from './memory-operations/metadata.ops';
@@ -30,73 +32,71 @@ import * as graphOps from './memory-operations/graph.ops';
 /**
  * Service for memory bank operations
  * Implements the singleton pattern as per best practices
+ *
+ * Refactored to use RepositoryProvider for repository management
  */
 export class MemoryService {
   private static instance: MemoryService;
   private static lock = new Mutex();
-  private repositoryRepo!: RepositoryRepository;
-  private metadataRepo!: MetadataRepository;
-  private contextRepo!: ContextRepository;
-  private componentRepo!: ComponentRepository;
-  private decisionRepo!: DecisionRepository;
-  private ruleRepo!: RuleRepository;
+
+  // Multi-root support
+  private kuzuClients: Map<string, KuzuDBClient> = new Map();
+
+  // Repository provider for managing repository instances
+  private repositoryProvider: RepositoryProvider | null = null;
 
   private constructor() {
-    // Repositories will be initialized in the initialize method
+    // No initialization here - will be done in initialize()
   }
 
-  /**
-   * Initialize repositories with a KuzuDBClient
-   * @param kuzuClient The KuzuDBClient instance
-   */
-  private async initializeRepositories(kuzuClient: KuzuDBClient): Promise<void> {
-    // Initialize all repositories with the same KuzuDBClient
-    this.repositoryRepo = new RepositoryRepository(kuzuClient);
-    this.metadataRepo = new MetadataRepository(kuzuClient);
-    this.contextRepo = new ContextRepository(kuzuClient);
-    this.componentRepo = new ComponentRepository(kuzuClient);
-    this.decisionRepo = new DecisionRepository(kuzuClient);
-    this.ruleRepo = new RuleRepository(kuzuClient);
-  }
-
-  /**
-   * Initialize the service asynchronously
-   * This ensures proper lazy initialization of dependencies
-   */
   private async initialize(): Promise<void> {
-    try {
-      // Determine the client project root for this MemoryService instance.
-      // For E2E tests, this will be dictated by an environment variable.
-      // Otherwise, use a sensible default (e.g., a temporary directory or a configured path).
-      const e2eDbPath = process.env.E2E_TEST_DB_PATH;
-      const serviceInstanceDbRoot = e2eDbPath || '/tmp/mcp-service-default-db'; // Fallback for non-E2E
+    // Initialize repository provider
+    this.repositoryProvider = await RepositoryProvider.getInstance();
+    console.log('MemoryService: Initialized with RepositoryProvider');
+  }
 
-      console.error(`MemoryService: Initializing KuzuDBClient with root: ${serviceInstanceDbRoot}`);
-      const kuzuClient = new KuzuDBClient(serviceInstanceDbRoot);
-      await kuzuClient.initialize();
-
-      await this.initializeRepositories(kuzuClient);
-
-      console.error('MemoryService: Initialization complete');
-    } catch (error) {
-      console.error('MemoryService: Error during initialization:', error);
-      throw error;
+  /**
+   * Get a KuzuDBClient for the given client project root
+   * Also initializes all repositories for this client if not already initialized
+   *
+   * @param clientProjectRoot The absolute path to the client project root
+   * @returns Initialized KuzuDBClient instance
+   */
+  public async getKuzuClient(clientProjectRoot: string): Promise<KuzuDBClient> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
     }
+
+    // Ensure path is absolute
+    if (!path.isAbsolute(clientProjectRoot)) {
+      clientProjectRoot = path.resolve(clientProjectRoot);
+    }
+
+    // Return existing client if available
+    if (this.kuzuClients.has(clientProjectRoot)) {
+      return this.kuzuClients.get(clientProjectRoot)!;
+    }
+
+    // Create and initialize new client
+    const newClient = new KuzuDBClient(clientProjectRoot);
+    await newClient.initialize();
+    this.kuzuClients.set(clientProjectRoot, newClient);
+
+    // Initialize repositories for this client using repository provider
+    await this.repositoryProvider.initializeRepositories(clientProjectRoot, newClient);
+
+    return newClient;
   }
 
   static async getInstance(): Promise<MemoryService> {
-    // Acquire lock for thread safety
     const release = await MemoryService.lock.acquire();
-
     try {
       if (!MemoryService.instance) {
         MemoryService.instance = new MemoryService();
         await MemoryService.instance.initialize();
       }
-
       return MemoryService.instance;
     } finally {
-      // Always release the lock
       release();
     }
   }
@@ -105,31 +105,42 @@ export class MemoryService {
    * Initialize memory bank for a repository
    * Creates metadata with stub values if it doesn't exist
    */
-  async initMemoryBank(repositoryName: string, branch: string = 'main'): Promise<void> {
-    const repository = await this.getOrCreateRepository(repositoryName, branch);
+  async initMemoryBank(
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string = 'main',
+  ): Promise<void> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const metadataRepo = this.repositoryProvider.getMetadataRepository(clientProjectRoot);
+
+    const repository =
+      (await repositoryRepo.findByName(repositoryName, branch)) ||
+      (await repositoryRepo.create({ name: repositoryName, branch }));
+
     if (!repository || !repository.id) {
       throw new Error(`Repository ${repositoryName}:${branch} could not be found or created.`);
     }
-    const existingMetadata = await this.metadataRepo.findMetadata(repositoryName, branch, 'meta');
 
+    const existingMetadata = await metadataRepo.findMetadata(repositoryName, branch, 'meta');
     if (!existingMetadata) {
       const today = new Date().toISOString().split('T')[0];
-      await this.metadataRepo.upsertMetadata({
+      await metadataRepo.upsertMetadata({
         repository: repository.id,
         branch: branch,
         id: 'meta',
         name: repositoryName,
         content: {
           id: 'meta',
-          project: {
-            name: repositoryName,
-            created: today,
-          },
-          tech_stack: {
-            language: 'Unknown',
-            framework: 'Unknown',
-            datastore: 'Unknown',
-          },
+          project: { name: repositoryName, created: today },
+          tech_stack: { language: 'Unknown', framework: 'Unknown', datastore: 'Unknown' },
           architecture: 'unknown',
           memory_spec_version: '3.0.0',
         },
@@ -140,16 +151,30 @@ export class MemoryService {
   /**
    * Get or create a repository by name
    */
-  async getOrCreateRepository(name: string, branch: string = 'main'): Promise<Repository | null> {
+  async getOrCreateRepository(
+    clientProjectRoot: string,
+    name: string,
+    branch: string = 'main',
+  ): Promise<Repository | null> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repository from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+
     // First try to find existing repository with name and branch
-    const existingRepo = await this.repositoryRepo.findByName(name, branch);
+    const existingRepo = await repositoryRepo.findByName(name, branch);
     if (existingRepo) {
       return existingRepo;
     }
 
     // Create new repository with specified branch if it doesn't exist
     try {
-      return await this.repositoryRepo.create({
+      return await repositoryRepo.create({
         name,
         branch,
       });
@@ -162,59 +187,102 @@ export class MemoryService {
   /**
    * Get metadata for a repository
    */
-  async getMetadata(repositoryName: string, branch: string = 'main'): Promise<Metadata | null> {
-    return metadataOps.getMetadataOp(
-      repositoryName,
-      branch,
-      this.repositoryRepo,
-      this.metadataRepo,
-    );
+  async getMetadata(
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string = 'main',
+  ): Promise<Metadata | null> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repository from provider
+    const metadataRepo = this.repositoryProvider.getMetadataRepository(clientProjectRoot);
+
+    return metadataRepo.findMetadata(repositoryName, branch, 'meta');
   }
 
   /**
    * Update metadata for a repository
    */
   async updateMetadata(
+    clientProjectRoot: string,
     repositoryName: string,
     metadata: Partial<Metadata['content']>,
     branch: string = 'main',
   ): Promise<Metadata | null> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const metadataRepo = this.repositoryProvider.getMetadataRepository(clientProjectRoot);
+
     return metadataOps.updateMetadataOp(
       repositoryName,
       branch,
       metadata,
-      this.repositoryRepo,
-      this.metadataRepo,
+      repositoryRepo,
+      metadataRepo,
     );
   }
 
   /**
    * Get today's context or create it if it doesn't exist
    */
-  async getTodayContext(repositoryName: string, branch: string = 'main'): Promise<Context | null> {
-    return contextOps.getTodayContextOp(
-      repositoryName,
-      branch,
-      this.repositoryRepo,
-      this.contextRepo,
-    );
+  async getTodayContext(
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string = 'main',
+  ): Promise<Context | null> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const contextRepo = this.repositoryProvider.getContextRepository(clientProjectRoot);
+
+    return contextOps.getTodayContextOp(repositoryName, branch, repositoryRepo, contextRepo);
   }
 
   /**
    * Update today's context
    */
   async updateTodayContext(
+    clientProjectRoot: string,
     repositoryName: string,
     contextUpdate: Partial<Omit<Context, 'repository' | 'id' | 'iso_date' | 'branch'>>,
     branch: string = 'main',
   ): Promise<Context | null> {
-    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const contextRepo = this.repositoryProvider.getContextRepository(clientProjectRoot);
+
+    const repository = await repositoryRepo.findByName(repositoryName, branch);
     if (!repository || !repository.id) {
       console.warn(`Repository ${repositoryName}:${branch} not found in updateTodayContext.`);
       return null;
     }
     const todayIsoDate = new Date().toISOString().split('T')[0];
-    const context = await this.contextRepo.getContextByDate(repositoryName, branch, todayIsoDate);
+    const context = await contextRepo.getContextByDate(repositoryName, branch, todayIsoDate);
 
     if (!context) {
       console.warn(
@@ -233,7 +301,7 @@ export class MemoryService {
       id: context.id,
     };
 
-    const updated = await this.contextRepo.upsertContext(updatedContextObject);
+    const updated = await contextRepo.upsertContext(updatedContextObject);
     return updated ?? null;
   }
 
@@ -241,11 +309,23 @@ export class MemoryService {
    * Get latest contexts
    */
   async getLatestContexts(
+    clientProjectRoot: string,
     repositoryName: string,
     branch: string = 'main',
     limit?: number,
   ): Promise<Context[]> {
-    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const contextRepo = this.repositoryProvider.getContextRepository(clientProjectRoot);
+
+    const repository = await repositoryRepo.findByName(repositoryName, branch);
     if (!repository || !repository.id) {
       console.warn(`Repository ${repositoryName}:${branch} not found in getLatestContexts.`);
       return [];
@@ -254,8 +334,8 @@ export class MemoryService {
       repository.id,
       branch,
       limit,
-      this.repositoryRepo,
-      this.contextRepo,
+      repositoryRepo,
+      contextRepo,
     );
   }
 
@@ -263,20 +343,34 @@ export class MemoryService {
    * Update today's context for a repository/branch (MCP tool compatibility)
    * Accepts summary, agent, decision, issue, observation. Merges with existing.
    */
-  async updateContext(params: {
-    repository: string;
-    branch?: string;
-    summary?: string;
-    agent?: string;
-    decision?: string;
-    issue?: string;
-    observation?: string;
-    id?: string;
-  }): Promise<Context | null> {
+  async updateContext(
+    clientProjectRoot: string,
+    params: {
+      repository: string;
+      branch?: string;
+      summary?: string;
+      agent?: string;
+      decision?: string;
+      issue?: string;
+      observation?: string;
+      id?: string;
+    },
+  ): Promise<Context | null> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const contextRepo = this.repositoryProvider.getContextRepository(clientProjectRoot);
+
     return contextOps.updateContextOp(
       { repositoryName: params.repository, ...params },
-      this.repositoryRepo,
-      this.contextRepo,
+      repositoryRepo,
+      contextRepo,
     );
   }
 
@@ -284,21 +378,28 @@ export class MemoryService {
    * Create or update a rule for a repository
    */
   async upsertRule(
+    clientProjectRoot: string,
     repositoryName: string,
     rule: Omit<Rule, 'repository' | 'branch' | 'id'> & { id: string },
     branch: string = 'main',
   ): Promise<Rule | null> {
-    return ruleOps.upsertRuleOp(
-      repositoryName,
-      branch,
-      rule as Rule,
-      this.repositoryRepo,
-      this.ruleRepo,
-    );
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const ruleRepo = this.repositoryProvider.getRuleRepository(clientProjectRoot);
+
+    return ruleOps.upsertRuleOp(repositoryName, branch, rule as Rule, repositoryRepo, ruleRepo);
   }
 
   // Add new methods for tools, delegating to Ops
   async upsertComponent(
+    clientProjectRoot: string,
     repositoryName: string,
     branch: string,
     componentData: {
@@ -309,6 +410,17 @@ export class MemoryService {
       depends_on?: string[];
     },
   ): Promise<Component | null> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const componentRepo = this.repositoryProvider.getComponentRepository(clientProjectRoot);
+
     return componentOps.upsertComponentOp(
       repositoryName,
       branch,
@@ -320,12 +432,13 @@ export class MemoryService {
         status: componentData.status || 'active',
         depends_on: componentData.depends_on,
       } as ComponentInput, // Cast to ComponentInput with required status
-      this.repositoryRepo,
-      this.componentRepo,
+      repositoryRepo,
+      componentRepo,
     );
   }
 
   async upsertDecision(
+    clientProjectRoot: string,
     repositoryName: string,
     branch: string,
     decisionData: {
@@ -335,12 +448,23 @@ export class MemoryService {
       context?: string;
     },
   ): Promise<Decision | null> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const decisionRepo = this.repositoryProvider.getDecisionRepository(clientProjectRoot);
+
     return decisionOps.upsertDecisionOp(
       repositoryName,
       branch,
       decisionData,
-      this.repositoryRepo,
-      this.decisionRepo,
+      repositoryRepo,
+      decisionRepo,
     );
   }
 
@@ -348,55 +472,99 @@ export class MemoryService {
    * Get all upstream dependencies for a component (transitive DEPENDS_ON)
    */
   async getComponentDependencies(
+    clientProjectRoot: string,
     repositoryName: string,
     branch: string,
     componentId: string,
   ): Promise<Component[]> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const componentRepo = this.repositoryProvider.getComponentRepository(clientProjectRoot);
+
     return componentOps.getComponentDependenciesOp(
       repositoryName,
       branch,
       componentId,
-      this.repositoryRepo,
-      this.componentRepo,
+      repositoryRepo,
+      componentRepo,
     );
   }
 
-  async getActiveComponents(repositoryName: string, branch: string = 'main'): Promise<Component[]> {
-    const repository = await this.repositoryRepo.findByName(repositoryName, branch);
+  async getActiveComponents(
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string = 'main',
+  ): Promise<Component[]> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const componentRepo = this.repositoryProvider.getComponentRepository(clientProjectRoot);
+
+    const repository = await repositoryRepo.findByName(repositoryName, branch);
     if (!repository || !repository.id) {
       console.warn(`Repository ${repositoryName}:${branch} not found in getActiveComponents.`);
       return [];
     }
-    return componentOps.getActiveComponentsOp(
-      repository.id,
-      branch,
-      this.repositoryRepo,
-      this.componentRepo,
-    );
+    return componentOps.getActiveComponentsOp(repository.id, branch, repositoryRepo, componentRepo);
   }
 
-  // Placeholder for getComponentDependents - to be implemented via componentOps
   async getComponentDependents(
+    clientProjectRoot: string,
     repositoryName: string,
     branch: string,
     componentId: string,
   ): Promise<Component[]> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const componentRepo = this.repositoryProvider.getComponentRepository(clientProjectRoot);
+
     return componentOps.getComponentDependentsOp(
       repositoryName,
       branch,
       componentId,
-      this.repositoryRepo,
-      this.componentRepo,
+      repositoryRepo,
+      componentRepo,
     );
   }
 
-  // Placeholder for getItemContextualHistory - to be implemented via graphOps
   async getItemContextualHistory(
+    clientProjectRoot: string,
     repositoryName: string,
     branch: string,
     itemId: string,
     itemType: 'Component' | 'Decision' | 'Rule',
   ): Promise<any> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const componentRepo = this.repositoryProvider.getComponentRepository(clientProjectRoot);
+
     console.error(
       `DEBUG: memory.service.ts: getItemContextualHistory received itemType = >>>${itemType}<<<`,
     );
@@ -405,28 +573,39 @@ export class MemoryService {
       branch,
       itemId,
       itemType,
-      this.repositoryRepo,
-      this.componentRepo,
+      repositoryRepo,
+      componentRepo,
     );
   }
 
-  // Placeholder for getGoverningItemsForComponent - to be implemented via graphOps
   async getGoverningItemsForComponent(
+    clientProjectRoot: string,
     repositoryName: string,
     branch: string,
     componentId: string,
   ): Promise<any> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const componentRepo = this.repositoryProvider.getComponentRepository(clientProjectRoot);
+
     return graphOps.getGoverningItemsForComponentOp(
       repositoryName,
       branch,
       componentId,
-      this.repositoryRepo,
-      this.componentRepo,
+      repositoryRepo,
+      componentRepo,
     );
   }
 
-  // Placeholder for getRelatedItems - to be implemented via graphOps
   async getRelatedItems(
+    clientProjectRoot: string,
     repositoryName: string,
     branch: string,
     itemId: string,
@@ -436,39 +615,73 @@ export class MemoryService {
       direction?: 'OUTGOING' | 'INCOMING' | 'BOTH';
     },
   ): Promise<any> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const componentRepo = this.repositoryProvider.getComponentRepository(clientProjectRoot);
+
     return graphOps.getRelatedItemsOp(
       repositoryName,
       branch,
       itemId,
       params,
-      this.repositoryRepo,
-      this.componentRepo,
+      repositoryRepo,
+      componentRepo,
     );
   }
 
-  // Placeholder for kCoreDecomposition - to be implemented via graphOps
-  async kCoreDecomposition(repositoryName: string, branch: string, k?: number): Promise<any> {
-    return graphOps.kCoreDecompositionOp(
-      repositoryName,
-      branch,
-      k,
-      this.repositoryRepo,
-      this.componentRepo,
-    );
+  async kCoreDecomposition(
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    k?: number,
+  ): Promise<any> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const componentRepo = this.repositoryProvider.getComponentRepository(clientProjectRoot);
+
+    return graphOps.kCoreDecompositionOp(repositoryName, branch, k, repositoryRepo, componentRepo);
   }
 
-  // Placeholder for louvainCommunityDetection - to be implemented via graphOps
-  async louvainCommunityDetection(repositoryName: string, branch: string): Promise<any> {
+  async louvainCommunityDetection(
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+  ): Promise<any> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const componentRepo = this.repositoryProvider.getComponentRepository(clientProjectRoot);
+
     return graphOps.louvainCommunityDetectionOp(
       repositoryName,
       branch,
-      this.repositoryRepo,
-      this.componentRepo,
+      repositoryRepo,
+      componentRepo,
     );
   }
 
-  // Placeholder for pageRank - to be implemented via graphOps
   async pageRank(
+    clientProjectRoot: string,
     repositoryName: string,
     branch: string,
     dampingFactor?: number,
@@ -476,6 +689,17 @@ export class MemoryService {
     tolerance?: number,
     normalizeInitial?: boolean,
   ): Promise<any> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const componentRepo = this.repositoryProvider.getComponentRepository(clientProjectRoot);
+
     return graphOps.pageRankOp(
       repositoryName,
       branch,
@@ -483,43 +707,65 @@ export class MemoryService {
       iterations,
       tolerance,
       normalizeInitial,
-      this.repositoryRepo,
-      this.componentRepo,
+      repositoryRepo,
+      componentRepo,
     );
   }
 
-  // Placeholder for stronglyConnectedComponents - to be implemented via graphOps
   async getStronglyConnectedComponents(
+    clientProjectRoot: string,
     repositoryName: string,
     branch: string,
     maxIterations?: number,
   ): Promise<any> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const componentRepo = this.repositoryProvider.getComponentRepository(clientProjectRoot);
+
     return graphOps.stronglyConnectedComponentsOp(
       repositoryName,
       branch,
       maxIterations,
-      this.repositoryRepo,
-      this.componentRepo,
+      repositoryRepo,
+      componentRepo,
     );
   }
 
-  // In src/services/memory.service.ts, inside MemoryService class
   async getWeaklyConnectedComponents(
+    clientProjectRoot: string,
     repositoryName: string,
     branch: string,
     maxIterations?: number,
   ): Promise<any> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const componentRepo = this.repositoryProvider.getComponentRepository(clientProjectRoot);
+
     return graphOps.weaklyConnectedComponentsOp(
       repositoryName,
       branch,
       maxIterations,
-      this.repositoryRepo,
-      this.componentRepo,
+      repositoryRepo,
+      componentRepo,
     );
   }
 
-  // Placeholder for shortestPath - to be implemented via graphOps
   async shortestPath(
+    clientProjectRoot: string,
     repositoryName: string,
     branch: string,
     startNodeId: string,
@@ -533,34 +779,95 @@ export class MemoryService {
       relationshipTableNames?: string[];
     },
   ): Promise<any> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const componentRepo = this.repositoryProvider.getComponentRepository(clientProjectRoot);
+
     return graphOps.shortestPathOp(
       repositoryName,
       branch,
       startNodeId,
       endNodeId,
       params,
-      this.repositoryRepo,
-      this.componentRepo,
+      repositoryRepo,
+      componentRepo,
     );
   }
 
   async getDecisionsByDateRange(
+    clientProjectRoot: string,
     repositoryName: string,
     branch: string = 'main',
     startDate: string,
     endDate: string,
   ): Promise<Decision[]> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    // Get repositories from provider
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const decisionRepo = this.repositoryProvider.getDecisionRepository(clientProjectRoot);
+
     return decisionOps.getDecisionsByDateRangeOp(
       repositoryName,
       branch,
       startDate,
       endDate,
-      this.repositoryRepo,
-      this.decisionRepo,
+      repositoryRepo,
+      decisionRepo,
     );
   }
 
-  async getActiveRules(repositoryName: string, branch: string = 'main'): Promise<Rule[]> {
-    return ruleOps.getActiveRulesOp(repositoryName, branch, this.repositoryRepo, this.ruleRepo);
+  async getActiveRules(
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string = 'main',
+  ): Promise<Rule[]> {
+    // Get repositories for this client
+    const { repositoryRepo, ruleRepo } = await this.getRepositoriesForClient(clientProjectRoot);
+
+    return ruleOps.getActiveRulesOp(repositoryName, branch, repositoryRepo, ruleRepo);
+  }
+
+  /**
+   * Helper method to get repositories for a client project root
+   *
+   * @param clientProjectRoot The client project root path
+   * @returns Object containing repository instances
+   */
+  private async getRepositoriesForClient(clientProjectRoot: string): Promise<{
+    repositoryRepo: RepositoryRepository;
+    metadataRepo: MetadataRepository;
+    contextRepo: ContextRepository;
+    componentRepo: ComponentRepository;
+    decisionRepo: DecisionRepository;
+    ruleRepo: RuleRepository;
+  }> {
+    if (!this.repositoryProvider) {
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    // Ensure KuzuClient is initialized
+    await this.getKuzuClient(clientProjectRoot);
+
+    return {
+      repositoryRepo: this.repositoryProvider.getRepositoryRepository(clientProjectRoot),
+      metadataRepo: this.repositoryProvider.getMetadataRepository(clientProjectRoot),
+      contextRepo: this.repositoryProvider.getContextRepository(clientProjectRoot),
+      componentRepo: this.repositoryProvider.getComponentRepository(clientProjectRoot),
+      decisionRepo: this.repositoryProvider.getDecisionRepository(clientProjectRoot),
+      ruleRepo: this.repositoryProvider.getRuleRepository(clientProjectRoot),
+    };
   }
 }

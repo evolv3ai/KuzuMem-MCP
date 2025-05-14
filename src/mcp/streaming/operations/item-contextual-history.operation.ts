@@ -44,6 +44,7 @@ export class ItemContextualHistoryOperation {
       // Assuming memoryService.getItemContextualHistory exists and retrieves the history.
       // This could be a candidate for internal streaming within MemoryService if histories are very long.
       const history = await memoryService.getItemContextualHistory(
+        clientProjectRoot,
         repositoryName,
         branch,
         itemId,
