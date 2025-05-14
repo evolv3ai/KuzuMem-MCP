@@ -8,31 +8,13 @@ import { createProgressHandler } from './mcp/streaming/progress-handler';
 import { StdioProgressTransport } from './mcp/streaming/stdio-transport';
 import { ToolExecutionService } from './mcp/services/tool-execution.service';
 
-// Determine Client Project Root at startup
+// Determine Client Project Root at startup (for context only, not for DB initialization)
 const detectedClientProjectRoot = process.cwd();
 console.error(`MCP stdio server detected client project root: ${detectedClientProjectRoot}`);
 
-// Ensure database directory (relative to detectedClientProjectRoot) exists for KuzuDBClient to use
-// KuzuDBClient will construct the full path: clientProjectRoot + config.DB_RELATIVE_DIR + config.DB_FILENAME
-const kuzuDbDirWithinProject = path.join(detectedClientProjectRoot, '.kuzu'); // Assuming default .kuzu from config
-if (!fs.existsSync(kuzuDbDirWithinProject)) {
-  try {
-    fs.mkdirSync(kuzuDbDirWithinProject, { recursive: true });
-    console.error(`Created KuzuDB directory within client project: ${kuzuDbDirWithinProject}`);
-  } catch (e) {
-    console.error(`Error creating KuzuDB directory ${kuzuDbDirWithinProject}: `, e);
-    // Decide if this is fatal. For now, let KuzuDBClient handle final path construction errors.
-  }
-}
-
-// Initialize memory service early (it's a singleton, but its internal KuzuDBClient instances are per-project-root)
-MemoryService.getInstance()
-  .then(() => {
-    console.error('Memory service singleton obtained by stdio-server.');
-  })
-  .catch((err) => {
-    console.error('Stdio-server: Failed to get memory service instance on startup:', err);
-  });
+// IMPORTANT: We do NOT initialize directories or memory service at startup!
+// Database initialization should only happen through the init-memory-bank tool
+// or when explicitly requested by a tool call
 
 const rl = readline.createInterface({
   input: process.stdin,
