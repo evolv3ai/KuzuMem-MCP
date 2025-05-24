@@ -122,9 +122,14 @@ export async function handleTransportEvents(
     };
 
     transportAsAny.onMessage = (message: SDKMessage) => {
+      console.log(
+        '[DEBUG handleTransportEvents] onMessage received:',
+        JSON.stringify(message, null, 2),
+      );
       if (message && typeof message === 'object') {
         // Check if it's a response related to our request ID
         if ('id' in message && message.id === requestId) {
+          console.log('[DEBUG handleTransportEvents] Final event found for requestId:', requestId);
           finalEvent = message as JSONRPCResponse;
           cleanup();
           resolve({ progressEvents, finalEvent, errors: handlerErrors });
@@ -137,8 +142,18 @@ export async function handleTransportEvents(
             progressMessage.params.progressToken === String(requestId)
           ) {
             // Ensure progressToken is compared as string if requestId can be number
+            console.log(
+              '[DEBUG handleTransportEvents] Progress event found for requestId:',
+              requestId,
+            );
             progressEvents.push(progressMessage.params);
           }
+        } else {
+          console.log('[DEBUG handleTransportEvents] Unhandled message type or mismatched ID:', {
+            messageId: 'id' in message ? message.id : 'no id',
+            expectedId: requestId,
+            messageMethod: 'method' in message ? message.method : 'no method',
+          });
         }
         // Potentially handle other types of notifications if necessary
       }
@@ -146,6 +161,9 @@ export async function handleTransportEvents(
 
     transportAsAny.onError = (error: any) => {
       // Handles transport-level errors (e.g., connection issues, non-JSON-RPC errors)
+      console.log('[DEBUG handleTransportEvents] Transport error received:', error);
+      console.log('[DEBUG handleTransportEvents] Error type:', typeof error);
+      console.log('[DEBUG handleTransportEvents] Error details:', JSON.stringify(error, null, 2));
       const err = error instanceof Error ? error : new Error(String(error?.message || error));
       handlerErrors.push(err);
       // A transport error likely means we won't get a finalEvent for this request.
@@ -166,8 +184,10 @@ export async function handleTransportEvents(
 
     // Send the request using the transport
     // The `send` method is expected to be Promise<void>.
+    console.log('[DEBUG handleTransportEvents] Sending request:', requestToSend);
     sdkTransportInstance.send(requestToSend as any).catch((sendError: any) => {
       // Catches errors from the send call itself (e.g., if the transport is not connected)
+      console.log('[DEBUG handleTransportEvents] Send error:', sendError);
       const err =
         sendError instanceof Error ? sendError : new Error(String(sendError?.message || sendError));
       handlerErrors.push(err);
@@ -179,17 +199,40 @@ export async function handleTransportEvents(
 }
 
 /**
- * Parses the content from a CallToolResult object.
- * The CallToolResult is typically found in the `result` field of a successful
+ * Parses the content from a tool result object.
+ * The tool result can be either the new MCP CallToolResult format or the old format.
+ * The tool result is typically found in the `result` field of a successful
  * JSONRPCResponse for a tool invocation.
  */
-export function parseSdkResponseContent(
-  toolResult: CallToolResult | null | undefined,
-): any[] | string | null {
-  if (!toolResult || !toolResult.tool_call || !toolResult.tool_call.tool_response) {
+export function parseSdkResponseContent(toolResult: any | null | undefined): any {
+  if (!toolResult) {
     return null;
   }
-  return toolResult.tool_call.tool_response.content;
+
+  // Check if this is the new MCP format with content array
+  if (toolResult.content && Array.isArray(toolResult.content)) {
+    if (toolResult.content.length > 0) {
+      const firstContent = toolResult.content[0];
+      if (firstContent.type === 'text' && typeof firstContent.text === 'string') {
+        try {
+          // Try to parse the JSON string back to the original object
+          return JSON.parse(firstContent.text);
+        } catch (parseError) {
+          // If parsing fails, return the text as-is
+          return firstContent.text;
+        }
+      }
+    }
+    return toolResult.content;
+  }
+
+  // Check if this is the old CallToolResult format
+  if (toolResult.tool_call && toolResult.tool_call.tool_response) {
+    return toolResult.tool_call.tool_response.content;
+  }
+
+  // If neither format matches, return as-is
+  return toolResult;
 }
 
 // Old utility functions like collectSdkStreamEvents and their specific helper types

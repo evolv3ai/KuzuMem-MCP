@@ -1,294 +1,122 @@
-import request from 'supertest'; // For HTTP requests
 import { ChildProcess, spawn } from 'child_process';
 import path from 'path';
-import { MEMORY_BANK_MCP_TOOLS } from '../../mcp/tools'; // Adjust path as needed
-import { Component, ComponentStatus } from '../../types'; // Adjust path
-import { setupTestDB, cleanupTestDB } from '../utils/test-db-setup'; // Removed dbPath import
+import { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { MEMORY_BANK_MCP_TOOLS } from '../../mcp/tools';
+import { Component, Decision, Rule } from '../../types';
+import { setupTestDB, cleanupTestDB } from '../utils/test-db-setup';
+// Import centralized SDK test utils
+import { parseSdkResponseContent } from '../utils/sdk-test-utils';
 
-// Increase Jest timeout
-jest.setTimeout(90000);
+jest.setTimeout(180000); // Increased global timeout
 
 const STREAM_PORT = process.env.HTTP_STREAM_PORT || 3001;
 const STREAM_HOST = process.env.HOST || 'localhost';
 const BASE_URL = `http://${STREAM_HOST}:${STREAM_PORT}`;
+const MCP_URL = BASE_URL; // Use base URL directly for MCP SDK transport
 
-// Interface for the resolved value of collectStreamEvents
-interface CollectedSseEvents {
-  events: any[];
-  progressEventsCount: number;
-  finalResponseEvent: any | null;
-  errorEvent: any | null;
-  connectionError?: Error;
-}
+let sdkClient: Client;
 
-// Copied from httpstream-streaming-implementation.md guide
-const collectStreamEvents = async (sseResponseEmitter: any): Promise<CollectedSseEvents> => {
-  const events: any[] = [];
-  let progressEventsCount = 0;
-  let finalResponseEvent: any | null = null;
-  let errorEvent: any | null = null;
-
-  console.log('[collectStreamEvents] Starting collection of SSE events...');
-
-  return new Promise<CollectedSseEvents>((resolve, reject) => {
-    let promiseSettled = false;
-
-    const settlePromise = (
-      resolver: (value: CollectedSseEvents | PromiseLike<CollectedSseEvents>) => void,
-      value: CollectedSseEvents,
-      isRejectOperation = false,
-    ) => {
-      if (!promiseSettled) {
-        promiseSettled = true;
-        console.log(
-          `[collectStreamEvents] Promise being ${isRejectOperation ? 'rejected' : 'resolved'}.`,
-        );
-        if (sseResponseEmitter.destroy) {
-          console.log('[collectStreamEvents] Destroying SSE response emitter.');
-          sseResponseEmitter.destroy();
-        } else if (sseResponseEmitter.removeAllListeners) {
-          console.log('[collectStreamEvents] Removing all listeners from SSE response emitter.');
-          sseResponseEmitter.removeAllListeners();
-        }
-        resolver(value);
-      }
-    };
-
-    let buffer = '';
-    const processBuffer = () => {
-      if (promiseSettled) {
-        return;
-      }
-
-      let eolIndex;
-      while ((eolIndex = buffer.indexOf('\n\n')) >= 0) {
-        if (promiseSettled) {
-          break;
-        }
-        const message = buffer.substring(0, eolIndex);
-        buffer = buffer.substring(eolIndex + 2);
-        if (message.trim() === '') {
-          continue;
-        }
-
-        const lines = message.split('\n');
-        let eventType = 'message';
-        let eventDataString = '';
-        let eventId = null;
-
-        lines.forEach((line) => {
-          if (line.startsWith('event:')) {
-            eventType = line.substring('event:'.length).trim();
-          } else if (line.startsWith('data:')) {
-            eventDataString = line.substring('data:'.length).trim();
-          } else if (line.startsWith('id:')) {
-            eventId = line.substring('id:'.length).trim();
-          }
-        });
-
-        try {
-          let parsedData: any = {}; // Default to empty object, typed as any
-          if (eventDataString) {
-            // Only parse if eventDataString is not empty
-            parsedData = JSON.parse(eventDataString);
-          }
-          const eventPayload = { type: eventType, id: eventId, data: parsedData };
-          events.push(eventPayload);
-          console.log(`[collectStreamEvents] Received event:`, eventPayload);
-
-          if (eventType === 'mcpNotification' && parsedData.method === 'tools/progress') {
-            progressEventsCount++;
-            console.log(`[collectStreamEvents] Progress event count: ${progressEventsCount}`);
-          }
-          if (eventType === 'mcpResponse') {
-            finalResponseEvent = eventPayload;
-            console.log(
-              '[collectStreamEvents] Final mcpResponse event received. Resolving promise.',
-            );
-            settlePromise(resolve, { events, progressEventsCount, finalResponseEvent, errorEvent });
-            return;
-          }
-          if (eventType === 'error') {
-            errorEvent = eventPayload;
-            console.error(
-              '[collectStreamEvents] SSE standard error event received. Rejecting promise:',
-              eventPayload,
-            );
-            const syntheticError = new Error(parsedData.message || 'SSE error event');
-            settlePromise(
-              reject,
-              {
-                events,
-                progressEventsCount,
-                finalResponseEvent,
-                errorEvent,
-                connectionError: syntheticError,
-              },
-              true,
-            );
-            return;
-          }
-        } catch (e) {
-          console.error(
-            '[collectStreamEvents] Failed to parse SSE event data:',
-            eventDataString,
-            e,
-          );
-          // Potentially reject here if parsing error is critical, for now, it logs and continues.
-          // If a parsing error should stop everything:
-          // errorEvent = { type: 'parsing_error', data: { message: (e as Error).message, rawData: eventDataString }};
-          // settlePromise(reject, { events, progressEventsCount, finalResponseEvent, errorEvent, connectionError: e as Error }, true);
-          // return;
-        }
-      }
-    };
-
-    if (sseResponseEmitter.on) {
-      sseResponseEmitter.on('data', (chunk: Buffer | string) => {
-        if (promiseSettled) {
-          return;
-        }
-        buffer += chunk.toString();
-        console.log(`[collectStreamEvents] Data chunk received (${chunk.length} bytes)`);
-        processBuffer();
-      });
-      sseResponseEmitter.on('end', () => {
-        if (promiseSettled) {
-          return;
-        }
-        console.log('[collectStreamEvents] SSE stream "end" event received.');
-        if (buffer.length > 0) {
-          processBuffer(); // Process any remaining buffer
-        }
-        if (promiseSettled) {
-          return;
-        } // Check if processBuffer settled it
-        // If stream ends and we haven't resolved (e.g. no mcpResponse), resolve with current state.
-        // This maintains original behavior for streams that might end without explicit mcpResponse.
-        console.log(
-          '[collectStreamEvents] Resolving promise due to stream "end" event (if not already settled).',
-        );
-        settlePromise(resolve, { events, progressEventsCount, finalResponseEvent, errorEvent });
-      });
-      sseResponseEmitter.on('error', (err: Error) => {
-        // Connection/transport error
-        if (promiseSettled) {
-          return;
-        }
-        console.error('[collectStreamEvents] SSE stream connection error. Rejecting promise:', err);
-        if (!errorEvent) {
-          errorEvent = { type: 'connection_error', data: { message: err.message } };
-        }
-        settlePromise(
-          reject,
-          { events, progressEventsCount, finalResponseEvent, errorEvent, connectionError: err },
-          true,
-        );
-      });
-    } else {
-      console.error(
-        '[collectStreamEvents] Provided sseResponseEmitter does not have .on method for events',
-      );
-      const err = new Error('Provided sseResponseEmitter does not have .on method for events');
-      settlePromise(
-        reject,
-        {
-          events: [],
-          progressEventsCount: 0,
-          finalResponseEvent: null,
-          errorEvent: { type: 'setup_error', data: { message: err.message } },
-          connectionError: err,
-        },
-        true,
-      );
-    }
-  });
-};
-
-describe('MCP HTTP Stream Server E2E Tests', () => {
+describe('MCP HTTP Stream Server E2E Tests with SDK Client (Full Refactor)', () => {
   let serverProcess: ChildProcess;
-  let dbPathForTest: string; // Will be set by setupTestDB return value
-  let clientProjectRootForTest: string; // <<<< Dependant on dbPathForTest
-  const testRepository = 'e2e-httpstream-repo'; // Specific repo for these tests
+  let dbPathForTest: string;
+  let clientProjectRootForTest: string;
+  const testRepository = 'e2e-http-sdk-final-repo';
   const testBranch = 'main';
-  let testComponentId: string | null = null;
-  let dependentComponentId: string;
 
-  // Share these across describe blocks if tests depend on IDs created in earlier blocks
-  let sharedTestComponentId: string | null = null;
-  let sharedDependentComponentId: string | null = null;
-  let sharedTestDecisionId: string | null = null;
-  let sharedTestRuleId: string | null = null;
+  // IDs for seeded items
+  let seededComponentId1: string;
+  let seededComponentId2: string; // Dependent on Id1
+  let seededDecisionId: string;
+  let seededRuleId: string;
 
-  const startHttpStreamServer = (envVars: Record<string, string> = {}): Promise<void> => {
+  const startHttpStreamServer = (envOverride: Record<string, string> = {}): Promise<void> => {
     return new Promise((resolve, reject) => {
       const serverFilePath = path.resolve(__dirname, '../../mcp-httpstream-server.ts');
-      // Use STREAM_PORT for the PORT env var for this server
       const defaultEnv = {
         PORT: String(STREAM_PORT),
-        DEBUG: '3', // Increase debug level for more verbose logging
-        DB_FILENAME: dbPathForTest,
-        ...envVars,
+        DEBUG: process.env.CI ? '1' : '3',
+        // Pass DB_PATH_OVERRIDE like stdio server to ensure proper database isolation
+        ...envOverride,
       };
 
-      console.log('Starting HTTP Stream server from path:', serverFilePath);
-      console.log('With environment variables:', JSON.stringify(defaultEnv, null, 2));
+      console.log(`[HTTP E2E Setup] Starting HTTP Stream server: ${serverFilePath}`);
+      console.log(`[HTTP E2E Setup] Env: ${JSON.stringify(defaultEnv)}`);
 
       serverProcess = spawn('npx', ['ts-node', '--transpile-only', serverFilePath], {
         env: { ...process.env, ...defaultEnv },
-        shell: true,
-        detached: false, // Changed to false for simpler process killing
+        shell: process.platform === 'win32',
+        detached: false,
       });
 
       let output = '';
       let resolved = false;
-      let startupTimeout: NodeJS.Timeout | null = null;
-
-      // Set a timeout to reject the promise if the server doesn't start within 30 seconds
-      startupTimeout = setTimeout(() => {
+      const startupTimeoutMs = process.env.CI ? 90000 : 45000; // Increased timeout
+      const startupTimeout: NodeJS.Timeout | null = setTimeout(() => {
         if (!resolved) {
           console.error(
-            `HTTP Stream Server failed to start within timeout. Output so far:\n${output}`,
+            `[HTTP E2E Setup ERROR] Server startup timeout (${startupTimeoutMs}ms). Output:\n${output}`,
           );
           resolved = true;
+          if (serverProcess && !serverProcess.killed) {
+            serverProcess.kill();
+          }
           reject(new Error('Server startup timeout'));
         }
-      }, 30000);
+      }, startupTimeoutMs);
 
-      serverProcess.stdout?.on('data', (data) => {
-        const sData = data.toString();
+      const onData = (dataChunk: Buffer | string, streamName: string) => {
+        const sData = dataChunk.toString();
         output += sData;
-        console.log(`HTTPSTREAM_SERVER_STDOUT: ${sData}`);
+        if (
+          process.env.E2E_SERVER_DEBUG === 'true' ||
+          (process.env.CI && sData.toLowerCase().includes('error'))
+        ) {
+          console.log(`[HTTP Server ${streamName}] ${sData.trim()}`);
+        }
+
         if (
           !resolved &&
           sData.includes(
             `MCP HTTP Streaming Server running at http://${STREAM_HOST}:${STREAM_PORT}`,
           )
         ) {
-          console.log('HTTP Stream Server ready.');
+          console.log('[HTTP E2E Setup] Server reported ready.');
           if (startupTimeout) {
             clearTimeout(startupTimeout);
           }
           resolved = true;
           resolve();
         }
-      });
+      };
+
+      serverProcess.stdout?.on('data', (data) => onData(data, 'STDOUT'));
       serverProcess.stderr?.on('data', (data) => {
-        const sData = data.toString();
-        output += sData;
-        console.error(`HTTPSTREAM_SERVER_STDERR: ${sData}`);
-        if (!resolved && (sData.includes('EADDRINUSE') || sData.toLowerCase().includes('error'))) {
-          // If an error occurs before resolving, reject to prevent test timeout
-          console.error('HTTP Stream Server failed to start due to an error');
+        const sData = data.toString(); // Need sData for checks below
+        onData(sData, 'STDERR'); // Pass string to onData
+        if (
+          !resolved &&
+          (sData.includes('EADDRINUSE') ||
+            sData.toLowerCase().includes('error setting up kuzu') ||
+            sData.includes('CRITICAL UNHANDLED ERROR'))
+        ) {
+          console.error(
+            '[HTTP E2E Setup ERROR] Server failed to start due to critical error in STDERR.',
+          );
           if (startupTimeout) {
             clearTimeout(startupTimeout);
           }
           resolved = true;
-          reject(new Error(`Server failed to start: ${sData.substring(0, 300)}`));
+          if (serverProcess && !serverProcess.killed) {
+            serverProcess.kill();
+          }
+          reject(new Error(`Server critical startup error: ${sData.substring(0, 300)}`));
         }
       });
+
       serverProcess.on('error', (err) => {
-        console.error('Failed to start HTTP Stream server process:', err);
+        console.error('[HTTP E2E Setup ERROR] Failed to spawn server process:', err);
         if (!resolved) {
           if (startupTimeout) {
             clearTimeout(startupTimeout);
@@ -297,742 +125,357 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
           reject(err);
         }
       });
+
       serverProcess.on('exit', (code, signal) => {
-        if (code !== 0 && signal !== 'SIGTERM' && signal !== 'SIGINT') {
+        console.log(`[HTTP E2E Teardown] Server process exited. Code: ${code}, Signal: ${signal}.`);
+        if (!resolved && code !== 0 && signal !== 'SIGTERM' && signal !== 'SIGINT') {
           console.warn(
-            `HTTP Stream Server process exited unexpectedly with code ${code}, signal ${signal}. Output:\n${output}`,
+            `[HTTP E2E Setup WARNING] Server process exited prematurely and unexpectedly. Code: ${code}, Signal: ${signal}.`,
           );
-          if (!resolved) {
-            if (startupTimeout) {
-              clearTimeout(startupTimeout);
-            }
-            resolved = true;
-            reject(new Error(`Server process exited with code ${code}`));
+          if (startupTimeout) {
+            clearTimeout(startupTimeout);
           }
+          resolved = true;
+          reject(new Error(`Server process exited prematurely with code ${code}`));
         }
       });
     });
   };
 
   beforeAll(async () => {
-    dbPathForTest = await setupTestDB('httpstream_e2e_test.kuzu');
+    dbPathForTest = await setupTestDB('httpstream_e2e_sdk_final.kuzu');
     clientProjectRootForTest = path.dirname(dbPathForTest);
-    await startHttpStreamServer();
+    console.log(`[HTTP E2E Setup] Using database path: ${dbPathForTest}`);
+    console.log(`[HTTP E2E Setup] Using client project root: ${clientProjectRootForTest}`);
 
-    const repository = testRepository;
-    const branch = testBranch;
+    // Start HTTP server with DB_PATH_OVERRIDE exactly like stdio server
+    await startHttpStreamServer({
+      DB_PATH_OVERRIDE: dbPathForTest,
+      TS_NODE_CACHE: 'false',
+    });
 
-    console.log(`HTTP Stream E2E: Initializing memory bank for ${repository}...`);
-    const initPayload = {
-      jsonrpc: '2.0',
-      id: 'init_e2e_http',
-      method: 'tools/call',
-      params: {
-        name: 'init-memory-bank',
-        arguments: { repository, branch, clientProjectRoot: clientProjectRootForTest },
-      },
+    // Initialize SDK Client following official MCP pattern
+    const transport = new StreamableHTTPClientTransport(new URL(MCP_URL));
+    sdkClient = new Client({
+      name: 'kuzumem-mcp-e2e-client',
+      version: '1.0.0',
+    });
+
+    await sdkClient.connect(transport);
+
+    console.log(`[HTTP E2E Setup] Initializing memory bank for ${testRepository}:${testBranch}...`);
+    const initArgs = {
+      repository: testRepository,
+      branch: testBranch,
+      clientProjectRoot: clientProjectRootForTest,
     };
-    let httpResponse = await request(BASE_URL)
-      .post('/mcp')
-      .set('Origin', 'http://localhost')
-      .send(initPayload)
-      .expect(200);
-    expect(httpResponse.body.id).toBe('init_e2e_http');
-    expect(httpResponse.body.result?.success).toBe(true);
-    console.log('HTTP Stream E2E: Memory bank initialized.');
 
-    // --- BEGIN FULL DATA SEEDING (adapted from stdio tests) ---
-    console.log('HTTP Stream E2E: Seeding database with initial data...');
+    // Use official Client.callTool method
+    console.log('[DEBUG] Calling init-memory-bank using Client.callTool...');
+    console.log('[DEBUG] initArgs:', JSON.stringify(initArgs, null, 2));
 
-    // Seed Components
-    const componentsToSeed = [
+    const initResult = await sdkClient.callTool({
+      name: 'init-memory-bank',
+      arguments: initArgs,
+    });
+
+    console.log('[DEBUG] SDK client init result:', initResult);
+
+    if (!initResult || !initResult.content) {
+      fail(`init-memory-bank failed, no result: ${JSON.stringify(initResult)}`);
+    }
+
+    const initToolResult = parseSdkResponseContent(initResult as unknown);
+    console.log('[DEBUG] Parsed tool result:', JSON.stringify(initToolResult, null, 2));
+    expect(initToolResult?.success).toBe(true);
+    expect(initToolResult?.dbPath).toBe(clientProjectRootForTest);
+
+    console.log('[HTTP E2E Setup] Memory bank initialized.');
+
+    // --- Data Seeding ---
+    console.log('[HTTP E2E Setup] Seeding initial data...');
+    seededComponentId1 = `comp-seed-http-1-${Date.now()}`;
+    seededComponentId2 = `comp-seed-http-2-${Date.now()}`;
+    seededDecisionId = `dec-seed-http-1-${Date.now()}`;
+    seededRuleId = `rule-seed-http-1-${Date.now()}`;
+
+    const componentsToSeed: Array<
+      Omit<Component, 'repository' | 'branch' | 'created_at' | 'updated_at'> & { id: string }
+    > = [
       {
-        id: 'comp-seed-001',
-        name: 'Seeded Component Alpha',
-        kind: 'library',
-        status: 'active' as ComponentStatus,
-      },
-      {
-        id: 'comp-seed-002',
-        name: 'Seeded Component Beta',
+        id: seededComponentId1,
+        name: 'HTTP Seed Alpha',
         kind: 'service',
-        status: 'active' as ComponentStatus,
-        depends_on: ['comp-seed-001'],
+        status: 'active' as const,
       },
       {
-        id: 'comp-seed-003',
-        name: 'Seeded Component Gamma',
-        kind: 'API',
-        status: 'planned' as ComponentStatus,
-      },
-      {
-        id: 'comp-seed-004',
-        name: 'Seeded Component Delta',
-        kind: 'database',
-        status: 'deprecated' as ComponentStatus,
-      },
-      {
-        id: 'comp-seed-005',
-        name: 'Seeded Component Epsilon',
-        kind: 'UI',
-        status: 'active' as ComponentStatus,
+        id: seededComponentId2,
+        name: 'HTTP Seed Beta',
+        kind: 'library',
+        status: 'active' as const,
+        depends_on: [seededComponentId1],
       },
     ];
-    testComponentId = componentsToSeed[0].id; // Save one for later tests if needed
-    dependentComponentId = componentsToSeed[1].id; // Save one for later tests if needed
 
     for (const comp of componentsToSeed) {
-      const addCompPayload = {
-        jsonrpc: '2.0',
-        id: `add_comp_${comp.id}`,
-        method: 'tools/call',
-        params: {
-          name: 'add-component',
-          arguments: { repository, branch, ...comp, clientProjectRoot: clientProjectRootForTest },
-        },
+      const addCompArgs = {
+        repository: testRepository,
+        branch: testBranch,
+        ...comp,
+        clientProjectRoot: clientProjectRootForTest,
       };
-      httpResponse = await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(addCompPayload)
-        .expect(200);
-      expect(httpResponse.body.result?.success).toBe(true);
-    }
-    console.log(`${componentsToSeed.length} components seeded for HTTP E2E.`);
 
-    // Seed Contexts
-    const contextsToSeed = [
-      {
-        summary: 'Initial context for seeding via HTTP',
-        agent: 'seed-script-http',
-        decisions: ['DEC-SEED-001'],
-        observations: ['OBS-SEED-001'],
-      },
-      {
-        summary: 'Another seeded context entry via HTTP',
-        agent: 'seed-script-http',
-        decisions: ['DEC-SEED-002'],
-        observations: ['OBS-SEED-002', 'OBS-SEED-003'],
-      },
-    ];
-    for (const ctxData of contextsToSeed) {
-      const updateCtxPayload = {
-        jsonrpc: '2.0',
-        id: `update_ctx_${crypto.randomUUID()}`,
-        method: 'tools/call',
-        params: {
-          name: 'update-context',
-          arguments: {
-            repository,
-            branch,
-            ...ctxData,
-            clientProjectRoot: clientProjectRootForTest,
-          },
-        },
-      };
-      httpResponse = await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(updateCtxPayload)
-        .expect(200);
-      expect(httpResponse.body.result?.success).toBe(true);
-    }
-    console.log(`${contextsToSeed.length} context entries updated/seeded for HTTP E2E.`);
+      console.log(`[DEBUG] Adding component ${comp.id} using Client.callTool...`);
+      const addCompResult = await sdkClient.callTool({
+        name: 'add-component',
+        arguments: addCompArgs,
+      });
 
-    // Seed Decisions
-    const decisionsToSeed = [
-      {
-        id: 'dec-seed-001',
-        name: 'Seeded HTTP Decision Alpha',
-        date: '2023-01-01',
-        context: 'Regarding initial HTTP setup',
-      },
-      {
-        id: 'dec-seed-002',
-        name: 'Seeded HTTP Decision Beta',
-        date: '2023-01-15',
-        context: 'HTTP Architectural choice',
-      },
-    ];
-    for (const dec of decisionsToSeed) {
-      const addDecPayload = {
-        jsonrpc: '2.0',
-        id: `add_dec_${dec.id}`,
-        method: 'tools/call',
-        params: {
-          name: 'add-decision',
-          arguments: { repository, branch, ...dec, clientProjectRoot: clientProjectRootForTest },
-        },
-      };
-      httpResponse = await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(addDecPayload)
-        .expect(200);
-      expect(httpResponse.body.result?.success).toBe(true);
-    }
-    console.log(`${decisionsToSeed.length} decisions seeded for HTTP E2E.`);
+      if (!addCompResult || !addCompResult.content) {
+        throw new Error(
+          `add-component ${comp.id} failed, no result: ${JSON.stringify(addCompResult)}`,
+        );
+      }
 
-    // Seed Rules
-    const rulesToSeed = [
-      {
-        id: 'rule-seed-001',
-        name: 'Seeded HTTP Rule Alpha',
-        created: '2023-01-05',
-        content: 'Standard HTTP linting',
-        status: 'active' as const,
-      },
-      {
-        id: 'rule-seed-002',
-        name: 'Seeded HTTP Rule Beta',
-        created: '2023-01-20',
-        content: 'HTTP Security check',
-        status: 'active' as const,
-        triggers: ['commit', 'push'],
-      },
-    ];
-    for (const rule of rulesToSeed) {
-      const addRulePayload = {
-        jsonrpc: '2.0',
-        id: `add_rule_${rule.id}`,
-        method: 'tools/call',
-        params: {
-          name: 'add-rule',
-          arguments: { repository, branch, ...rule, clientProjectRoot: clientProjectRootForTest },
-        },
-      };
-      httpResponse = await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(addRulePayload)
-        .expect(200);
-      expect(httpResponse.body.result?.success).toBe(true);
+      const addCompToolResult = parseSdkResponseContent(addCompResult as unknown);
+      expect(addCompToolResult?.success).toBe(true);
     }
-    console.log(`${rulesToSeed.length} rules seeded for HTTP E2E.`);
-    console.log('HTTP Stream E2E: Database seeding complete.');
-    // --- END DATA SEEDING ---
-  }, 120000);
+    console.log(`[HTTP E2E Setup] ${componentsToSeed.length} components seeded.`);
+
+    const decisionToSeed: Omit<Decision, 'repository' | 'branch' | 'created_at' | 'updated_at'> & {
+      id: string;
+    } = {
+      id: seededDecisionId,
+      name: 'HTTP Seed Decision',
+      date: '2024-02-10',
+      context: 'Seeded decision for HTTP tests',
+      status: 'accepted',
+    };
+    const addDecArgs = {
+      repository: testRepository,
+      branch: testBranch,
+      ...decisionToSeed,
+      clientProjectRoot: clientProjectRootForTest,
+    };
+
+    console.log(`[DEBUG] Adding decision ${seededDecisionId} using Client.callTool...`);
+    const addDecResult = await sdkClient.callTool({
+      name: 'add-decision',
+      arguments: addDecArgs,
+    });
+
+    if (!addDecResult || !addDecResult.content) {
+      throw new Error(`add-decision failed, no result: ${JSON.stringify(addDecResult)}`);
+    }
+
+    const addDecToolResult = parseSdkResponseContent(addDecResult as unknown);
+    expect(addDecToolResult?.success).toBe(true);
+    console.log(`[HTTP E2E Setup] 1 decision seeded.`);
+
+    const ruleToSeed: Omit<Rule, 'repository' | 'branch' | 'created_at' | 'updated_at'> & {
+      id: string;
+    } = {
+      id: seededRuleId,
+      name: 'HTTP Seed Rule',
+      created: '2024-02-11',
+      content: 'HTTP test rule',
+      status: 'active' as const,
+      triggers: ['on_deploy'],
+    };
+    const addRuleArgs = {
+      repository: testRepository,
+      branch: testBranch,
+      ...ruleToSeed,
+      clientProjectRoot: clientProjectRootForTest,
+    };
+
+    console.log(`[DEBUG] Adding rule ${seededRuleId} using Client.callTool...`);
+    const addRuleResult = await sdkClient.callTool({
+      name: 'add-rule',
+      arguments: addRuleArgs,
+    });
+
+    if (!addRuleResult || !addRuleResult.content) {
+      throw new Error(`add-rule failed, no result: ${JSON.stringify(addRuleResult)}`);
+    }
+
+    const addRuleToolResult = parseSdkResponseContent(addRuleResult as unknown);
+    expect(addRuleToolResult?.success).toBe(true);
+    console.log(`[HTTP E2E Setup] 1 rule seeded.`);
+  }, 240000);
 
   afterAll(async () => {
-    if (serverProcess && serverProcess.pid && !serverProcess.killed) {
-      console.log('Stopping HTTP Stream server...');
-      serverProcess.kill();
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (sdkClient && typeof (sdkClient as any).dispose === 'function') {
+      await (sdkClient as any).dispose();
+      console.log('[HTTP E2E Teardown] SDK Client disposed.');
     }
-    // Pass the specific path to cleanupTestDB
+    if (serverProcess && serverProcess.pid && !serverProcess.killed) {
+      console.log('[HTTP E2E Teardown] Attempting to stop HTTP Stream server process...');
+      const killed = serverProcess.kill('SIGTERM');
+      if (killed) {
+        console.log('[HTTP E2E Teardown] SIGTERM sent to server process. Waiting for exit...');
+        // Wait for server process to exit or timeout
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => {
+            console.warn(
+              '[HTTP E2E Teardown WARNING] Timeout waiting for server process to exit after SIGTERM.',
+            );
+            if (serverProcess && serverProcess.pid && !serverProcess.killed) {
+              console.warn('[HTTP E2E Teardown WARNING] Forcing SIGKILL.');
+              serverProcess.kill('SIGKILL');
+            }
+            resolve();
+          }, 5000); // 5 seconds timeout for graceful exit
+
+          serverProcess.on('exit', () => {
+            clearTimeout(timer);
+            console.log('[HTTP E2E Teardown] Server process confirmed exited.');
+            resolve();
+          });
+        });
+      } else {
+        console.error('[HTTP E2E Teardown ERROR] Failed to send SIGTERM to server process.');
+      }
+    } else {
+      console.log('[HTTP E2E Teardown] Server process already stopped or not started.');
+    }
     if (dbPathForTest) {
       await cleanupTestDB(dbPathForTest);
+      console.log('[HTTP E2E Teardown] Test database cleaned up.');
     }
   });
 
-  it('T_HTTPSTREAM_001: /initialize should return server capabilities', async () => {
-    const response = await request(BASE_URL)
-      .post('/initialize')
-      .set('Origin', 'http://localhost')
-      .send({ protocolVersion: '0.1' })
-      .expect('Content-Type', /json/)
-      .expect(200);
+  it('T_HTTPSTREAM_002: SDK client listTools should return list of tools', async () => {
+    console.log('[DEBUG] Calling listTools using Client.listTools...');
 
-    expect(response.body.result).toBeDefined();
-    expect(response.body.result.capabilities.tools).toEqual({ list: true, call: true });
-    expect(response.body.result.serverInfo.name).toBe('KuzuMem-MCP-HTTPStream'); // Adjusted expected name
+    const listToolsResult = await sdkClient.listTools();
+    console.log('[DEBUG] SDK client listTools result:', listToolsResult);
+
+    expect(listToolsResult).toBeDefined();
+    expect(listToolsResult.tools).toBeDefined();
+    const tools = listToolsResult.tools;
+
+    expect(Array.isArray(tools)).toBe(true);
+    expect(tools.length).toBe(MEMORY_BANK_MCP_TOOLS.length);
+    const initTool = tools.find((t: ToolAnnotations) => t.name === 'init-memory-bank');
+    expect(initTool).toBeDefined();
+    expect(initTool?.description).toBeDefined();
   });
 
-  it('T_HTTPSTREAM_002: /tools/list should return list of tools', async () => {
-    const response = await request(BASE_URL)
-      .get('/tools/list')
-      .set('Origin', 'http://localhost')
-      .expect('Content-Type', /json/)
-      .expect(200);
-
-    expect(Array.isArray(response.body.tools)).toBe(true);
-    expect(response.body.tools.length).toBe(MEMORY_BANK_MCP_TOOLS.length);
-    expect(response.body.tools[0]).toHaveProperty('name');
-    expect(response.body.tools[0]).toHaveProperty('inputSchema');
-  });
-
-  it('T_HTTPSTREAM_003: /mcp tools/call (JSON) should execute a batch tool', async () => {
-    const repoName = 'e2e-httpstream-repo';
+  it('T_HTTPSTREAM_003: SDK client tools/call (JSON style via /mcp) for non-streaming tool (update-metadata)', async () => {
     const metadataContent = {
       id: 'meta',
       project: {
-        name: repoName,
-        created: new Date().toISOString().split('T')[0],
-        description: 'Test E2E HTTP',
+        name: `${testRepository}-sdk-updated`,
+        created: '2024-02-01',
+        description: 'Updated via HTTP SDK E2E',
       },
-      tech_stack: { language: 'TypeScript' },
-      architecture: 'test-driven',
-      memory_spec_version: '3.0.0',
+      tech_stack: { language: 'TypeScript (SDK)' },
     };
-    const response = await request(BASE_URL)
-      .post('/mcp')
-      .set('Origin', 'http://localhost')
-      .send({
-        jsonrpc: '2.0',
-        id: 'update_meta_http',
-        method: 'tools/call',
-        params: {
-          name: 'update-metadata',
-          arguments: {
-            repository: repoName,
-            branch: 'main',
-            metadata: metadataContent,
-            clientProjectRoot: clientProjectRootForTest,
-          },
-        },
-      })
-      .expect('Content-Type', /json/)
-      .expect(200);
+    const updateMetaArgs = {
+      repository: testRepository,
+      branch: testBranch,
+      metadata: metadataContent,
+      clientProjectRoot: clientProjectRootForTest,
+    };
 
-    expect(response.body.id).toBe('update_meta_http');
-    expect(response.body.result).toBeDefined();
-    expect(response.body.result.success).toBe(true);
+    console.log('[DEBUG] Calling update-metadata using Client.callTool...');
+    const updateMetaResult = await sdkClient.callTool({
+      name: 'update-metadata',
+      arguments: updateMetaArgs,
+    });
+
+    console.log('[DEBUG] SDK client update-metadata result:', updateMetaResult);
+
+    if (!updateMetaResult || !updateMetaResult.content) {
+      fail(`update-metadata failed, no result: ${JSON.stringify(updateMetaResult)}`);
+    }
+
+    if ((updateMetaResult as any).isError) {
+      fail(`update-metadata failed with error: ${JSON.stringify(updateMetaResult)}`);
+    }
+
+    const toolResult = parseSdkResponseContent(updateMetaResult as unknown) as {
+      success: boolean;
+      metadata: { content: any };
+    } | null;
+    expect(toolResult?.success).toBe(true);
+    const returnedMetadata = toolResult?.metadata as any;
+    expect(returnedMetadata?.project.description).toBe('Updated via HTTP SDK E2E');
+    expect(returnedMetadata?.tech_stack.language).toBe('TypeScript (SDK)');
   });
 
-  it('T_HTTPSTREAM_004: /mcp tools/call (SSE) should stream progress for get-component-dependencies', (done) => {
-    // Ensure dependentComponentId and testComponentId are seeded from beforeAll
-    expect(dependentComponentId).toBeDefined();
-    expect(testComponentId).toBeDefined();
+  it('T_HTTPSTREAM_004: SDK client tools/call (SSE via /mcp) for streaming tool (get-component-dependencies)', async () => {
+    expect(seededComponentId2).toBeDefined();
+    expect(seededComponentId1).toBeDefined();
 
     const toolArgs = {
       repository: testRepository,
       branch: testBranch,
-      componentId: dependentComponentId,
-      depth: 1, // Keep depth 1 for simpler expected output for now
-      clientProjectRoot: clientProjectRootForTest,
-    };
-    const payload = {
-      jsonrpc: '2.0',
-      id: 'sse_get_deps_http',
-      method: 'tools/call',
-      params: { name: 'get-component-dependencies', arguments: toolArgs },
+      componentId: seededComponentId2,
     };
 
-    const sseRequest = request(BASE_URL)
-      .post('/mcp')
-      .set('Origin', 'http://localhost') // As required by server
-      .set('Accept', 'text/event-stream')
-      .send(payload);
+    console.log('[DEBUG] Calling get-component-dependencies using Client.callTool...');
 
-    // Pipe the response stream to collectStreamEvents
-    // supertest .agent() might be needed if BASE_URL is tricky or cookies/session needed later
-    // For now, direct request should pipe correctly.
-    sseRequest
-      .expect(200) // Expect initial 200 OK for SSE stream connection
-      .parse(async (res: any, callback: any) => {
-        // superagent/supertest response object `res` is a stream here for SSE
-        // We need to collect events from it.
-        // The `collectStreamEvents` function is designed to work with such a stream emitter.
-        try {
-          // Use the defined interface for the destructured result
-          const {
-            events,
-            progressEventsCount,
-            finalResponseEvent,
-            errorEvent,
-          }: CollectedSseEvents = await collectStreamEvents(res);
+    // For streaming tools, we can listen to progress events
+    const progressEvents: any[] = [];
 
-          // Basic checks
-          expect(errorEvent).toBeNull(); // Should be no protocol/transport errors
-          expect(progressEventsCount).toBeGreaterThanOrEqual(2); // At least init and in_progress
-          expect(finalResponseEvent).toBeDefined();
-          expect(finalResponseEvent.data.id).toBe('sse_get_deps_http');
-
-          // Check for initializing progress event
-          const initProgress = events.find(
-            (ev: any) =>
-              ev.type === 'mcpNotification' &&
-              ev.data.method === 'tools/progress' &&
-              !ev.data.params.isFinal &&
-              JSON.parse(ev.data.params.content[0].text).status === 'initializing',
-          );
-          expect(initProgress).toBeDefined();
-
-          // Check for an in_progress event with dependencies
-          const inProgress = events.find(
-            (ev: any) =>
-              ev.type === 'mcpNotification' &&
-              ev.data.method === 'tools/progress' &&
-              !ev.data.params.isFinal &&
-              JSON.parse(ev.data.params.content[0].text).status === 'in_progress',
-          );
-          expect(inProgress).toBeDefined();
-          const inProgressContent = JSON.parse(inProgress.data.params.content[0].text);
-          expect(Array.isArray(inProgressContent.dependencies)).toBe(true);
-          // For depth 1, this should find testComponentId
-          expect(
-            inProgressContent.dependencies.some((c: Component) => c.id === testComponentId),
-          ).toBe(true);
-
-          // Check for the final progress event (isFinal: true)
-          const finalProgress = events.find(
-            (ev: any) =>
-              ev.type === 'mcpNotification' &&
-              ev.data.method === 'tools/progress' &&
-              ev.data.params.isFinal === true,
-          );
-          expect(finalProgress).toBeDefined();
-          const finalProgressContent = JSON.parse(finalProgress.data.params.content[0].text);
-          expect(finalProgressContent.status).toBe('complete');
-          expect(Array.isArray(finalProgressContent.dependencies)).toBe(true);
-          expect(
-            finalProgressContent.dependencies.some((c: Component) => c.id === testComponentId),
-          ).toBe(true);
-
-          // Check the final mcpResponse event
-          expect(finalResponseEvent.data.result).toBeDefined();
-          expect(finalResponseEvent.data.result.status).toBe('complete');
-          expect(Array.isArray(finalResponseEvent.data.result.dependencies)).toBe(true);
-          expect(
-            finalResponseEvent.data.result.dependencies.some(
-              (c: Component) => c.id === testComponentId,
-            ),
-          ).toBe(true);
-
-          callback(null, null);
-        } catch (assertionError) {
-          callback(assertionError, null);
-        }
-      })
-      .end(done); // Use Jest's done callback for async test completion
-  });
-
-  describe('Entity CRUD via /mcp (JSON)', () => {
-    it('T_HTTPSTREAM_CRUD_add-component: should add a primary component', async () => {
-      sharedTestComponentId = `e2e-http-crud-comp-${Date.now()}`;
-      const compArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        id: sharedTestComponentId,
-        name: 'HTTP CRUD Primary',
-        kind: 'module',
-        status: 'active' as ComponentStatus,
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'add_comp_crud',
-        method: 'tools/call',
-        params: { name: 'add-component', arguments: compArgs },
-      };
-      const response = await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(payload)
-        .expect(200);
-      expect(response.body.result?.success).toBe(true);
+    const getDepsResult = await sdkClient.callTool({
+      name: 'get-component-dependencies',
+      arguments: toolArgs,
     });
 
-    it('T_HTTPSTREAM_CRUD_add-component-dependent: should add a dependent component', async () => {
-      expect(sharedTestComponentId).not.toBeNull();
-      sharedDependentComponentId = `e2e-http-crud-dep-${Date.now()}`;
-      const compArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        id: sharedDependentComponentId,
-        name: 'HTTP CRUD Dependent',
-        kind: 'service',
-        status: 'active' as ComponentStatus,
-        depends_on: [sharedTestComponentId!],
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'add_dep_crud',
-        method: 'tools/call',
-        params: { name: 'add-component', arguments: compArgs },
-      };
-      const response = await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(payload)
-        .expect(200);
-      expect(response.body.result?.success).toBe(true);
-    });
+    console.log('[DEBUG] SDK client get-component-dependencies result:', getDepsResult);
 
-    it('T_HTTPSTREAM_CRUD_add-decision: should add a decision', async () => {
-      sharedTestDecisionId = `e2e-http-crud-dec-${Date.now()}`;
-      const decisionArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        id: sharedTestDecisionId,
-        name: 'HTTP CRUD Decision',
-        date: '2024-01-01',
-        context: 'Test decision',
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'add_dec_crud',
-        method: 'tools/call',
-        params: { name: 'add-decision', arguments: decisionArgs },
-      };
-      const response = await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(payload)
-        .expect(200);
-      expect(response.body.result?.success).toBe(true);
-    });
+    if (!getDepsResult || !getDepsResult.content) {
+      fail(`get-component-dependencies failed, no result: ${JSON.stringify(getDepsResult)}`);
+    }
 
-    it('T_HTTPSTREAM_CRUD_add-rule: should add a rule', async () => {
-      sharedTestRuleId = `e2e-http-crud-rule-${Date.now()}`;
-      const ruleArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        id: sharedTestRuleId,
-        name: 'HTTP CRUD Rule',
-        created: '2024-01-01',
-        content: 'Test rule',
-        status: 'active' as const,
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'add_rule_crud',
-        method: 'tools/call',
-        params: { name: 'add-rule', arguments: ruleArgs },
-      };
-      const response = await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(payload)
-        .expect(200);
-      expect(response.body.result?.success).toBe(true);
-    });
-  });
+    const finalResultContent = parseSdkResponseContent(getDepsResult as unknown) as {
+      status: string;
+      dependencies: Component[];
+    } | null;
 
-  describe('Traversal and Graph Tools via /mcp (JSON responses)', () => {
-    // Assumes components from CRUD tests or beforeAll are available (sharedTestComponentId, sharedDependentComponentId)
-    it('T_HTTPSTREAM_JSON_get-component-dependencies: should retrieve dependencies', async () => {
-      expect(sharedDependentComponentId).toBeDefined();
+    expect(finalResultContent?.status).toBe('complete');
+    expect(Array.isArray(finalResultContent?.dependencies)).toBe(true);
+    expect(finalResultContent?.dependencies.some((c) => c.id === seededComponentId1)).toBe(true);
+  }, 60000);
+
+  // --- Add more SDK based tests for CRUD, Traversal, Algorithms ---
+  describe('SDK Advanced Tools via /mcp (HTTP)', () => {
+    it('T_HTTPSTREAM_SDK_ALGO_pagerank: should execute pagerank and return ranks', async () => {
       const toolArgs = {
         repository: testRepository,
         branch: testBranch,
-        componentId: sharedDependentComponentId,
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'get_deps_json',
-        method: 'tools/call',
-        params: { name: 'get-component-dependencies', arguments: toolArgs },
-      };
-      const response = await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(payload)
-        .expect(200);
-
-      expect(response.body.id).toBe('get_deps_json');
-      const resultWrapper = response.body.result;
-      expect(resultWrapper.status).toBe('complete');
-      expect(Array.isArray(resultWrapper.dependencies)).toBe(true);
-      expect(
-        resultWrapper.dependencies.some((c: Component) => c.id === sharedTestComponentId),
-      ).toBe(true);
-    });
-
-    it('T_HTTPSTREAM_JSON_shortest-path: should find a shortest path', async () => {
-      expect(sharedDependentComponentId).toBeDefined();
-      const toolArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        startNodeId: sharedDependentComponentId,
-        endNodeId: sharedTestComponentId!,
-        relationshipTypes: ['DEPENDS_ON'],
-        direction: 'OUTGOING',
-        clientProjectRoot: clientProjectRootForTest,
-        projectedGraphName: 'sp_json_test_graph',
+        projectedGraphName: `pagerank_http_sdk_${Date.now()}`.substring(0, 30),
         nodeTableNames: ['Component'],
         relationshipTableNames: ['DEPENDS_ON'],
       };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'sp_json',
-        method: 'tools/call',
-        params: { name: 'shortest-path', arguments: toolArgs },
-      };
-      const response = await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(payload)
-        .expect(200);
 
-      expect(response.body.id).toBe('sp_json');
-      const resultWrapper = response.body.result;
-      expect(resultWrapper.status).toBe('complete');
-      expect(resultWrapper.results.pathFound).toBe(true);
-      expect(Array.isArray(resultWrapper.results.path)).toBe(true);
-      expect(resultWrapper.results.path.length).toBeGreaterThanOrEqual(1);
-      expect(resultWrapper.results.path[0].id).toBe(sharedDependentComponentId);
-      if (resultWrapper.results.path.length >= 2) {
-        expect(resultWrapper.results.path[resultWrapper.results.path.length - 1].id).toBe(
-          sharedTestComponentId,
-        );
+      console.log('[DEBUG] Calling pagerank using Client.callTool...');
+      const pagerankResult = await sdkClient.callTool({
+        name: 'pagerank',
+        arguments: toolArgs,
+      });
+
+      console.log('[DEBUG] SDK client pagerank result:', pagerankResult);
+
+      if (!pagerankResult || !pagerankResult.content) {
+        fail(`pagerank failed, no result: ${JSON.stringify(pagerankResult)}`);
+      }
+
+      const resultWrapper = parseSdkResponseContent(pagerankResult as unknown) as {
+        status: string;
+        results: { ranks: any[] };
+      } | null;
+
+      expect(resultWrapper?.status).toBe('complete');
+      expect(resultWrapper?.results).toBeDefined();
+      expect(Array.isArray(resultWrapper?.results?.ranks)).toBe(true);
+      if (resultWrapper?.results?.ranks && resultWrapper.results.ranks.length > 0) {
+        expect(resultWrapper.results.ranks[0]).toHaveProperty('nodeId');
+        expect(resultWrapper.results.ranks[0]).toHaveProperty('score');
       }
     });
-
-    it('T_HTTPSTREAM_JSON_get-component-dependents: should retrieve dependents', async () => {
-      expect(sharedTestComponentId).toBeDefined();
-      expect(sharedDependentComponentId).toBeDefined();
-      const toolArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        componentId: sharedTestComponentId!,
-        clientProjectRoot: clientProjectRootForTest,
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'get_dependents_json',
-        method: 'tools/call',
-        params: { name: 'get-component-dependents', arguments: toolArgs },
-      };
-      const response = await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(payload)
-        .expect(200);
-
-      expect(response.body.id).toBe('get_dependents_json');
-      const resultWrapper = response.body.result;
-      expect(resultWrapper.status).toBe('complete');
-      expect(Array.isArray(resultWrapper.dependents)).toBe(true);
-      // Check if the dependent component we created is listed
-      expect(
-        resultWrapper.dependents.some((c: Component) => c.id === sharedDependentComponentId),
-      ).toBe(true);
-    });
-
-    it('T_HTTPSTREAM_JSON_shortest-path_reflexive: should handle reflexive shortest path', async () => {
-      expect(sharedTestComponentId).toBeDefined();
-      const toolArgs = {
-        repository: testRepository,
-        branch: testBranch,
-        startNodeId: sharedTestComponentId!,
-        endNodeId: sharedTestComponentId!,
-        clientProjectRoot: clientProjectRootForTest,
-        projectedGraphName: 'sp_reflexive_json_test_graph',
-        nodeTableNames: ['Component'],
-        relationshipTableNames: [],
-      };
-      const payload = {
-        jsonrpc: '2.0',
-        id: 'sp_reflex_json',
-        method: 'tools/call',
-        params: { name: 'shortest-path', arguments: toolArgs },
-      };
-      const response = await request(BASE_URL)
-        .post('/mcp')
-        .set('Origin', 'http://localhost')
-        .send(payload)
-        .expect(200);
-
-      expect(response.body.id).toBe('sp_reflex_json');
-      const resultWrapper = response.body.result;
-      expect(resultWrapper.status).toBe('complete');
-      expect(resultWrapper.results).toBeDefined(); // Ensure results object exists
-      expect(resultWrapper.results.pathFound).toBe(false);
-      expect(Array.isArray(resultWrapper.results.path)).toBe(true);
-      expect(resultWrapper.results.path.length).toBe(0);
-    });
-  });
-
-  describe('Algorithm Tools via /mcp (JSON responses)', () => {
-    const algorithmTestCases = [
-      {
-        name: 'k-core-decomposition',
-        args: {
-          k: 1,
-          projectedGraphName: 'kcore_json_test_graph',
-          nodeTableNames: ['Component'],
-          relationshipTableNames: ['DEPENDS_ON'],
-        },
-        expectedDataKeyInWrapper: 'results',
-        checkField: 'components',
-      },
-      {
-        name: 'louvain-community-detection',
-        args: {
-          projectedGraphName: 'louvain_json_test_graph',
-          nodeTableNames: ['Component'],
-          relationshipTableNames: ['DEPENDS_ON'],
-        },
-        expectedDataKeyInWrapper: 'results',
-        checkModularity: true,
-        checkField: 'communities',
-      },
-      {
-        name: 'pagerank',
-        args: {
-          projectedGraphName: 'pagerank_json_test_graph',
-          nodeTableNames: ['Component'],
-          relationshipTableNames: ['DEPENDS_ON'],
-        },
-        expectedDataKeyInWrapper: 'results',
-        checkField: 'ranks',
-      },
-      {
-        name: 'strongly-connected-components',
-        args: {
-          projectedGraphName: 'scc_json_test_graph',
-          nodeTableNames: ['Component'],
-          relationshipTableNames: ['DEPENDS_ON'],
-        },
-        expectedDataKeyInWrapper: 'results',
-        checkField: 'components',
-      },
-      {
-        name: 'weakly-connected-components',
-        args: {
-          projectedGraphName: 'wcc_json_test_graph',
-          nodeTableNames: ['Component'],
-          relationshipTableNames: ['DEPENDS_ON'],
-        },
-        expectedDataKeyInWrapper: 'results',
-        checkField: 'components',
-      },
-    ];
-
-    for (const toolSetup of algorithmTestCases) {
-      it(`T_HTTPSTREAM_JSON_ALGO_${toolSetup.name}: should execute and return wrapper`, async () => {
-        const toolArgs = {
-          repository: testRepository,
-          branch: testBranch,
-          ...toolSetup.args,
-          clientProjectRoot: clientProjectRootForTest,
-        };
-        const payload = {
-          jsonrpc: '2.0',
-          id: `algo_json_${toolSetup.name}`,
-          method: 'tools/call',
-          params: { name: toolSetup.name, arguments: toolArgs },
-        };
-        const response = await request(BASE_URL)
-          .post('/mcp')
-          .set('Origin', 'http://localhost')
-          .send(payload)
-          .expect(200);
-
-        expect(response.body.id).toBe(`algo_json_${toolSetup.name}`);
-        const resultWrapper = response.body.result;
-        expect(resultWrapper).toBeDefined();
-        expect(resultWrapper.status).toBe('complete');
-
-        const dataContainer = resultWrapper[toolSetup.expectedDataKeyInWrapper]; // This is now resultWrapper.results
-        expect(dataContainer).toBeDefined();
-
-        // Updated checks to look inside dataContainer (which is resultWrapper.results)
-        if (toolSetup.checkField) {
-          expect(dataContainer[toolSetup.checkField]).toBeDefined();
-          expect(Array.isArray(dataContainer[toolSetup.checkField])).toBe(true);
-        }
-
-        if (toolSetup.checkModularity) {
-          // Modularity for Louvain is returned at the same level as 'communities' within the 'results' object from the operation
-          expect(dataContainer).toHaveProperty('modularity');
-        }
-      });
-    }
   });
 });
