@@ -15,14 +15,17 @@ export class WeaklyConnectedComponentsOperation {
     projectedGraphName: string,
     nodeTableNames: string[],
     relationshipTableNames: string[],
-    memoryService: MemoryService,
+    memoryService?: MemoryService,
     progressHandler?: ProgressHandler,
   ): Promise<any> {
-    try {
-      if (!repositoryName || !projectedGraphName || !nodeTableNames || !relationshipTableNames) {
-        return { error: 'Missing required parameters for Weakly Connected Components' };
-      }
+    if (!memoryService) {
+      return { error: 'MemoryService instance is required for WCC Operation' };
+    }
+    if (!repositoryName || !projectedGraphName || !nodeTableNames || !relationshipTableNames) {
+      return { error: 'Missing required parameters for Weakly Connected Components' };
+    }
 
+    try {
       if (progressHandler) {
         progressHandler.progress({
           status: 'initializing',
@@ -30,28 +33,36 @@ export class WeaklyConnectedComponentsOperation {
         });
       }
 
-      const wccResults = await memoryService.getWeaklyConnectedComponents(
-        clientProjectRoot,
-        repositoryName,
-        branch,
-        undefined, // maxIterations
-      );
+      const params = {
+        repository: repositoryName,
+        branch: branch,
+        projectedGraphName: projectedGraphName,
+        nodeTableNames: nodeTableNames,
+        relationshipTableNames: relationshipTableNames,
+      };
+
+      const wccOutput = await memoryService.getWeaklyConnectedComponents(clientProjectRoot, params);
+
+      const components = wccOutput?.results?.components || [];
+      const resultStatus = wccOutput?.status || 'error';
 
       const resultPayload = {
-        status: 'complete',
+        status: resultStatus,
         clientProjectRoot,
         repository: repositoryName,
         branch,
         projectedGraphName,
-        results: wccResults, // Contains the list of components in WCC groups
+        results: {
+          components: components,
+        },
+        message: wccOutput?.message,
       };
 
       if (progressHandler) {
-        const componentsInWCC = wccResults?.components || [];
         progressHandler.progress({
           status: 'in_progress',
-          message: `Weakly Connected Components analysis processing for ${projectedGraphName}.`,
-          wccCount: componentsInWCC.length, // Add wccCount based on results
+          message: `Weakly Connected Components analysis processing for ${projectedGraphName}. Components found: ${components.length}.`,
+          wccCount: components.length,
         });
 
         // Send final progress event
@@ -62,7 +73,10 @@ export class WeaklyConnectedComponentsOperation {
         return null; // Indicate response was sent via progressHandler
       }
 
-      // If no progressHandler, return the result directly
+      if (resultStatus === 'error' && !progressHandler) {
+        throw new Error(resultPayload.message || 'WCC analysis failed in operation.');
+      }
+
       return resultPayload;
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : String(error);

@@ -1,5 +1,6 @@
 import { MemoryService } from '../../../services/memory.service';
 import { ProgressHandler } from '../progress-handler';
+import { McpServerRequestContext } from '@modelcontextprotocol/sdk';
 
 /**
  * Operation class for retrieving governing items for a component with streaming support.
@@ -10,6 +11,7 @@ export class GoverningItemsForComponentOperation {
    * Execute the operation with streaming support.
    */
   public static async execute(
+    mcpContext: McpServerRequestContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -17,8 +19,10 @@ export class GoverningItemsForComponentOperation {
     memoryService: MemoryService,
     progressHandler?: ProgressHandler,
   ): Promise<any> {
+    const logger = mcpContext.logger || console;
     try {
       if (!repositoryName || !componentId) {
+        logger.warn('[GoverningItemsForComponentOperation] Missing required parameters');
         return {
           error: 'Missing required parameters: repositoryName and componentId are required',
         };
@@ -31,25 +35,37 @@ export class GoverningItemsForComponentOperation {
         });
       }
 
-      const governingItemsResult = await memoryService.getGoverningItemsForComponent(
+      const governingItemsOutput = await memoryService.getGoverningItemsForComponent(
+        mcpContext,
         clientProjectRoot,
         repositoryName,
         branch,
         componentId,
       );
 
-      const decisions = governingItemsResult?.decisions || [];
-      const rules = governingItemsResult?.rules || [];
-      const contextHistory = governingItemsResult?.contextHistory || [];
+      const decisions = governingItemsOutput?.decisions || [];
+      const rules = governingItemsOutput?.rules || [];
+      const resultStatus = governingItemsOutput?.status || 'error';
+      // Context history is not part of GetGoverningItemsForComponentOutputSchema, handled by ItemContextualHistoryOperation
+
+      const resultPayload = {
+        status: resultStatus,
+        clientProjectRoot,
+        repository: repositoryName,
+        branch,
+        componentId,
+        decisions,
+        rules,
+        message: governingItemsOutput?.message,
+      };
 
       if (progressHandler) {
-        // Send separate in_progress updates for each type of item
         progressHandler.progress({
           status: 'in_progress',
           message: `Retrieved ${decisions.length} decision(s).`,
           dataType: 'decisions',
           decisionsCount: decisions.length,
-          decisions: decisions, // Send the actual data if appropriate for progress
+          decisions: decisions,
         });
         progressHandler.progress({
           status: 'in_progress',
@@ -58,25 +74,7 @@ export class GoverningItemsForComponentOperation {
           rulesCount: rules.length,
           rules: rules,
         });
-        progressHandler.progress({
-          status: 'in_progress',
-          message: `Retrieved ${contextHistory.length} context history entries.`,
-          dataType: 'contextHistory',
-          contextHistoryCount: contextHistory.length,
-          contextHistory: contextHistory,
-        });
-
-        // Prepare final payload for final progress and response
-        const resultPayload = {
-          status: 'complete',
-          clientProjectRoot,
-          repository: repositoryName,
-          branch,
-          componentId,
-          decisions,
-          rules,
-          contextHistory,
-        };
+        // Removed contextHistory progress update as it's not part of this operation's direct output
 
         // Send final progress event
         progressHandler.progress({ ...resultPayload, isFinal: true });
@@ -86,19 +84,14 @@ export class GoverningItemsForComponentOperation {
         return null; // Indicate response was sent via progressHandler
       }
 
-      // If no progressHandler, return the result directly (for non-SSE calls)
-      // This part would be hit if progressHandler is undefined
-      const resultPayloadDirect = {
-        status: 'complete',
-        clientProjectRoot,
-        repository: repositoryName,
-        branch,
-        componentId,
-        decisions,
-        rules,
-        contextHistory,
-      };
-      return resultPayloadDirect;
+      if (resultStatus === 'error' && !progressHandler) {
+        logger.error(
+          `[GoverningItemsForComponentOperation] Failed: ${resultPayload.message || 'Unknown error'}`,
+        );
+        throw new Error(resultPayload.message || 'Failed to get governing items in operation.');
+      }
+
+      return resultPayload;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       throw new Error(`Failed to get governing items for component: ${errorMessage}`);

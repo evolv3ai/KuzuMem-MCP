@@ -1,5 +1,6 @@
 import { MemoryService } from '../../../services/memory.service';
 import { ProgressHandler } from '../progress-handler';
+import { McpServerRequestContext } from '@modelcontextprotocol/sdk';
 
 /**
  * Operation class for retrieving related items with streaming support.
@@ -9,21 +10,28 @@ export class RelatedItemsOperation {
    * Execute the operation with streaming support.
    */
   public static async execute(
+    mcpContext: McpServerRequestContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
     startItemId: string,
-    params: {
-      // Kuzu Algo/query params are passed via this object
-      relationshipFilter?: string; // Comma-separated list of relationship types
-      targetNodeTypeFilter?: string; // Comma-separated list of target node types
-      depth?: number; // Max hops
+    opParams: {
+      projectedGraphName?: string;
+      nodeTableNames?: string[];
+      relationshipTableNames?: string[];
+      depth?: number;
+      relationshipFilter?: string;
+      targetNodeTypeFilter?: string;
     } = {},
     memoryService: MemoryService,
     progressHandler?: ProgressHandler,
   ): Promise<any> {
+    const logger = mcpContext.logger || console;
     try {
       if (!repositoryName || !startItemId) {
+        logger.warn(
+          '[RelatedItemsOperation] Missing required parameters: repositoryName and startItemId',
+        );
         return {
           error: 'Missing required parameters: repositoryName and startItemId are required',
         };
@@ -36,42 +44,34 @@ export class RelatedItemsOperation {
         });
       }
 
-      // Convert comma-separated strings to arrays if needed by memoryService
-      const formattedParams = {
-        relationshipTypes: params.relationshipFilter
-          ?.split(',')
-          .map((s) => s.trim())
-          .filter(Boolean),
-        targetNodeTypes: params.targetNodeTypeFilter
-          ?.split(',')
-          .map((s) => s.trim())
-          .filter(Boolean),
-        depth: params.depth || 1, // Default depth
-      };
-
-      const relatedItems = await memoryService.getRelatedItems(
+      const getRelatedItemsOutput = await memoryService.getRelatedItems(
+        mcpContext,
         clientProjectRoot,
         repositoryName,
         branch,
         startItemId,
-        formattedParams, // Pass the structured params
+        opParams,
       );
 
+      const relatedItems = getRelatedItemsOutput?.relatedItems || [];
+      const resultStatus = getRelatedItemsOutput?.status || 'error';
+
       const resultPayload = {
-        status: 'complete',
+        status: resultStatus,
         clientProjectRoot,
         repository: repositoryName,
         branch,
         startItemId,
-        relatedItems: relatedItems || [], // Ensure it's an array
+        relatedItems: relatedItems,
+        message: getRelatedItemsOutput?.message,
       };
 
       if (progressHandler) {
         progressHandler.progress({
           status: 'in_progress',
-          message: `Retrieved ${relatedItems?.length || 0} related item(s) for ${startItemId}.`,
-          count: relatedItems?.length || 0,
-          items: relatedItems || [], // Use 'items' to match potential test expectation or relatedItems
+          message: `Retrieved ${relatedItems.length} related item(s) for ${startItemId}.`,
+          count: relatedItems.length,
+          items: relatedItems,
         });
 
         // Send final progress event
@@ -82,7 +82,13 @@ export class RelatedItemsOperation {
         return null; // Indicate response was sent via progressHandler
       }
 
-      // If no progressHandler, return the result directly
+      if (resultStatus === 'error' && !progressHandler) {
+        logger.error(
+          `[RelatedItemsOperation] Failed to get related items: ${resultPayload.message || 'Unknown error'}`,
+        );
+        throw new Error(resultPayload.message || 'Failed to get related items in operation.');
+      }
+
       return resultPayload;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

@@ -1,350 +1,364 @@
-import readline from 'readline';
-import fs from 'fs';
-import path from 'path';
-import { MEMORY_BANK_MCP_TOOLS } from './mcp';
 import { MemoryService } from './services/memory.service';
 import { toolHandlers } from './mcp/tool-handlers';
-import { createProgressHandler } from './mcp/streaming/progress-handler';
-import { StdioProgressTransport } from './mcp/streaming/stdio-transport';
-import { ToolExecutionService } from './mcp/services/tool-execution.service';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import type { RequestId } from '@modelcontextprotocol/sdk/types.js';
+import { z, ZodObject, AnyZodObject } from 'zod';
+import * as toolSchemas from './mcp/schemas/tool-schemas';
+import { EnrichedRequestHandlerExtra, McpProgressNotification } from './mcp/types/sdk-custom';
 
 // Determine Client Project Root at startup (for context only, not for DB initialization)
 const serverCwd = process.cwd();
-console.error(
-  `MCP stdio server CWD (Current Working Directory): ${serverCwd}. Note: Actual memory bank paths are determined by 'init-memory-bank' calls per repository/branch.`,
-);
-
-// Map to store clientProjectRoot for each repository and branch
-// Key: "repositoryName:branchName", Value: "clientProjectRootPath"
-const repositoryRootMap = new Map<string, string>();
-
-// IMPORTANT: We do NOT initialize directories or memory service at startup!
-// Database initialization should only happen through the init-memory-bank tool
-// or when explicitly requested by a tool call
-
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-  terminal: false,
-});
-
-let initialized = false;
-
-interface McpRequest {
-  jsonrpc: string;
-  id: number | string;
-  method: string;
-  params?: any;
-}
-
-interface McpResponse {
-  jsonrpc: string;
-  id: number | string | null;
-  result?: any;
-  error?: { code: number; message: string; data?: any };
-}
-
-const DEBUG_LEVEL = process.env.DEBUG ? parseInt(process.env.DEBUG, 10) || 1 : 0;
-
-function debugLog(level: number, message: string, data?: any): void {
-  if (DEBUG_LEVEL >= level) {
-    if (data) {
-      console.error(
-        `[MCP-STDIO-DEBUG${level}] ${message}`,
-        typeof data === 'string' ? data : JSON.stringify(data, null, 2),
-      );
-    } else {
-      console.error(`[MCP-STDIO-DEBUG${level}] ${message}`);
-    }
-  }
-}
-
-const progressTransport = new StdioProgressTransport(debugLog);
-
-function sendResponse(response: McpResponse): void {
-  debugLog(1, `Sending response for id: ${response.id}`);
-  debugLog(2, 'Response details:', response);
-  process.stdout.write(JSON.stringify(response) + '\n');
-}
-
-rl.on('line', async (line) => {
-  let request: McpRequest;
-  try {
-    request = JSON.parse(line);
-    debugLog(1, `Received request: ${request.method}`);
-    debugLog(2, 'Request details:', request);
-
-    if (!request.jsonrpc || !request.method) {
-      sendResponse({
-        jsonrpc: '2.0',
-        id: request.id || null,
-        error: { code: -32600, message: 'Invalid Request: missing required fields' },
-      });
-      return;
-    }
-
-    switch (request.method) {
-      case 'initialize':
-        const protocolVersion = request.params?.protocolVersion || '0.1';
-        initialized = true;
-        sendResponse({
-          jsonrpc: '2.0',
-          id: request.id,
-          result: {
-            protocolVersion,
-            capabilities: { memory: { list: true }, tools: { list: true, call: true } },
-            serverInfo: { name: 'memory-bank-mcp', version: '1.0.0' },
-          },
-        });
-        break;
-      case 'initialized':
-        initialized = true;
-        break;
-      case 'notifications/initialized':
-        debugLog(1, 'Handling notifications/initialized');
-        sendResponse({ jsonrpc: '2.0', id: request.id, result: {} });
-        break;
-      case 'resources/list':
-      case 'resources/templates/list':
-        sendResponse({
-          jsonrpc: '2.0',
-          id: request.id,
-          result: { resources: [], templates: [], cursor: null },
-        });
-        break;
-      case 'tools/list':
-        debugLog(1, `Returning tools/list with ${MEMORY_BANK_MCP_TOOLS.length} tools`);
-        const convertedTools = MEMORY_BANK_MCP_TOOLS.map((tool) => ({
-          name: tool.name,
-          description: tool.description,
-          inputSchema: tool.parameters || { type: 'object', properties: {}, required: [] },
-          outputSchema: tool.returns || { type: 'object', properties: {} },
-          annotations: tool.annotations || {
-            title: tool.name,
-            readOnlyHint: true,
-            destructiveHint: false,
-            idempotentHint: true,
-            openWorldHint: false,
-          },
-        }));
-        sendResponse({ jsonrpc: '2.0', id: request.id, result: { tools: convertedTools } });
-        break;
-      case 'tools/call':
-        const toolName = request.params?.name;
-        const toolArgs = request.params?.arguments || {};
-        debugLog(1, `Handling tools/call for tool: ${toolName}`);
-
-        const toolDefinition = MEMORY_BANK_MCP_TOOLS.find((t) => t.name === toolName);
-        if (!toolDefinition) {
-          sendResponse({
-            jsonrpc: '2.0',
-            id: request.id,
-            result: {
-              content: [{ type: 'text', text: `Tool '${toolName}' not found.` }],
-              isError: true,
-            },
-          });
-          break;
-        }
-
-        let effectiveClientProjectRoot: string | undefined;
-
-        if (toolName === 'init-memory-bank') {
-          effectiveClientProjectRoot = toolArgs.clientProjectRoot;
-          if (effectiveClientProjectRoot && toolArgs.repository && toolArgs.branch) {
-            const repoBranchKey = `${toolArgs.repository}:${toolArgs.branch}`;
-            repositoryRootMap.set(repoBranchKey, effectiveClientProjectRoot);
-            debugLog(
-              2,
-              `Stored clientProjectRoot for ${repoBranchKey}: ${effectiveClientProjectRoot}`,
-            );
-          } else {
-            debugLog(
-              0,
-              `Error: init-memory-bank called without required arguments for storing clientProjectRoot (repository, branch, clientProjectRoot).`,
-            );
-            sendResponse({
-              jsonrpc: '2.0',
-              id: request.id,
-              result: {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Tool '${toolName}' called without repository, branch, or clientProjectRoot for mapping.`,
-                  },
-                ],
-                isError: true,
-              },
-            });
-            break;
-          }
-        } else {
-          // For other tools, retrieve clientProjectRoot from the map
-          if (toolArgs.repository && toolArgs.branch) {
-            const repoBranchKey = `${toolArgs.repository}:${toolArgs.branch}`;
-            effectiveClientProjectRoot = repositoryRootMap.get(repoBranchKey);
-            if (!effectiveClientProjectRoot) {
-              debugLog(
-                0,
-                `Error: clientProjectRoot not found in map for ${repoBranchKey}. Was init-memory-bank called for this repo/branch?`,
-              );
-              // Fallback to detectedClientProjectRoot (server CWD) if not found, though this is the problematic behavior we want to avoid.
-              // Ideally, this should be an error if strict mapping is required.
-              // For now, to maintain some prior behavior if uninitialized, let's log an error and consider it a failure.
-              sendResponse({
-                jsonrpc: '2.0',
-                id: request.id,
-                result: {
-                  content: [
-                    {
-                      type: 'text',
-                      text: `Memory for repository '${toolArgs.repository}' on branch '${toolArgs.branch}' not initialized. Please call 'init-memory-bank' first.`,
-                    },
-                  ],
-                  isError: true,
-                },
-              });
-              break;
-            }
-            debugLog(
-              2,
-              `Retrieved clientProjectRoot for ${repoBranchKey}: ${effectiveClientProjectRoot}`,
-            );
-          } else {
-            // If repository or branch are not in toolArgs, this is a problem for most tools.
-            debugLog(
-              0,
-              `Error: Tool '${toolName}' called without repository or branch arguments needed to find clientProjectRoot.`,
-            );
-            sendResponse({
-              jsonrpc: '2.0',
-              id: request.id,
-              result: {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Tool '${toolName}' requires repository and branch arguments.`,
-                  },
-                ],
-                isError: true,
-              },
-            });
-            break;
-          }
-        }
-
-        if (!effectiveClientProjectRoot && toolName === 'init-memory-bank') {
-          sendResponse({
-            jsonrpc: '2.0',
-            id: request.id,
-            result: {
-              content: [
-                { type: 'text', text: `Tool '${toolName}' requires clientProjectRoot argument.` },
-              ],
-              isError: true,
-            },
-          });
-          break;
-        }
-        if (!effectiveClientProjectRoot) {
-          // Should not happen if init-memory-bank was called correctly first for other tools
-          // And if the logic above correctly assigns effectiveClientProjectRoot from the map
-          console.error(
-            `CRITICAL: effectiveClientProjectRoot is not defined for tool ${toolName}. This indicates a problem with server launch context, tool argument passing, or the repositoryRootMap logic.`,
-          );
-          sendResponse({
-            jsonrpc: '2.0',
-            id: request.id,
-            result: {
-              content: [
-                {
-                  type: 'text',
-                  text: `Server error: clientProjectRoot context not established for tool '${toolName}'.`,
-                },
-              ],
-              isError: true,
-            },
-          });
-          break;
-        }
-
-        try {
-          const progressHandler = createProgressHandler(
-            String(request.id),
-            progressTransport,
-            debugLog,
-          );
-          const toolExecutionService = await ToolExecutionService.getInstance();
-
-          const toolResult = await toolExecutionService.executeTool(
-            toolName,
-            toolArgs,
-            toolHandlers,
-            effectiveClientProjectRoot, // Pass the determined clientProjectRoot
-            progressHandler,
-            debugLog,
-          );
-
-          if (toolResult !== null) {
-            // Successful tool execution (or tool returning its own error structure within the result)
-            sendResponse({
-              jsonrpc: '2.0',
-              id: String(request.id),
-              result: {
-                content: [{ type: 'text', text: JSON.stringify(toolResult, null, 2) }],
-                isError: !!toolResult?.error, // This custom flag is part of the expected content structure
-              },
-            });
-          }
-          // If toolResult is null, it implies progressHandler handled the final response, or it was a notification-style call
-        } catch (err: any) {
-          debugLog(
-            0,
-            `FATAL ERROR (tools/call in stdio-server catch block): ${err.message || String(err)}`,
-            err.stack,
-          );
-          // Send a standard JSON-RPC error response
-          sendResponse({
-            jsonrpc: '2.0',
-            id: request.id, // Use original request.id
-            error: {
-              code: -32000, // Generic server error
-              message: `Server error executing tool '${toolName}': ${err.message || String(err)}`,
-              data: err.stack, // Optional: include stack trace or other data
-            },
-          });
-        }
-        break;
-      default:
-        if (!initialized) {
-          sendResponse({
-            jsonrpc: '2.0',
-            id: String(request.id),
-            error: { code: -32002, message: 'Server not initialized' },
-          });
-          return;
-        }
-        // Fallback for other methods - this section is largely legacy and might be removed
-        // as all actions should ideally go through tools/call with the new refactor.
-        console.error(
-          `Warning: Received direct method call '${request.method}' which is deprecated. Use 'tools/call'.`,
-        );
-        sendResponse({
-          jsonrpc: '2.0',
-          id: String(request.id),
-          error: {
-            code: -32601,
-            message: `Method not implemented: ${request.method}. Use tools/call.`,
-          },
-        });
-    }
-  } catch (err: any) {
-    debugLog(0, `Parse error or other top-level error: ${err.message || String(err)}`, err);
-    sendResponse({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
-  }
-});
+// console.error(
+//   `MCP stdio server CWD (Current Working Directory): ${serverCwd}. Note: Actual memory bank paths are determined by 'init-memory-bank' calls per repository/branch.`,
+// );
 
 process.on('SIGINT', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));
 
 // console.log('MCP_STDIO_SERVER_READY_FOR_TESTING'); // Removed to avoid non-JSON output on stdout
+
+import packageJson from '../package.json';
+
+// Simple session store (example - replace with a more robust solution if needed)
+const sessionStore = new Map<
+  string,
+  { clientProjectRoot?: string; repository?: string; branch?: string }
+>();
+
+// Helper function to derive schema name (e.g., init-memory-bank -> InitMemoryBankInputSchema)
+function getSchemaKeyForTool(toolName: string): keyof typeof toolSchemas | undefined {
+  // Special handling for algorithm tools with compound words
+  const specialCases: Record<string, string> = {
+    pagerank: 'PageRank',
+    'k-core-decomposition': 'KCoreDecomposition',
+    'louvain-community-detection': 'LouvainCommunityDetection',
+    'strongly-connected-components': 'StronglyConnectedComponents',
+    'weakly-connected-components': 'WeaklyConnectedComponents',
+    'shortest-path': 'ShortestPath',
+  };
+
+  let pascalCaseName: string;
+  if (specialCases[toolName]) {
+    pascalCaseName = specialCases[toolName];
+  } else {
+    pascalCaseName = toolName
+      .split('-')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join('');
+  }
+
+  const schemaKey = `${pascalCaseName}InputSchema`;
+
+  if (schemaKey in toolSchemas) {
+    return schemaKey as keyof typeof toolSchemas;
+  }
+  return undefined;
+}
+
+async function main() {
+  console.error('[MCP Stdio SDK Server] Initializing...');
+  // Set up server-wide logger
+  const serverLogger = console; // Simple console logger for now
+
+  // Dummy McpContext for global MemoryService initialization
+  // This is a workaround for MemoryService.getInstance expecting a full context.
+  const dummySendNotification = async (_notification: any) => {
+    serverLogger.warn(
+      '[DummyContext] sendNotification called. This should not happen during global MemoryService init.',
+    );
+  };
+  const dummySendRequest = async <U extends z.ZodType<object>>(
+    _request: any,
+    _resultSchema: U,
+  ): Promise<z.infer<U>> => {
+    serverLogger.warn(
+      '[DummyContext] sendRequest called. This should not happen during global MemoryService init.',
+    );
+    throw new Error('dummySendRequest should not be called');
+  };
+
+  const globalMemoryServiceInitContext: any = {
+    logger: serverLogger,
+    session: {}, // Global services don't belong to a specific session initially
+    sendProgress: async (progress: McpProgressNotification) => {
+      serverLogger.warn(
+        '[MemoryService fallback sendProgress]: This should ideally not be used directly for request-specific progress.',
+        progress,
+      );
+    },
+    // Required by RequestHandlerExtra
+    signal: new AbortController().signal, // No real cancellation for global init
+    requestId: 'global-memory-service-init' as RequestId, // Placeholder RequestId
+    sendNotification: dummySendNotification,
+    sendRequest: dummySendRequest,
+    // This is the tricky part for getInstance. We pass null initially.
+    // MemoryService constructor should be robust enough or this needs rethinking.
+    memoryService: null as any, // Will be replaced by the actual instance
+  };
+
+  let memoryService: MemoryService;
+  try {
+    serverLogger.info('[MCP Stdio SDK Server] Attempting to get MemoryService instance...');
+    memoryService = await MemoryService.getInstance(globalMemoryServiceInitContext);
+    serverLogger.info('[MCP Stdio SDK Server] Successfully got MemoryService instance.');
+    // Now, if the global context is stored or used by other parts of MemoryService,
+    // we could potentially update its memoryService field, though this is awkward.
+    (globalMemoryServiceInitContext as any).memoryService = memoryService; // Update the dummy context
+    serverLogger.info(
+      '[MCP Stdio SDK Server] Patched globalMemoryServiceInitContext with memoryService instance.',
+    );
+  } catch (error) {
+    serverLogger.error(
+      '[MCP Stdio SDK Server] CRITICAL ERROR during global MemoryService.getInstance():',
+      error,
+    );
+    process.exit(1); // Exit if global service setup fails
+  }
+
+  const serverInfo = {
+    name: packageJson.name,
+    version: packageJson.version,
+    // Add other server info if needed
+  };
+
+  const mcpServer = new McpServer(serverInfo, {
+    capabilities: {
+      tools: {}, // SDK should handle tools/list if this is true or an object
+    },
+  });
+
+  // Register each tool with the server
+  for (const [toolName, actualToolHandler] of Object.entries(toolHandlers)) {
+    const schemaKey = getSchemaKeyForTool(toolName);
+    const defaultSchema = z.object({});
+    const currentInputSchema =
+      schemaKey && toolSchemas[schemaKey] ? toolSchemas[schemaKey] : defaultSchema; // Default to empty schema if not found
+
+    let schemaForSdk: z.ZodRawShape | z.ZodTypeAny = {}; // Default to empty shape for no-input tools
+    if (currentInputSchema instanceof ZodObject) {
+      schemaForSdk = (currentInputSchema as AnyZodObject).shape;
+    }
+
+    const isDefaultSchema = !schemaKey || currentInputSchema === defaultSchema;
+    if (isDefaultSchema && schemaKey) {
+      serverLogger.warn(
+        `[Server Setup] No specific input schema found for tool: ${toolName} (key: ${schemaKey}). Using default empty schema.`,
+      );
+    } else if (!schemaKey && currentInputSchema === z.object({})) {
+      serverLogger.info(
+        `[Server Setup] Tool ${toolName} uses default empty schema (no specific schema key found).`,
+      );
+    }
+
+    // DEBUG: Special logging for get-context
+    if (toolName === 'get-context') {
+      serverLogger.info(`[DEBUG get-context] schemaKey: ${schemaKey}`);
+      serverLogger.info(`[DEBUG get-context] currentInputSchema: ${currentInputSchema}`);
+      serverLogger.info(
+        `[DEBUG get-context] schemaForSdk: ${JSON.stringify(schemaForSdk, null, 2)}`,
+      );
+      serverLogger.info(`[DEBUG get-context] isDefaultSchema: ${isDefaultSchema}`);
+      serverLogger.info(
+        `[DEBUG get-context] Available schemas: ${Object.keys(toolSchemas).join(', ')}`,
+      );
+    }
+
+    mcpServer.tool(
+      toolName,
+      schemaForSdk as any, // Cast to any to avoid deep type recursion
+      (async (
+        sdkProvidedParams: any, // Parameters parsed by SDK based on currentInputSchema
+        sdkContext: any,
+      ) => {
+        console.log(`[DEBUG] MCP Stdio Server tool handler for ${toolName} ENTERED`);
+        console.error(
+          `[Tool: ${toolName}] Received sdkProvidedParams (parsed by SDK):`,
+          JSON.stringify(sdkProvidedParams, null, 2),
+        );
+        // console.error(`[Tool: ${toolName}] Received full sdkContext from SDK:`, JSON.stringify(sdkContext, null, 2)); // Too verbose usually
+
+        // DEBUG: Special logging for get-context
+        if (toolName === 'get-context') {
+          console.error(
+            `[DEBUG get-context wrapper] About to parse params and build enrichedContext`,
+          );
+        }
+
+        try {
+          // sdkProvidedParams are ALREADY parsed by the SDK according to currentInputSchema.
+          // The actualToolHandler might re-parse them if its internal logic uses *.parse(params)
+          // This is a temporary redundancy to align with existing toolHandlers structure.
+          const validatedParams = sdkProvidedParams;
+
+          const sessionId = sdkContext?.sessionId || 'default-e2e-session-fallback';
+          if (!sdkContext?.sessionId) {
+            serverLogger.warn(
+              `[Tool: ${toolName}] sdkContext.sessionId was undefined. Using fallback: ${sessionId}`,
+            );
+          }
+
+          let currentSessionData = sessionStore.get(sessionId);
+          if (!currentSessionData) {
+            serverLogger.warn(
+              `[Tool: ${toolName}] No session data found for sessionId: ${sessionId}. Initializing new session data.`,
+            );
+            currentSessionData = {
+              clientProjectRoot: undefined,
+              repository: undefined,
+              branch: undefined,
+            };
+          }
+
+          if (
+            toolName === 'init-memory-bank' &&
+            validatedParams &&
+            typeof validatedParams === 'object'
+          ) {
+            const params = validatedParams as z.infer<typeof toolSchemas.InitMemoryBankInputSchema>;
+            if (!currentSessionData) {
+              currentSessionData = {
+                clientProjectRoot: undefined,
+                repository: undefined,
+                branch: undefined,
+              };
+            }
+            if (params.clientProjectRoot) {
+              currentSessionData.clientProjectRoot = params.clientProjectRoot;
+            }
+            if (params.repository) {
+              currentSessionData.repository = params.repository;
+            }
+            if (params.branch) {
+              currentSessionData.branch = params.branch;
+            }
+            serverLogger.info(
+              `[Tool: init-memory-bank] Attempting to set session data for ${sessionId}: CPR=${params.clientProjectRoot}, Repo=${params.repository}, Branch=${params.branch}`,
+            );
+          }
+          if (currentSessionData) {
+            sessionStore.set(sessionId, currentSessionData);
+          }
+
+          const enrichedContext: any = {
+            ...sdkContext,
+            sessionId: sessionId,
+            session: currentSessionData || {},
+            logger: serverLogger,
+            sendProgress: async (progressData: McpProgressNotification) => {
+              serverLogger.info(`[Tool: ${toolName}] Sending Progress:`, progressData);
+              try {
+                const token =
+                  (validatedParams as any)?._meta?.progressToken || sdkContext.requestId;
+                const notificationParams: any = {
+                  progressToken: token,
+                  progress:
+                    progressData.percent !== undefined ? progressData.percent / 100 : undefined,
+                  message: progressData.message,
+                  data: {
+                    status: progressData.status,
+                    isFinal: progressData.isFinal,
+                    toolName: progressData.toolName || toolName,
+                    originalData: progressData.data,
+                    error: progressData.error,
+                  },
+                };
+                Object.keys(notificationParams.data).forEach((key) => {
+                  if (notificationParams.data[key] === undefined) {
+                    delete notificationParams.data[key];
+                  }
+                });
+                if (Object.keys(notificationParams.data).length === 0) {
+                  delete notificationParams.data;
+                }
+                if (notificationParams.progress === undefined) {
+                  delete notificationParams.progress;
+                }
+                if (notificationParams.message === undefined) {
+                  delete notificationParams.message;
+                }
+                await sdkContext.sendNotification({
+                  method: 'notifications/progress',
+                  params: notificationParams,
+                });
+                serverLogger.info(`[Tool: ${toolName}] Progress sent successfully.`);
+              } catch (e: any) {
+                serverLogger.error(
+                  `[Tool: ${toolName}] Failed to send progress notification: ${e.message}`,
+                  e,
+                );
+              }
+            },
+            memoryService: memoryService,
+          };
+
+          // Call the original tool handler from tool-handlers.ts
+          // It expects (params, enrichedContext, memoryService)
+          // We pass sdkProvidedParams as 'params' (already parsed by SDK if schema matched)
+
+          // DEBUG: Special logging for get-context
+          if (toolName === 'get-context') {
+            console.error(`[DEBUG get-context wrapper] About to call actualToolHandler`, {
+              hasActualToolHandler: !!actualToolHandler,
+              enrichedContextKeys: Object.keys(enrichedContext),
+              hasMemoryService: !!memoryService,
+            });
+          }
+
+          const result = await actualToolHandler(sdkProvidedParams, enrichedContext, memoryService);
+
+          // DEBUG: Special logging for get-context
+          if (toolName === 'get-context') {
+            console.error(`[DEBUG get-context wrapper] actualToolHandler returned:`, result);
+            console.error(`[DEBUG get-context wrapper] Converting to MCP CallToolResult format...`);
+          }
+
+          // Convert raw result to MCP CallToolResult format
+          const mcpResult = {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+
+          // DEBUG: Special logging for get-context
+          if (toolName === 'get-context') {
+            console.error(`[DEBUG get-context wrapper] Returning MCP-formatted result:`, mcpResult);
+          }
+
+          return mcpResult;
+        } catch (error) {
+          // DEBUG: Special logging for get-context
+          if (toolName === 'get-context') {
+            console.error(`[DEBUG get-context wrapper] Exception caught:`, error);
+          }
+
+          if (error instanceof z.ZodError) {
+            // This error could be from the SDK's parsing (if sdkProvidedParams was a direct forward)
+            // or from within actualToolHandler if it re-parses.
+            serverLogger.error(
+              `[Tool: ${toolName}] Zod validation error (possibly from SDK parsing or internal handler): ${JSON.stringify(error.issues)}`,
+            );
+            throw error; // Let SDK format it
+          }
+          serverLogger.error(`[Tool: ${toolName}] Error during execution:`, error);
+          throw error; // Let SDK format it
+        }
+      }) as any,
+    );
+  }
+
+  const transport = new StdioServerTransport();
+  await mcpServer.connect(transport);
+
+  console.info('MCP Server (stdio) initialized and listening...'); // Use console for this global message
+}
+
+main().catch((e) => {
+  const logger = console;
+  logger.error('Failed to start MCP server:', e);
+  process.exit(1);
+});

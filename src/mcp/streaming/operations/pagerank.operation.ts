@@ -35,44 +35,43 @@ export class PageRankOperation {
         });
       }
 
-      const pageRankResults = await memoryService.pageRank(
-        clientProjectRoot,
-        repositoryName,
-        branch,
-        dampingFactor,
-        maxIterations,
-        /* tolerance */ undefined,
-        /* normalizeInitial */ undefined,
-      );
+      const params: any = {
+        repository: repositoryName,
+        branch: branch,
+        projectedGraphName: projectedGraphName,
+        nodeTableNames: nodeTableNames,
+        relationshipTableNames: relationshipTableNames,
+      };
+      if (dampingFactor !== undefined) {
+        params.dampingFactor = dampingFactor;
+      }
+      if (maxIterations !== undefined) {
+        params.maxIterations = maxIterations;
+      }
 
-      // console.log(
-      //   'PageRankOperation: pageRankResults from service:',
-      //   JSON.stringify(pageRankResults, null, 2),
-      // );
+      const pageRankOutput = await memoryService.pageRank(clientProjectRoot, params);
+
+      const ranks = pageRankOutput?.results?.ranks || [];
+      const resultStatus = pageRankOutput?.status || 'error';
 
       const resultPayload = {
-        status: 'complete',
+        status: resultStatus,
         clientProjectRoot,
         repository: repositoryName,
         branch,
         projectedGraphName,
-        results: pageRankResults, // This will contain the final ranks and any iteration info
+        results: {
+          ranks: ranks,
+        },
+        message: pageRankOutput?.message,
       };
 
       if (progressHandler) {
         progressHandler.progress({
           status: 'in_progress',
-          message: `PageRank calculation processing for ${projectedGraphName}...`,
-          // Include summary from pageRankResults if available, e.g., iterations completed
-          iterationsCompleted: pageRankResults?.iterations || maxIterations || 'unknown',
-          // Ranks here would be the final ranks, consider if a sample is useful for in-progress
+          message: `PageRank calculation processing for ${projectedGraphName}. Ranks found: ${ranks.length}.`,
+          ranksCount: ranks.length,
         });
-
-        // const ranksForProgress = pageRankResults?.ranks || [];
-        // console.log(
-        //   'PageRankOperation: ranks being sent in final progress:',
-        //   JSON.stringify(ranksForProgress, null, 2),
-        // );
 
         // Send final progress event
         progressHandler.progress({ ...resultPayload, isFinal: true });
@@ -82,7 +81,10 @@ export class PageRankOperation {
         return null; // Indicate response was sent via progressHandler
       }
 
-      // If no progressHandler, return the result directly
+      if (resultStatus === 'error' && !progressHandler) {
+        throw new Error(resultPayload.message || 'PageRank failed in operation.');
+      }
+
       return resultPayload;
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : String(error);

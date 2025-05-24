@@ -4,11 +4,10 @@ A TypeScript implementation of a distributed memory bank as an MCP (Model Contex
 
 ## Why it's not using the official TypeScript MCP SDK?
 
-The official TypeScript MCP SDK is a great project and we will use it in the future. However, we are using a custom implementation for the following reasons:
-
-- To learn the intricacies of the MCP Protocol
-- To have a more flexible and custom implementation
-- Wanted to start small with CLI and HTTP server implementation and then add more features later
+This project has begun migrating to the official TypeScript MCP SDK.
+The STDIN/STDOUT based server (`src/mcp-stdio-server.ts`) now utilizes the SDK directly.
+This allows leveraging the SDK's features and ensures better compatibility with MCP clients.
+Some components, like the HTTP streaming server, may still use custom MCP handling logic while sharing core tool functionalities.
 
 ## Features
 
@@ -16,12 +15,11 @@ The official TypeScript MCP SDK is a great project and we will use it in the fut
 - **Distributed Graph Structure** - Follows the advanced memory bank specification using a KùzuDB graph.
 - **Repository & Branch Awareness** - All operations are contextualized by repository name and branch, with entities uniquely identified by a composite key (`repositoryName:branchName:itemId`).
 - **Asynchronous Operations** - Uses async/await for better performance
-- **Multiple Access Interfaces** - Access via a RESTful HTTP API, a CLI, and multiple MCP server implementations.
+- **Multiple Access Interfaces** - Access via a CLI, and multiple MCP server implementations.
 - **KùzuDB Backend** - Utilizes KùzuDB for graph-based memory storage and querying.
 - **Fully MCP Compliant** - All tools follow the Model Context Protocol for client integration.
 - **Modular Architecture** - Clear separation between MCP servers, service layer, memory operations, and repositories.
 - **MCP/JSON-RPC Communication** - Supports:
-  - HTTP with per-tool batch-oriented endpoints (`src/mcp/server.ts` via `src/app.ts` at `/mcp/tools/...`).
   - HTTP Streaming (SSE) via a unified `/mcp` endpoint for progressive results (`src/mcp-httpstream-server.ts`).
   - Stdio for direct IDE/Agent integration, supporting both batch and progressive results (`src/mcp-stdio-server.ts`).
 - **Progressive Results Streaming** - Supports `tools/progress` notifications for long-running graph operations over Stdio and HTTP Streaming.
@@ -58,8 +56,6 @@ Create a `.env` file in the root directory with the following variables:
 DB_FILENAME="memory-bank.kuzu" 
 
 # Server Configuration
-# Main server port
-PORT=3000
 # HTTP Stream server port (should be different from main port)
 HTTP_STREAM_PORT=3001
 # Host to bind server to
@@ -74,7 +70,7 @@ Add the following to your IDEs MCP configuration:
 ```json
 {
   "mcpServers": {
-    "KuzuMemo-MCP": {
+    "KuzuMem-MCP": {
       "command": "npx",
       "args": [
         "-y",
@@ -82,12 +78,9 @@ Add the following to your IDEs MCP configuration:
         "/Users/jokkeruokolainen/Documents/Solita/GenAI/Azure/MCP/advanced-memory-tool/src/mcp-stdio-server.ts" // or "src/mcp-httpstream-server.ts" if your IDE supports SSE
       ],
       "env": {
-        "PORT": "3000",
         "HOST": "localhost",
         "DB_FILENAME": "memory-bank.kuzu",
-        "HTTP_STREAM_PORT": "3001",
-        "PROJECT_ROOT_FOR_MAIN_SERVER": "./memory-bank",
-        "HTTP_STREAM_PROJECT_ROOT": "./memory-bank"
+        "HTTP_STREAM_PORT": "3001"
       },
       "protocol": "stdio" // or "sse"
     }
@@ -100,16 +93,6 @@ Add the following to your IDEs MCP configuration:
 ## Usage
 
 ### Starting the Servers for local testing
-
-- **Main HTTP Server (for REST API & Batch MCP via per-tool endpoints):** (`src/app.ts` which uses `src/mcp/server.ts` for `/mcp/tools/...`)
-
-  ```bash
-  # Make sure memory-bank directory exists
-  mkdir -p ./memory-bank
-  
-  # Start the main server
-  npm start
-  ```
 
 - **HTTP Streaming MCP Server (for MCP clients wanting SSE via unified `/mcp`):** (`src/mcp-httpstream-server.ts`)
 
@@ -147,7 +130,6 @@ All server implementations support these MCP capabilities:
 - `initialize` - Protocol handshake and capability discovery.
 - `tools/list` - Discovery of available tools with full schema definitions.
 - `tools/call` (for stdio and the http-stream unified `/mcp` endpoint) - Execution of any listed tool, with support for `tools/progress` streaming from graph operations.
-- Dedicated HTTP POST endpoints for each tool (e.g., `/mcp/tools/<tool-name>`) in the main HTTP server (`src/app.ts` via `src/mcp/server.ts`) which are batch-oriented.
 
 **Common Tool Parameters (in JSON request body)**:
 
@@ -206,9 +188,8 @@ A new layer introduced to encapsulate specific business logic for groups of oper
   - `tool-execution.service.ts`: Orchestrates tool calls with progress handling.
   - `operations/`: Directory containing Operation Classes for streamable tools.
 - **Server Implementations**:
-  - `src/mcp/server.ts` (`MemoryMcpServer`): Provides MCP via Express.js with dedicated batch-oriented POST endpoints per tool (typically mounted under `/mcp/tools/...` by `src/app.ts`).
   - `src/mcp-httpstream-server.ts`: Standalone HTTP server with a unified `/mcp` endpoint supporting Server-Sent Events (SSE) for streaming `tools/progress` and final responses.
-  - `src/mcp-stdio-server.ts`: Stdio-based server supporting both batch and streaming (`tools/progress`) responses for `tools/call`.
+  - `src/mcp-stdio-server.ts`: Stdio-based server using the `@modelcontextprotocol/sdk`, supporting both batch and streaming (`tools/progress`) responses for `tools/call`.
 - **Types(`src/mcp/types/`)**: Shared MCP type definitions (e.g., `McpTool`, `ToolHandler`).
 
 ### CLI Layer
@@ -239,7 +220,7 @@ Feel free to contribute to the project.
 - **Refine Graph Algorithm Streaming**: Further refactor `MemoryService` and Kùzu calls within Operation Classes to provide more granular progress for algorithms where KùzuDB allows iterative result yielding.
 - **Add Full-Text Search (FTS) Capabilities** - Planned implementation to enable efficient keyword-based search across all memory items using KùzuDB's FTS extension. Especially good when tags are implemented.
 - **Vector Embeddings Support** - Planned implementation; would enable semantic similarity search and NLP-based memory retrieval using KùzuDB's vector capabilities. Currently blocked due to KuzuDB Vector columns being immutable. Updating memories wouldn't update the vector embeddings. Making the feature a little redundant.
-- **Official TypeScript MCP SDK Migration** - Consider migrating to the official TypeScript MCP SDK to benefit from the latest features and community support, now that foundational understanding of the protocol is established.
+- **Official TypeScript MCP SDK Migration** - The project has started migrating to the official TypeScript MCP SDK, with the stdio server already using it. Further adoption across other components (like the HTTP streaming server) can be considered.
 - **Graph Schema Evolution** - Extending the graph schema to support more complex memory types and relationships. Filenames, tags etc.
 
 ## Target Graph Schema

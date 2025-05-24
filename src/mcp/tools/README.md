@@ -1,6 +1,6 @@
 ## Streaming Support for Graph Operations
 
-The Advanced Memory Bank MCP server supports progressive results for several long-running graph operations via the `tools/progress` notification channel. This allows clients to receive updates as the operation executes, rather than waiting for the complete result.
+The KuzuMem-MCP server supports progressive results for several long-running graph operations via the `tools/progress` notification channel. This allows clients to receive updates as the operation executes, rather than waiting for the complete result.
 
 The following tools support progressive results:
 

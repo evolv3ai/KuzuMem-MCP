@@ -40,10 +40,12 @@ export class ComponentDependentsOperation {
       // Placeholder for actual logic that might involve complex graph traversal and path reconstruction
       // which would be the source of multiple progressHandler.progress() calls.
       const allDependents = await memoryService.getComponentDependents(
+        context,
         clientProjectRoot,
         repositoryName,
         branch,
         componentId,
+        Promise.resolve([]),
       );
 
       const resultPayload = {
@@ -52,7 +54,7 @@ export class ComponentDependentsOperation {
         repository: repositoryName,
         branch,
         componentId,
-        totalDependents: allDependents.length,
+        totalDependents: allDependents,
         dependents: allDependents,
       };
 
@@ -60,8 +62,8 @@ export class ComponentDependentsOperation {
         // Send in_progress (could be chunked if data is large)
         progressHandler.progress({
           status: 'in_progress',
-          message: `Retrieved ${allDependents.length} dependent(s) for ${componentId}`,
-          count: allDependents.length,
+          message: `Retrieved ${allDependents} dependent(s) for ${componentId}`,
+          count: allDependents,
           dependents: allDependents, // Or a chunk of it
         });
 

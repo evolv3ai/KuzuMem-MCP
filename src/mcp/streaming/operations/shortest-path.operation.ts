@@ -17,22 +17,25 @@ export class ShortestPathOperation {
     relationshipTableNames: string[],
     startNodeId: string,
     endNodeId: string,
-    params: any, // Keep generic params for potential future Kuzu options
-    memoryService: MemoryService,
+    additionalKuzuParams?: any, // Renamed for clarity, for options like costProperty
+    memoryService?: MemoryService,
     progressHandler?: ProgressHandler,
   ): Promise<any> {
-    try {
-      if (
-        !repositoryName ||
-        !projectedGraphName ||
-        !nodeTableNames ||
-        !relationshipTableNames ||
-        !startNodeId ||
-        !endNodeId
-      ) {
-        return { error: 'Missing required parameters for Shortest Path' };
-      }
+    if (!memoryService) {
+      return { error: 'MemoryService instance is required for ShortestPathOperation' };
+    }
+    if (
+      !repositoryName ||
+      !projectedGraphName ||
+      !nodeTableNames ||
+      !relationshipTableNames ||
+      !startNodeId ||
+      !endNodeId
+    ) {
+      return { error: 'Missing required parameters for Shortest Path' };
+    }
 
+    try {
       if (progressHandler) {
         progressHandler.progress({
           status: 'initializing',
@@ -40,29 +43,31 @@ export class ShortestPathOperation {
         });
       }
 
-      const enrichedParams = {
-        ...params,
-        projectedGraphName,
-        nodeTableNames,
-        relationshipTableNames,
+      const paramsForService = {
+        repository: repositoryName,
+        branch: branch,
+        projectedGraphName: projectedGraphName,
+        nodeTableNames: nodeTableNames,
+        relationshipTableNames: relationshipTableNames,
+        startNodeId: startNodeId,
+        endNodeId: endNodeId,
+        ...(additionalKuzuParams || {}), // Spread any additional Kuzu options
       };
 
-      const shortestPathResult = await memoryService.shortestPath(
+      const shortestPathOutput = await memoryService.shortestPath(
         clientProjectRoot,
-        repositoryName,
-        branch,
-        startNodeId,
-        endNodeId,
-        enrichedParams,
+        paramsForService,
       );
 
-      // Determine pathFound based on the result
-      const pathFound = !!(shortestPathResult?.path && shortestPathResult.path.length > 0);
-      const path = shortestPathResult?.path || [];
-      const length = shortestPathResult?.length || 0;
+      const pathFound = shortestPathOutput?.results?.pathFound || false;
+      const path = shortestPathOutput?.results?.path || [];
+      // Kuzu's shortest path op might not directly return length, it's often len(path)-1 or based on cost.
+      // For now, assume path is an array of nodes, so length can be path.length if pathFound.
+      const pathLength = pathFound ? path.length : 0;
+      const resultStatus = shortestPathOutput?.status || 'error';
 
       const resultPayload = {
-        status: 'complete',
+        status: resultStatus,
         clientProjectRoot,
         repository: repositoryName,
         branch,
@@ -72,22 +77,21 @@ export class ShortestPathOperation {
         results: {
           pathFound,
           path,
-          length,
-          error: shortestPathResult?.error || null, // Include error if present in Kuzu result
+          length: pathLength, // Use calculated/derived length
         },
+        message: shortestPathOutput?.message,
       };
 
       if (progressHandler) {
-        // Send in_progress with available path information
         progressHandler.progress({
           status: 'in_progress',
-          message: `Shortest path search processing for ${projectedGraphName}...`,
+          message: `Shortest path search processing for ${projectedGraphName}... Path found: ${pathFound}. Length: ${pathLength}`,
           pathFound: pathFound,
           path: path,
-          length: length,
+          length: pathLength,
         });
 
-        // Send final progress event (which is effectively the same data now)
+        // Send final progress event
         progressHandler.progress({ ...resultPayload, isFinal: true });
 
         // Send the final JSON-RPC response via progressHandler
@@ -95,7 +99,10 @@ export class ShortestPathOperation {
         return null; // Indicate response was sent via progressHandler
       }
 
-      // If no progressHandler, return the result directly
+      if (resultStatus === 'error' && !progressHandler) {
+        throw new Error(resultPayload.message || 'Shortest path search failed in operation.');
+      }
+
       return resultPayload;
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : String(error);

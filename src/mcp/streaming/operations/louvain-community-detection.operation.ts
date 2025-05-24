@@ -19,43 +19,54 @@ export class LouvainCommunityDetectionOperation {
     progressHandler?: ProgressHandler,
   ): Promise<any> {
     try {
-      if (!repositoryName) {
-        return { error: 'Missing repository name parameter for Louvain Community Detection' };
+      if (!repositoryName || !projectedGraphName || !nodeTableNames || !relationshipTableNames) {
+        return { error: 'Missing required parameters for Louvain Community Detection' };
       }
 
       if (progressHandler) {
         progressHandler.progress({
           status: 'initializing',
-          message: `Starting Louvain Community Detection for ${repositoryName}:${branch} (Project: ${clientProjectRoot})`,
+          message: `Starting Louvain Community Detection for graph ${projectedGraphName} in ${repositoryName}:${branch} (Project: ${clientProjectRoot})`,
         });
       }
 
+      const params = {
+        repository: repositoryName,
+        branch: branch,
+        projectedGraphName: projectedGraphName,
+        nodeTableNames: nodeTableNames,
+        relationshipTableNames: relationshipTableNames,
+      };
+
       // Call the MemoryService's louvainCommunityDetection method with the correct signature
-      const louvainResults = await memoryService.louvainCommunityDetection(
+      const louvainOutput = await memoryService.louvainCommunityDetection(
         clientProjectRoot,
-        repositoryName,
-        branch,
+        params,
       );
 
+      const communities = louvainOutput?.results?.communities || [];
+      const modularity = louvainOutput?.results?.modularity ?? null;
+      const resultStatus = louvainOutput?.status || 'error';
+
       const resultPayload = {
-        status: 'complete',
+        status: resultStatus,
         clientProjectRoot,
         repository: repositoryName,
         branch,
         projectedGraphName,
         results: {
-          communities: louvainResults?.communities || [],
-          modularity: louvainResults?.modularity ?? null,
+          communities: communities,
+          modularity: modularity,
         },
+        message: louvainOutput?.message,
       };
 
       if (progressHandler) {
-        const communities = louvainResults?.communities || [];
         progressHandler.progress({
           status: 'in_progress',
-          message: `Louvain Community Detection processing for ${repositoryName}/${branch}.`,
+          message: `Louvain Community Detection processing for ${repositoryName}/${branch}. Communities found: ${communities.length}. Modularity: ${modularity}.`,
           communitiesCount: communities.length,
-          modularity: louvainResults?.modularity ?? null,
+          modularity: modularity,
         });
 
         // Send final progress event
@@ -66,7 +77,13 @@ export class LouvainCommunityDetectionOperation {
         return null; // Indicate response was sent via progressHandler
       }
 
-      // If no progressHandler, return the result directly
+      // If status is error and no progress handler, throw or return error structure
+      if (resultStatus === 'error' && !progressHandler) {
+        throw new Error(
+          resultPayload.message || 'Louvain Community Detection failed in operation.',
+        );
+      }
+
       return resultPayload;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

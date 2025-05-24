@@ -20,8 +20,8 @@ export class KCoreDecompositionOperation {
     progressHandler?: ProgressHandler,
   ): Promise<any> {
     try {
-      if (!repositoryName) {
-        return { error: 'Missing repository name parameter for K-Core Decomposition' };
+      if (!repositoryName || !projectedGraphName || !nodeTableNames || !relationshipTableNames) {
+        return { error: 'Missing required parameters for K-Core Decomposition' };
       }
 
       if (progressHandler) {
@@ -32,30 +32,37 @@ export class KCoreDecompositionOperation {
       }
 
       // Call the MemoryService's kCoreDecomposition method with the correct signature
-      const kCoreResults = await memoryService.kCoreDecomposition(
-        clientProjectRoot,
-        repositoryName,
-        branch,
-        k,
-      );
+      const kCoreOutput = await memoryService.kCoreDecomposition(clientProjectRoot, {
+        repository: repositoryName,
+        branch: branch,
+        projectedGraphName: projectedGraphName,
+        nodeTableNames: nodeTableNames,
+        relationshipTableNames: relationshipTableNames,
+        k: k,
+      });
+
+      // Ensure kCoreOutput and kCoreOutput.results are defined before accessing components
+      const components = kCoreOutput?.results?.components || [];
+      const resultStatus = kCoreOutput?.status || 'error'; // Default to error if status is not present
 
       const resultPayload = {
-        status: 'complete',
+        status: resultStatus, // Use status from kCoreOutput
         clientProjectRoot,
         repository: repositoryName,
         branch,
         projectedGraphName,
         results: {
-          k: k,
-          components: kCoreResults?.cores || [],
+          k: k, // k is passed in, so it's known
+          components: components,
         },
+        message: kCoreOutput?.message, // Include message from output if available
       };
 
       if (progressHandler) {
         progressHandler.progress({
           status: 'in_progress',
-          message: `K-Core Decomposition processing for ${repositoryName}/${branch}.`,
-          componentsCount: kCoreResults?.cores?.length || 0,
+          message: `K-Core Decomposition processing for ${repositoryName}/${branch}. Components found: ${components.length}.`,
+          componentsCount: components.length,
         });
 
         // Send final progress event
@@ -63,7 +70,12 @@ export class KCoreDecompositionOperation {
 
         // Send the final JSON-RPC response via progressHandler
         progressHandler.sendFinalResponse(resultPayload, false);
-        return null;
+      }
+
+      // If status is error and no progress handler, throw or return error structure
+      if (resultStatus === 'error' && !progressHandler) {
+        // Prefer throwing an error that the main tool handler can catch and format
+        throw new Error(resultPayload.message || 'K-Core Decomposition failed in operation.');
       }
 
       return resultPayload;

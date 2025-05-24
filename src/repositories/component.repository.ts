@@ -1,6 +1,7 @@
-import { Component, Context, Decision, Rule, ComponentStatus, ComponentInput } from '../types';
+import { Component, Context, Decision, ComponentStatus, ComponentInput } from '../types';
 import { KuzuDBClient } from '../db/kuzu';
 import { formatGraphUniqueId } from '../utils/id.utils';
+import { RepositoryRepository } from './repository.repository';
 
 /**
  * Repository for Component, using KuzuDB and Cypher queries.
@@ -8,36 +9,62 @@ import { formatGraphUniqueId } from '../utils/id.utils';
  */
 export class ComponentRepository {
   private kuzuClient: KuzuDBClient;
+  private repositoryRepo: RepositoryRepository;
+
+  // Helper to escape strings for Cypher queries to prevent injection
+  private escapeStr(value: string): string {
+    if (typeof value !== 'string') {
+      return ''; // Or throw an error, depending on desired strictness
+    }
+    // Basic escape: replace single quotes. Kuzu might have more specific needs.
+    return value.replace(/'/g, "\\'");
+  }
 
   /**
-   * Constructor now public and requires a KuzuDBClient.
+   * Constructor now public and requires a KuzuDBClient and RepositoryRepository.
    * @param kuzuClient An initialized KuzuDBClient instance.
+   * @param repositoryRepo An initialized RepositoryRepository instance.
    */
-  public constructor(kuzuClient: KuzuDBClient) {
+  public constructor(kuzuClient: KuzuDBClient, repositoryRepo: RepositoryRepository) {
     if (!kuzuClient) {
       throw new Error('ComponentRepository requires an initialized KuzuDBClient instance.');
     }
+    if (!repositoryRepo) {
+      throw new Error('ComponentRepository requires an initialized RepositoryRepository instance.');
+    }
     this.kuzuClient = kuzuClient;
+    this.repositoryRepo = repositoryRepo;
   }
 
-  private escapeStr(value: any): string {
-    if (value === undefined || value === null) {
-      return 'null';
-    }
-    return String(value).replace(/'/g, "\\'").replace(/\\/g, '\\\\');
-  }
-
-  private escapeJsonProp(value: any): string {
-    if (value === undefined || value === null) {
-      return 'null';
-    }
-    try {
-      const jsonString = JSON.stringify(value);
-      return `'${this.escapeStr(jsonString)}'`;
-    } catch (e) {
-      console.error('Failed to stringify JSON for escapeJsonProp', value, e);
-      return "'null'";
-    }
+  /**
+   * Helper to format Kuzu component data to internal Component type
+   * @param kuzuRowData The raw data from KuzuDB
+   * @param repositoryName The logical name of the repository
+   * @param branch The branch of the component
+   * @returns A formatted Component object
+   */
+  private formatKuzuRowToComponent(
+    kuzuRowData: any,
+    repositoryName: string,
+    branch: string,
+  ): Component {
+    const rawComponent = kuzuRowData.properties || kuzuRowData;
+    const logicalId = rawComponent.id?.toString();
+    return {
+      id: logicalId,
+      name: rawComponent.name,
+      kind: rawComponent.kind,
+      status: rawComponent.status,
+      branch: rawComponent.branch,
+      repository: `${repositoryName}:${branch}`,
+      depends_on: Array.isArray(rawComponent.depends_on)
+        ? rawComponent.depends_on.map(String)
+        : rawComponent.depends_on
+          ? [String(rawComponent.depends_on)]
+          : [],
+      created_at: rawComponent.created_at ? new Date(rawComponent.created_at) : new Date(),
+      updated_at: rawComponent.updated_at ? new Date(rawComponent.updated_at) : new Date(),
+    } as Component;
   }
 
   /**
@@ -49,367 +76,31 @@ export class ComponentRepository {
     repositoryNodeId: string,
     componentBranch: string,
   ): Promise<Component[]> {
-    const escapedRepoNodeId = this.escapeStr(repositoryNodeId);
-    const escapedComponentBranch = this.escapeStr(componentBranch);
-
+    const logger = console; // Placeholder for actual logger
     const query = `
-      MATCH (r:Repository {id: '${escapedRepoNodeId}'})-[:HAS_COMPONENT]->(c:Component {status: 'active', branch: '${escapedComponentBranch}'}) 
+      MATCH (r:Repository {id: $repositoryNodeId})-[:HAS_COMPONENT]->(c:Component)
+      WHERE c.status = $status AND c.branch = $componentBranch 
       RETURN c ORDER BY c.name ASC
     `;
-    const result = await this.kuzuClient.executeQuery(query);
-    if (!result || typeof result.getAll !== 'function') {
-      return [];
-    }
-    const rows = await result.getAll();
-    if (!rows || rows.length === 0) {
-      return [];
-    }
-    // Ensure logical id is mapped, and graph_unique_id is not directly exposed
-    return rows.map((row: any) => {
-      const componentData = row.c ?? row['c'];
-      return {
-        ...componentData,
-        id: componentData.id,
-        graph_unique_id: undefined,
-      } as Component;
-    });
-  }
-
-  /**
-   * Creates or updates a component for a repository.
-   * Manages DEPENDS_ON relationships by clearing existing ones and creating new ones.
-   * Returns the upserted Component or null if not found
-   */
-  async upsertComponent(
-    repositoryNodeId: string,
-    component: ComponentInput,
-  ): Promise<Component | null> {
-    const repoIdParts = repositoryNodeId.split(':');
-    if (repoIdParts.length < 2) {
-      throw new Error(`Invalid repositoryNodeId format: ${repositoryNodeId}`);
-    }
-    const logicalRepositoryName = repoIdParts[0];
-
-    const componentId = String(component.id);
-    const componentBranch = String(component.branch || 'main');
-    const graphUniqueId = formatGraphUniqueId(logicalRepositoryName, componentBranch, componentId);
-    const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
-
-    const escapedName = this.escapeStr(component.name);
-    const escapedKind = this.escapeStr(component.kind);
-    const escapedStatus = this.escapeStr(component.status);
-    const nowIso = new Date().toISOString();
-    const kuzuTimestamp = nowIso.replace('T', ' ').replace('Z', '');
-    const escapedComponentId = this.escapeStr(componentId);
-    const escapedComponentBranch = this.escapeStr(componentBranch);
-    const escapedRepoNodeId = this.escapeStr(repositoryNodeId);
-
+    const params = { repositoryNodeId, status: 'active', componentBranch };
     try {
-      await this.kuzuClient.executeQuery('BEGIN TRANSACTION');
-      console.error(`DEBUG: upsertComponent - BEGAN TRANSACTION for ${graphUniqueId}`);
-
-      const upsertNodeQuery = `
-        MATCH (repo:Repository {id: '${escapedRepoNodeId}'})
-        MERGE (c:Component {graph_unique_id: '${escapedGraphUniqueId}'})
-        ON CREATE SET
-          c.id = '${escapedComponentId}', 
-          c.name = '${escapedName}', 
-          c.kind = '${escapedKind}', 
-          c.status = '${escapedStatus}', 
-          c.branch = '${escapedComponentBranch}',
-          c.created_at = timestamp('${kuzuTimestamp}'),
-          c.updated_at = timestamp('${kuzuTimestamp}')
-        ON MATCH SET 
-          c.name = '${escapedName}', 
-          c.kind = '${escapedKind}', 
-          c.status = '${escapedStatus}', 
-          c.id = '${escapedComponentId}', 
-          c.branch = '${escapedComponentBranch}', 
-          c.updated_at = timestamp('${kuzuTimestamp}')
-        MERGE (repo)-[:HAS_COMPONENT]->(c)
-      `;
-      await this.kuzuClient.executeQuery(upsertNodeQuery);
-      console.error(`DEBUG: upsertComponent - Upserted main node ${graphUniqueId}`);
-
-      const deleteDepsQuery = `
-          MATCH (c:Component {graph_unique_id: '${escapedGraphUniqueId}'})-[r:DEPENDS_ON]->()
-          DELETE r`;
-      await this.kuzuClient.executeQuery(deleteDepsQuery);
-      console.error(`DEBUG: upsertComponent - Deleted existing deps for ${graphUniqueId}`);
-
-      if (component.depends_on && component.depends_on.length > 0) {
-        for (const depId of component.depends_on) {
-          const depGraphUniqueId = formatGraphUniqueId(
-            logicalRepositoryName,
-            componentBranch,
-            depId,
-          );
-          const escapedDepGraphUniqueId = this.escapeStr(depGraphUniqueId);
-
-          const ensureDepNodeQuery = `
-              MATCH (repo:Repository {id: '${escapedRepoNodeId}'}) 
-              MERGE (dep:Component {graph_unique_id: '${escapedDepGraphUniqueId}'})
-              ON CREATE SET 
-                  dep.id = '${this.escapeStr(depId)}', 
-                  dep.branch = '${escapedComponentBranch}', 
-                  dep.name = 'Placeholder: ${this.escapeStr(depId)}', 
-                  dep.kind='Unknown', 
-                  dep.status='planned', 
-                  dep.created_at=timestamp('${kuzuTimestamp}'), 
-                  dep.updated_at=timestamp('${kuzuTimestamp}')
-              MERGE (repo)-[:HAS_COMPONENT]->(dep)`;
-          await this.kuzuClient.executeQuery(ensureDepNodeQuery);
-          console.error(
-            `DEBUG: upsertComponent - Ensured/Created dependency node: ${escapedDepGraphUniqueId}`,
-          );
-
-          const checkCQuery = `MATCH (c:Component {graph_unique_id: '${escapedGraphUniqueId}'}) RETURN c.id AS componentId`;
-          const checkDQuery = `MATCH (d:Component {graph_unique_id: '${escapedDepGraphUniqueId}'}) RETURN d.id AS depId`;
-          const cResult = await this.kuzuClient.executeQuery(checkCQuery);
-          const dResult = await this.kuzuClient.executeQuery(checkDQuery);
-          const cRows = await cResult.getAll();
-          const dRows = await dResult.getAll();
-          console.error(
-            `DEBUG: upsertComponent - Pre-CREATE check: Found parent c (${escapedGraphUniqueId})? ${cRows.length > 0}. Found dep d (${escapedDepGraphUniqueId})? ${dRows.length > 0}`,
-          );
-
-          const addDepRelQuery = `
-            MATCH (c:Component {graph_unique_id: '${escapedGraphUniqueId}'}) 
-            MATCH (dep:Component {graph_unique_id: '${escapedDepGraphUniqueId}'})
-            CREATE (c)-[r:DEPENDS_ON]->(dep) RETURN count(r)`;
-
-          console.error(
-            `DEBUG: upsertComponent - Attempting DEPENDS_ON: ${escapedGraphUniqueId} -> ${escapedDepGraphUniqueId}`,
-          );
-          const relCreateResult = await this.kuzuClient.executeQuery(addDepRelQuery);
-          const relCreateRows = await relCreateResult.getAll();
-          console.error(
-            `DEBUG: upsertComponent - Executed CREATE for DEPENDS_ON, rows returned: ${relCreateRows.length}, content: ${JSON.stringify(relCreateRows)}`,
-          );
-        }
-      }
-      await this.kuzuClient.executeQuery('COMMIT');
-      console.error(`DEBUG: upsertComponent - COMMITTED TRANSACTION for ${graphUniqueId}`);
-      return this.findByIdAndBranch(logicalRepositoryName, componentId, componentBranch);
-    } catch (error) {
-      console.error(`ERROR in upsertComponent for ${graphUniqueId}:`, error);
-      try {
-        await this.kuzuClient.executeQuery('ROLLBACK');
-        console.error(`DEBUG: upsertComponent - ROLLED BACK TRANSACTION for ${graphUniqueId}`);
-      } catch (rollbackError) {
-        console.error(
-          `CRITICAL ERROR: Failed to ROLLBACK transaction for ${graphUniqueId}:`,
-          rollbackError,
-        );
-      }
-      throw error; // Re-throw original error
-    }
-  }
-
-  /**
-   * Find a component by its logical ID and branch, within a given repository context.
-   * The repositoryId here refers to the name of the repository for ID formatting.
-   */
-  async findByIdAndBranch(
-    repositoryName: string,
-    itemId: string,
-    itemBranch: string,
-  ): Promise<Component | null> {
-    const graphUniqueId = formatGraphUniqueId(repositoryName, itemBranch, itemId);
-    const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
-
-    const query = `
-      MATCH (c:Component {graph_unique_id: '${escapedGraphUniqueId}'}) 
-      RETURN c LIMIT 1`;
-
-    const result = await this.kuzuClient.executeQuery(query);
-    if (!result || typeof result.getAll !== 'function') {
-      return null;
-    }
-    const rows = await result.getAll();
-    if (!rows || rows.length === 0) {
-      return null;
-    }
-    const componentData = rows[0].c ?? rows[0]['c'];
-    return {
-      ...componentData,
-      id: componentData.id,
-      graph_unique_id: undefined,
-    } as Component;
-  }
-
-  /**
-   * Get all upstream dependencies for a component (transitive DEPENDS_ON).
-   * All components (start and dependencies) are assumed to be within the same repositoryName and componentBranch context.
-   */
-  async getComponentDependencies(
-    repositoryName: string, // Logical name of the repository, e.g., 'my-cool-project'
-    componentId: string, // Logical ID of the starting component, e.g., 'ui-module'
-    componentBranch: string, // Branch of the starting component AND its dependencies, e.g., 'main'
-  ): Promise<Component[]> {
-    const startNodeGraphUniqueId = formatGraphUniqueId(
-      repositoryName,
-      componentBranch,
-      componentId,
-    );
-    const escapedStartNodeGraphUniqueId = this.escapeStr(startNodeGraphUniqueId);
-    const escapedComponentBranch = this.escapeStr(componentBranch); // For filtering dependencies
-    console.error(
-      `DEBUG: getComponentDependencies - Looking for deps of: ${startNodeGraphUniqueId}, branch filter: ${componentBranch}`,
-    ); // Log query params
-
-    // This query assumes that any depended-upon component (dep)
-    // will also have its graph_unique_id formatted with the same repositoryName and componentBranch.
-    const query = `
-      MATCH (c:Component {graph_unique_id: '${escapedStartNodeGraphUniqueId}'})
-      MATCH (c)-[:DEPENDS_ON]->(dep:Component)
-      WHERE dep.branch = '${escapedComponentBranch}' 
-      RETURN DISTINCT dep
-    `;
-    console.error('DEBUG: getComponentDependencies EXECUTING QUERY (direct):', query);
-    // We also need to ensure dep.id is populated from the node, and graph_unique_id is not exposed.
-    const result = await this.kuzuClient.executeQuery(query);
-    if (!result || typeof result.getAll !== 'function') {
-      return [];
-    }
-    const rows = await result.getAll();
-    if (!rows || rows.length === 0) {
-      return [];
-    }
-    return rows.map((row: any) => {
-      const depData = row.dep ?? row['dep'];
-      return {
-        ...depData,
-        id: depData.id,
-        graph_unique_id: undefined,
-      } as Component;
-    });
-  }
-
-  /**
-   * Get all downstream dependents for a component (transitive).
-   * All components are assumed to be within the same repositoryName and componentBranch context.
-   */
-  async getComponentDependents(
-    repositoryName: string,
-    componentId: string,
-    componentBranch: string,
-  ): Promise<Component[]> {
-    const targetNodeGraphUniqueId = formatGraphUniqueId(
-      repositoryName,
-      componentBranch,
-      componentId,
-    );
-    const escapedTargetNodeGraphUniqueId = this.escapeStr(targetNodeGraphUniqueId);
-    const escapedComponentBranch = this.escapeStr(componentBranch); // For filtering dependents
-    console.error(
-      `DEBUG: getComponentDependents - Looking for those that depend on: ${targetNodeGraphUniqueId}, branch filter: ${componentBranch}`,
-    ); // Log query params
-
-    const query = `
-      MATCH (targetComp:Component {graph_unique_id: '${escapedTargetNodeGraphUniqueId}'})
-      MATCH (dependentComp:Component)-[:DEPENDS_ON]->(targetComp)
-      WHERE dependentComp.branch = '${escapedComponentBranch}' 
-      RETURN DISTINCT dependentComp
-    `;
-    console.error('DEBUG: getComponentDependents EXECUTING QUERY (direct):', query);
-    const result = await this.kuzuClient.executeQuery(query);
-    if (!result || typeof result.getAll !== 'function') {
-      console.warn(
-        `Query for getComponentDependents for ${componentId} (branch ${componentBranch}) in repo ${repositoryName} returned no result or invalid result type.`,
+      logger.debug(
+        `[ComponentRepository] Getting active components for ${repositoryNodeId}, branch ${componentBranch}`,
       );
-      return [];
-    }
-    const rows = await result.getAll();
-    if (!rows || rows.length === 0) {
-      return [];
-    }
-    return rows.map((row: any) => {
-      const depData = row.dependentComp ?? row['dependentComp'];
-      return {
-        ...depData,
-        id: depData.id,
-        graph_unique_id: undefined,
-      } as Component;
-    });
-  }
-
-  /**
-   * Get related items for a component based on specified relationship types, depth, and direction.
-   * All components are assumed to be within the same repositoryName and componentBranch context.
-   */
-  async getRelatedItems(
-    repositoryName: string,
-    componentId: string,
-    componentBranch: string,
-    relationshipTypes?: string[],
-    depth?: number,
-    direction?: 'INCOMING' | 'OUTGOING' | 'BOTH',
-  ): Promise<Component[]> {
-    const currentDepth = depth && depth > 0 && depth <= 10 ? depth : 1;
-    const currentDirection = direction || 'OUTGOING';
-    const escapedComponentBranch = this.escapeStr(componentBranch);
-
-    let relTypeSpec = '';
-    if (relationshipTypes && relationshipTypes.length > 0) {
-      const sanitizedTypes = relationshipTypes
-        .map((rt) => rt.replace(/[^a-zA-Z0-9_]/g, ''))
-        .filter((rt) => rt.length > 0);
-      if (sanitizedTypes.length > 0) {
-        relTypeSpec = ':' + sanitizedTypes.join('|');
-      }
-    }
-    // console.error for relTypeSpec can be removed if no longer needed for active debugging
-
-    let pathRelationship = `-[r${relTypeSpec}*1..${currentDepth}]-`;
-    if (currentDirection === 'OUTGOING') {
-      pathRelationship = `-[r${relTypeSpec}*1..${currentDepth}]->`;
-    } else if (currentDirection === 'INCOMING') {
-      pathRelationship = `<-[r${relTypeSpec}*1..${currentDepth}]-`;
-    }
-    // console.error for pathRelationship can be removed
-
-    const startNodeGraphUniqueId = formatGraphUniqueId(
-      repositoryName,
-      componentBranch,
-      componentId,
-    );
-    const escapedStartNodeGraphUniqueId = this.escapeStr(startNodeGraphUniqueId);
-
-    const query = `
-      MATCH (startNode:Component {graph_unique_id: '${escapedStartNodeGraphUniqueId}'})
-      MATCH (startNode)${pathRelationship}(relatedItem:Component)
-      WHERE relatedItem.branch = '${escapedComponentBranch}' 
-      RETURN DISTINCT relatedItem
-    `;
-
-    try {
-      const result = await this.kuzuClient.executeQuery(query);
-      if (!result || typeof result.getAll !== 'function') {
-        console.warn(
-          `Query for getRelatedItems for ${componentId} (branch ${componentBranch}) in repo ${repositoryName} returned no result or invalid result type.`,
-        );
+      const result = await this.kuzuClient.executeQuery(query, params);
+      if (!result) {
         return [];
       }
-      const rows = await result.getAll();
-      if (!rows || rows.length === 0) {
-        return [];
-      }
-      return rows.map((row: any) => {
-        const itemData = row.relatedItem ?? row['relatedItem'];
-        return {
-          ...itemData,
-          id: itemData.id,
-          graph_unique_id: undefined,
-        } as Component;
-      });
-    } catch (error) {
-      console.error(
-        `Error executing getRelatedItems query for ${componentId} (branch ${componentBranch}) in repo ${repositoryName}:`,
-        error,
+      const repoNameFromNodeId = repositoryNodeId.split(':')[0];
+      return result.map((row: any) =>
+        this.formatKuzuRowToComponent(row.c, repoNameFromNodeId, componentBranch),
       );
-      console.error('Query was:', query);
-      throw error;
+    } catch (error: any) {
+      logger.error(
+        `[ComponentRepository] Error in getActiveComponents for ${repositoryNodeId}, branch ${componentBranch}: ${error.message}`,
+        { stack: error.stack },
+      );
+      return [];
     }
   }
 
@@ -507,6 +198,541 @@ export class ComponentRepository {
         length: 0,
         error: error.message || 'Error executing shortest path query.',
       };
+    }
+  }
+
+  async updateComponentStatus(
+    repositoryName: string,
+    itemId: string, // Logical ID of the component
+    branch: string,
+    status: ComponentStatus, // This is from '../types', e.g., 'active' | 'deprecated' | 'planned'
+  ): Promise<Component | null> {
+    const logger = console; // Placeholder for actual logger
+    const graphUniqueId = formatGraphUniqueId(repositoryName, branch, itemId);
+    const now = new Date(); // For updated_at timestamp
+
+    const query = `
+      MATCH (c:Component {graph_unique_id: $graphUniqueId})
+      SET c.status = $status, c.updated_at = $updatedAt
+      RETURN c
+    `; // Kuzu might need specific timestamp formatting for $updatedAt, or driver handles Date obj
+
+    const params = {
+      graphUniqueId,
+      status,
+      updatedAt: now, // Pass Date object, Kuzu driver should handle conversion
+    };
+
+    try {
+      logger.debug(
+        `[ComponentRepository] Updating status for component ${graphUniqueId} to ${status}`,
+      );
+      const result = await this.kuzuClient.executeQuery(query, params);
+
+      // Check if the update was successful and a node was returned
+      if (result && result.length > 0 && result[0].c) {
+        logger.info(
+          `[ComponentRepository] Status updated for component ${graphUniqueId} to ${status}`,
+        );
+        // The RETURN c might give the updated node. Format it.
+        return this.formatKuzuRowToComponent(result[0].c, repositoryName, branch);
+      } else {
+        // If MATCH failed or RETURN c was empty, the component might not exist or update failed silently
+        logger.warn(
+          `[ComponentRepository] Component ${graphUniqueId} not found or status update failed to return node.`,
+        );
+        // Attempt to fetch to confirm, or return null if update implies existence
+        return this.findByIdAndBranch(repositoryName, itemId, branch);
+      }
+    } catch (error: any) {
+      logger.error(
+        `[ComponentRepository] Error executing updateComponentStatus for ${graphUniqueId} to status ${status}: ${error.message}`,
+        { stack: error.stack, query, params },
+      );
+      throw error; // Re-throw for service layer to handle
+    }
+  }
+
+  async upsertComponent(
+    repositoryNodeId: string, // This is the internal _id of the Repository node (e.g., 'repoName:branch')
+    component: ComponentInput, // Data for the component from service layer
+  ): Promise<Component | null> {
+    const logger = console; // Placeholder for actual logger if passed down
+    const repoIdParts = repositoryNodeId.split(':');
+    if (repoIdParts.length < 2) {
+      // This should ideally not happen if repositoryNodeId is always correctly formed
+      logger.error(
+        `[ComponentRepository] Invalid repositoryNodeId format: ${repositoryNodeId} in upsertComponent`,
+      );
+      throw new Error(`Invalid repositoryNodeId format: ${repositoryNodeId}`);
+    }
+    const logicalRepositoryName = repoIdParts[0];
+    // const componentBranch = repoIdParts[1]; // Branch is also on component input
+
+    const componentId = String(component.id);
+    const componentBranch = String(component.branch || 'main'); // Default branch if not on input
+    const graphUniqueId = formatGraphUniqueId(logicalRepositoryName, componentBranch, componentId);
+
+    const now = new Date(); // For timestamps
+
+    // Properties for the main component node
+    const componentNodeProps = {
+      id: componentId, // Logical ID, Kuzu PK for Component table
+      graph_unique_id: graphUniqueId,
+      name: component.name,
+      kind: component.kind || null,
+      status: component.status || 'active',
+      branch: componentBranch,
+      repository: repositoryNodeId, // Link to parent Repository node's PK
+      // created_at and updated_at are handled by ON CREATE / ON MATCH
+    };
+
+    // Properties for ON CREATE clause
+    const propsOnCreate = { ...componentNodeProps, created_at: now, updated_at: now };
+    // Properties for ON MATCH clause (subset, only updatable fields + updated_at)
+    const propsOnMatch = {
+      name: component.name,
+      kind: component.kind || null,
+      status: component.status || 'active',
+      // id, branch, repository, graph_unique_id should not change on match for the same node
+      updated_at: now,
+    };
+
+    try {
+      await this.kuzuClient.executeQuery('BEGIN TRANSACTION');
+      logger.debug(
+        `[ComponentRepository] upsertComponent - BEGAN TRANSACTION for ${graphUniqueId}`,
+      );
+
+      const upsertNodeQuery = `
+        MATCH (repo:Repository {id: $repositoryNodeId})
+        MERGE (c:Component {graph_unique_id: $graphUniqueId})
+        ON CREATE SET 
+          c.id = $componentId,
+          c.name = $componentName,
+          c.kind = $componentKind,
+          c.status = $componentStatus,
+          c.branch = $componentBranch,
+          c.created_at = $createdAt,
+          c.updated_at = $updatedAt
+        ON MATCH SET 
+          c.name = $componentName,
+          c.kind = $componentKind,
+          c.status = $componentStatus,
+          c.updated_at = $updatedAt
+        MERGE (repo)-[:HAS_COMPONENT]->(c)
+      `;
+      await this.kuzuClient.executeQuery(upsertNodeQuery, {
+        repositoryNodeId,
+        graphUniqueId,
+        componentId,
+        componentName: component.name,
+        componentKind: component.kind || null,
+        componentStatus: component.status || 'active',
+        componentBranch,
+        createdAt: now,
+        updatedAt: now,
+      });
+      logger.debug(`[ComponentRepository] Upserted main node ${graphUniqueId}`);
+
+      // Delete existing DEPENDS_ON relationships for this component
+      const deleteDepsQuery = `
+          MATCH (c:Component {graph_unique_id: $graphUniqueId})-[r:DEPENDS_ON]->()
+          DELETE r
+      `;
+      await this.kuzuClient.executeQuery(deleteDepsQuery, { graphUniqueId });
+      logger.debug(`[ComponentRepository] Deleted existing deps for ${graphUniqueId}`);
+
+      // Add new DEPENDS_ON relationships
+      if (component.depends_on && component.depends_on.length > 0) {
+        logger.debug(
+          `[ComponentRepository] Creating ${component.depends_on.length} dependencies for ${graphUniqueId}`,
+        );
+
+        for (const depLogicalId of component.depends_on) {
+          const depGraphUniqueId = formatGraphUniqueId(
+            logicalRepositoryName,
+            componentBranch,
+            depLogicalId,
+          );
+          console.error(
+            `[ComponentRepository] DEBUG: Processing dependency ${depLogicalId} -> ${depGraphUniqueId}`,
+          );
+
+          // First, check if the dependency component already exists
+          const checkDepQuery = `MATCH (dep:Component {graph_unique_id: $depGraphUniqueId}) RETURN dep.id, dep.name`;
+          const existingDep = await this.kuzuClient.executeQuery(checkDepQuery, {
+            depGraphUniqueId,
+          });
+          console.error(
+            `[ComponentRepository] DEBUG: Existing dependency check result:`,
+            existingDep?.length || 0,
+            'rows',
+          );
+
+          // Ensure dependent node exists or create a placeholder
+          // This is complex: placeholder might not have correct 'repository' field if dep is from different repo/branch
+          // For now, assume dependent components are in the same repo/branch context for placeholder creation.
+          const depPlaceholderProps = {
+            id: depLogicalId,
+            graph_unique_id: depGraphUniqueId,
+            name: `Placeholder: ${depLogicalId}`,
+            kind: 'Unknown',
+            status: 'planned' as ComponentStatus,
+            branch: componentBranch,
+            repository: repositoryNodeId, // Assume same repo for placeholder
+            created_at: now,
+            updated_at: now,
+          };
+          const ensureDepNodeQuery = `
+              MATCH (repoDep:Repository {id: $repositoryNodeId})
+              MERGE (dep:Component {graph_unique_id: $depGraphUniqueId})
+              ON CREATE SET 
+                dep.id = $depId,
+                dep.name = $depName,
+                dep.kind = $depKind,
+                dep.status = $depStatus,
+                dep.branch = $depBranch,
+                dep.created_at = $depCreatedAt,
+                dep.updated_at = $depUpdatedAt
+              MERGE (repoDep)-[:HAS_COMPONENT]->(dep)
+          `;
+          console.error(
+            `[ComponentRepository] DEBUG: Executing ensure dependency query for ${depGraphUniqueId}`,
+          );
+          await this.kuzuClient.executeQuery(ensureDepNodeQuery, {
+            repositoryNodeId,
+            depGraphUniqueId,
+            depId: depLogicalId,
+            depName: `Placeholder: ${depLogicalId}`,
+            depKind: 'Unknown',
+            depStatus: 'planned',
+            depBranch: componentBranch,
+            depCreatedAt: now,
+            depUpdatedAt: now,
+          });
+          console.error(
+            `[ComponentRepository] DEBUG: Ensured/Created dependency node: ${depGraphUniqueId}`,
+          );
+
+          // Double-check both nodes exist before creating relationship
+          const checkBothQuery = `
+            MATCH (c:Component {graph_unique_id: $graphUniqueId}) 
+            MATCH (dep:Component {graph_unique_id: $depGraphUniqueId}) 
+            RETURN c.id as sourceId, dep.id as depId
+          `;
+          const bothNodesResult = await this.kuzuClient.executeQuery(checkBothQuery, {
+            graphUniqueId,
+            depGraphUniqueId,
+          });
+          console.error(
+            `[ComponentRepository] DEBUG: Both nodes check result:`,
+            bothNodesResult?.length || 0,
+            'rows',
+          );
+          if (bothNodesResult && bothNodesResult.length > 0) {
+            console.error(
+              `[ComponentRepository] DEBUG: Found source: ${bothNodesResult[0].sourceId}, dep: ${bothNodesResult[0].depId}`,
+            );
+          }
+
+          const addDepRelQuery = `
+            MATCH (c:Component {graph_unique_id: $graphUniqueId}), (dep:Component {graph_unique_id: $depGraphUniqueId})
+            MERGE (c)-[:DEPENDS_ON]->(dep)
+            RETURN c.id as sourceId, dep.id as depId
+          `;
+          console.error(
+            `[ComponentRepository] DEBUG: Creating DEPENDS_ON relationship: ${graphUniqueId} -> ${depGraphUniqueId}`,
+          );
+          const relResult = await this.kuzuClient.executeQuery(addDepRelQuery, {
+            graphUniqueId,
+            depGraphUniqueId,
+          });
+          console.error(
+            `[ComponentRepository] DEBUG: Relationship creation result:`,
+            relResult?.length || 0,
+            'rows',
+          );
+          if (relResult && relResult.length > 0) {
+            console.error(
+              `[ComponentRepository] DEBUG: Successfully created relationship between ${relResult[0].sourceId} -> ${relResult[0].depId}`,
+            );
+          }
+
+          logger.debug(
+            `[ComponentRepository] Added DEPENDS_ON: ${graphUniqueId} -> ${depGraphUniqueId}`,
+          );
+        }
+      } else {
+        console.error(
+          `[ComponentRepository] DEBUG: No dependencies to create for ${graphUniqueId} - depends_on:`,
+          component.depends_on,
+        );
+      }
+      await this.kuzuClient.executeQuery('COMMIT');
+      logger.info(
+        `[ComponentRepository] COMMITTED TRANSACTION for upsertComponent ${graphUniqueId}`,
+      );
+      // Fetch and return the fully formatted component
+      return this.findByIdAndBranch(logicalRepositoryName, componentId, componentBranch);
+    } catch (error: any) {
+      logger.error(
+        `[ComponentRepository] ERROR in upsertComponent for ${graphUniqueId}: ${error.message}`,
+        { stack: error.stack },
+      );
+      try {
+        await this.kuzuClient.executeQuery('ROLLBACK');
+        logger.warn(
+          `[ComponentRepository] ROLLED BACK TRANSACTION for upsertComponent ${graphUniqueId}`,
+        );
+      } catch (rollbackError: any) {
+        logger.error(
+          `[ComponentRepository] CRITICAL ERROR: Failed to ROLLBACK transaction for ${graphUniqueId}: ${rollbackError.message}`,
+          { stack: rollbackError.stack },
+        );
+      }
+      // Decide: throw error or return null?
+      // To match Promise<Component | null>, return null, but error is logged.
+      // Throwing might be cleaner for service layer to handle and build Zod output.
+      throw error; // Let service layer decide how to map this to Zod output
+    }
+  }
+
+  /**
+   * Find a component by its logical ID and branch, within a given repository context.
+   * The repositoryId here refers to the name of the repository for ID formatting.
+   */
+  async findByIdAndBranch(
+    repositoryName: string,
+    itemId: string,
+    itemBranch: string,
+  ): Promise<Component | null> {
+    const logger = console; // Placeholder
+    const graphUniqueId = formatGraphUniqueId(repositoryName, itemBranch, itemId);
+    const query = `MATCH (c:Component {graph_unique_id: $graphUniqueId}) RETURN c LIMIT 1`;
+    const params = { graphUniqueId };
+    try {
+      logger.debug(`[ComponentRepository] Finding component by GID: ${graphUniqueId}`);
+      const result = await this.kuzuClient.executeQuery(query, params);
+      if (result && result.length > 0 && result[0].c) {
+        return this.formatKuzuRowToComponent(result[0].c, repositoryName, itemBranch);
+      }
+      return null;
+    } catch (error: any) {
+      logger.error(
+        `[ComponentRepository] Error in findByIdAndBranch for GID ${graphUniqueId}: ${error.message}`,
+        { stack: error.stack },
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Get all upstream dependencies for a component (transitive DEPENDS_ON).
+   * All components (start and dependencies) are assumed to be within the same repositoryName and componentBranch context.
+   */
+  async getComponentDependencies(
+    repositoryName: string, // Logical name of the repository, e.g., 'my-cool-project'
+    componentId: string, // Logical ID of the starting component, e.g., 'ui-module'
+    componentBranch: string, // Branch of the starting component AND its dependencies, e.g., 'main'
+  ): Promise<Component[]> {
+    const startNodeGraphUniqueId = formatGraphUniqueId(
+      repositoryName,
+      componentBranch,
+      componentId,
+    );
+    const escapedStartNodeGraphUniqueId = this.escapeStr(startNodeGraphUniqueId);
+    const escapedComponentBranch = this.escapeStr(componentBranch); // For filtering dependencies
+    console.error(
+      `DEBUG: getComponentDependencies - Looking for deps of: ${startNodeGraphUniqueId}, branch filter: ${componentBranch}`,
+    ); // Log query params
+
+    // This query assumes that any depended-upon component (dep)
+    // will also have its graph_unique_id formatted with the same repositoryName and componentBranch.
+    const query = `
+      MATCH (c:Component {graph_unique_id: '${escapedStartNodeGraphUniqueId}'})
+      MATCH (c)-[:DEPENDS_ON]->(dep:Component)
+      WHERE dep.branch = '${escapedComponentBranch}' 
+      RETURN DISTINCT dep
+    `;
+    console.error('DEBUG: getComponentDependencies EXECUTING QUERY (direct):', query);
+    // We also need to ensure dep.id is populated from the node, and graph_unique_id is not exposed.
+    const result = await this.kuzuClient.executeQuery(query);
+
+    // Check if result is a direct array (common KuzuDB return pattern)
+    if (Array.isArray(result)) {
+      if (result.length === 0) {
+        return [];
+      }
+      return result.map((row: any) => {
+        const depData = row.dep ?? row['dep'] ?? row;
+        return {
+          ...depData,
+          id: depData.id,
+          graph_unique_id: undefined,
+        } as Component;
+      });
+    }
+
+    // Check if result has getAll method (alternative query result pattern)
+    if (!result || typeof result.getAll !== 'function') {
+      return [];
+    }
+    const rows = await result.getAll();
+    if (!rows || rows.length === 0) {
+      return [];
+    }
+    return rows.map((row: any) => {
+      const depData = row.dep ?? row['dep'];
+      return {
+        ...depData,
+        id: depData.id,
+        graph_unique_id: undefined,
+      } as Component;
+    });
+  }
+
+  /**
+   * Get all downstream dependents for a component (transitive).
+   * All components are assumed to be within the same repositoryName and componentBranch context.
+   */
+  async getComponentDependents(
+    repositoryName: string,
+    componentId: string,
+    componentBranch: string,
+  ): Promise<Component[]> {
+    const targetNodeGraphUniqueId = formatGraphUniqueId(
+      repositoryName,
+      componentBranch,
+      componentId,
+    );
+    const escapedTargetNodeGraphUniqueId = this.escapeStr(targetNodeGraphUniqueId);
+    const escapedComponentBranch = this.escapeStr(componentBranch); // For filtering dependents
+    console.error(
+      `DEBUG: getComponentDependents - Looking for those that depend on: ${targetNodeGraphUniqueId}, branch filter: ${componentBranch}`,
+    ); // Log query params
+
+    const query = `
+      MATCH (targetComp:Component {graph_unique_id: '${escapedTargetNodeGraphUniqueId}'})
+      MATCH (dependentComp:Component)-[:DEPENDS_ON]->(targetComp)
+      WHERE dependentComp.branch = '${escapedComponentBranch}' 
+      RETURN DISTINCT dependentComp
+    `;
+    console.error('DEBUG: getComponentDependents EXECUTING QUERY (direct):', query);
+    const result = await this.kuzuClient.executeQuery(query);
+
+    // Check if result is a direct array (common KuzuDB return pattern)
+    if (Array.isArray(result)) {
+      if (result.length === 0) {
+        return [];
+      }
+      return result.map((row: any) => {
+        const depData = row.dependentComp ?? row['dependentComp'] ?? row;
+        return {
+          ...depData,
+          id: depData.id,
+          graph_unique_id: undefined,
+        } as Component;
+      });
+    }
+
+    // Check if result has getAll method (alternative query result pattern)
+    if (!result || typeof result.getAll !== 'function') {
+      console.warn(
+        `Query for getComponentDependents for ${componentId} (branch ${componentBranch}) in repo ${repositoryName} returned no result or invalid result type.`,
+      );
+      return [];
+    }
+    const rows = await result.getAll();
+    if (!rows || rows.length === 0) {
+      return [];
+    }
+    return rows.map((row: any) => {
+      const depData = row.dependentComp ?? row['dependentComp'];
+      return {
+        ...depData,
+        id: depData.id,
+        graph_unique_id: undefined,
+      } as Component;
+    });
+  }
+
+  /**
+   * Get related items for a component based on specified relationship types, depth, and direction.
+   * All components are assumed to be within the same repositoryName and componentBranch context.
+   */
+  async getRelatedItems(
+    repositoryName: string,
+    componentId: string,
+    componentBranch: string,
+    relationshipTypes?: string[],
+    depth?: number,
+    direction?: 'INCOMING' | 'OUTGOING' | 'BOTH',
+  ): Promise<Component[]> {
+    const currentDepth = depth && depth > 0 && depth <= 10 ? depth : 1;
+    const currentDirection = direction || 'OUTGOING';
+    const escapedComponentBranch = this.escapeStr(componentBranch);
+
+    let relTypeSpec = '';
+    if (relationshipTypes && relationshipTypes.length > 0) {
+      const sanitizedTypes = relationshipTypes
+        .map((rt) => rt.replace(/[^a-zA-Z0-9_]/g, ''))
+        .filter((rt) => rt.length > 0);
+      if (sanitizedTypes.length > 0) {
+        relTypeSpec = ':' + sanitizedTypes.join('|');
+      }
+    }
+    // console.error for relTypeSpec can be removed if no longer needed for active debugging
+
+    let pathRelationship = `-[r${relTypeSpec}*1..${currentDepth}]-`;
+    if (currentDirection === 'OUTGOING') {
+      pathRelationship = `-[r${relTypeSpec}*1..${currentDepth}]->`;
+    } else if (currentDirection === 'INCOMING') {
+      pathRelationship = `<-[r${relTypeSpec}*1..${currentDepth}]-`;
+    }
+    // console.error for pathRelationship can be removed
+
+    const startNodeGraphUniqueId = formatGraphUniqueId(
+      repositoryName,
+      componentBranch,
+      componentId,
+    );
+    const escapedStartNodeGraphUniqueId = this.escapeStr(startNodeGraphUniqueId);
+
+    const query = `
+      MATCH (startNode:Component {graph_unique_id: '${escapedStartNodeGraphUniqueId}'})
+      MATCH (startNode)${pathRelationship}(relatedItem:Component)
+      WHERE relatedItem.branch = '${escapedComponentBranch}' 
+      RETURN DISTINCT relatedItem
+    `;
+
+    try {
+      const result = await this.kuzuClient.executeQuery(query);
+      if (!result || typeof result.getAll !== 'function') {
+        console.warn(
+          `Query for getRelatedItems for ${componentId} (branch ${componentBranch}) in repo ${repositoryName} returned no result or invalid result type.`,
+        );
+        return [];
+      }
+      const rows = await result.getAll();
+      if (!rows || rows.length === 0) {
+        return [];
+      }
+      return rows.map((row: any) => {
+        const itemData = row.relatedItem ?? row['relatedItem'];
+        return {
+          ...itemData,
+          id: itemData.id,
+          graph_unique_id: undefined,
+        } as Component;
+      });
+    } catch (error) {
+      console.error(
+        `Error executing getRelatedItems query for ${componentId} (branch ${componentBranch}) in repo ${repositoryName}:`,
+        error,
+      );
+      console.error('Query was:', query);
+      throw error;
     }
   }
 
@@ -998,36 +1224,6 @@ export class ComponentRepository {
     } catch (error) {
       console.error(
         `Error executing getGoverningItemsForComponent for ${componentId} (branch: ${componentBranch}) in repo ${repositoryName}:`,
-        error,
-      );
-      console.error('Query was:', query);
-      throw error;
-    }
-  }
-
-  async updateComponentStatus(
-    repositoryName: string,
-    itemId: string,
-    branch: string,
-    status: ComponentStatus,
-  ): Promise<Component | null> {
-    const graphUniqueId = formatGraphUniqueId(repositoryName, branch, itemId);
-    const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
-    const escapedStatus = this.escapeStr(status);
-    const nowIso = new Date().toISOString();
-    const kuzuTimestamp = nowIso.replace('T', ' ').replace('Z', '');
-
-    const query = `
-      MATCH (c:Component {graph_unique_id: '${escapedGraphUniqueId}'})
-      SET c.status = '${escapedStatus}', c.updated_at = timestamp('${kuzuTimestamp}')
-      RETURN c`;
-
-    try {
-      await this.kuzuClient.executeQuery(query);
-      return this.findByIdAndBranch(repositoryName, itemId, branch);
-    } catch (error) {
-      console.error(
-        `Error executing updateComponentStatus for ${itemId} (branch: ${branch}) in repo ${repositoryName} to status ${status}:`,
         error,
       );
       console.error('Query was:', query);

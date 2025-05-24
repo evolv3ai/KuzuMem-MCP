@@ -1,5 +1,6 @@
 import { MemoryService } from '../../../services/memory.service';
 import { ProgressHandler } from '../progress-handler';
+import { McpServerRequestContext } from '@modelcontextprotocol/sdk';
 
 // Define an enum or type for itemType for better type safety, if not already globally defined
 type ItemType = 'Component' | 'Decision' | 'Rule';
@@ -12,6 +13,7 @@ export class ItemContextualHistoryOperation {
    * Execute the item contextual history operation with streaming support
    */
   public static async execute(
+    mcpContext: McpServerRequestContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -20,15 +22,18 @@ export class ItemContextualHistoryOperation {
     memoryService: MemoryService,
     progressHandler?: ProgressHandler,
   ): Promise<any> {
+    const logger = mcpContext.logger || console;
     try {
       // Validate required args
       if (!repositoryName || !itemId || !itemType) {
+        logger.warn('[ItemContextualHistoryOperation] Missing required parameters');
         return {
           error: 'Missing required parameters: repositoryName, itemId, and itemType are required',
         };
       }
       const validItemTypes: ItemType[] = ['Component', 'Decision', 'Rule'];
       if (!validItemTypes.includes(itemType)) {
+        logger.warn(`[ItemContextualHistoryOperation] Invalid itemType: ${itemType}`);
         return {
           error: `Invalid itemType: ${itemType}. Must be one of ${validItemTypes.join(', ')}`,
         };
@@ -41,9 +46,8 @@ export class ItemContextualHistoryOperation {
         });
       }
 
-      // Assuming memoryService.getItemContextualHistory exists and retrieves the history.
-      // This could be a candidate for internal streaming within MemoryService if histories are very long.
-      const history = await memoryService.getItemContextualHistory(
+      const historyOutput = await memoryService.getItemContextualHistory(
+        mcpContext,
         clientProjectRoot,
         repositoryName,
         branch,
@@ -51,23 +55,27 @@ export class ItemContextualHistoryOperation {
         itemType,
       );
 
+      const contextHistory = historyOutput?.contextHistory || [];
+      const resultStatus = historyOutput?.status || 'error';
+
       const resultPayload = {
-        status: 'complete',
+        status: resultStatus,
         clientProjectRoot,
         repository: repositoryName,
         branch,
         itemId,
         itemType,
-        historyCount: history?.length || 0,
-        contextHistory: history || [],
+        historyCount: contextHistory.length,
+        contextHistory: contextHistory,
+        message: historyOutput?.message,
       };
 
       if (progressHandler) {
         progressHandler.progress({
           status: 'in_progress',
-          message: `Retrieved ${history?.length || 0} history entries for ${itemType} ${itemId}`,
-          count: history?.length || 0,
-          history: history || [], // This key might be what the test expects for in-progress data if it checks it
+          message: `Retrieved ${contextHistory.length} history entries for ${itemType} ${itemId}`,
+          count: contextHistory.length,
+          history: contextHistory,
         });
 
         // Send final progress event with the full payload
@@ -78,7 +86,15 @@ export class ItemContextualHistoryOperation {
         return null; // Indicate response was sent via progressHandler
       }
 
-      // If no progressHandler, return the result directly (for non-SSE calls)
+      if (resultStatus === 'error' && !progressHandler) {
+        logger.error(
+          `[ItemContextualHistoryOperation] Failed to get history: ${resultPayload.message || 'Unknown error'}`,
+        );
+        throw new Error(
+          resultPayload.message || 'Failed to get item contextual history in operation.',
+        );
+      }
+
       return resultPayload;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
