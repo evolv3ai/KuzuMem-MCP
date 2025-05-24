@@ -1,5 +1,5 @@
 import { KuzuDBClient } from '../db/kuzu'; // Corrected path
-import { File, Component } from '../../types'; // Internal domain types
+import { File, Component } from '../types'; // Internal domain types
 import { RepositoryRepository } from './repository.repository'; // For context/scoping if needed
 
 export class FileRepository {
@@ -24,28 +24,22 @@ export class FileRepository {
     // Input data should be clean, matching internal File type structure for new node properties
     fileData: Omit<
       File,
-      'repository' | 'branch' | 'created_at' | 'updated_at' | 'graph_unique_id'
+      'repository' | 'branch' | 'created_at' | 'updated_at'
     > & { id: string },
   ): Promise<File | null> {
     const now = new Date();
-    const graphUniqueId = `${repoNodeId}:${fileData.id}`;
     const fileNodeProps = {
       ...fileData,
       id: fileData.id, // This is the logical ID used as Kuzu PK for File table
-      graph_unique_id: graphUniqueId,
       repository: repoNodeId, // Link to the Repository node's PK
       branch: branch,
       created_at: now,
       updated_at: now,
-      // Ensure all properties of File table are covered
-      language: fileData.language || null,
-      metrics: fileData.metrics ? JSON.stringify(fileData.metrics) : null, // Store JSON as string
-      content_hash: fileData.content_hash || null,
+      // Use properties that actually exist in File interface
+      name: fileData.name,
+      path: fileData.path,
+      size: fileData.size || null,
       mime_type: fileData.mime_type || null,
-      size_bytes:
-        fileData.size_bytes === null || fileData.size_bytes === undefined
-          ? null
-          : Number(fileData.size_bytes), // Corrected null/undefined check
     };
 
     const query = `

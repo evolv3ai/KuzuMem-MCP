@@ -1,8 +1,12 @@
 import { RuleRepository, RepositoryRepository } from '../../repositories';
 import { Rule } from '../../types';
 import { z } from 'zod';
-import { AddRuleInputSchema, RuleSchema, RuleStatusSchema } from '../../mcp/schemas/tool-schemas';
-import { McpServerRequestContext } from '@modelcontextprotocol/sdk/types.js';
+import { AddRuleInputSchema, RuleSchema } from '../../mcp/schemas/tool-schemas';
+
+// Simple context type to avoid SDK import issues
+type McpContext = {
+  logger: any;
+};
 
 // Helper function to parse timestamps from BaseEntity (Date | undefined) to string | null
 // This can be shared or made a utility if used in multiple ops files.
@@ -25,7 +29,7 @@ function parseBaseEntityTimestamp(timestamp: Date | undefined): string | null {
  * @returns A Promise resolving to the upserted Rule object or null if repository not found.
  */
 export async function upsertRuleOp(
-  mcpContext: McpServerRequestContext,
+  mcpContext: McpContext,
   repositoryName: string,
   branch: string,
   ruleDataFromTool: Omit<z.infer<typeof AddRuleInputSchema>, 'repository' | 'branch'>,
@@ -92,7 +96,7 @@ export async function upsertRuleOp(
  * @returns A Promise resolving to an array of active Rule objects.
  */
 export async function getActiveRulesOp(
-  mcpContext: McpServerRequestContext,
+  mcpContext: McpContext,
   repositoryName: string,
   branch: string,
   repositoryRepo: RepositoryRepository,
@@ -128,7 +132,7 @@ function transformToZodRule(
   rule: Rule,
   repositoryName: string,
   branch: string,
-  logger: McpServerRequestContext['logger'], // Removed Console fallback
+  logger: any,
 ): z.infer<typeof RuleSchema> {
   if (!rule) {
     // Changed to throw error for consistency

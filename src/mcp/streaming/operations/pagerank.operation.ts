@@ -1,5 +1,30 @@
 import { MemoryService } from '../../../services/memory.service';
 import { ProgressHandler } from '../progress-handler';
+import { EnrichedRequestHandlerExtra } from '../../types/sdk-custom';
+
+/**
+ * Creates a mock context for service calls
+ */
+function createMockContext(): EnrichedRequestHandlerExtra {
+  return {
+    signal: new AbortController().signal,
+    requestId: 'mock-request-id',
+    sendNotification: async () => {},
+    sendRequest: async () => ({ type: 'response' as const, id: '', result: {} }),
+    logger: {
+      debug: () => {},
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+    },
+    session: {
+      sessionId: 'mock-session-id',
+      serverVersion: '1.0.0',
+    },
+    sendProgress: async () => {},
+    memoryService: {} as MemoryService,
+  };
+}
 
 /**
  * Operation class for PageRank calculation with streaming support.
@@ -49,7 +74,7 @@ export class PageRankOperation {
         params.maxIterations = maxIterations;
       }
 
-      const pageRankOutput = await memoryService.pageRank(clientProjectRoot, params);
+      const pageRankOutput = await memoryService.pageRank(createMockContext(), clientProjectRoot, params);
 
       const ranks = pageRankOutput?.results?.ranks || [];
       const resultStatus = pageRankOutput?.status || 'error';

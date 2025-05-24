@@ -1,4 +1,3 @@
-import { McpServerRequestContext } from '@modelcontextprotocol/sdk';
 import { z } from 'zod';
 import {
   RepositoryRepository,
@@ -18,11 +17,16 @@ import {
   Tag /* Component, Decision, Rule, File, Context - if used for casting */,
 } from '../../types'; // Internal Tag type
 
+// Simple context type to avoid SDK import issues
+type McpContext = {
+  logger?: any;
+};
+
 /**
  * Operation to add or update a tag node.
  */
 export async function addTagOp(
-  mcpContext: McpServerRequestContext,
+  mcpContext: McpContext,
   repositoryName: string, // Used for logging/context, even if tags are global
   branch: string, // Used for logging/context
   tagDataFromTool: z.infer<typeof AddTagInputSchema>,
@@ -37,12 +41,13 @@ export async function addTagOp(
   try {
     // Assuming TagRepository.upsertTagNode expects data aligned with internal Tag type,
     // (omitting created_at as DB might handle it, or pass it if repo expects it)
-    const tagToUpsert: Omit<Tag, 'created_at'> & { id: string; name: string } = {
+    const tagToUpsert: Omit<Tag, 'created_at'> = {
       id: tagDataFromTool.id,
       name: tagDataFromTool.name,
       color: tagDataFromTool.color,
       description: tagDataFromTool.description,
-      // If tags were repo/branch scoped, add repository/branch fields here from params
+      repository: 'global', // Tags are global, not repo-scoped based on Tag interface
+      branch: 'main', // Default branch for global tags
     };
 
     const upsertedTagNode = await tagRepo.upsertTagNode(tagToUpsert);
@@ -64,7 +69,7 @@ export async function addTagOp(
       created_at: upsertedTagNode.created_at
         ? upsertedTagNode.created_at instanceof Date
           ? upsertedTagNode.created_at.toISOString()
-          : upsertedTagNode.created_at.toString()
+          : String(upsertedTagNode.created_at)
         : null,
     };
 
@@ -88,7 +93,7 @@ export async function addTagOp(
  * Operation to apply a tag to an item.
  */
 export async function tagItemOp(
-  mcpContext: McpServerRequestContext,
+  mcpContext: McpContext,
   repositoryName: string,
   branch: string,
   itemId: string,
@@ -147,7 +152,7 @@ export async function tagItemOp(
  * Operation to find items associated with a specific tag.
  */
 export async function findItemsByTagOp(
-  mcpContext: McpServerRequestContext,
+  mcpContext: McpContext,
   repositoryName: string,
   branch: string,
   tagId: string,

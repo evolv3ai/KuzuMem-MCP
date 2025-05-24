@@ -4,16 +4,7 @@ import { MetadataRepository, RepositoryRepository } from '../../repositories';
 import { Metadata } from '../../types';
 import { MetadataContentSchema } from '../../mcp/schemas/tool-schemas';
 import { z } from 'zod';
-import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import type { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
-
-// Define an interface for the augmented context
-interface EnrichedRequestHandlerExtra
-  extends RequestHandlerExtra<ServerRequest, ServerNotification> {
-  logger: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
-  session: Record<string, any>;
-  sendProgress: (data: any) => Promise<void>; // sendNotification is async, so sendProgress might be too
-}
+import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
 
 /**
  * Retrieves metadata for a given repository and branch.

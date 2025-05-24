@@ -1,4 +1,3 @@
-import { McpServerRequestContext } from '@modelcontextprotocol/sdk';
 import { z } from 'zod';
 import { RepositoryRepository, FileRepository, ComponentRepository } from '../../repositories';
 import {
@@ -10,11 +9,16 @@ import {
 } from '../../mcp/schemas/tool-schemas';
 import { File } from '../../types'; // Internal File type
 
+// Simple context type to avoid SDK import issues
+type McpContext = {
+  logger?: any;
+};
+
 /**
  * Operation to add a new file node.
  */
 export async function addFileOp(
-  mcpContext: McpServerRequestContext,
+  mcpContext: McpContext,
   repositoryName: string,
   branch: string,
   fileDataFromTool: z.infer<typeof AddFileInputSchema>,
@@ -34,19 +38,16 @@ export async function addFileOp(
     }
 
     // Transform Zod input to internal File type fields expected by FileRepository.createFileNode
-    // Omit repository, branch, created_at, updated_at, graph_unique_id as repo method handles them
+    // Omit repository, branch, created_at, updated_at as repo method handles them
     const fileRepoInput: Omit<
       File,
-      'repository' | 'branch' | 'created_at' | 'updated_at' | 'graph_unique_id'
+      'repository' | 'branch' | 'created_at' | 'updated_at'
     > & { id: string } = {
       id: fileDataFromTool.id,
       name: fileDataFromTool.name,
       path: fileDataFromTool.path,
-      language: fileDataFromTool.language,
-      metrics: fileDataFromTool.metrics as any, // Assuming metrics is Record<string, any>
-      content_hash: fileDataFromTool.content_hash,
+      size: fileDataFromTool.size_bytes || undefined, // Map size_bytes to size
       mime_type: fileDataFromTool.mime_type,
-      size_bytes: fileDataFromTool.size_bytes,
     };
 
     const createdFileNode = await fileRepo.createFileNode(repoNode.id, branch, fileRepoInput);
@@ -60,23 +61,21 @@ export async function addFileOp(
 
     const zodFileNode: z.infer<typeof FileNodeSchema> = {
       ...createdFileNode,
-      language: createdFileNode.language || null,
-      metrics: createdFileNode.metrics || null,
-      content_hash: createdFileNode.content_hash || null,
+      // Map File interface properties to schema expectations
+      language: null, // Not in File interface
+      metrics: null, // Not in File interface
+      content_hash: null, // Not in File interface
       mime_type: createdFileNode.mime_type || null,
-      size_bytes:
-        createdFileNode.size_bytes === null || createdFileNode.size_bytes === undefined
-          ? null
-          : Number(createdFileNode.size_bytes),
+      size_bytes: createdFileNode.size || null, // Map size to size_bytes
       created_at: createdFileNode.created_at
         ? createdFileNode.created_at instanceof Date
           ? createdFileNode.created_at.toISOString()
-          : createdFileNode.created_at.toString()
+          : String(createdFileNode.created_at)
         : null,
       updated_at: createdFileNode.updated_at
         ? createdFileNode.updated_at instanceof Date
           ? createdFileNode.updated_at.toISOString()
-          : createdFileNode.updated_at.toString()
+          : String(createdFileNode.updated_at)
         : null,
       repository: repoIdForLog,
       branch: branch,
@@ -102,7 +101,7 @@ export async function addFileOp(
  * Operation to associate a file with a component.
  */
 export async function associateFileWithComponentOp(
-  mcpContext: McpServerRequestContext,
+  mcpContext: McpContext,
   repositoryName: string,
   branch: string,
   componentId: string,

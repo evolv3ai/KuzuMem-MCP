@@ -1,5 +1,6 @@
 import { MemoryService } from '../../../services/memory.service';
 import { ProgressHandler } from '../progress-handler';
+import { EnrichedRequestHandlerExtra } from '../../types/sdk-custom';
 
 /**
  * Operation class for component dependents retrieval with streaming support
@@ -37,16 +38,29 @@ export class ComponentDependentsOperation {
       // or directly return if the operation is quick.
       // The example in README2 shows paths, suggesting a traversal.
 
+      // Create mock context for service calls
+      const mockContext: EnrichedRequestHandlerExtra = {
+        signal: new AbortController().signal,
+        requestId: 'streaming-operation',
+        sendNotification: async () => {},
+        sendRequest: async () => ({ id: 'mock' } as any),
+        logger: console,
+        session: {},
+        sendProgress: async () => {},
+        memoryService: memoryService
+      };
+
       // Placeholder for actual logic that might involve complex graph traversal and path reconstruction
       // which would be the source of multiple progressHandler.progress() calls.
-      const allDependents = await memoryService.getComponentDependents(
-        context,
+      const allDependentsResult = await memoryService.getComponentDependents(
+        mockContext,
         clientProjectRoot,
         repositoryName,
         branch,
         componentId,
-        Promise.resolve([]),
       );
+
+      const allDependents = allDependentsResult.dependents || [];
 
       const resultPayload = {
         status: 'complete',
@@ -54,7 +68,7 @@ export class ComponentDependentsOperation {
         repository: repositoryName,
         branch,
         componentId,
-        totalDependents: allDependents,
+        totalDependents: allDependents.length,
         dependents: allDependents,
       };
 
@@ -62,8 +76,8 @@ export class ComponentDependentsOperation {
         // Send in_progress (could be chunked if data is large)
         progressHandler.progress({
           status: 'in_progress',
-          message: `Retrieved ${allDependents} dependent(s) for ${componentId}`,
-          count: allDependents,
+          message: `Retrieved ${allDependents.length} dependent(s) for ${componentId}`,
+          count: allDependents.length,
           dependents: allDependents, // Or a chunk of it
         });
 

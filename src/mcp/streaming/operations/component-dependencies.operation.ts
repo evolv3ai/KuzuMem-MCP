@@ -1,5 +1,6 @@
 import { MemoryService } from '../../../services/memory.service';
 import { ProgressHandler } from '../progress-handler';
+import { EnrichedRequestHandlerExtra } from '../../types/sdk-custom';
 
 /**
  * Operation class for component dependency retrieval with streaming support
@@ -34,13 +35,28 @@ export class ComponentDependenciesOperation {
         });
       }
 
+      // Create mock context for service calls
+      const mockContext: EnrichedRequestHandlerExtra = {
+        signal: new AbortController().signal,
+        requestId: 'streaming-operation',
+        sendNotification: async () => {},
+        sendRequest: async () => ({ id: 'mock' } as any),
+        logger: console,
+        session: {},
+        sendProgress: async () => {},
+        memoryService: memoryService
+      };
+
       // First level of dependencies
-      const firstLevelDeps = await memoryService.getComponentDependencies(
+      const firstLevelDepsResult = await memoryService.getComponentDependencies(
+        mockContext,
         clientProjectRoot,
         repositoryName,
         branch,
         componentId,
       );
+
+      const firstLevelDeps = firstLevelDepsResult.dependencies || [];
 
       // Send progressive result
       if (progressHandler) {
@@ -71,12 +87,15 @@ export class ComponentDependenciesOperation {
           }
 
           // Get next level
-          const nextLevelDeps = await memoryService.getComponentDependencies(
+          const nextLevelDepsResult = await memoryService.getComponentDependencies(
+            mockContext,
             clientProjectRoot,
             repositoryName,
             branch,
             dep.id,
           );
+
+          const nextLevelDeps = nextLevelDepsResult.dependencies || [];
 
           // Add to all dependencies, avoiding duplicates
           const newDeps = nextLevelDeps.filter(
