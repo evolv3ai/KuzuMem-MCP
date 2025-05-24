@@ -185,7 +185,8 @@ describe('MCP HTTP Stream Server E2E Tests with SDK Client (Full Refactor)', () 
       fail(`init-memory-bank failed, no result: ${JSON.stringify(initResult)}`);
     }
 
-    const initToolResult = parseSdkResponseContent(initResult as unknown);
+    type InitMemoryBankResult = { success: boolean; message: string; dbPath: string };
+    const initToolResult = parseSdkResponseContent<InitMemoryBankResult>(initResult);
     console.log('[DEBUG] Parsed tool result:', JSON.stringify(initToolResult, null, 2));
     expect(initToolResult?.success).toBe(true);
     expect(initToolResult?.dbPath).toBe(clientProjectRootForTest);
@@ -237,7 +238,8 @@ describe('MCP HTTP Stream Server E2E Tests with SDK Client (Full Refactor)', () 
         );
       }
 
-      const addCompToolResult = parseSdkResponseContent(addCompResult as unknown);
+      type AddComponentResult = { success: boolean };
+      const addCompToolResult = parseSdkResponseContent<AddComponentResult>(addCompResult);
       expect(addCompToolResult?.success).toBe(true);
     }
     console.log(`[HTTP E2E Setup] ${componentsToSeed.length} components seeded.`);
@@ -268,7 +270,8 @@ describe('MCP HTTP Stream Server E2E Tests with SDK Client (Full Refactor)', () 
       throw new Error(`add-decision failed, no result: ${JSON.stringify(addDecResult)}`);
     }
 
-    const addDecToolResult = parseSdkResponseContent(addDecResult as unknown);
+    type AddDecisionResult = { success: boolean };
+    const addDecToolResult = parseSdkResponseContent<AddDecisionResult>(addDecResult);
     expect(addDecToolResult?.success).toBe(true);
     console.log(`[HTTP E2E Setup] 1 decision seeded.`);
 
@@ -299,7 +302,8 @@ describe('MCP HTTP Stream Server E2E Tests with SDK Client (Full Refactor)', () 
       throw new Error(`add-rule failed, no result: ${JSON.stringify(addRuleResult)}`);
     }
 
-    const addRuleToolResult = parseSdkResponseContent(addRuleResult as unknown);
+    type AddRuleResult = { success: boolean };
+    const addRuleToolResult = parseSdkResponseContent<AddRuleResult>(addRuleResult);
     expect(addRuleToolResult?.success).toBe(true);
     console.log(`[HTTP E2E Setup] 1 rule seeded.`);
   }, 240000);
@@ -395,12 +399,13 @@ describe('MCP HTTP Stream Server E2E Tests with SDK Client (Full Refactor)', () 
       fail(`update-metadata failed with error: ${JSON.stringify(updateMetaResult)}`);
     }
 
-    const toolResult = parseSdkResponseContent(updateMetaResult as unknown) as {
+    type UpdateMetadataResult = {
       success: boolean;
-      metadata: { content: any };
-    } | null;
+      metadata: { id: string; project: { description: string }; tech_stack: { language: string } };
+    };
+    const toolResult = parseSdkResponseContent<UpdateMetadataResult>(updateMetaResult);
     expect(toolResult?.success).toBe(true);
-    const returnedMetadata = toolResult?.metadata as any;
+    const returnedMetadata = toolResult?.metadata;
     expect(returnedMetadata?.project.description).toBe('Updated via HTTP SDK E2E');
     expect(returnedMetadata?.tech_stack.language).toBe('TypeScript (SDK)');
   });
@@ -431,10 +436,9 @@ describe('MCP HTTP Stream Server E2E Tests with SDK Client (Full Refactor)', () 
       fail(`get-component-dependencies failed, no result: ${JSON.stringify(getDepsResult)}`);
     }
 
-    const finalResultContent = parseSdkResponseContent(getDepsResult as unknown) as {
-      status: string;
-      dependencies: Component[];
-    } | null;
+    type GetComponentDependenciesResult = { status: string; dependencies: Component[] };
+    const finalResultContent =
+      parseSdkResponseContent<GetComponentDependenciesResult>(getDepsResult);
 
     expect(finalResultContent?.status).toBe('complete');
     expect(Array.isArray(finalResultContent?.dependencies)).toBe(true);
@@ -464,10 +468,8 @@ describe('MCP HTTP Stream Server E2E Tests with SDK Client (Full Refactor)', () 
         fail(`pagerank failed, no result: ${JSON.stringify(pagerankResult)}`);
       }
 
-      const resultWrapper = parseSdkResponseContent(pagerankResult as unknown) as {
-        status: string;
-        results: { ranks: any[] };
-      } | null;
+      type PagerankResult = { status: string; results: { ranks: any[] } };
+      const resultWrapper = parseSdkResponseContent<PagerankResult>(pagerankResult);
 
       expect(resultWrapper?.status).toBe('complete');
       expect(resultWrapper?.results).toBeDefined();

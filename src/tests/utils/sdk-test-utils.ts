@@ -204,7 +204,7 @@ export async function handleTransportEvents(
  * The tool result is typically found in the `result` field of a successful
  * JSONRPCResponse for a tool invocation.
  */
-export function parseSdkResponseContent(toolResult: any | null | undefined): any {
+export function parseSdkResponseContent<T = unknown>(toolResult: any | null | undefined): T | null {
   if (!toolResult) {
     return null;
   }
@@ -216,23 +216,23 @@ export function parseSdkResponseContent(toolResult: any | null | undefined): any
       if (firstContent.type === 'text' && typeof firstContent.text === 'string') {
         try {
           // Try to parse the JSON string back to the original object
-          return JSON.parse(firstContent.text);
+          return JSON.parse(firstContent.text) as T;
         } catch (parseError) {
           // If parsing fails, return the text as-is
-          return firstContent.text;
+          return firstContent.text as unknown as T;
         }
       }
     }
-    return toolResult.content;
+    return toolResult.content as T;
   }
 
   // Check if this is the old CallToolResult format
   if (toolResult.tool_call && toolResult.tool_call.tool_response) {
-    return toolResult.tool_call.tool_response.content;
+    return toolResult.tool_call.tool_response.content as T;
   }
 
   // If neither format matches, return as-is
-  return toolResult;
+  return toolResult as T;
 }
 
 // Old utility functions like collectSdkStreamEvents and their specific helper types
