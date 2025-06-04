@@ -1,36 +1,27 @@
-import {
-  RepositoryRepository,
-  MetadataRepository,
-  ContextRepository,
-  ComponentRepository,
-  DecisionRepository,
-  RuleRepository,
-} from '../repositories';
-import {
-  Repository,
-  Metadata,
-  Context,
-  Component,
-  Decision,
-  Rule,
-  ComponentStatus,
-  ComponentInput,
-} from '../types';
-import { Mutex } from '../utils/mutex';
-import { KuzuDBClient } from '../db/kuzu';
-import { RepositoryProvider } from '../db';
 import * as path from 'path';
 import { z } from 'zod';
-import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
+import { RepositoryProvider } from '../db';
+import { KuzuDBClient } from '../db/kuzu';
 import * as toolSchemas from '../mcp/schemas/tool-schemas';
+import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
+import {
+    Component,
+    ComponentStatus,
+    Context,
+    Decision,
+    Metadata,
+    Repository,
+    Rule
+} from '../types';
+import { Mutex } from '../utils/mutex';
 
 // Import operation modules
-import * as metadataOps from './memory-operations/metadata.ops';
-import * as contextOps from './memory-operations/context.ops';
 import * as componentOps from './memory-operations/component.ops';
+import * as contextOps from './memory-operations/context.ops';
 import * as decisionOps from './memory-operations/decision.ops';
-import * as ruleOps from './memory-operations/rule.ops';
 import * as graphOps from './memory-operations/graph.ops';
+import * as metadataOps from './memory-operations/metadata.ops';
+import * as ruleOps from './memory-operations/rule.ops';
 
 /**
  * Service for memory bank operations
@@ -53,10 +44,14 @@ export class MemoryService {
   }
 
   private async initialize(initialMcpContext?: EnrichedRequestHandlerExtra): Promise<void> {
+    // Do not attempt any database initialization in the initial setup
+    // This will make the MemoryService lightweight during creation
+    // The real database work will be done on-demand when specific methods are called with valid clientProjectRoot
     this.repositoryProvider = await RepositoryProvider.getInstance();
+    
     // Use logger if available, otherwise console for this early init log
     const logger = initialMcpContext?.logger || console;
-    logger.info('MemoryService: Initialized with RepositoryProvider');
+    logger.info('MemoryService: Initialized with RepositoryProvider - database access deferred until needed');
   }
 
   /**
@@ -74,32 +69,48 @@ export class MemoryService {
       `[STDOUT-DEBUG] MemoryService.getKuzuClient ENTERED with CPR: ${clientProjectRoot}\n`,
     );
     const logger = mcpContext.logger || console; // Fallback for safety, though context should always have logger
+    
+    // Validate clientProjectRoot - this is critical for correct operation
+    if (!clientProjectRoot) {
+      const error = new Error('clientProjectRoot is required but was undefined or empty');
+      logger.error('[MemoryService.getKuzuClient] CRITICAL ERROR: clientProjectRoot is missing', error);
+      throw error;
+    }
+    
+    // Ensure path is absolute
     clientProjectRoot = this.ensureAbsoluteRoot(clientProjectRoot);
-    console.log(`[DEBUG] MemoryService.getKuzuClient absolute CPR: ${clientProjectRoot}`);
+    logger.info(`[MemoryService.getKuzuClient] Using absolute clientProjectRoot: ${clientProjectRoot}`);
+    
+    // Check repository provider
     if (!this.repositoryProvider) {
-      logger.error('RepositoryProvider not initialized in getKuzuClient');
+      logger.error('[MemoryService.getKuzuClient] RepositoryProvider not initialized');
       throw new Error('RepositoryProvider not initialized');
     }
+    
+    // Return cached client if available
     if (this.kuzuClients.has(clientProjectRoot)) {
-      console.error(
-        `[DEBUG] MemoryService.getKuzuClient FOUND CACHED CLIENT for CPR: ${clientProjectRoot}`,
-      );
+      logger.info(`[MemoryService.getKuzuClient] Found cached KuzuDBClient for: ${clientProjectRoot}`);
       const cachedClient = this.kuzuClients.get(clientProjectRoot)!;
-      console.error(
-        `[DEBUG] MemoryService.getKuzuClient CACHED CLIENT dbPath:`,
-        cachedClient.dbPath,
-      );
       return cachedClient;
     }
+    
+    // Create new client if needed
     logger.info(
-      `Creating new KuzuDBClient and initializing repositories for root: ${clientProjectRoot}`,
+      `[MemoryService.getKuzuClient] Creating new KuzuDBClient for: ${clientProjectRoot}`,
     );
-    const newClient = new KuzuDBClient(clientProjectRoot); // KuzuDBClient constructor handles path joining for db file
-    await newClient.initialize(); // This now also handles schema init
-    this.kuzuClients.set(clientProjectRoot, newClient);
-    await this.repositoryProvider.initializeRepositories(clientProjectRoot, newClient);
-    logger.info(`KuzuDBClient and repositories initialized for: ${clientProjectRoot}`);
-    return newClient;
+    
+    try {
+      const newClient = new KuzuDBClient(clientProjectRoot); // KuzuDBClient constructor handles path joining for db file
+      // Pass the mcpContext to allow for progress notifications during initialization
+      await newClient.initialize(mcpContext); // This now also handles schema init
+      this.kuzuClients.set(clientProjectRoot, newClient);
+      await this.repositoryProvider.initializeRepositories(clientProjectRoot, newClient);
+      logger.info(`[MemoryService.getKuzuClient] KuzuDBClient and repositories initialized for: ${clientProjectRoot}`);
+      return newClient;
+    } catch (error) {
+      logger.error(`[MemoryService.getKuzuClient] Failed to initialize KuzuDBClient for ${clientProjectRoot}:`, error);
+      throw new Error(`Failed to initialize database for project root ${clientProjectRoot}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   static async getInstance(
@@ -138,6 +149,13 @@ export class MemoryService {
     console.error(`[DEBUG] MemoryService.initMemoryBank Absolute CPR: ${clientProjectRoot}`);
     logger.info(`[MemoryService.initMemoryBank] Absolute CPR: ${clientProjectRoot}`);
 
+    // Send progress update for path validation
+    await mcpContext.sendProgress({
+      status: 'in_progress',
+      message: `Validating database path for ${repositoryName}:${branch}...`,
+      percent: 25,
+    });
+
     console.error(
       `[DEBUG] MemoryService.initMemoryBank checking repositoryProvider: ${!!this.repositoryProvider}`,
     );
@@ -165,12 +183,27 @@ export class MemoryService {
       logger.info(
         `[MemoryService.initMemoryBank] Attempting to call this.getKuzuClient for CPR: ${clientProjectRoot}`,
       );
+      
+      // Send progress update for database client initialization
+      await mcpContext.sendProgress({
+        status: 'in_progress',
+        message: `Creating Kuzu database client for ${repositoryName}:${branch}...`,
+        percent: 45,
+      });
+      
       console.error(`[DEBUG] MemoryService.initMemoryBank ABOUT TO CALL getKuzuClient`);
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
       console.error(`[DEBUG] MemoryService.initMemoryBank getKuzuClient RETURNED:`, !!kuzuClient);
       logger.info(
         `[MemoryService.initMemoryBank] Successfully RETURNED from this.getKuzuClient for CPR: ${clientProjectRoot}`,
       );
+
+      // Send progress update for repository initialization
+      await mcpContext.sendProgress({
+        status: 'in_progress',
+        message: `Initializing repository structure...`,
+        percent: 60,
+      });
 
       logger.info(`[MemoryService.initMemoryBank] Getting repository instances...`);
       const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
@@ -181,6 +214,13 @@ export class MemoryService {
       );
       let repository = await repositoryRepo.findByName(repositoryName, branch);
       logger.info(`[MemoryService.initMemoryBank] findByName result:`, repository);
+
+      // Send progress update for repository creation/verification
+      await mcpContext.sendProgress({
+        status: 'in_progress',
+        message: `${repository ? 'Found' : 'Creating'} repository node for ${repositoryName}:${branch}...`,
+        percent: 70,
+      });
 
       if (!repository) {
         logger.info(`Repository ${repositoryName}:${branch} not found, creating...`);
@@ -195,6 +235,14 @@ export class MemoryService {
         };
       }
       logger.info(`Repository node ID for ${repositoryName}:${branch} is ${repository.id}`);
+      
+      // Send progress update for metadata initialization
+      await mcpContext.sendProgress({
+        status: 'in_progress',
+        message: `Looking for existing metadata for ${repositoryName}:${branch}...`,
+        percent: 80,
+      });
+      
       const existingMetadata = await metadataRepo.findMetadata(
         mcpContext,
         repositoryName,
@@ -202,6 +250,12 @@ export class MemoryService {
         'meta',
       );
       if (!existingMetadata) {
+        await mcpContext.sendProgress({
+          status: 'in_progress',
+          message: `Creating initial metadata for ${repositoryName}:${branch}...`,
+          percent: 85,
+        });
+        
         logger.info(`No existing metadata for ${repositoryName}:${branch}, creating stub...`);
         const today = new Date().toISOString().split('T')[0];
         const metadataToCreate = {
@@ -225,6 +279,14 @@ export class MemoryService {
       } else {
         logger.info(`Existing metadata found for ${repositoryName}:${branch}`);
       }
+      
+      // Send progress update for completion
+      await mcpContext.sendProgress({
+        status: 'in_progress',
+        message: `Finalizing memory bank initialization for ${repositoryName}:${branch}...`,
+        percent: 90,
+      });
+      
       return {
         success: true,
         message: `Memory bank initialized for ${repositoryName} (branch: ${branch})`,
@@ -236,6 +298,21 @@ export class MemoryService {
         error: error.toString(),
         stack: error.stack,
       });
+      
+      // Send error progress notification
+      try {
+        await mcpContext.sendProgress({
+          status: 'error',
+          message: `Error initializing memory bank: ${error.message || 'Unknown error'}`,
+          error: {
+            message: error.message || 'Failed to initialize memory bank',
+            details: error.stack,
+          },
+        });
+      } catch (progressError: any) {
+        logger.error(`Failed to send error progress: ${String(progressError)}`);
+      }
+      
       return { success: false, message: error.message || 'Failed to initialize memory bank' };
     }
   }

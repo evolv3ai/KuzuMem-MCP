@@ -1,18 +1,25 @@
-import { MemoryService } from './services/memory.service';
-import { toolHandlers } from './mcp/tool-handlers';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import type { RequestId } from '@modelcontextprotocol/sdk/types.js';
-import { z, ZodObject, AnyZodObject } from 'zod';
+import { AnyZodObject, z, ZodObject } from 'zod';
 import * as toolSchemas from './mcp/schemas/tool-schemas';
-import { EnrichedRequestHandlerExtra, McpProgressNotification } from './mcp/types/sdk-custom';
+import { toolHandlers } from './mcp/tool-handlers';
+import { McpProgressNotification } from './mcp/types/sdk-custom';
+import { MemoryService } from './services/memory.service';
 
 // Determine Client Project Root at startup (for context only, not for DB initialization)
 const serverCwd = process.cwd();
 // console.error(
-//   `MCP stdio server CWD (Current Working Directory): ${serverCwd}. Note: Actual memory bank paths are determined by 'init-memory-bank' calls per repository/branch.`,
+//   `MCP stdio server CWD (Current Working Directory): ${serverCwd}. Note: Actual memory bank paths are determined by \'init-memory-bank\' calls per repository/branch.`,
 // );
+
+if (process.env.DB_PATH_OVERRIDE) {
+  console.warn(
+    '[MCP Stdio SDK Server] WARNING: DB_PATH_OVERRIDE environment variable is set.' +
+      ' This will force all KuzuDBClient instances to use this single, globally overridden path (\'${process.env.DB_PATH_OVERRIDE}\').' +
+      ' This is intended for specific testing scenarios and will break multi-project isolation in a typical IDE setup.' +
+      ' Unset this variable for normal operation in IDE environments.',
+  );
+}
 
 process.on('SIGINT', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));
@@ -62,60 +69,9 @@ async function main() {
   // Set up server-wide logger
   const serverLogger = console; // Simple console logger for now
 
-  // Dummy McpContext for global MemoryService initialization
-  // This is a workaround for MemoryService.getInstance expecting a full context.
-  const dummySendNotification = async (_notification: any) => {
-    serverLogger.warn(
-      '[DummyContext] sendNotification called. This should not happen during global MemoryService init.',
-    );
-  };
-  const dummySendRequest = async <U extends z.ZodType<object>>(
-    _request: any,
-    _resultSchema: U,
-  ): Promise<z.infer<U>> => {
-    serverLogger.warn(
-      '[DummyContext] sendRequest called. This should not happen during global MemoryService init.',
-    );
-    throw new Error('dummySendRequest should not be called');
-  };
-
-  const globalMemoryServiceInitContext: any = {
-    logger: serverLogger,
-    session: {}, // Global services don't belong to a specific session initially
-    sendProgress: async (progress: McpProgressNotification) => {
-      serverLogger.warn(
-        '[MemoryService fallback sendProgress]: This should ideally not be used directly for request-specific progress.',
-        progress,
-      );
-    },
-    // Required by RequestHandlerExtra
-    signal: new AbortController().signal, // No real cancellation for global init
-    requestId: 'global-memory-service-init' as RequestId, // Placeholder RequestId
-    sendNotification: dummySendNotification,
-    sendRequest: dummySendRequest,
-    // This is the tricky part for getInstance. We pass null initially.
-    // MemoryService constructor should be robust enough or this needs rethinking.
-    memoryService: null as any, // Will be replaced by the actual instance
-  };
-
-  let memoryService: MemoryService;
-  try {
-    serverLogger.info('[MCP Stdio SDK Server] Attempting to get MemoryService instance...');
-    memoryService = await MemoryService.getInstance(globalMemoryServiceInitContext);
-    serverLogger.info('[MCP Stdio SDK Server] Successfully got MemoryService instance.');
-    // Now, if the global context is stored or used by other parts of MemoryService,
-    // we could potentially update its memoryService field, though this is awkward.
-    (globalMemoryServiceInitContext as any).memoryService = memoryService; // Update the dummy context
-    serverLogger.info(
-      '[MCP Stdio SDK Server] Patched globalMemoryServiceInitContext with memoryService instance.',
-    );
-  } catch (error) {
-    serverLogger.error(
-      '[MCP Stdio SDK Server] CRITICAL ERROR during global MemoryService.getInstance():',
-      error,
-    );
-    process.exit(1); // Exit if global service setup fails
-  }
+  // We no longer initialize a global MemoryService during startup
+  // Each MCP tool handler will create or retrieve a MemoryService instance on-demand and specific to each clientProjectRoot
+  serverLogger.info('[MCP Stdio SDK Server] MemoryService initialization deferred until needed by tool handlers');
 
   const serverInfo = {
     name: packageJson.name,
@@ -290,7 +246,7 @@ async function main() {
                 );
               }
             },
-            memoryService: memoryService,
+            // We'll create a new memoryService instance on-demand instead of using a global one
           };
 
           // Call the original tool handler from tool-handlers.ts
@@ -302,11 +258,22 @@ async function main() {
             console.error(`[DEBUG get-context wrapper] About to call actualToolHandler`, {
               hasActualToolHandler: !!actualToolHandler,
               enrichedContextKeys: Object.keys(enrichedContext),
-              hasMemoryService: !!memoryService,
+              hasMemoryService: !! MemoryService,
             });
           }
 
-          const result = await actualToolHandler(sdkProvidedParams, enrichedContext, memoryService);
+          // Create a new MemoryService instance on-demand for each tool call
+          let memoryServiceInstance: MemoryService;
+          try {
+            serverLogger.info(`[MCP Tool ${toolName}] Creating MemoryService instance for request ${sdkContext.requestId}`);
+            memoryServiceInstance = await MemoryService.getInstance(enrichedContext);
+            serverLogger.info(`[MCP Tool ${toolName}] Successfully created MemoryService instance`);
+          } catch (error) {
+            serverLogger.error(`[MCP Tool ${toolName}] Error creating MemoryService:`, error);
+            throw new Error(`Failed to initialize memory service: ${error instanceof Error ? error.message : String(error)}`);
+          }
+          
+          const result = await actualToolHandler(sdkProvidedParams, enrichedContext, memoryServiceInstance);
 
           // DEBUG: Special logging for get-context
           if (toolName === 'get-context') {
