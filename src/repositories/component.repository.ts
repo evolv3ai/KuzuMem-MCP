@@ -1,5 +1,5 @@
-import { Component, Context, Decision, ComponentStatus, ComponentInput } from '../types';
 import { KuzuDBClient } from '../db/kuzu';
+import { Component, ComponentInput, ComponentStatus, Context, Decision } from '../types';
 import { formatGraphUniqueId } from '../utils/id.utils';
 import { RepositoryRepository } from './repository.repository';
 
@@ -501,6 +501,7 @@ export class ComponentRepository {
   /**
    * Find a component by its logical ID and branch, within a given repository context.
    * The repositoryId here refers to the name of the repository for ID formatting.
+   * Also retrieves the component's dependencies.
    */
   async findByIdAndBranch(
     repositoryName: string,
@@ -509,15 +510,47 @@ export class ComponentRepository {
   ): Promise<Component | null> {
     const logger = console; // Placeholder
     const graphUniqueId = formatGraphUniqueId(repositoryName, itemBranch, itemId);
-    const query = `MATCH (c:Component {graph_unique_id: $graphUniqueId}) RETURN c LIMIT 1`;
-    const params = { graphUniqueId };
+    
     try {
       logger.debug(`[ComponentRepository] Finding component by GID: ${graphUniqueId}`);
-      const result = await this.kuzuClient.executeQuery(query, params);
-      if (result && result.length > 0 && result[0].c) {
-        return this.formatKuzuRowToComponent(result[0].c, repositoryName, itemBranch);
+      
+      // Step 1: Get the basic component info
+      const query = `MATCH (c:Component {graph_unique_id: $graphUniqueId}) RETURN c LIMIT 1`;
+      const result = await this.kuzuClient.executeQuery(query, { graphUniqueId });
+      
+      if (!result || result.length === 0 || !result[0].c) {
+        logger.debug(`[ComponentRepository] Component not found for GID: ${graphUniqueId}`);
+        return null;
       }
-      return null;
+      
+      // Get component data from the basic result
+      const componentData = this.formatKuzuRowToComponent(result[0].c, repositoryName, itemBranch);
+      
+      // Step 2: Get the component's dependencies
+      const depsQuery = `
+        MATCH (c:Component {graph_unique_id: $graphUniqueId})-[:DEPENDS_ON]->(dep:Component)
+        RETURN dep.id as depId
+      `;
+      
+      const depsResult = await this.kuzuClient.executeQuery(depsQuery, { graphUniqueId });
+      
+      // Update the dependencies
+      // First ensure depends_on is initialized as an array (Component interface has it as string[] | undefined)
+      if (!componentData.depends_on) {
+        componentData.depends_on = [];
+      }
+      
+      if (depsResult && depsResult.length > 0) {
+        // Assign the dependency IDs from the query result
+        componentData.depends_on = depsResult.map((dep: any) => dep.depId);
+        logger.debug(`[ComponentRepository] Found ${depsResult.length} dependencies for ${graphUniqueId}`);
+      } else {
+        // If no dependencies found, ensure it's an empty array
+        componentData.depends_on = [];
+        logger.debug(`[ComponentRepository] No dependencies found for ${graphUniqueId}`);
+      }
+      
+      return componentData;
     } catch (error: any) {
       logger.error(
         `[ComponentRepository] Error in findByIdAndBranch for GID ${graphUniqueId}: ${error.message}`,
