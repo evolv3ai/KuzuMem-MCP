@@ -69,10 +69,13 @@ export interface ComponentInput {
 }
 
 // Decision type
+export type DecisionStatus = 'proposed' | 'accepted' | 'rejected' | 'deprecated' | 'superseded';
+
 export interface Decision extends BaseEntity {
   name: string;
   context?: string;
   date: string;
+  status?: DecisionStatus;
 }
 
 // Rule type
@@ -156,3 +159,18 @@ export const ruleSchema = z.object({
   content: z.string().optional(),
   status: z.enum(['active', 'deprecated']).default('active'),
 });
+
+// Tag type
+export interface Tag extends BaseEntity {
+  name: string;
+  color?: string;
+  description?: string;
+}
+
+// File type (basic placeholder)
+export interface File extends BaseEntity {
+  name: string;
+  path: string;
+  size?: number; // in bytes
+  mime_type?: string;
+}

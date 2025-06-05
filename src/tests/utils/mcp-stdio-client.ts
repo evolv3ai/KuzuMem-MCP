@@ -1,341 +1,350 @@
-import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
-import readline from 'readline';
+// Import SDK components with the correct paths
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+
+// Import types
+import {
+  JSONRPCResponse as SDKJSONRPCResponse,
+  isJSONRPCError,
+  ToolAnnotations,
+  ProgressNotification as SDKProgressNotification,
+  McpError as SDKMcpError,
+} from '@modelcontextprotocol/sdk/types.js';
+
 import path from 'path';
-// import { destr } from 'destr'; // Reverted: Will use JSON.parse with guards
+
+// Explicit type for a JSON-RPC Error Response structure
+interface StdioJSONRPCErrorResponse {
+  jsonrpc: '2.0';
+  id: string | number | null; // id can be null for some errors
+  error: {
+    code: number;
+    message: string;
+    data?: unknown;
+  };
+}
+
+// Define a simpler local error type for client-side issues NOT representing JSON-RPC errors
+type ClientSideError = {
+  clientError: {
+    message: string;
+    code?: number;
+    data?: unknown;
+  };
+};
+
+// Call tool options
+interface CallToolOptions {
+  progress?: boolean;
+  stream?: boolean;
+}
 
 // Ensure paths are relative to project root if this file is moved
 const projectRoot = path.resolve(__dirname, '../../../'); // Adjust depth if utils moves
 
-interface JsonRpcRequest {
-  jsonrpc: '2.0';
-  method: string;
-  params?: any;
-  id: string | number;
-}
-
-export interface JsonRpcResponse {
-  jsonrpc: '2.0';
-  result?: any;
-  error?: { code: number; message: string; data?: any };
-  id: string | null;
+// Define a type for the constructor options to make envVars explicit
+interface McpStdioClientOptions {
+  envVars?: Record<string, string>;
+  serverScriptPath?: string; // Allow overriding for tests if needed
+  useTsNode?: boolean; // Flag to use ts-node or direct node execution
+  debug?: boolean; // For verbose logging from this client utility
 }
 
 export class McpStdioClient {
-  private serverProcess?: ChildProcessWithoutNullStreams;
-  private responses: Map<string, (response: JsonRpcResponse) => void> = new Map();
-  private errorResolvers: Map<string, (reason?: any) => void> = new Map();
-  private timeoutHandles: Map<string, NodeJS.Timeout> = new Map();
-  private messageIdCounter = 1;
-  private responseBuffer = '';
-  private static readonly SERVER_SCRIPT_PATH = path.join(projectRoot, 'src/mcp-stdio-server.ts');
-  private serverReady = false;
-  private serverReadyPromise!: Promise<void>;
-  private resolveServerReady!: () => void;
-  private rejectServerReady!: (reason?: any) => void;
+  private sdkClient: Client;
+  private transport: StdioClientTransport;
+  private static readonly DEFAULT_SERVER_SCRIPT_PATH = path.join(
+    projectRoot,
+    'src/mcp-stdio-server.ts',
+  );
 
-  private serverStoppedPromise?: Promise<void>;
-  private resolveServerStopped?: () => void;
+  // Moved class member declarations to the correct class scope
+  private serverReadyPromise: Promise<void>;
+  private _isServerReady: boolean = false;
+  private _serverProcessExited: boolean = false;
+  private _debug: boolean;
 
-  constructor() {
-    this.resetServerReadyPromise();
-  }
+  constructor(options: McpStdioClientOptions = {}) {
+    const {
+      envVars = {},
+      serverScriptPath = McpStdioClient.DEFAULT_SERVER_SCRIPT_PATH,
+      useTsNode = true, // Default to using ts-node for .ts script
+      debug = false,
+    } = options;
+    this._debug = debug;
 
-  private resetServerReadyPromise() {
-    this.serverReadyPromise = new Promise((resolve, reject) => {
-      this.resolveServerReady = resolve;
-      this.rejectServerReady = reject;
-    });
-  }
+    let command: string;
+    let args: string[];
 
-  async startServer(envVars: Record<string, string> = {}): Promise<void> {
-    const serverPath = McpStdioClient.SERVER_SCRIPT_PATH;
-    console.log(`E2E STDIO Client: Starting server script: ${serverPath}`);
-    this.serverReady = false;
-    this.resetServerReadyPromise();
-
-    this.serverProcess = spawn('npx', ['ts-node', '--transpile-only', serverPath], {
-      env: { ...process.env, ...envVars },
-      shell: process.platform === 'win32',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-
-    if (
-      !this.serverProcess ||
-      !this.serverProcess.stdout ||
-      !this.serverProcess.stderr ||
-      !this.serverProcess.stdin
-    ) {
-      const err = new Error('Failed to spawn server process or attach to stdio streams.');
-      this.rejectServerReady(err);
-      return Promise.reject(err);
+    if (useTsNode) {
+      command = 'npx';
+      args = ['ts-node', '--transpile-only', serverScriptPath];
+    } else {
+      command = 'node';
+      args = [serverScriptPath]; // Assuming serverScriptPath points to a .js file
     }
 
-    this.serverProcess.stderr.on('data', (data) => {
-      const errorOutput = data.toString();
-      console.error(`E2E STDIO Server STDERR: ${errorOutput}`);
-      if (!this.serverReady && (errorOutput.includes('Error') || errorOutput.includes('⨯'))) {
-        // If critical error on startup before ready signal, reject the ready promise
-        // this.rejectServerReady(new Error(`Server emitted critical error on startup: ${errorOutput.substring(0,200)}`));
-      }
+    if (this._debug) {
+      console.log(
+        `E2E SDK Client: Initializing StdioClientTransport. Command: ${command}, Args: ${args.join(' ')}, Env: ${JSON.stringify(envVars)}`,
+      );
+    }
+
+    this.transport = new StdioClientTransport({
+      command,
+      args,
+      env: Object.fromEntries(
+        Object.entries({ ...process.env, ...envVars }).filter(([_, v]) => v !== undefined),
+      ) as Record<string, string>,
+      // Removed onStdErr and onExit as they are not in StdioServerParameters type
+      // The SDK transport should handle stderr and process exit internally,
+      // or expose them via different means if needed.
     });
 
-    const rl = readline.createInterface({ input: this.serverProcess.stdout });
-
-    rl.on('line', (line) => {
-      if (!this.serverReady && line.trim() === 'MCP_STDIO_SERVER_READY_FOR_TESTING') {
-        console.log(
-          'E2E STDIO Client: Server reported ready (MCP_STDIO_SERVER_READY_FOR_TESTING detected).',
-        );
-        this.serverReady = true;
-        this.resolveServerReady();
-        this.responseBuffer = '';
-        return;
-      }
-
-      if (this.serverReady) {
-        if (line.trim() === '') {
-          return;
-        }
-
-        if (line.trim().startsWith('{') && line.trim().endsWith('}')) {
-          try {
-            const parsedJson = JSON.parse(line); // Use JSON.parse again
-            // this.responseBuffer = ''; // Not strictly needed if readline handles lines correctly
-
-            // Check if parsedJson is an object, as JSON.parse can return primitives if top-level JSON is a primitive
-            if (typeof parsedJson === 'object' && parsedJson !== null) {
-              if (
-                parsedJson.id !== undefined &&
-                parsedJson.id !== null &&
-                this.responses.has(String(parsedJson.id))
-              ) {
-                const idStr = String(parsedJson.id);
-                const callback = this.responses.get(idStr);
-                const rejectError = this.errorResolvers.get(idStr);
-                const timeoutHandle = this.timeoutHandles.get(idStr);
-
-                if (timeoutHandle) {
-                  clearTimeout(timeoutHandle);
-                  this.timeoutHandles.delete(idStr);
-                }
-
-                if (parsedJson.error && rejectError) {
-                  console.log(
-                    `E2E STDIO Client: Rejecting request ${idStr} with JSON-RPC error:`,
-                    parsedJson.error,
-                  );
-                  rejectError(parsedJson as JsonRpcResponse);
-                } else if (callback) {
-                  console.log(
-                    `E2E STDIO Client: Resolving request ${idStr} with result:`,
-                    parsedJson.result,
-                  );
-                  callback(parsedJson as JsonRpcResponse);
-                }
-                this.responses.delete(idStr);
-                this.errorResolvers.delete(idStr);
-              } else if (
-                parsedJson.method === 'tools/progress' ||
-                parsedJson.method === '$/progress'
-              ) {
-                console.log('E2E STDIO Progress Notification:', parsedJson.params);
-              } else if (parsedJson.id === null && parsedJson.error) {
-                console.error('E2E STDIO General Server Error (id:null):', parsedJson.error);
-              } else if (parsedJson.id !== undefined) {
-                console.log(
-                  `E2E STDIO Client: Received JSON with ID ${parsedJson.id} but no pending resolver or not a progress event.`,
-                );
-              } else {
-                console.log('E2E STDIO Client: Received unexpected JSON object:', parsedJson);
-              }
-            } else {
-              // JSON.parse returned a primitive or null, but the line looked like an object.
-              console.log(
-                `E2E STDIO Client: Parsed line that looked like JSON, but result was not an object: >>>${line}<<<, Parsed:`,
-                parsedJson,
-              );
-            }
-          } catch (e: any) {
-            console.error(
-              `E2E STDIO Client: Error parsing line (that appeared to be JSON) as JSON: ${e.message}. Raw line: >>>${line}<<<`,
-            );
-          }
-        } else {
-          console.log(
-            `E2E STDIO Client: Received non-JSON stdout line from server (discarded): >>>${line}<<<`,
-          );
-        }
-      }
+    this.sdkClient = new Client({
+      transport: this.transport,
+      name: 'e2e-mcp-client',
+      version: '0.0.1',
     });
 
-    this.serverProcess.on('error', (err) => {
-      console.error('E2E STDIO Client: Failed to start server process:', err);
-      if (!this.serverReady) {
-        this.rejectServerReady(err);
-      }
-    });
-
-    this.serverProcess.on('close', (code) => {
-      console.log(`E2E STDIO Server process exited with code ${code}`);
-      this.serverReady = false;
-      this.responses.forEach((cb, id) => {
-        const errCb = this.errorResolvers.get(id);
-        const timeoutHandle = this.timeoutHandles.get(id);
-        if (timeoutHandle) {
-          clearTimeout(timeoutHandle);
-          this.timeoutHandles.delete(id);
-        }
-        if (errCb) {
-          errCb(
-            new Error(
-              `Server process closed unexpectedly with code ${code}. Request ${id} may not have been processed.`,
-            ),
-          );
-        }
-        this.errorResolvers.delete(id);
-      });
-      this.responses.clear();
-      if (this.resolveServerStopped) {
-        this.resolveServerStopped();
-        this.resolveServerStopped = undefined;
-        this.serverStoppedPromise = undefined;
-      }
-      this.resetServerReadyPromise();
-    });
-    return this.serverReadyPromise;
+    // Attempt to determine server readiness.
+    // This is a best guess. The ideal way is if transport exposes a status or connect() promise.
+    // For now, we'll assume the first successful interaction means it's ready,
+    // or if the transport has an explicit startup mechanism.
+    this.serverReadyPromise = this._initializeConnection();
   }
 
-  async request(method: string, params?: any, timeoutMs: number = 30000): Promise<JsonRpcResponse> {
-    if (!this.isServerReady()) {
-      console.log('E2E STDIO Client: request() called but server not ready, awaiting readiness...');
-      try {
-        await this.serverReadyPromise;
-        if (!this.isServerReady()) {
-          throw new Error('Server did not become ready after awaiting.');
-        }
-      } catch (e) {
+  private logDebug(message: string, ...data: any[]): void {
+    if (this._debug) {
+      const logData =
+        data.length > 0
+          ? data.map((d) => (typeof d === 'object' ? JSON.stringify(d, null, 2) : d))
+          : [];
+      console.log(`[MCP E2E SDK Client DEBUG] ${message}`, ...logData);
+    }
+  }
+
+  private async _initializeConnection(): Promise<void> {
+    try {
+      // First, connect the SDK client to the transport.
+      // This will internally call transport.start() and perform the MCP initialize handshake.
+      this.logDebug('Connecting SDK client to transport...');
+      await this.sdkClient.connect(this.transport);
+      this.logDebug('SDK client connect() successful. Server should be initialized.');
+
+      // Now, a light operation like listTools can confirm server is responsive post-initialization.
+      this.logDebug('Attempting to list tools to confirm server responsiveness post-connect...');
+      await this.sdkClient.listTools(); // This call now happens *after* client.connect()
+      this._isServerReady = true;
+      this.logDebug(
+        'Server connection confirmed and responsive (listTools successful post-connect).',
+      );
+
+      // Monitor for disconnection if the transport provides such an event
+      if (typeof (this.transport as any).on === 'function') {
+        (this.transport as any).on('close', () => {
+          // Assuming a 'close' or 'exit' event
+          this.logDebug('Transport indicated server process exit.');
+          this._isServerReady = false;
+          this._serverProcessExited = true;
+        });
+      }
+    } catch (error) {
+      this._isServerReady = false;
+      this._serverProcessExited = true; // Assume exit on initial connection error
+      console.error(
+        'E2E SDK Client: Failed to initialize connection with server or server is not ready.',
+        error,
+      );
+      throw new Error(
+        `Server failed to become ready: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  /**
+   * Ensures the server is ready before proceeding. Throws if not.
+   */
+  public async ensureServerReady(): Promise<void> {
+    if (this._serverProcessExited) {
+      throw new Error(
+        'E2E SDK Client: Server process has exited or failed to start. Cannot make requests.',
+      );
+    }
+    if (!this._isServerReady) {
+      this.logDebug('Server not ready, awaiting initialization promise...');
+      await this.serverReadyPromise;
+      if (this._serverProcessExited) {
+        // Check again after await
+        throw new Error('E2E SDK Client: Server process exited during readiness check.');
+      }
+      if (!this._isServerReady) {
         throw new Error(
-          `E2E STDIO Client: Server failed to become ready before request: ${(e as Error).message}`,
+          'E2E SDK Client: Server did not become ready after awaiting initial connection.',
         );
       }
-      console.log('E2E STDIO Client: Server is now ready, proceeding with request.');
     }
-    if (!this.serverProcess || this.serverProcess.killed) {
-      throw new Error('E2E STDIO Client: Server process is not running or has been killed.');
-    }
+    this.logDebug('Server is ready.');
+  }
 
-    const id = String(this.messageIdCounter++);
-    const rpcRequest: JsonRpcRequest = {
-      jsonrpc: '2.0',
-      method,
-      params,
-      id,
+  /**
+   * Calls a tool on the MCP server.
+   * For streaming tools, this returns an AsyncIterable to consume progress and final result.
+   * For non-streaming tools, it effectively yields one item (the final result or error).
+   */
+  public async *callTool(
+    toolName: string,
+    params?: any,
+    options?: CallToolOptions,
+  ): AsyncIterable<
+    SDKProgressNotification | SDKJSONRPCResponse | StdioJSONRPCErrorResponse | ClientSideError
+  > {
+    await this.ensureServerReady();
+    this.logDebug(`Calling tool '${toolName}' (adapted for single yield)`, { params, options });
+
+    const callToolArgs = {
+      name: toolName,
+      arguments: params,
+      _meta: {
+        progress: options?.progress,
+        stream: options?.stream,
+      },
     };
 
-    return new Promise((resolve, reject) => {
-      this.responses.set(id, resolve);
-      this.errorResolvers.set(id, reject);
-
-      const timeoutHandle = setTimeout(() => {
-        if (this.responses.has(id)) {
-          this.responses.delete(id);
-          this.errorResolvers.delete(id);
-          this.timeoutHandles.delete(id);
-          reject(new Error(`E2E STDIO Request ${id} (${method}) timed out after ${timeoutMs}ms`));
-        }
-      }, timeoutMs);
-      this.timeoutHandles.set(id, timeoutHandle);
-
-      try {
-        const requestString = JSON.stringify(rpcRequest) + '\n';
-        this.serverProcess?.stdin.write(requestString);
-      } catch (e) {
-        clearTimeout(timeoutHandle);
-        this.responses.delete(id);
-        this.errorResolvers.delete(id);
-        this.timeoutHandles.delete(id);
-        reject(e);
-      }
-    });
-  }
-
-  stopServer(): Promise<void> {
-    if (this.serverProcess && !this.serverProcess.killed) {
-      console.log('E2E STDIO Client: Sending SIGTERM to server process.');
-      this.serverStoppedPromise = new Promise((resolve) => {
-        this.resolveServerStopped = resolve;
-      });
-      this.serverProcess.kill('SIGTERM');
-      this.serverReady = false;
-      this.timeoutHandles.forEach((handle, id) => {
-        clearTimeout(handle);
-        this.responses.delete(id);
-        this.errorResolvers.delete(id);
-      });
-      this.timeoutHandles.clear();
-      return this.serverStoppedPromise;
-    }
-    return Promise.resolve();
-  }
-
-  isServerReady(): boolean {
-    return this.serverReady;
-  }
-
-  private handleData(data: Buffer) {
-    const lines = data.toString().split('\n');
-    lines.forEach((line) => {
-      if (line.trim() === '') {
-        return;
-      }
-
-      if (line.trim().startsWith('{') && line.trim().endsWith('}')) {
-        try {
-          const response = JSON.parse(line);
-          console.log(`E2E STDIO Client: Received potential JSON line: ${line}`);
-
-          if (response.id && this.responses.has(String(response.id))) {
-            console.log(`E2E STDIO Client: Resolving request ${response.id}`);
-            const resolve = this.responses.get(String(response.id));
-            const rejectError = this.errorResolvers.get(String(response.id));
-            const timeoutHandle = this.timeoutHandles.get(String(response.id));
-
-            if (timeoutHandle) {
-              clearTimeout(timeoutHandle);
-            }
-
-            if (response.error) {
-              console.log(
-                `E2E STDIO Client: Response for ${response.id} is an error:`,
-                response.error,
-              );
-              if (rejectError) {
-                rejectError(response);
-              }
-            } else {
-              if (resolve) {
-                resolve(response);
-              }
-            }
-
-            this.responses.delete(String(response.id));
-            this.errorResolvers.delete(String(response.id));
-            this.timeoutHandles.delete(String(response.id));
-          } else if (response.method === 'tools/progress') {
-            console.log(`E2E STDIO Client: Received progress notification:`, response.params);
-          } else {
-            console.log(
-              `E2E STDIO Client: Received unexpected JSON response or notification: ${line}`,
-            );
-          }
-        } catch (e: any) {
-          console.log(
-            `E2E STDIO Client: Error parsing line that seemed like JSON: ${e.message}. Raw line: >>>${line}<<<`,
-          );
-        }
+    try {
+      const finalResult = await this.sdkClient.callTool(callToolArgs as any);
+      this.logDebug(`Adapted callTool: Received final result for ${toolName}:`, finalResult);
+      yield finalResult as SDKJSONRPCResponse;
+    } catch (error) {
+      this.logDebug(`Adapted callTool: Error from sdkClient.callTool for '${toolName}':`, error);
+      if (isJSONRPCError(error)) {
+        yield error as StdioJSONRPCErrorResponse;
       } else {
-        console.log(`E2E STDIO Client: Received non-JSON stdout line: >>>${line}<<<`);
+        const clientError: ClientSideError = {
+          clientError: {
+            message: error instanceof Error ? error.message : String(error),
+            code: (error as any)?.code || -32001,
+            data: error,
+          },
+        };
+        yield clientError;
       }
-    });
+    }
+  }
+
+  /**
+   * A utility method to get the final result from a tool call,
+   * especially for non-streaming tools or when only the end result of a stream is needed.
+   * It will iterate through progress events if any.
+   */
+  public async getFinalToolResult(
+    toolName: string,
+    params?: any,
+    options?: CallToolOptions,
+  ): Promise<SDKJSONRPCResponse | StdioJSONRPCErrorResponse | ClientSideError> {
+    await this.ensureServerReady();
+    this.logDebug(`Getting final result for tool '${toolName}'`, { params, options });
+
+    const callToolArgs = {
+      name: toolName,
+      arguments: params,
+      _meta: {
+        progress: options?.progress,
+        stream: options?.stream,
+      },
+    };
+
+    try {
+      const finalResult = await this.sdkClient.callTool(callToolArgs as any);
+      this.logDebug(`Final MCP result for ${toolName}:`, finalResult);
+
+      // Extract actual data from MCP CallToolResult format
+      if (finalResult && typeof finalResult === 'object' && 'content' in finalResult) {
+        const mcpResult = finalResult as any;
+        if (Array.isArray(mcpResult.content) && mcpResult.content.length > 0) {
+          const firstContent = mcpResult.content[0];
+          if (firstContent.type === 'text' && typeof firstContent.text === 'string') {
+            try {
+              // Try to parse the JSON string back to the original object
+              const parsedData = JSON.parse(firstContent.text);
+              this.logDebug(`Extracted data from MCP format for ${toolName}:`, parsedData);
+              return parsedData as SDKJSONRPCResponse;
+            } catch (parseError) {
+              this.logDebug(
+                `Failed to parse MCP content as JSON for ${toolName}, returning text:`,
+                firstContent.text,
+              );
+              // If it's not valid JSON, return the text as-is
+              return firstContent.text as SDKJSONRPCResponse;
+            }
+          }
+        }
+      }
+
+      // Fallback: return the raw result if it's not in expected MCP format
+      this.logDebug(`Using raw result for ${toolName} (not MCP format):`, finalResult);
+      return finalResult as SDKJSONRPCResponse;
+    } catch (error) {
+      this.logDebug(`Error from sdkClient.callTool for ${toolName}:`, error);
+      if (isJSONRPCError(error)) {
+        return error as StdioJSONRPCErrorResponse;
+      }
+      const clientError: ClientSideError = {
+        clientError: {
+          message: error instanceof Error ? error.message : String(error),
+          code: (error as any)?.code || -32001,
+          data: error,
+        },
+      };
+      return clientError;
+    }
+  }
+
+  public async listTools(): Promise<ToolAnnotations[]> {
+    await this.ensureServerReady();
+    this.logDebug('Listing tools (raw SDK output)...');
+    try {
+      const response = await this.sdkClient.listTools();
+      // Attempt to access a 'tools' property, or use response directly if it's the array.
+      // Cast to 'any' to handle potential structural changes in the SDK response.
+      const toolsArray = (response as any)?.tools || response;
+
+      if (!Array.isArray(toolsArray)) {
+        console.error(
+          'E2E SDK Client: listTools response is not an array and has no .tools property or is not the array itself:',
+          response,
+        );
+        throw new Error('Unexpected listTools response structure from SDK');
+      }
+
+      this.logDebug(
+        'Successfully listed tools (raw): ',
+        toolsArray.length > 0 ? toolsArray[0] : 'No tools',
+      );
+      return toolsArray as ToolAnnotations[]; // Ensure the final return is cast to the expected type
+    } catch (error) {
+      console.error('E2E SDK Client: Error listing tools (raw): ', error);
+      throw error; // Rethrow to be handled by test
+    }
+  }
+
+  public async stopServer(): Promise<void> {
+    this.logDebug('Stopping server via transport.close().');
+    this._isServerReady = false;
+    this._serverProcessExited = true; // Mark as exited when stop is initiated
+    if (this.transport && typeof (this.transport as any).close === 'function') {
+      try {
+        await (this.transport as any).close(); // SDK transport should handle killing the process
+        this.logDebug('Transport closed.');
+      } catch (error) {
+        console.error('E2E SDK Client: Error during transport.close():', error);
+      }
+    } else {
+      this.logDebug('Transport has no close method or transport is not defined.');
+    }
+  }
+
+  public isServerReady(): boolean {
+    return this._isServerReady && !this._serverProcessExited;
   }
 }

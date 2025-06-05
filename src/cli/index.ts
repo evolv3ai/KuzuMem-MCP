@@ -2,11 +2,25 @@
 import { Command } from 'commander';
 import { MemoryService } from '../services/memory.service';
 import { Rule } from '../types'; // Import Rule type
+import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
 import fs from 'fs/promises';
 import path from 'path';
 
 const program = new Command();
 let memoryService: MemoryService;
+
+function createMockContext(): EnrichedRequestHandlerExtra {
+  return {
+    logger: console,
+    session: {},
+    sendProgress: async () => {},
+    memoryService: null as any, // Will be set after initialization
+    signal: new AbortController().signal,
+    requestId: 'cli-request',
+    sendNotification: async () => {},
+    sendRequest: async () => ({ id: 'cli', jsonrpc: '2.0', result: {} }),
+  } as EnrichedRequestHandlerExtra;
+}
 
 async function initializeMemoryServiceInstance(): Promise<void> {
   if (!memoryService) {
@@ -46,7 +60,8 @@ program
     const branch = options.branch;
     try {
       const clientProjectRoot = getEffectiveProjectRoot();
-      await memoryService.initMemoryBank(clientProjectRoot, repositoryName, branch);
+      const mockContext = createMockContext();
+      await memoryService.initMemoryBank(mockContext, clientProjectRoot, repositoryName, branch);
       console.log(
         `✅ Memory bank initialized for repository: ${repositoryName} (branch: ${branch})`,
       );
@@ -80,7 +95,8 @@ program
       observation: options.observation,
     };
     try {
-      await memoryService.updateContext(clientProjectRoot, contextParams);
+      const mockContext = createMockContext();
+      await memoryService.updateContext(mockContext, clientProjectRoot, contextParams);
       console.log(
         `✅ Added to today's context for repository: ${repositoryName} (branch: ${branch})`,
       );
@@ -112,7 +128,9 @@ program
       status: options.status as 'active' | 'deprecated' | 'planned',
     };
     try {
+      const mockContext = createMockContext();
       await memoryService.upsertComponent(
+        mockContext,
         clientProjectRoot,
         repositoryName,
         branch,
@@ -145,7 +163,9 @@ program
       date: options.date,
     };
     try {
+      const mockContext = createMockContext();
       await memoryService.upsertDecision(
+        mockContext,
         clientProjectRoot,
         repositoryName,
         branch,
@@ -182,7 +202,8 @@ program
       status: options.status as 'active' | 'deprecated',
     };
     try {
-      await memoryService.upsertRule(clientProjectRoot, repositoryName, ruleDataForService, branch);
+      const mockContext = createMockContext();
+      await memoryService.upsertRule(mockContext, clientProjectRoot, repositoryName, ruleDataForService, branch);
       console.log(`✅ Rule ${id} added to repository: ${repositoryName} (branch: ${branch})`);
     } catch (error) {
       console.error('❌ Failed to add rule:', error);

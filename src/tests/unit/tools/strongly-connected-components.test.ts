@@ -48,13 +48,25 @@ describe('strongly-connected-components tool handler', () => {
     mockMemoryService = {};
   });
 
+  // Mock context for the handler
+  const mockContext = {
+    logger: console,
+    session: {},
+    sendProgress: jest.fn(async () => {}),
+    memoryService: mockMemoryService,
+    signal: new AbortController().signal,
+    requestId: 'test-request-id',
+    sendNotification: jest.fn(async () => {}),
+    sendRequest: jest.fn(async () => {}),
+  } as any; // Type assertion to avoid complex mock typing
+
   it('should validate required parameters', async () => {
     // Missing repository
     const missingRepoArgs = {
       branch: 'main',
       clientProjectRoot: '/test/client/root',
     };
-    const result = (await handler(missingRepoArgs, mockMemoryService)) as ErrorResult;
+    const result = (await handler(missingRepoArgs, mockContext, mockMemoryService)) as ErrorResult;
     expect(result).toHaveProperty('error');
     expect(result.error).toContain('repository');
     expect(mockExecute).not.toHaveBeenCalled();
@@ -73,7 +85,7 @@ describe('strongly-connected-components tool handler', () => {
       relationshipTableNames: ['DEPENDS_ON'],
     };
 
-    const result = await handler(args, mockMemoryService);
+    const result = await handler(args, mockContext, mockMemoryService);
 
     expect(result).toBe(opResult);
     expect(mockExecute).toHaveBeenCalledWith(
@@ -100,7 +112,7 @@ describe('strongly-connected-components tool handler', () => {
       relationshipTableNames: ['DEPENDS_ON'],
     };
 
-    await handler(args, mockMemoryService);
+    await handler(args, mockContext, mockMemoryService);
 
     expect(mockExecute).toHaveBeenCalledWith(
       '/test/client/root',
@@ -126,6 +138,6 @@ describe('strongly-connected-components tool handler', () => {
       nodeTableNames: ['Component'],
       relationshipTableNames: ['DEPENDS_ON'],
     };
-    await expect(handler(args, mockMemoryService)).rejects.toThrow('Graph error');
+    await expect(handler(args, mockContext, mockMemoryService)).rejects.toThrow('Graph error');
   });
 });
