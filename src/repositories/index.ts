@@ -13,3 +13,6 @@ export {
   DecisionRepository,
   RuleRepository,
 };
+
+export * from './file.repository';
+export * from './tag.repository';

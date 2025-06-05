@@ -3,18 +3,10 @@ import { MemoryService } from '../services/memory.service';
 import {
   metadataSchema,
   contextSchema,
-  componentSchema,
-  decisionSchema,
-  ruleSchema,
-  Rule,
-  ComponentInput,
-  Metadata,
-  Context,
-  Component,
-  Decision,
+  Rule
 } from '../types';
-import { z } from 'zod';
 import { Mutex } from '../utils/mutex';
+import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
 
 /**
  * Controller for memory bank operations
@@ -80,6 +72,22 @@ export class MemoryController {
   };
 
   /**
+   * Create mock MCP context for controller calls
+   */
+  private createMockContext(): EnrichedRequestHandlerExtra {
+    return {
+      signal: new AbortController().signal,
+      requestId: 'controller-mock-request',
+      sendNotification: async () => {},
+      sendRequest: async () => ({ id: 'mock' } as any),
+      logger: console,
+      session: {},
+      sendProgress: async () => {},
+      memoryService: this.memoryService
+    };
+  }
+
+  /**
    * Initialize a memory bank for a repository
    */
   initMemoryBank = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
@@ -91,7 +99,7 @@ export class MemoryController {
         .json({ error: 'clientProjectRoot and repositoryName are required in the request body' });
       return;
     }
-    await this.memoryService.initMemoryBank(clientProjectRoot, repositoryName, branch);
+    await this.memoryService.initMemoryBank(this.createMockContext(), clientProjectRoot, repositoryName, branch);
     res.status(200).json({
       message: `Memory bank for ${repositoryName} initialized successfully at ${clientProjectRoot}.`,
     });
@@ -110,6 +118,7 @@ export class MemoryController {
       return;
     }
     const metadata = await this.memoryService.getMetadata(
+      this.createMockContext(),
       clientProjectRoot,
       repositoryName,
       branch,
@@ -150,6 +159,7 @@ export class MemoryController {
     }
 
     const updatedMetadata = await this.memoryService.updateMetadata(
+      this.createMockContext(),
       clientProjectRoot,
       repositoryName,
       metadata,
@@ -179,6 +189,7 @@ export class MemoryController {
     }
 
     const context = await this.memoryService.getTodayContext(
+      this.createMockContext(),
       clientProjectRoot,
       repositoryName,
       branch,
@@ -215,11 +226,15 @@ export class MemoryController {
       return;
     }
 
-    const updatedContext = await this.memoryService.updateContext(clientProjectRoot, {
-      repository: repositoryName,
-      branch,
-      ...result.data,
-    });
+    const updatedContext = await this.memoryService.updateContext(
+      this.createMockContext(),
+      clientProjectRoot,
+      {
+        repository: repositoryName,
+        branch,
+        ...result.data,
+      }
+    );
 
     if (!updatedContext) {
       res.status(404).json({ error: 'Context not found or update failed' });
@@ -248,6 +263,7 @@ export class MemoryController {
     const limitNum = limit ? parseInt(limit as string, 10) : undefined;
 
     const contexts = await this.memoryService.getLatestContexts(
+      this.createMockContext(),
       clientProjectRoot,
       repositoryName,
       branchName || 'main',
@@ -273,6 +289,7 @@ export class MemoryController {
     }
 
     const components = await this.memoryService.getActiveComponents(
+      this.createMockContext(),
       clientProjectRoot,
       repositoryName,
       branch,
@@ -314,6 +331,7 @@ export class MemoryController {
     }
 
     const updatedDecision = await this.memoryService.upsertDecision(
+      this.createMockContext(),
       clientProjectRoot,
       repositoryName,
       branch,
@@ -352,6 +370,7 @@ export class MemoryController {
       }
 
       const decisions = await this.memoryService.getDecisionsByDateRange(
+        this.createMockContext(),
         clientProjectRoot,
         repositoryName,
         branchName,
@@ -402,6 +421,7 @@ export class MemoryController {
     }
 
     const updatedRule = await this.memoryService.upsertRule(
+      this.createMockContext(),
       clientProjectRoot,
       repositoryName,
       ruleDataForService as Omit<Rule, 'repository' | 'branch' | 'id'> & { id: string },
@@ -436,7 +456,7 @@ export class MemoryController {
         return;
       }
 
-      const rules = await this.memoryService.getActiveRules(clientProjectRoot, repository, branch);
+      const rules = await this.memoryService.getActiveRules(this.createMockContext(), clientProjectRoot, repository, branch);
 
       res.status(200).json(rules);
     } catch (error) {

@@ -20,6 +20,7 @@ describe('MemoryService', () => {
   let memoryService: MemoryService;
   let mockRepositoryProvider: jest.Mocked<RepositoryProvider>;
   let mockKuzuClient: jest.Mocked<KuzuDBClient>;
+  let mockMcpContext: any;
 
   const testClientRoot = '/test/client/root';
 
@@ -39,6 +40,18 @@ describe('MemoryService', () => {
     // Reset singleton instances
     (MemoryService as any).instance = undefined;
     (RepositoryProvider as any).instance = undefined;
+
+    // Setup mock MCP context
+    mockMcpContext = {
+      logger: console,
+      session: {},
+      sendProgress: jest.fn(),
+      signal: new AbortController().signal,
+      requestId: 'test-request-id',
+      sendNotification: jest.fn(),
+      sendRequest: jest.fn(),
+      memoryService: null,
+    };
 
     // Setup mock repository provider
     mockRepositoryProvider = {
@@ -82,7 +95,7 @@ describe('MemoryService', () => {
   });
 
   test('should get KuzuClient and initialize repositories', async () => {
-    const client = await memoryService.getKuzuClient(testClientRoot);
+    const client = await memoryService.getKuzuClient(mockMcpContext, testClientRoot);
 
     expect(client).toBe(mockKuzuClient);
     expect(KuzuDBClient).toHaveBeenCalledWith(testClientRoot);
@@ -94,8 +107,8 @@ describe('MemoryService', () => {
   });
 
   test('should reuse existing KuzuClient for same client root', async () => {
-    const client1 = await memoryService.getKuzuClient(testClientRoot);
-    const client2 = await memoryService.getKuzuClient(testClientRoot);
+    const client1 = await memoryService.getKuzuClient(mockMcpContext, testClientRoot);
+    const client2 = await memoryService.getKuzuClient(mockMcpContext, testClientRoot);
 
     expect(client1).toBe(client2);
     expect(KuzuDBClient).toHaveBeenCalledTimes(1);
@@ -104,27 +117,54 @@ describe('MemoryService', () => {
 
   test('should create different KuzuClients for different client roots', async () => {
     const anotherTestRoot = '/another/test/root';
-    const anotherMockKuzuClient = {
+
+    // Define the expected instances clearly for this test
+    const firstExpectedClient = {
+      initialize: jest.fn().mockResolvedValue(undefined),
+      executeQuery: jest.fn(),
+      close: jest.fn(),
+      dbPath: path.join(testClientRoot, 'test-memory-bank.kuzu'), // testClientRoot is from the outer scope
+    } as unknown as jest.Mocked<KuzuDBClient>;
+
+    const secondExpectedClient = {
       initialize: jest.fn().mockResolvedValue(undefined),
       executeQuery: jest.fn(),
       close: jest.fn(),
       dbPath: path.join(anotherTestRoot, 'test-memory-bank.kuzu'),
     } as unknown as jest.Mocked<KuzuDBClient>;
 
-    // Reset the mock to count from here
-    (KuzuDBClient as unknown as jest.Mock).mockClear();
+    (KuzuDBClient as unknown as jest.Mock).mockClear(); // Clear calls AND previous implementations
 
-    // Setup mock for second client
+    // Setup mock implementations for KuzuDBClient constructor
     (KuzuDBClient as unknown as jest.Mock)
-      .mockImplementationOnce(() => mockKuzuClient)
-      .mockImplementationOnce(() => anotherMockKuzuClient);
+      .mockImplementationOnce((root: string) => {
+        // Optional: Add logging or specific checks if needed for deeper debugging
+        // console.log('KuzuDBClient mock: 1st call, root:', root);
+        if (root !== testClientRoot) {
+          throw new Error(`KuzuDBClient 1st call: expected root ${testClientRoot}, got ${root}`);
+        }
+        return firstExpectedClient;
+      })
+      .mockImplementationOnce((root: string) => {
+        // Optional: Add logging or specific checks
+        // console.log('KuzuDBClient mock: 2nd call, root:', root);
+        if (root !== anotherTestRoot) {
+          throw new Error(`KuzuDBClient 2nd call: expected root ${anotherTestRoot}, got ${root}`);
+        }
+        return secondExpectedClient;
+      });
 
-    const client1 = await memoryService.getKuzuClient(testClientRoot);
-    const client2 = await memoryService.getKuzuClient(anotherTestRoot);
+    const client1 = await memoryService.getKuzuClient(mockMcpContext, testClientRoot);
+    const client2 = await memoryService.getKuzuClient(mockMcpContext, anotherTestRoot);
 
-    expect(client1).toBe(mockKuzuClient);
-    expect(client2).toBe(anotherMockKuzuClient);
+    expect(client1).toBe(firstExpectedClient);
+    expect(client2).toBe(secondExpectedClient);
+
     expect(KuzuDBClient).toHaveBeenCalledTimes(2);
+    // Verify constructor was called with the correct arguments
+    expect(KuzuDBClient).toHaveBeenCalledWith(testClientRoot, expect.anything());
+    expect(KuzuDBClient).toHaveBeenCalledWith(anotherTestRoot, expect.anything());
+
     expect(mockRepositoryProvider.initializeRepositories).toHaveBeenCalledTimes(2);
   });
 
@@ -138,7 +178,7 @@ describe('MemoryService', () => {
     mockRepositories.metadataRepo.findMetadata.mockResolvedValue(null);
     mockRepositories.metadataRepo.upsertMetadata.mockResolvedValue({ id: 'meta' });
 
-    await memoryService.initMemoryBank(testClientRoot, testRepoName, testBranch);
+    await memoryService.initMemoryBank(mockMcpContext, testClientRoot, testRepoName, testBranch);
 
     // Verify repository and metadata operations
     expect(mockRepositoryProvider.getRepositoryRepository).toHaveBeenCalledWith(testClientRoot);
@@ -164,7 +204,7 @@ describe('MemoryService', () => {
     mockRepositories.repositoryRepo.create.mockResolvedValue(null);
 
     await expect(
-      memoryService.initMemoryBank(testClientRoot, testRepoName, testBranch),
+      memoryService.initMemoryBank(mockMcpContext, testClientRoot, testRepoName, testBranch),
     ).rejects.toThrow(`Repository ${testRepoName}:${testBranch} could not be found or created.`);
   });
 });

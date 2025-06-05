@@ -60,11 +60,33 @@ export class ProgressHandler {
    * @param isError True if resultData represents an error, false otherwise.
    */
   public sendFinalResponse(resultData: any, isError: boolean): void {
-    const responsePayload = {
-      jsonrpc: '2.0',
-      id: this.toolCallId,
-      ...(isError ? { error: resultData } : { result: resultData }),
-    };
+    let responsePayload: any;
+
+    if (isError) {
+      responsePayload = {
+        jsonrpc: '2.0',
+        id: this.toolCallId,
+        error: resultData,
+      };
+    } else {
+      // Convert raw result to MCP CallToolResult format for successful responses
+      const mcpToolResult = {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(resultData),
+          },
+        ],
+        isError: false,
+      };
+
+      responsePayload = {
+        jsonrpc: '2.0',
+        id: this.toolCallId,
+        result: mcpToolResult,
+      };
+    }
+
     this.debugLog(
       3,
       `ProgressHandler: Sending final mcpResponse for ${this.toolCallId}, isError: ${isError}`,

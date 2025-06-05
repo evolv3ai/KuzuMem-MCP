@@ -19,6 +19,10 @@ export class RepositoryRepository {
     this.kuzuClient = kuzuClient;
   }
 
+  public getClient(): KuzuDBClient {
+    return this.kuzuClient;
+  }
+
   // Escapes string for Cypher, does NOT add surrounding quotes
   private escapeStr(value: any): string {
     if (value === undefined || value === null) {
@@ -51,17 +55,15 @@ export class RepositoryRepository {
       return null;
     }
 
-    if (!result || typeof result.getAll !== 'function') {
-      // console.error(`RepositoryRepository (${this.kuzuClient.dbPath}): Kuzu query result invalid. Query: ${query}`);
+    if (!result || !Array.isArray(result)) {
       return null;
     }
 
-    const rows = await result.getAll();
-    if (!rows || rows.length === 0) {
+    if (result.length === 0) {
       return null;
     }
 
-    const node = rows[0].r ?? rows[0]['r'] ?? rows[0];
+    const node = result[0].r ?? result[0]['r'] ?? result[0];
     if (!node) {
       return null;
     }
@@ -95,8 +97,15 @@ export class RepositoryRepository {
     const kuzuTimestamp = nowIso.replace('T', ' ').replace('Z', '');
 
     const query = `CREATE (r:Repository {id: '${escapedId}', name: '${escapedName}', branch: '${escapedBranch}', created_at: timestamp('${kuzuTimestamp}'), updated_at: timestamp('${kuzuTimestamp}')}) RETURN r`;
-    await this.kuzuClient.executeQuery(query);
-    return this.findByName(name, branch);
+
+    try {
+      const result = await this.kuzuClient.executeQuery(query);
+      const found = await this.findByName(name, branch);
+      return found;
+    } catch (error) {
+      console.error(`RepositoryRepository: Error during create:`, error);
+      return null;
+    }
   }
 
   /**
@@ -112,14 +121,13 @@ export class RepositoryRepository {
       query = 'MATCH (r:Repository) RETURN r';
     }
     const result = await this.kuzuClient.executeQuery(query);
-    if (!result || typeof result.getAll !== 'function') {
+    if (!result || !Array.isArray(result)) {
       return [];
     }
-    const rows = await result.getAll();
-    if (!rows || rows.length === 0) {
+    if (result.length === 0) {
       return [];
     }
-    return rows.map((row: any) => {
+    return result.map((row: any) => {
       const node = row.r ?? row['r'] ?? row;
       return {
         name: node.name,

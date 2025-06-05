@@ -1,6 +1,9 @@
 import { Rule } from '../types';
 import { KuzuDBClient } from '../db/kuzu';
 import { formatGraphUniqueId } from '../utils/id.utils';
+import { RepositoryRepository } from './repository.repository';
+import { z } from 'zod';
+import { RuleStatusSchema } from '../mcp/schemas/tool-schemas';
 
 /**
  * Repository for Rule, using KuzuDB and Cypher queries.
@@ -8,46 +11,54 @@ import { formatGraphUniqueId } from '../utils/id.utils';
  */
 export class RuleRepository {
   private kuzuClient: KuzuDBClient;
+  private repositoryRepo: RepositoryRepository;
 
   /**
    * Constructor requires an initialized KuzuDBClient instance.
    * @param kuzuClient An initialized KuzuDBClient.
    */
-  public constructor(kuzuClient: KuzuDBClient) {
+  public constructor(kuzuClient: KuzuDBClient, repositoryRepo: RepositoryRepository) {
     if (!kuzuClient) {
       throw new Error('RuleRepository requires an initialized KuzuDBClient instance.');
     }
+    if (!repositoryRepo) {
+      throw new Error('RuleRepository requires an initialized RepositoryRepository instance.');
+    }
     this.kuzuClient = kuzuClient;
+    this.repositoryRepo = repositoryRepo;
   }
 
-  private escapeStr(value: any): string {
-    if (value === undefined || value === null) {
-      return 'null';
-    }
-    return String(value).replace(/'/g, "\\'").replace(/\\/g, '\\\\');
-  }
+  private formatKuzuRowToRule(kuzuRowData: any, repositoryName: string, branch: string): Rule {
+    const rawRule = kuzuRowData.properties || kuzuRowData;
+    const logicalId = rawRule.id?.toString();
+    const graphUniqueId =
+      rawRule.graph_unique_id?.toString() || formatGraphUniqueId(repositoryName, branch, logicalId);
 
-  private formatStringArrayForCypher(arr: string[] | undefined | null): string {
-    if (arr === undefined || arr === null || arr.length === 0) {
-      return 'null';
+    let createdDate = rawRule.created;
+    if (rawRule.created instanceof Date) {
+      createdDate = rawRule.created.toISOString().split('T')[0];
+    } else if (typeof rawRule.created === 'number') {
+      createdDate = new Date(rawRule.created).toISOString().split('T')[0];
+    } else if (
+      typeof rawRule.created === 'object' &&
+      rawRule.created !== null &&
+      'year' in rawRule.created
+    ) {
+      createdDate = `${String(rawRule.created.year).padStart(4, '0')}-${String(rawRule.created.month).padStart(2, '0')}-${String(rawRule.created.day).padStart(2, '0')}`;
     }
-    const escapedItems = arr.map((item) => `'${this.escapeStr(item)}'`);
-    return `[${escapedItems.join(', ')}]`;
-  }
 
-  private formatRule(ruleData: any): Rule {
-    let created_str = ruleData.created;
-    if (ruleData.created && typeof ruleData.created.toISOString === 'function') {
-      created_str = ruleData.created.toISOString().split('T')[0];
-    } else if (typeof ruleData.created === 'string') {
-      created_str = ruleData.created;
-    }
     return {
-      ...ruleData,
-      id: ruleData.id,
-      created: created_str,
-      triggers: Array.isArray(ruleData.triggers) ? ruleData.triggers : [],
-      graph_unique_id: undefined,
+      id: logicalId,
+      graph_unique_id: graphUniqueId,
+      name: rawRule.name,
+      created: createdDate,
+      triggers: Array.isArray(rawRule.triggers) ? rawRule.triggers.map(String) : [],
+      content: rawRule.content,
+      status: rawRule.status,
+      branch: rawRule.branch,
+      repository: `${repositoryName}:${branch}`,
+      created_at: rawRule.created_at ? new Date(rawRule.created_at) : new Date(),
+      updated_at: rawRule.updated_at ? new Date(rawRule.updated_at) : new Date(),
     } as Rule;
   }
 
@@ -55,21 +66,28 @@ export class RuleRepository {
    * Get all active rules for a repository node and branch.
    */
   async getActiveRules(repositoryNodeId: string, ruleBranch: string): Promise<Rule[]> {
-    const escapedRepoNodeId = this.escapeStr(repositoryNodeId);
-    const escapedRuleBranch = this.escapeStr(ruleBranch);
     const query = `
-      MATCH (repo:Repository {id: '${escapedRepoNodeId}'})-[:HAS_RULE]->(r:Rule {status: 'active', branch: '${escapedRuleBranch}'})
+      MATCH (repo:Repository {id: $repositoryNodeId})-[:HAS_RULE]->(r:Rule)
+      WHERE r.status = $status AND r.branch = $ruleBranch 
       RETURN r ORDER BY r.created DESC
     `;
-    const result = await this.kuzuClient.executeQuery(query);
-    if (!result || typeof result.getAll !== 'function') {
+    const params = { repositoryNodeId, status: 'active', ruleBranch };
+    try {
+      const result = await this.kuzuClient.executeQuery(query, params);
+      if (!result) {
+        return [];
+      }
+      const repoNameFromNodeId = repositoryNodeId.split(':')[0];
+      return result.map((row: any) =>
+        this.formatKuzuRowToRule(row.r, repoNameFromNodeId, ruleBranch),
+      );
+    } catch (error) {
+      console.error(
+        `[RuleRepository] Error in getActiveRules for ${repositoryNodeId}, branch ${ruleBranch}:`,
+        error,
+      );
       return [];
     }
-    const rows = await result.getAll();
-    if (!rows || rows.length === 0) {
-      return [];
-    }
-    return rows.map((row: any) => this.formatRule(row.r ?? row['r']));
   }
 
   /**
@@ -79,58 +97,122 @@ export class RuleRepository {
    * `rule.id` is the logical ID of this Rule entity.
    */
   async upsertRule(rule: Rule): Promise<Rule | null> {
-    const repositoryNodeId = rule.repository;
+    const logger = console; // Placeholder logger
+    const {
+      repository: repositoryNodeId,
+      branch,
+      id: logicalId,
+      name,
+      created,
+      content,
+      status,
+      triggers,
+    } = rule;
+    const statusFromInput = (rule as any).status; // Assuming internal Rule type will be updated for status
 
-    // Extract the logical repository name from the Repository Node ID
     const repoIdParts = repositoryNodeId.split(':');
-    if (repoIdParts.length < 2) {
-      // Expects 'repoName:repoBranch'
-      throw new Error(`Invalid repositoryNodeId format in rule.repository: ${repositoryNodeId}`);
+    if (repoIdParts.length < 1) {
+      logger.error(`[RuleRepository] Invalid repositoryNodeId format: ${repositoryNodeId}`);
+      throw new Error(`Invalid repositoryNodeId format for upsertRule: ${repositoryNodeId}`);
     }
     const logicalRepositoryName = repoIdParts[0];
+    const effectiveBranch = repoIdParts.length > 1 ? repoIdParts[1] : branch;
 
-    const ruleBranch = rule.branch;
-    const logicalId = rule.id;
-    const graphUniqueId = formatGraphUniqueId(logicalRepositoryName, ruleBranch, logicalId);
-    const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
+    const graphUniqueId = formatGraphUniqueId(logicalRepositoryName, effectiveBranch, logicalId);
+    const now = new Date();
 
-    const escapedRepoNodeId = this.escapeStr(repositoryNodeId);
-    const escapedLogicalId = this.escapeStr(logicalId);
-    const escapedName = this.escapeStr(rule.name);
-    const escapedCreated = this.escapeStr(rule.created);
-    const cypherTriggersList = this.formatStringArrayForCypher(rule.triggers);
-    const escapedContent = this.escapeStr(rule.content);
-    const escapedStatus = this.escapeStr(rule.status || 'active');
-    const escapedBranch = this.escapeStr(ruleBranch);
-    const nowIso = new Date().toISOString();
-    const kuzuTimestamp = nowIso.replace('T', ' ').replace('Z', '');
+    // Validate 'created' date format (YYYY-MM-DD string) from input 'rule.created'
+    let kuzuCreatedDateString = rule.created; // Directly use the string from Rule type
+    if (
+      typeof kuzuCreatedDateString !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(kuzuCreatedDateString)
+    ) {
+      logger.warn(
+        `[RuleRepository] Invalid or non-string 'created' date for rule ${logicalId}: '${kuzuCreatedDateString}'. Defaulting to current date. Expected YYYY-MM-DD string.`,
+      );
+      kuzuCreatedDateString = new Date().toISOString().split('T')[0];
+    }
+
+    const propsOnCreate = {
+      id: logicalId,
+      graph_unique_id: graphUniqueId,
+      name: name,
+      created: kuzuCreatedDateString,
+      triggers: Array.isArray(triggers) ? triggers.map(String) : triggers ? [String(triggers)] : [],
+      content: content || null,
+      status: statusFromInput || 'active',
+      branch: effectiveBranch,
+      created_at: now,
+      updated_at: now,
+    };
+
+    const propsOnMatch = {
+      name: name,
+      created: kuzuCreatedDateString,
+      triggers: Array.isArray(triggers) ? triggers.map(String) : triggers ? [String(triggers)] : [],
+      content: content || null,
+      status: statusFromInput || 'active',
+      updated_at: now,
+    };
 
     const query = `
-      MATCH (repo:Repository {id: '${escapedRepoNodeId}'})
-      MERGE (r:Rule {graph_unique_id: '${escapedGraphUniqueId}'})
-      ON CREATE SET
-        r.id = '${escapedLogicalId}',
-        r.name = '${escapedName}',
-        r.created = date('${escapedCreated}'), 
-        r.triggers = ${cypherTriggersList}, 
-        r.content = '${escapedContent}', 
-        r.status = '${escapedStatus}', 
-        r.branch = '${escapedBranch}',
-        r.created_at = timestamp('${kuzuTimestamp}'),
-        r.updated_at = timestamp('${kuzuTimestamp}')
-      ON MATCH SET
-        r.name = '${escapedName}',
-        r.created = date('${escapedCreated}'),
-        r.triggers = ${cypherTriggersList},
-        r.content = '${escapedContent}',
-        r.status = '${escapedStatus}',
-        r.branch = '${escapedBranch}',
-        r.updated_at = timestamp('${kuzuTimestamp}')
+      MATCH (repo:Repository {id: $repositoryNodeIdParam})
+      MERGE (r:Rule {graph_unique_id: $graphUniqueIdParam})
+      ON CREATE SET 
+        r.id = $idParam,
+        r.name = $nameParam,
+        r.created = date($createdDateParam),
+        r.triggers = $triggersParam,
+        r.content = $contentParam,
+        r.status = $statusParam,
+        r.branch = $branchParam,
+        r.created_at = $createdAtParam,
+        r.updated_at = $updatedAtParam
+      ON MATCH SET 
+        r.name = $nameParam, 
+        r.created = date($createdDateParam), 
+        r.triggers = $triggersParam, 
+        r.content = $contentParam, 
+        r.status = $statusParam, 
+        r.updated_at = $updatedAtParam 
       MERGE (repo)-[:HAS_RULE]->(r)
-      RETURN r`;
+      RETURN r
+    `;
 
-    await this.kuzuClient.executeQuery(query);
-    return this.findByIdAndBranch(logicalRepositoryName, logicalId, ruleBranch);
+    const queryParams = {
+      repositoryNodeIdParam: repositoryNodeId,
+      graphUniqueIdParam: graphUniqueId,
+      idParam: propsOnCreate.id,
+      nameParam: propsOnCreate.name,
+      createdDateParam: propsOnCreate.created,
+      triggersParam: propsOnCreate.triggers,
+      contentParam: propsOnCreate.content,
+      statusParam: propsOnCreate.status,
+      branchParam: propsOnCreate.branch,
+      createdAtParam: propsOnCreate.created_at,
+      updatedAtParam: now, // Use current time for both create and update
+    };
+
+    try {
+      logger.debug(
+        `[RuleRepository] Upserting Rule GID ${graphUniqueId} for repo ${repositoryNodeId}`,
+      );
+      const result = await this.kuzuClient.executeQuery(query, queryParams);
+      if (result && result.length > 0 && result[0].r) {
+        logger.info(
+          `[RuleRepository] Rule ${logicalId} upserted successfully for ${repositoryNodeId}`,
+        );
+        return this.formatKuzuRowToRule(result[0].r, logicalRepositoryName, effectiveBranch);
+      }
+      logger.warn(`[RuleRepository] UpsertRule did not return a node for GID ${graphUniqueId}`);
+      return null;
+    } catch (error: any) {
+      logger.error(
+        `[RuleRepository] Error in upsertRule for GID ${graphUniqueId}: ${error.message}`,
+        { stack: error.stack },
+      );
+      throw error;
+    }
   }
 
   /**
@@ -142,47 +224,45 @@ export class RuleRepository {
     itemBranch: string,
   ): Promise<Rule | null> {
     const graphUniqueId = formatGraphUniqueId(repositoryName, itemBranch, itemId);
-    const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
-
-    const query = `
-      MATCH (r:Rule {graph_unique_id: '${escapedGraphUniqueId}'})
-      RETURN r LIMIT 1
-    `;
-    const result = await this.kuzuClient.executeQuery(query);
-    if (!result || typeof result.getAll !== 'function') {
+    const query = `MATCH (r:Rule {graph_unique_id: $graphUniqueId}) RETURN r LIMIT 1`;
+    const params = { graphUniqueId };
+    try {
+      const result = await this.kuzuClient.executeQuery(query, params);
+      if (result && result.length > 0 && result[0].r) {
+        return this.formatKuzuRowToRule(result[0].r, repositoryName, itemBranch);
+      }
+      return null;
+    } catch (error) {
+      console.error(`[RuleRepository] Error in findByIdAndBranch for GID ${graphUniqueId}:`, error);
       return null;
     }
-    const rows = await result.getAll();
-    if (!rows || rows.length === 0) {
-      return null;
-    }
-    const rawRuleData = rows[0].r ?? rows[0]['r'];
-    if (!rawRuleData) {
-      return null;
-    }
-    return this.formatRule(rawRuleData);
   }
 
   /**
    * Get all rules for a repository node and branch.
    */
   async getAllRules(repositoryNodeId: string, ruleBranch: string): Promise<Rule[]> {
-    const escapedRepoNodeId = this.escapeStr(repositoryNodeId);
-    const escapedRuleBranch = this.escapeStr(ruleBranch);
-
     const query = `
-      MATCH (repo:Repository {id: '${escapedRepoNodeId}'})-[:HAS_RULE]->(r:Rule {branch: '${escapedRuleBranch}'})
-      RETURN r
-      ORDER BY r.created DESC, r.name ASC
+      MATCH (repo:Repository {id: $repositoryNodeId})-[:HAS_RULE]->(r:Rule)
+      WHERE r.branch = $ruleBranch
+      RETURN r ORDER BY r.created DESC, r.name ASC
     `;
-    const result = await this.kuzuClient.executeQuery(query);
-    if (!result || typeof result.getAll !== 'function') {
+    const params = { repositoryNodeId, ruleBranch };
+    try {
+      const result = await this.kuzuClient.executeQuery(query, params);
+      if (!result) {
+        return [];
+      }
+      const repoNameFromNodeId = repositoryNodeId.split(':')[0];
+      return result.map((row: any) =>
+        this.formatKuzuRowToRule(row.r, repoNameFromNodeId, ruleBranch),
+      );
+    } catch (error) {
+      console.error(
+        `[RuleRepository] Error in getAllRules for ${repositoryNodeId}, branch ${ruleBranch}:`,
+        error,
+      );
       return [];
     }
-    const rows = await result.getAll();
-    if (!rows || rows.length === 0) {
-      return [];
-    }
-    return rows.map((row: any) => this.formatRule(row.r ?? row['r']));
   }
 }

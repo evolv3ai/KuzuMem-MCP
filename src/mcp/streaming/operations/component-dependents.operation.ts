@@ -1,5 +1,6 @@
 import { MemoryService } from '../../../services/memory.service';
 import { ProgressHandler } from '../progress-handler';
+import { EnrichedRequestHandlerExtra } from '../../types/sdk-custom';
 
 /**
  * Operation class for component dependents retrieval with streaming support
@@ -37,14 +38,29 @@ export class ComponentDependentsOperation {
       // or directly return if the operation is quick.
       // The example in README2 shows paths, suggesting a traversal.
 
+      // Create mock context for service calls
+      const mockContext: EnrichedRequestHandlerExtra = {
+        signal: new AbortController().signal,
+        requestId: 'streaming-operation',
+        sendNotification: async () => {},
+        sendRequest: async () => ({ id: 'mock' } as any),
+        logger: console,
+        session: {},
+        sendProgress: async () => {},
+        memoryService: memoryService
+      };
+
       // Placeholder for actual logic that might involve complex graph traversal and path reconstruction
       // which would be the source of multiple progressHandler.progress() calls.
-      const allDependents = await memoryService.getComponentDependents(
+      const allDependentsResult = await memoryService.getComponentDependents(
+        mockContext,
         clientProjectRoot,
         repositoryName,
         branch,
         componentId,
       );
+
+      const allDependents = allDependentsResult.dependents || [];
 
       const resultPayload = {
         status: 'complete',
