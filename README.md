@@ -36,7 +36,7 @@ For details on tools supporting progressive results, see [MCP Tools Streaming Su
 
 ```bash
 # Clone the repository
-git clone https://github.com/solita-internal/kuzumem-mcp
+git clone git@github.com:Jakedismo/KuzuMem-MCP.git
 cd kuzumem-mcp
 
 # Install dependencies
@@ -75,7 +75,7 @@ Add the following to your IDEs MCP configuration:
       "args": [
         "-y",
         "ts-node",
-        "/Users/jokkeruokolainen/Documents/Solita/GenAI/Azure/MCP/advanced-memory-tool/src/mcp-stdio-server.ts" // or "src/mcp-httpstream-server.ts" if your IDE supports SSE
+        "/Users/<absolute_path>/src/mcp-stdio-server.ts" // or "src/mcp-httpstream-server.ts" if your IDE supports SSE
       ],
       "env": {
         "HOST": "localhost",
@@ -225,4 +225,4 @@ Feel free to contribute to the project.
 
 ## Target Graph Schema
 
-![New Graph Schema](docs/schema_evolution.png)
+![New Graph Schema](docs/schema_evolution.md)

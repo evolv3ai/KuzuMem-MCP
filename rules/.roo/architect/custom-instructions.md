@@ -8,7 +8,7 @@ KuzuMem_MCP_strategy:
       1. Verify that a KuzuMem-MCP server is registered.  
       2. Verify a memory-bank repository for `${repository}:${branch}`  
          (default branch = `main`).  
-      3. Every MCP tool call **MUST** include `--branch`.  
+      3. Every MCP tool call **MUST** include `--clientProjectRoot` and `--branch`.  
       4. Synthetic repository ID = `${repository}:${branch}`.  
     </thinking>
     <list_resources><server_name>KuzuMem-MCP</server_name></list_resources>
@@ -19,7 +19,7 @@ KuzuMem_MCP_strategy:
 
   if_no_memory_bank: |-
     1. Prompt user —  
-       “No memory bank found for this branch. Create one?”  
+       "No memory bank found for this branch. Create one?"  
     2. If the user **declines** →  
        a. Reply `[MEMORY BANK: INACTIVE]` and continue without persistence.  
     3. If the user **accepts** →  
@@ -35,7 +35,7 @@ KuzuMem_MCP_strategy:
        • `get-component-dependencies`  
        • `get-component-dependents`  
     4. `get-governing-items-for-component` as required.  
-    5. Optional graph algos: `mcp_pagerank`, `louvain-community-detection`,  
+    5. Optional graph algos: `pagerank`, `louvain-community-detection`,  
        `strongly-connected-components`.  
     6. Reply `[MEMORY BANK: ACTIVE]` and proceed.
 
@@ -49,7 +49,7 @@ KuzuMem_MCP_strategy:
         • Plain Markdown if no tool call.  
       No additional top-level keys.
     guardrails:
-      - "Always pass `--branch`; never write to `main` without user request."
+      - "Always pass `--clientProjectRoot` and `--branch`; never write to `main` without user request."
       - "Strip secrets; on unsafe request reply `REFUSE: <reason>`."
     token_budget: 800
 
@@ -69,69 +69,69 @@ KuzuMem_MCP_strategy:
   memory_bank_management_tools:
     init_memory_bank:
       trigger: "New repository or branch."
-      format: "init-memory-bank {repository} --branch {branch}"
+      format: "init-memory-bank {repository} --clientProjectRoot {clientProjectRoot} --branch {branch}"
     update_metadata:
       trigger: "Project metadata changes."
-      format: "update-metadata {repository} --branch {branch} --metadata {...}"
+      format: "update-metadata {repository} --clientProjectRoot {clientProjectRoot} --branch {branch} --metadata {...}"
     get_metadata:
       trigger: "Session start or repo info needed."
-      format: "get-metadata {repository} --branch {branch}"
+      format: "get-metadata {repository} --clientProjectRoot {clientProjectRoot} --branch {branch}"
     update_context:
       trigger: "Significant work progress or focus shift."
-      format: "update-context {repository} --branch {branch} --agent {agent} --summary \"...\" --observation \"...\""
+      format: "update-context {repository} --clientProjectRoot {clientProjectRoot} --branch {branch} --agent {agent} --summary \"...\" --observation \"...\""
     get_context:
       trigger: "Session start or pre-recommendation."
-      format: "get-context {repository} --branch {branch} --latest true --limit 10"
+      format: "get-context {repository} --clientProjectRoot {clientProjectRoot} --branch {branch} --latest true --limit 10"
     add_component:
       trigger: "New or modified component."
-      format: "add-component {repository} --branch {branch} --id comp-{Name} --name \"...\" --kind \"...\" --depends_on [...] --status active"
+      format: "add-component {repository} --clientProjectRoot {clientProjectRoot} --branch {branch} --id comp-{Name} --name \"...\" --kind \"...\" --depends_on [...] --status active"
     add_decision:
       trigger: "Architectural decision made."
-      format: "add-decision {repository} --branch {branch} --id dec-{YYYYMMDD}-{slug} --name \"...\" --context \"...\" --date {YYYY-MM-DD}"
+      format: "add-decision {repository} --clientProjectRoot {clientProjectRoot} --branch {branch} --id dec-{YYYYMMDD}-{slug} --name \"...\" --context \"...\" --date {YYYY-MM-DD}"
     add_rule:
       trigger: "New coding or architectural rule."
-      format: "add-rule {repository} --branch {branch} --id rule-{category}-vX.Y.Z --name \"...\" --created {YYYY-MM-DD} --triggers [...] --content \"...\" --status active"
+      format: "add-rule {repository} --clientProjectRoot {clientProjectRoot} --branch {branch} --id rule-{category}-vX.Y.Z --name \"...\" --created {YYYY-MM-DD} --triggers [...] --content \"...\" --status active"
 
 # ──────────────────────────────────────────────
 
   graph_traversal_tools:
     get_component_dependencies:
       trigger: "Before modifying a component."
-      format: "get-component-dependencies {repository} --branch {branch} --componentId comp-{Name}"
+      format: "get-component-dependencies {repository} --clientProjectRoot {clientProjectRoot} --branch {branch} --componentId comp-{Name}"
     get_component_dependents:
       trigger: "Assess downstream impact."
-      format: "get-component-dependents {repository} --branch {branch} --componentId comp-{Name}"
+      format: "get-component-dependents {repository} --clientProjectRoot {clientProjectRoot} --branch {branch} --componentId comp-{Name}"
     get_governing_items_for_component:
       trigger: "Check standards before coding."
-      format: "get-governing-items-for-component {repository} --branch {branch} --componentId comp-{Name}"
+      format: "get-governing-items-for-component {repository} --clientProjectRoot {clientProjectRoot} --branch {branch} --componentId comp-{Name}"
     get_item_contextual_history:
       trigger: "Understand item evolution."
-      format: "get-item-contextual-history {repository} --branch {branch} --itemId {ID} --itemType {Component|Decision|Rule}"
+      format: "get-item-contextual-history {repository} --clientProjectRoot {clientProjectRoot} --branch {branch} --itemId {ID} --itemType {Component|Decision|Rule}"
     get_related_items:
       trigger: "Explore neighbourhood."
-      format: "get-related-items {repository} --branch {branch} --startItemId {ID} --depth 2 --relationshipFilter DEPENDS_ON --targetNodeTypeFilter Component"
+      format: "get-related-items {repository} --clientProjectRoot {clientProjectRoot} --branch {branch} --startItemId {ID} --depth 2 --relationshipFilter DEPENDS_ON --targetNodeTypeFilter Component"
 
 # ──────────────────────────────────────────────
 
   graph_algorithm_tools:
-    mcp_pagerank:
+    pagerank:
       trigger: "Detect critical components."
-      format: "mcp_pagerank {repository} --branch {branch} --projectedGraphName core --nodeTableNames [\"Component\"] --relationshipTableNames [\"DEPENDS_ON\"]"
+      format: "pagerank {repository} --clientProjectRoot {clientProjectRoot} --branch {branch} --projectedGraphName core --nodeTableNames [\"Component\"] --relationshipTableNames [\"DEPENDS_ON\"]"
     louvain_community_detection:
       trigger: "Discover subsystems."
-      format: "louvain-community-detection {repository} --branch {branch} --projectedGraphName modules --nodeTableNames [\"Component\"] --relationshipTableNames [\"DEPENDS_ON\"]"
+      format: "louvain-community-detection {repository} --clientProjectRoot {clientProjectRoot} --branch {branch} --projectedGraphName modules --nodeTableNames [\"Component\"] --relationshipTableNames [\"DEPENDS_ON\"]"
     k_core_decomposition:
       trigger: "Find tightly coupled clusters."
-      format: "k-core-decomposition {repository} --branch {branch} --projectedGraphName cohesion --nodeTableNames [\"Component\"] --relationshipTableNames [\"DEPENDS_ON\"] --k 2"
+      format: "k-core-decomposition {repository} --clientProjectRoot {clientProjectRoot} --branch {branch} --projectedGraphName cohesion --nodeTableNames [\"Component\"] --relationshipTableNames [\"DEPENDS_ON\"] --k 2"
     strongly_connected_components:
       trigger: "Detect circular dependencies."
-      format: "strongly-connected-components {repository} --branch {branch} --projectedGraphName cycles --nodeTableNames [\"Component\"] --relationshipTableNames [\"DEPENDS_ON\"]"
+      format: "strongly-connected-components {repository} --clientProjectRoot {clientProjectRoot} --branch {branch} --projectedGraphName cycles --nodeTableNames [\"Component\"] --relationshipTableNames [\"DEPENDS_ON\"]"
     weakly_connected_components:
       trigger: "Locate isolated subsystems."
-      format: "weakly-connected-components {repository} --branch {branch} --projectedGraphName islands --nodeTableNames [\"Component\"] --relationshipTableNames [\"DEPENDS_ON\"]"
+      format: "weakly-connected-components {repository} --clientProjectRoot {clientProjectRoot} --branch {branch} --projectedGraphName islands --nodeTableNames [\"Component\"] --relationshipTableNames [\"DEPENDS_ON\"]"
     shortest_path:
       trigger: "Trace relationships between two items."
-      format: "shortest-path {repository} --branch {branch} --projectedGraphName path --nodeTableNames [\"Component\"] --relationshipTableNames [\"DEPENDS_ON\"] --startNodeId {startId} --endNodeId {endId}"
+      format: "shortest-path {repository} --clientProjectRoot {clientProjectRoot} --branch {branch} --projectedGraphName path --nodeTableNames [\"Component\"] --relationshipTableNames [\"DEPENDS_ON\"] --startNodeId {startId} --endNodeId {endId}"
 
 # ──────────────────────────────────────────────
 
@@ -141,7 +141,7 @@ KuzuMem_MCP_strategy:
       - "Decision: dec-{YYYYMMDD}-{slug}"
       - "Rule:    rule-{category}-v{semver}"
     branch_handling: |-
-      • Always pass `--branch`.  
+      • Always pass `--clientProjectRoot` and `--branch`.  
       • Synthetic ID = `${repository}:${branch}`.  
       • Knowledge is isolated per branch.
     component_guidelines: |-
