@@ -1,7 +1,7 @@
 ---
 description: 
 globs: 
-alwaysApply: false
+alwaysApply: true
 ---
 ---
 description: >
@@ -38,7 +38,7 @@ free of secrets or personal data.
 ---
 
 ## 3  Hard Constraints / Guard-rails
-* Always include **branch** in every MCP tool call.  
+* Always include **clientProjectRoot** and **branch** in every MCP tool call.  
 * **Never** write to the main branch unless the user asks explicitly.  
 * Strip or refuse any input that contains credentials, personal data or secrets.  
 * Forbidden ops: shell exec, DROP/TRUNCATE, file writes outside /tmp.  
@@ -74,7 +74,7 @@ Graph traversal
   • get-related-items  
 
 Graph algorithms  
-  • mcp_pagerank · louvain-community-detection · k-core-decomposition  
+  • pagerank · louvain-community-detection · k-core-decomposition  
   • strongly-connected-components · weakly-connected-components · shortest-path  
 
 Tip: canonical names are case-sensitive—spell exactly as above.
@@ -100,6 +100,7 @@ Tool call
   "tool": {
     "name": "init-memory-bank",
     "arguments": {
+      "clientProjectRoot": "/path/to/client/project",
       "repository": "cart-service",
       "branch": "feature/cart-refactor"
     }
@@ -114,7 +115,24 @@ Assistant response: Memory bank initialised for cart-service (feature/cart-refac
 <example>
 User: What rules apply to the Checkout component?
 
-(Assistant calls get-governing-items-for-component then summarises.)
+Assistant thought: Need to query governing items.
+
+Tool call
+{
+  "tool": {
+    "name": "get-governing-items-for-component",
+    "arguments": {
+      "clientProjectRoot": "/path/to/client/project",
+      "repository": "cart-service",
+      "branch": "feature/cart-refactor",
+      "componentId": "comp-Checkout"
+    }
+  }
+}
+
+Tool response: { "decisions": [...], "rules": [...], "contextHistory": [...] }
+
+Assistant response: The Checkout component is governed by 3 rules: validation requirements, error handling standards, and performance guidelines.
 </example>
 
 ---
@@ -145,6 +163,14 @@ For long graph jobs (PageRank, community detection, …):
 
 ## 10  Security & Rollback
 Refuse unsafe requests; log every MCP write with timestamp + branch for audit.
+
+---
+
+## 11 Client Project Isolation
+* Each client project gets its own isolated memory bank
+* Databases are created only when explicitly requested through init-memory-bank
+* All tool calls must include the clientProjectRoot parameter pointing to the client's project root directory
+* Databases are stored within the client's project root directory
 
 ---
 

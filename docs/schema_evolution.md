@@ -1,3 +1,6 @@
+# Schema Evolution
+
+```mermaid
 flowchart TD
   classDef pk fill:#f96,stroke:#333,stroke-width:2px
   classDef added fill:#c8e6c9,stroke:#333,stroke-width:2px
@@ -39,3 +42,4 @@ flowchart TD
   class Repository pk
   class Metadata,Context,Component,Decision,Rule,File pk
   class File,Tag added
+```
