@@ -111,7 +111,7 @@ function createMcpServer(): Server {
 
     // For init-memory-bank, clientProjectRoot comes from toolArgs.
     // For others, we use the provided clientProjectRoot from tool arguments
-    const effectiveClientProjectRoot = toolArgs.clientProjectRoot;
+    const effectiveClientProjectRoot = toolArgs.clientProjectRoot as string;
 
     if (!effectiveClientProjectRoot) {
       throw new Error(

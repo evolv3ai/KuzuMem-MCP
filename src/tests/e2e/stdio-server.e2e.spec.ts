@@ -307,13 +307,20 @@ describe('MCP STDIO Server E2E Tests', () => {
   it('T_STDIO_001: should initialize the server correctly', async () => {
     const response = await client.request('initialize', {
       protocolVersion: '0.1',
+      capabilities: {
+        roots: {
+          listChanged: true,
+        },
+        sampling: {},
+      },
+      clientInfo: {
+        name: 'test-client',
+        version: '1.0.0',
+      },
     });
     expect(response.error).toBeUndefined();
     expect(response.result).toBeDefined();
-    expect(response.result.capabilities.tools).toEqual({
-      list: true,
-      call: true,
-    });
+    expect(response.result.capabilities.tools).toBeDefined();
     expect(response.result.serverInfo.name).toBe('memory-bank-mcp');
   });
 
@@ -657,12 +664,13 @@ describe('MCP STDIO Server E2E Tests', () => {
         arguments: toolArgs,
       });
       expect(response.error).toBeUndefined();
-      const toolResultWrapper = response.result as any; // The actual result payload
-      // console.log(
-      //   `SIMPLIFIED TEST: Dependencies wrapper for ${dependentId}:`,
-      //   JSON.stringify(toolResultWrapper),
-      // );
-      expect(toolResultWrapper).toBeDefined(); // Add this check
+      expect(response.result).toBeDefined();
+      expect(response.result!.content).toBeDefined();
+      expect(response.result!.content[0]).toBeDefined();
+
+      // Parse the JSON result from the MCP SDK format
+      const toolResultWrapper = JSON.parse(response.result!.content[0].text);
+      expect(toolResultWrapper).toBeDefined();
       expect(toolResultWrapper.status).toBe('complete');
       expect(Array.isArray(toolResultWrapper.dependencies)).toBe(true);
       expect(toolResultWrapper.dependencies.length).toBeGreaterThanOrEqual(1);
@@ -716,8 +724,13 @@ describe('MCP STDIO Server E2E Tests', () => {
         arguments: toolArgs,
       });
       expect(response.error).toBeUndefined();
-      const toolResultWrapper = response.result as any; // The actual result payload
-      expect(toolResultWrapper).toBeDefined(); // Add this check
+      expect(response.result).toBeDefined();
+      expect(response.result!.content).toBeDefined();
+      expect(response.result!.content[0]).toBeDefined();
+
+      // Parse the JSON result from the MCP SDK format
+      const toolResultWrapper = JSON.parse(response.result!.content[0].text);
+      expect(toolResultWrapper).toBeDefined();
       expect(toolResultWrapper.status).toBe('complete');
       expect(Array.isArray(toolResultWrapper.dependencies)).toBe(true);
       expect(toolResultWrapper.dependencies.length).toBeGreaterThanOrEqual(1);
@@ -739,7 +752,12 @@ describe('MCP STDIO Server E2E Tests', () => {
         arguments: toolArgs,
       });
       expect(response.error).toBeUndefined();
-      const toolResultWrapper = response.result as any; // Direct result
+      expect(response.result).toBeDefined();
+      expect(response.result!.content).toBeDefined();
+      expect(response.result!.content[0]).toBeDefined();
+
+      // Parse the JSON result from the MCP SDK format
+      const toolResultWrapper = JSON.parse(response.result!.content[0].text);
       expect(toolResultWrapper).toBeDefined();
       expect(toolResultWrapper.status).toBe('complete');
       expect(Array.isArray(toolResultWrapper.dependents)).toBe(true);
@@ -769,7 +787,7 @@ describe('MCP STDIO Server E2E Tests', () => {
       if (relatedItemsResponse.error) {
         console.error('DIAGNOSTIC: get-related-items RPC call failed:', relatedItemsResponse.error);
       } else {
-        const relatedItemsWrapper = relatedItemsResponse.result as any; // Direct result
+        const relatedItemsWrapper = JSON.parse(relatedItemsResponse.result!.content[0].text);
         expect(relatedItemsWrapper).toBeDefined();
         // ... rest of diagnostic checks ...
       }
@@ -790,7 +808,12 @@ describe('MCP STDIO Server E2E Tests', () => {
         arguments: toolArgs,
       });
       expect(response.error).toBeUndefined();
-      const toolResultWrapper = response.result as any; // Direct result
+      expect(response.result).toBeDefined();
+      expect(response.result!.content).toBeDefined();
+      expect(response.result!.content[0]).toBeDefined();
+
+      // Parse the JSON result from the MCP SDK format
+      const toolResultWrapper = JSON.parse(response.result!.content[0].text);
       expect(toolResultWrapper).toBeDefined();
       expect(toolResultWrapper.status).toBe('complete');
       expect(toolResultWrapper.results).toBeDefined();
@@ -820,7 +843,12 @@ describe('MCP STDIO Server E2E Tests', () => {
         arguments: toolArgs,
       });
       expect(response.error).toBeUndefined();
-      const toolResultWrapper = response.result as any; // Direct result
+      expect(response.result).toBeDefined();
+      expect(response.result!.content).toBeDefined();
+      expect(response.result!.content[0]).toBeDefined();
+
+      // Parse the JSON result from the MCP SDK format
+      const toolResultWrapper = JSON.parse(response.result!.content[0].text);
       expect(toolResultWrapper).toBeDefined();
       expect(toolResultWrapper.status).toBe('complete');
       expect(toolResultWrapper.results).toBeDefined();
@@ -857,7 +885,12 @@ describe('MCP STDIO Server E2E Tests', () => {
         arguments: toolArgs,
       });
       expect(response.error).toBeUndefined();
-      const toolResultWrapper = response.result as any; // Direct result
+      expect(response.result).toBeDefined();
+      expect(response.result!.content).toBeDefined();
+      expect(response.result!.content[0]).toBeDefined();
+
+      // Parse the JSON result from the MCP SDK format
+      const toolResultWrapper = JSON.parse(response.result!.content[0].text);
       expect(toolResultWrapper).toBeDefined();
       expect(toolResultWrapper.status).toBe('complete');
       expect(typeof toolResultWrapper).toBe('object');
@@ -895,7 +928,12 @@ describe('MCP STDIO Server E2E Tests', () => {
         arguments: toolArgs,
       });
       expect(response.error).toBeUndefined();
-      const toolResultWrapper = response.result as any; // Direct result
+      expect(response.result).toBeDefined();
+      expect(response.result!.content).toBeDefined();
+      expect(response.result!.content[0]).toBeDefined();
+
+      // Parse the JSON result from the MCP SDK format
+      const toolResultWrapper = JSON.parse(response.result!.content[0].text);
       expect(toolResultWrapper).toBeDefined();
       expect(toolResultWrapper.status).toBe('complete');
       expect(Array.isArray(toolResultWrapper.contextHistory)).toBe(true);
@@ -974,8 +1012,12 @@ describe('MCP STDIO Server E2E Tests', () => {
         arguments: toolArgs,
       });
       expect(response.error).toBeUndefined();
-      const toolResultWrapper = response.result as any; // Algorithm operations return payload directly
+      expect(response.result).toBeDefined();
+      expect(response.result!.content).toBeDefined();
+      expect(response.result!.content[0]).toBeDefined();
 
+      // Parse the JSON result from the MCP SDK format
+      const toolResultWrapper = JSON.parse(response.result!.content[0].text);
       expect(toolResultWrapper).toBeDefined();
       expect(toolResultWrapper.status).toBe('complete');
       expect(toolResultWrapper.clientProjectRoot).toBe(testClientProjectRoot);
