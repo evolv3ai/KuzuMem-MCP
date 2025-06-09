@@ -4,23 +4,23 @@
  * Based on the official TypeScript SDK: https://github.com/modelcontextprotocol/typescript-sdk
  */
 
-import express, { Request, Response } from 'express';
-import cors from 'cors';
-import { randomUUID } from 'node:crypto';
-import dotenv from 'dotenv';
-import path from 'path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
-  ListToolsRequestSchema,
   CallToolRequestSchema,
-  ListResourcesRequestSchema,
   ListPromptsRequestSchema,
+  ListResourcesRequestSchema,
+  ListToolsRequestSchema,
   isInitializeRequest,
 } from '@modelcontextprotocol/sdk/types.js';
-import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
-import { toolHandlers } from './mcp/tool-handlers';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import express, { Request, Response } from 'express';
+import { randomUUID } from 'node:crypto';
+import path from 'path';
 import { ToolExecutionService } from './mcp/services/tool-execution.service';
+import { toolHandlers } from './mcp/tool-handlers';
+import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
 
 // Load environment variables
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
@@ -32,6 +32,52 @@ function debugLog(level: number, message: string): void {
   if (debugLevel >= level) {
     console.error(`[DEBUG-${level}] ${new Date().toISOString()} ${message}`);
   }
+}
+
+// Adapter to convert SdkToolHandler to ToolHandler format
+function adaptSdkToolHandler(
+  sdkHandler: (params: any, context: any, memoryService: any) => Promise<any>,
+): (
+  toolArgs: any,
+  memoryService: any,
+  progressHandler?: any,
+  clientProjectRoot?: string,
+) => Promise<any> {
+  return async (toolArgs, memoryService, progressHandler, clientProjectRoot) => {
+    // Create a mock context that matches EnrichedRequestHandlerExtra
+    const context = {
+      logger: {
+        debug: (msg: string, ...args: any[]) =>
+          debugLog(3, args.length > 0 ? `${msg} ${JSON.stringify(args)}` : msg),
+        info: (msg: string, ...args: any[]) =>
+          debugLog(2, args.length > 0 ? `${msg} ${JSON.stringify(args)}` : msg),
+        warn: (msg: string, ...args: any[]) =>
+          debugLog(1, args.length > 0 ? `${msg} ${JSON.stringify(args)}` : msg),
+        error: (msg: string, ...args: any[]) =>
+          debugLog(0, args.length > 0 ? `${msg} ${JSON.stringify(args)}` : msg),
+      },
+      session: {
+        clientProjectRoot,
+        repository: toolArgs.repository,
+        branch: toolArgs.branch,
+      },
+      sendProgress: async (progress: any) => {
+        if (progressHandler) {
+          progressHandler.progress(progress);
+        }
+      },
+      memoryService,
+    };
+
+    // Call the SDK handler with adapted parameters
+    return sdkHandler(toolArgs, context, memoryService);
+  };
+}
+
+// Adapt all tool handlers
+const adaptedToolHandlers: Record<string, any> = {};
+for (const [toolName, handler] of Object.entries(toolHandlers)) {
+  adaptedToolHandlers[toolName] = adaptSdkToolHandler(handler);
 }
 
 // Create an MCP server factory function
@@ -88,7 +134,7 @@ function createMcpServer(): Server {
       const toolResult = await toolExecutionService.executeTool(
         toolName,
         toolArgs,
-        toolHandlers,
+        adaptedToolHandlers,
         effectiveClientProjectRoot,
         undefined, // No progress handler for HTTP transport
         debugLog,

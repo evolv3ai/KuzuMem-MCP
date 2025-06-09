@@ -1,16 +1,16 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
-  ListToolsRequestSchema,
   CallToolRequestSchema,
-  ListResourcesRequestSchema,
   ListPromptsRequestSchema,
+  ListResourcesRequestSchema,
+  ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp';
-import { toolHandlers } from './mcp/tool-handlers';
+import { ToolExecutionService } from './mcp/services/tool-execution.service';
 import { createProgressHandler } from './mcp/streaming/progress-handler';
 import { StdioProgressTransport } from './mcp/streaming/stdio-transport';
-import { ToolExecutionService } from './mcp/services/tool-execution.service';
+import { toolHandlers } from './mcp/tool-handlers';
 
 // Determine Client Project Root at startup (for context only, not for DB initialization)
 const detectedClientProjectRoot = process.cwd();
@@ -30,6 +30,52 @@ function debugLog(level: number, message: string, data?: any): void {
       console.error(`[MCP-STDIO-DEBUG${level}] ${message}`);
     }
   }
+}
+
+// Adapter to convert SdkToolHandler to ToolHandler format
+function adaptSdkToolHandler(
+  sdkHandler: (params: any, context: any, memoryService: any) => Promise<any>,
+): (
+  toolArgs: any,
+  memoryService: any,
+  progressHandler?: any,
+  clientProjectRoot?: string,
+) => Promise<any> {
+  return async (toolArgs, memoryService, progressHandler, clientProjectRoot) => {
+    // Create a mock context that matches EnrichedRequestHandlerExtra
+    const context = {
+      logger: {
+        debug: (msg: string, ...args: any[]) =>
+          debugLog(3, args.length > 0 ? `${msg} ${JSON.stringify(args)}` : msg),
+        info: (msg: string, ...args: any[]) =>
+          debugLog(2, args.length > 0 ? `${msg} ${JSON.stringify(args)}` : msg),
+        warn: (msg: string, ...args: any[]) =>
+          debugLog(1, args.length > 0 ? `${msg} ${JSON.stringify(args)}` : msg),
+        error: (msg: string, ...args: any[]) =>
+          debugLog(0, args.length > 0 ? `${msg} ${JSON.stringify(args)}` : msg),
+      },
+      session: {
+        clientProjectRoot,
+        repository: toolArgs.repository,
+        branch: toolArgs.branch,
+      },
+      sendProgress: async (progress: any) => {
+        if (progressHandler) {
+          progressHandler.progress(progress);
+        }
+      },
+      memoryService,
+    };
+
+    // Call the SDK handler with adapted parameters
+    return sdkHandler(toolArgs, context, memoryService);
+  };
+}
+
+// Adapt all tool handlers
+const adaptedToolHandlers: Record<string, any> = {};
+for (const [toolName, handler] of Object.entries(toolHandlers)) {
+  adaptedToolHandlers[toolName] = adaptSdkToolHandler(handler);
 }
 
 // Create the server instance
@@ -117,7 +163,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const toolResult = await toolExecutionService.executeTool(
       toolName,
       toolArgs,
-      toolHandlers,
+      adaptedToolHandlers,
       effectiveClientProjectRoot,
       progressHandler,
       debugLog,

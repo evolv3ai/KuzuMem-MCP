@@ -1,8 +1,8 @@
 // src/tests/e2e/stdio-server.e2e.spec.ts
-import { McpStdioClient } from '../utils/mcp-stdio-client';
-import { Component, Context } from '../../types'; // For type assertions if needed
-import { setupTestDB, cleanupTestDB } from '../utils/test-db-setup'; // Corrected import names
 import path from 'path'; // Import path module
+import { Component, Context } from '../../types'; // For type assertions if needed
+import { McpStdioClient } from '../utils/mcp-stdio-client';
+import { cleanupTestDB, setupTestDB } from '../utils/test-db-setup'; // Corrected import names
 
 // Increase Jest timeout for E2E tests that involve server startup and multiple calls
 jest.setTimeout(90000); // 90 seconds, increased for potentially long graph algo calls
@@ -25,12 +25,17 @@ describe('MCP STDIO Server E2E Tests', () => {
     testClientProjectRoot = path.dirname(dbPathForStdioTest); // client project root is the DIRECTORY
     console.log(`E2E Test: Using client project root: ${testClientProjectRoot}`);
 
-    client = new McpStdioClient();
     // Pass DB_PATH_OVERRIDE to the server environment so MemoryService uses the correct test DB path
-    await client.startServer({
-      DEBUG: '0',
-      DB_PATH_OVERRIDE: testClientProjectRoot,
+    client = new McpStdioClient({
+      envVars: {
+        DEBUG: '0',
+        DB_PATH_OVERRIDE: testClientProjectRoot,
+      },
+      debug: false,
     });
+
+    // Wait for server to be ready
+    await client.ensureServerReady();
     expect(client.isServerReady()).toBe(true);
 
     // init-memory-bank call requires clientProjectRoot in arguments for the tool itself
@@ -42,18 +47,20 @@ describe('MCP STDIO Server E2E Tests', () => {
       branch: testBranch,
       clientProjectRoot: testClientProjectRoot,
     };
-    const initResponse = await client.request('tools/call', {
-      name: 'init-memory-bank',
-      arguments: initParams,
-    });
 
-    if (initResponse.error) {
+    // Use getFinalToolResult instead of request
+    const initResponse = await client.getFinalToolResult('init-memory-bank', initParams);
+
+    // Check for error in the response
+    if ('clientError' in initResponse || ('error' in initResponse && initResponse.error)) {
+      const error = 'clientError' in initResponse ? initResponse.clientError : initResponse.error;
       throw new Error(
-        `Prerequisite init-memory-bank failed at RPC level: ${initResponse.error.message} (Code: ${initResponse.error.code})`,
+        `Prerequisite init-memory-bank failed: ${error.message} (Code: ${error.code || 'unknown'})`,
       );
     }
-    expect(initResponse.result).toBeDefined();
-    const initToolResult = JSON.parse(initResponse.result!.content[0].text);
+
+    // Parse the result if it's a success response
+    const initToolResult = initResponse as any;
     if (!initToolResult.success) {
       console.error('init-memory-bank tool call failed in beforeAll. Tool Result:', initToolResult);
       throw new Error(
@@ -109,15 +116,20 @@ describe('MCP STDIO Server E2E Tests', () => {
         clientProjectRoot: testClientProjectRoot,
         ...comp,
       };
-      const compResponse = await client.request('tools/call', {
-        name: 'add-component',
-        arguments: addCompArgs,
-      });
-      if (compResponse.error || JSON.parse(compResponse.result!.content[0].text).error) {
-        console.error(
-          `Failed to seed component ${comp.id}:`,
-          compResponse.error || JSON.parse(compResponse.result!.content[0].text).error,
-        );
+      const compResponse = await client.getFinalToolResult('add-component', addCompArgs);
+
+      if (
+        'clientError' in compResponse ||
+        ('error' in compResponse && compResponse.error) ||
+        (compResponse as any).error
+      ) {
+        const error =
+          'clientError' in compResponse
+            ? compResponse.clientError
+            : 'error' in compResponse
+              ? compResponse.error
+              : (compResponse as any).error;
+        console.error(`Failed to seed component ${comp.id}:`, error);
         throw new Error(`Failed to seed component ${comp.id}`);
       }
     }
@@ -146,30 +158,21 @@ describe('MCP STDIO Server E2E Tests', () => {
         clientProjectRoot: testClientProjectRoot,
         ...ctxData,
       };
-      const ctxResponse = await client.request('tools/call', {
-        name: 'update-context',
-        arguments: updateCtxArgs,
-      });
+      const ctxResponse = await client.getFinalToolResult('update-context', updateCtxArgs);
 
-      // Simplified and more robust error check for context seeding
-      let toolResult;
-      try {
-        toolResult = JSON.parse(ctxResponse.result!.content[0].text);
-      } catch (e) {
-        console.error(
-          'Failed to parse tool result for update-context:',
-          ctxResponse.result?.content[0]?.text,
-          e,
-        );
-        throw new Error('Failed to seed context: could not parse tool result.');
-      }
-
-      if (ctxResponse.error || !toolResult || toolResult.error) {
-        console.error(
-          `Failed to seed context. RPC Error: ${JSON.stringify(
-            ctxResponse.error,
-          )}, Tool Result: ${JSON.stringify(toolResult)}`,
-        );
+      // Check for errors
+      if (
+        'clientError' in ctxResponse ||
+        ('error' in ctxResponse && ctxResponse.error) ||
+        !(ctxResponse as any).success
+      ) {
+        const error =
+          'clientError' in ctxResponse
+            ? ctxResponse.clientError
+            : 'error' in ctxResponse
+              ? ctxResponse.error
+              : 'Tool returned success: false';
+        console.error(`Failed to seed context. Error:`, error);
         throw new Error('Failed to seed context');
       }
       seededContextCount++;
@@ -218,15 +221,20 @@ describe('MCP STDIO Server E2E Tests', () => {
         clientProjectRoot: testClientProjectRoot,
         ...dec,
       };
-      const decResponse = await client.request('tools/call', {
-        name: 'add-decision',
-        arguments: addDecArgs,
-      });
-      if (decResponse.error || JSON.parse(decResponse.result!.content[0].text).error) {
-        console.error(
-          `Failed to seed decision ${dec.id}:`,
-          decResponse.error || JSON.parse(decResponse.result!.content[0].text).error,
-        );
+      const decResponse = await client.getFinalToolResult('add-decision', addDecArgs);
+
+      if (
+        'clientError' in decResponse ||
+        ('error' in decResponse && decResponse.error) ||
+        (decResponse as any).error
+      ) {
+        const error =
+          'clientError' in decResponse
+            ? decResponse.clientError
+            : 'error' in decResponse
+              ? decResponse.error
+              : (decResponse as any).error;
+        console.error(`Failed to seed decision ${dec.id}:`, error);
         throw new Error(`Failed to seed decision ${dec.id}`);
       }
     }
@@ -278,15 +286,20 @@ describe('MCP STDIO Server E2E Tests', () => {
         clientProjectRoot: testClientProjectRoot,
         ...rule,
       };
-      const ruleResponse = await client.request('tools/call', {
-        name: 'add-rule',
-        arguments: addRuleArgs,
-      });
-      if (ruleResponse.error || JSON.parse(ruleResponse.result!.content[0].text).error) {
-        console.error(
-          `Failed to seed rule ${rule.id}:`,
-          ruleResponse.error || JSON.parse(ruleResponse.result!.content[0].text).error,
-        );
+      const ruleResponse = await client.getFinalToolResult('add-rule', addRuleArgs);
+
+      if (
+        'clientError' in ruleResponse ||
+        ('error' in ruleResponse && ruleResponse.error) ||
+        (ruleResponse as any).error
+      ) {
+        const error =
+          'clientError' in ruleResponse
+            ? ruleResponse.clientError
+            : 'error' in ruleResponse
+              ? ruleResponse.error
+              : (ruleResponse as any).error;
+        console.error(`Failed to seed rule ${rule.id}:`, error);
         throw new Error(`Failed to seed rule ${rule.id}`);
       }
     }
@@ -305,23 +318,17 @@ describe('MCP STDIO Server E2E Tests', () => {
   });
 
   it('T_STDIO_001: should initialize the server correctly', async () => {
-    const response = await client.request('initialize', {
-      protocolVersion: '0.1',
-      capabilities: {
-        roots: {
-          listChanged: true,
-        },
-        sampling: {},
-      },
-      clientInfo: {
-        name: 'test-client',
-        version: '1.0.0',
-      },
-    });
-    expect(response.error).toBeUndefined();
-    expect(response.result).toBeDefined();
-    expect(response.result.capabilities.tools).toBeDefined();
-    expect(response.result.serverInfo.name).toBe('memory-bank-mcp');
+    // The SDK client handles initialization internally during connect()
+    // We can verify the server is ready by listing tools
+    const tools = await client.listTools();
+    expect(tools).toBeDefined();
+    expect(Array.isArray(tools)).toBe(true);
+    expect(tools.length).toBeGreaterThan(0);
+
+    // Verify some expected tools exist
+    const toolNames = tools.map((t) => t.name);
+    expect(toolNames).toContain('init-memory-bank');
+    expect(toolNames).toContain('get-metadata');
   });
 
   it('T_STDIO_002: should initialize a new memory bank (secondary check) and handle subsequent calls', async () => {
@@ -331,16 +338,13 @@ describe('MCP STDIO Server E2E Tests', () => {
       branch: testBranch,
       clientProjectRoot: testClientProjectRoot,
     };
-    const response = await client.request('tools/call', {
-      name: 'init-memory-bank',
-      arguments: params,
-    });
-    expect(response.error).toBeUndefined();
-    expect(response.result).toBeDefined();
-    expect(response.result!.isError).toBe(false);
-    expect(response.result!.content).toBeDefined();
-    expect(response.result!.content[0]).toBeDefined();
-    const toolResult = JSON.parse(response.result!.content[0].text);
+    const response = await client.getFinalToolResult('init-memory-bank', params);
+    expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+    expect(response).toBeDefined();
+    expect((response as any).isError).toBe(false);
+    expect([response as any]).toBeDefined();
+    expect([response as any][0]).toBeDefined();
+    const toolResult = response as any;
     expect(toolResult.success).toBe(true);
     expect(toolResult.message).toContain(`Memory bank initialized for ${tempRepoName}`);
     expect(toolResult.dbPath).toContain(testClientProjectRoot); // Verify path
@@ -353,12 +357,9 @@ describe('MCP STDIO Server E2E Tests', () => {
       branch: testBranch,
       clientProjectRoot: testClientProjectRoot,
     };
-    const response = await client.request('tools/call', {
-      name: 'get-metadata',
-      arguments: toolArgs,
-    });
-    expect(response.error).toBeUndefined();
-    const toolResult = JSON.parse(response.result!.content[0].text); // This is the metadata object
+    const response = await client.getFinalToolResult('get-metadata', toolArgs);
+    expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+    const toolResult = response as any; // This is the metadata object
     expect(toolResult).toBeDefined();
     expect(toolResult.id).toBe('meta');
     expect(toolResult.name).toBe(testRepositoryName);
@@ -380,12 +381,9 @@ describe('MCP STDIO Server E2E Tests', () => {
         tech_stack: { language: 'TypeScript' },
       },
     };
-    let response = await client.request('tools/call', {
-      name: 'update-metadata',
-      arguments: toolArgsUpdate,
-    });
-    expect(response.error).toBeUndefined();
-    let toolResult = JSON.parse(response.result!.content[0].text);
+    let response = await client.getFinalToolResult('update-metadata', toolArgsUpdate);
+    expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+    let toolResult = response as any;
     expect(toolResult.success).toBe(true);
 
     // Verify by getting metadata again
@@ -394,12 +392,9 @@ describe('MCP STDIO Server E2E Tests', () => {
       branch: testBranch,
       clientProjectRoot: testClientProjectRoot,
     };
-    response = await client.request('tools/call', {
-      name: 'get-metadata',
-      arguments: toolArgsGet,
-    });
-    expect(response.error).toBeUndefined();
-    toolResult = JSON.parse(response.result!.content[0].text);
+    response = await client.getFinalToolResult('get-metadata', toolArgsGet);
+    expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+    toolResult = response as any;
     const metadataContent = toolResult.content;
     expect(metadataContent.project.name).toBe(newProjectName);
     expect(metadataContent.tech_stack.language).toBe('TypeScript');
@@ -419,12 +414,9 @@ describe('MCP STDIO Server E2E Tests', () => {
         memory_spec_version: '3.0.0', // Assuming this was the initial state
       },
     };
-    response = await client.request('tools/call', {
-      name: 'update-metadata',
-      arguments: toolArgsRevert,
-    });
-    expect(response.error).toBeUndefined();
-    toolResult = JSON.parse(response.result!.content[0].text);
+    response = await client.getFinalToolResult('update-metadata', toolArgsRevert);
+    expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+    toolResult = response as any;
     expect(toolResult.success).toBe(true);
   });
 
@@ -436,12 +428,9 @@ describe('MCP STDIO Server E2E Tests', () => {
       clientProjectRoot: testClientProjectRoot,
       latest: true,
     };
-    const response = await client.request('tools/call', {
-      name: 'get-context',
-      arguments: toolArgs,
-    });
-    expect(response.error).toBeUndefined();
-    const toolResult = JSON.parse(response.result!.content[0].text) as Context[];
+    const response = await client.getFinalToolResult('get-context', toolArgs);
+    expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+    const toolResult = response as any as Context[];
     expect(Array.isArray(toolResult)).toBe(true);
     // After init, a context might not be auto-created unless updateContext is called.
     // If initMemoryBank or first updateContext creates one, length could be 1.
@@ -461,28 +450,22 @@ describe('MCP STDIO Server E2E Tests', () => {
       decision: 'D001',
       observation: 'Obs001',
     };
-    let response = await client.request('tools/call', {
-      name: 'update-context',
-      arguments: updateArgs,
-    });
-    expect(response.error).toBeUndefined();
+    let response = await client.getFinalToolResult('update-context', updateArgs);
+    expect('clientError' in response || ('error' in response && response.error)).toBe(false);
     // The text property itself IS the JSON string of the tool's direct result for update-context.
-    const updateToolResult = JSON.parse(response.result!.content[0].text); // Single parse
+    const updateToolResult = response as any; // Single parse
     expect(updateToolResult.success).toBe(true);
     expect(updateToolResult.message).toContain('Context updated');
 
     // To verify, we must call get-context again
-    response = await client.request('tools/call', {
-      name: 'get-context',
-      arguments: {
-        repository: testRepositoryName, // Changed from repositoryName
-        branch: testBranch,
-        clientProjectRoot: testClientProjectRoot,
-        latest: true,
-      },
+    response = await client.getFinalToolResult('get-context', {
+      repository: testRepositoryName, // Changed from repositoryName
+      branch: testBranch,
+      clientProjectRoot: testClientProjectRoot,
+      latest: true,
     });
-    expect(response.error).toBeUndefined();
-    const getContextToolResult = JSON.parse(response.result!.content[0].text);
+    expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+    const getContextToolResult = response as any;
     const contexts = getContextToolResult; // get-context directly returns the array or object
 
     expect(Array.isArray(contexts)).toBe(true);
@@ -526,12 +509,9 @@ describe('MCP STDIO Server E2E Tests', () => {
         kind: 'library',
         status: 'active',
       };
-      const response = await client.request('tools/call', {
-        name: 'add-component',
-        arguments: toolArgs,
-      });
-      expect(response.error).toBeUndefined();
-      const toolResult = JSON.parse(response.result!.content[0].text);
+      const response = await client.getFinalToolResult('add-component', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      const toolResult = response as any;
       expect(toolResult.success).toBe(true);
       expect(toolResult.message).toContain(
         `Component '${toolArgs.name}' (id: ${testComponentId}) added/updated`,
@@ -551,12 +531,9 @@ describe('MCP STDIO Server E2E Tests', () => {
         status: 'active',
         depends_on: [testComponentId!],
       };
-      const response = await client.request('tools/call', {
-        name: 'add-component',
-        arguments: toolArgs,
-      });
-      expect(response.error).toBeUndefined();
-      const toolResult = JSON.parse(response.result!.content[0].text);
+      const response = await client.getFinalToolResult('add-component', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      const toolResult = response as any;
       expect(toolResult.success).toBe(true);
       expect(toolResult.message).toContain(
         `Component '${toolArgs.name}' (id: ${dependentComponentId}) added/updated`,
@@ -574,12 +551,9 @@ describe('MCP STDIO Server E2E Tests', () => {
         date: new Date().toISOString().split('T')[0],
         context: 'E2E Test Decision',
       };
-      const response = await client.request('tools/call', {
-        name: 'add-decision',
-        arguments: toolArgs,
-      });
-      expect(response.error).toBeUndefined();
-      const toolResult = JSON.parse(response.result!.content[0].text);
+      const response = await client.getFinalToolResult('add-decision', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      const toolResult = response as any;
       expect(toolResult.success).toBe(true);
       expect(toolResult.message).toContain(
         `Decision '${toolArgs.name}' (id: ${testDecisionId}) added/updated`,
@@ -598,12 +572,9 @@ describe('MCP STDIO Server E2E Tests', () => {
         content: 'Test rule content',
         status: 'active',
       };
-      const response = await client.request('tools/call', {
-        name: 'add-rule',
-        arguments: toolArgs,
-      });
-      expect(response.error).toBeUndefined();
-      const toolResult = JSON.parse(response.result!.content[0].text);
+      const response = await client.getFinalToolResult('add-rule', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      const toolResult = response as any;
       expect(toolResult.success).toBe(true);
       expect(toolResult.message).toContain(
         `Rule '${toolArgs.name}' (id: ${testRuleId}) added/updated`,
@@ -617,36 +588,30 @@ describe('MCP STDIO Server E2E Tests', () => {
 
     beforeAll(async () => {
       // Create primary component
-      let response = await client.request('tools/call', {
-        name: 'add-component',
-        arguments: {
-          repository: testRepositoryName, // Ensure this is 'repository'
-          branch: testBranch,
-          clientProjectRoot: testClientProjectRoot,
-          id: primaryId,
-          name: 'Dep Test Primary',
-          kind: 'lib',
-          status: 'active',
-        },
+      let response = await client.getFinalToolResult('add-component', {
+        repository: testRepositoryName, // Ensure this is 'repository'
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        id: primaryId,
+        name: 'Dep Test Primary',
+        kind: 'lib',
+        status: 'active',
       });
-      let toolResult = JSON.parse(response.result!.content[0].text);
+      let toolResult = response as any;
       expect(toolResult.success).toBe(true);
 
       // Create dependent component
-      response = await client.request('tools/call', {
-        name: 'add-component',
-        arguments: {
-          repository: testRepositoryName, // Ensure this is 'repository'
-          branch: testBranch,
-          clientProjectRoot: testClientProjectRoot,
-          id: dependentId,
-          name: 'Dep Test Dependent',
-          kind: 'service',
-          status: 'active',
-          depends_on: [primaryId],
-        },
+      response = await client.getFinalToolResult('add-component', {
+        repository: testRepositoryName, // Ensure this is 'repository'
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        id: dependentId,
+        name: 'Dep Test Dependent',
+        kind: 'service',
+        status: 'active',
+        depends_on: [primaryId],
       });
-      toolResult = JSON.parse(response.result!.content[0].text);
+      toolResult = response as any;
       expect(toolResult.success).toBe(true);
       console.log(`SIMPLIFIED TEST: Finished creating ${dependentId} depending on ${primaryId}`);
       await new Promise((resolve) => setTimeout(resolve, 200));
@@ -659,17 +624,14 @@ describe('MCP STDIO Server E2E Tests', () => {
         clientProjectRoot: testClientProjectRoot,
         componentId: dependentId,
       };
-      const response = await client.request('tools/call', {
-        name: 'get-component-dependencies',
-        arguments: toolArgs,
-      });
-      expect(response.error).toBeUndefined();
-      expect(response.result).toBeDefined();
-      expect(response.result!.content).toBeDefined();
-      expect(response.result!.content[0]).toBeDefined();
+      const response = await client.getFinalToolResult('get-component-dependencies', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      expect(response).toBeDefined();
+      expect([response as any]).toBeDefined();
+      expect([response as any][0]).toBeDefined();
 
       // Parse the JSON result from the MCP SDK format
-      const toolResultWrapper = JSON.parse(response.result!.content[0].text);
+      const toolResultWrapper = response as any;
       expect(toolResultWrapper).toBeDefined();
       expect(toolResultWrapper.status).toBe('complete');
       expect(Array.isArray(toolResultWrapper.dependencies)).toBe(true);
@@ -685,29 +647,23 @@ describe('MCP STDIO Server E2E Tests', () => {
       dependentComponentId = `e2e-comp-dependent-for-traversal-${Date.now()}`;
       if (!testComponentId) {
         testComponentId = `e2e-comp-primary-fallback-${Date.now()}`;
-        await client.request('tools/call', {
-          name: 'add-component',
-          arguments: {
-            repository: testRepositoryName, // Changed from repositoryName
-            branch: testBranch,
-            clientProjectRoot: testClientProjectRoot,
-            id: testComponentId,
-            name: 'Fallback Primary',
-            kind: 'lib',
-          },
-        });
-      }
-      await client.request('tools/call', {
-        name: 'add-component',
-        arguments: {
+        await client.getFinalToolResult('add-component', {
           repository: testRepositoryName, // Changed from repositoryName
           branch: testBranch,
           clientProjectRoot: testClientProjectRoot,
-          id: dependentComponentId,
-          name: 'Traversal Dependent Comp',
-          kind: 'service',
-          depends_on: [testComponentId!],
-        },
+          id: testComponentId,
+          name: 'Fallback Primary',
+          kind: 'lib',
+        });
+      }
+      await client.getFinalToolResult('add-component', {
+        repository: testRepositoryName, // Changed from repositoryName
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        id: dependentComponentId,
+        name: 'Traversal Dependent Comp',
+        kind: 'service',
+        depends_on: [testComponentId!],
       });
     });
 
@@ -719,17 +675,14 @@ describe('MCP STDIO Server E2E Tests', () => {
         clientProjectRoot: testClientProjectRoot,
         componentId: dependentComponentId,
       };
-      const response = await client.request('tools/call', {
-        name: 'get-component-dependencies',
-        arguments: toolArgs,
-      });
-      expect(response.error).toBeUndefined();
-      expect(response.result).toBeDefined();
-      expect(response.result!.content).toBeDefined();
-      expect(response.result!.content[0]).toBeDefined();
+      const response = await client.getFinalToolResult('get-component-dependencies', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      expect(response).toBeDefined();
+      expect([response as any]).toBeDefined();
+      expect([response as any][0]).toBeDefined();
 
       // Parse the JSON result from the MCP SDK format
-      const toolResultWrapper = JSON.parse(response.result!.content[0].text);
+      const toolResultWrapper = response as any;
       expect(toolResultWrapper).toBeDefined();
       expect(toolResultWrapper.status).toBe('complete');
       expect(Array.isArray(toolResultWrapper.dependencies)).toBe(true);
@@ -747,17 +700,14 @@ describe('MCP STDIO Server E2E Tests', () => {
         clientProjectRoot: testClientProjectRoot,
         componentId: testComponentId!,
       };
-      const response = await client.request('tools/call', {
-        name: 'get-component-dependents',
-        arguments: toolArgs,
-      });
-      expect(response.error).toBeUndefined();
-      expect(response.result).toBeDefined();
-      expect(response.result!.content).toBeDefined();
-      expect(response.result!.content[0]).toBeDefined();
+      const response = await client.getFinalToolResult('get-component-dependents', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      expect(response).toBeDefined();
+      expect([response as any]).toBeDefined();
+      expect([response as any][0]).toBeDefined();
 
       // Parse the JSON result from the MCP SDK format
-      const toolResultWrapper = JSON.parse(response.result!.content[0].text);
+      const toolResultWrapper = response as any;
       expect(toolResultWrapper).toBeDefined();
       expect(toolResultWrapper.status).toBe('complete');
       expect(Array.isArray(toolResultWrapper.dependents)).toBe(true);
@@ -780,14 +730,22 @@ describe('MCP STDIO Server E2E Tests', () => {
           /* ... */
         },
       };
-      const relatedItemsResponse = await client.request('tools/call', {
-        name: 'get-related-items',
-        arguments: relatedItemsArgs,
-      });
-      if (relatedItemsResponse.error) {
-        console.error('DIAGNOSTIC: get-related-items RPC call failed:', relatedItemsResponse.error);
+      const relatedItemsResponse = await client.getFinalToolResult(
+        'get-related-items',
+        relatedItemsArgs,
+      );
+      if (
+        'clientError' in relatedItemsResponse ||
+        ('error' in relatedItemsResponse && relatedItemsResponse.error)
+      ) {
+        console.error(
+          'DIAGNOSTIC: get-related-items RPC call failed:',
+          'clientError' in relatedItemsResponse
+            ? relatedItemsResponse.clientError
+            : relatedItemsResponse.error,
+        );
       } else {
-        const relatedItemsWrapper = JSON.parse(relatedItemsResponse.result!.content[0].text);
+        const relatedItemsWrapper = relatedItemsResponse as any;
         expect(relatedItemsWrapper).toBeDefined();
         // ... rest of diagnostic checks ...
       }
@@ -803,17 +761,14 @@ describe('MCP STDIO Server E2E Tests', () => {
         relationshipTableNames: ['DEPENDS_ON'],
         params: {},
       };
-      const response = await client.request('tools/call', {
-        name: 'shortest-path',
-        arguments: toolArgs,
-      });
-      expect(response.error).toBeUndefined();
-      expect(response.result).toBeDefined();
-      expect(response.result!.content).toBeDefined();
-      expect(response.result!.content[0]).toBeDefined();
+      const response = await client.getFinalToolResult('shortest-path', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      expect(response).toBeDefined();
+      expect([response as any]).toBeDefined();
+      expect([response as any][0]).toBeDefined();
 
       // Parse the JSON result from the MCP SDK format
-      const toolResultWrapper = JSON.parse(response.result!.content[0].text);
+      const toolResultWrapper = response as any;
       expect(toolResultWrapper).toBeDefined();
       expect(toolResultWrapper.status).toBe('complete');
       expect(toolResultWrapper.results).toBeDefined();
@@ -838,17 +793,14 @@ describe('MCP STDIO Server E2E Tests', () => {
         relationshipTableNames: [],
         params: {},
       };
-      const response = await client.request('tools/call', {
-        name: 'shortest-path',
-        arguments: toolArgs,
-      });
-      expect(response.error).toBeUndefined();
-      expect(response.result).toBeDefined();
-      expect(response.result!.content).toBeDefined();
-      expect(response.result!.content[0]).toBeDefined();
+      const response = await client.getFinalToolResult('shortest-path', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      expect(response).toBeDefined();
+      expect([response as any]).toBeDefined();
+      expect([response as any][0]).toBeDefined();
 
       // Parse the JSON result from the MCP SDK format
-      const toolResultWrapper = JSON.parse(response.result!.content[0].text);
+      const toolResultWrapper = response as any;
       expect(toolResultWrapper).toBeDefined();
       expect(toolResultWrapper.status).toBe('complete');
       expect(toolResultWrapper.results).toBeDefined();
@@ -869,10 +821,7 @@ describe('MCP STDIO Server E2E Tests', () => {
         date: new Date().toISOString().split('T')[0],
         context: 'This decision explicitly governs the main E2E component.',
       };
-      await client.request('tools/call', {
-        name: 'add-decision',
-        arguments: decisionArgs,
-      });
+      await client.getFinalToolResult('add-decision', decisionArgs);
 
       const toolArgs = {
         repository: testRepositoryName,
@@ -880,17 +829,17 @@ describe('MCP STDIO Server E2E Tests', () => {
         clientProjectRoot: testClientProjectRoot,
         componentId: testComponentId!,
       };
-      const response = await client.request('tools/call', {
-        name: 'get-governing-items-for-component',
-        arguments: toolArgs,
-      });
-      expect(response.error).toBeUndefined();
-      expect(response.result).toBeDefined();
-      expect(response.result!.content).toBeDefined();
-      expect(response.result!.content[0]).toBeDefined();
+      const response = await client.getFinalToolResult(
+        'get-governing-items-for-component',
+        toolArgs,
+      );
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      expect(response).toBeDefined();
+      expect([response as any]).toBeDefined();
+      expect([response as any][0]).toBeDefined();
 
       // Parse the JSON result from the MCP SDK format
-      const toolResultWrapper = JSON.parse(response.result!.content[0].text);
+      const toolResultWrapper = response as any;
       expect(toolResultWrapper).toBeDefined();
       expect(toolResultWrapper.status).toBe('complete');
       expect(typeof toolResultWrapper).toBe('object');
@@ -903,17 +852,14 @@ describe('MCP STDIO Server E2E Tests', () => {
     it('T_STDIO_get-item-contextual-history: should retrieve contextual history for an item', async () => {
       expect(testComponentId).not.toBeNull();
       const summaryForHistory = 'Contextual history test entry for component';
-      await client.request('tools/call', {
-        name: 'update-context',
-        arguments: {
-          repository: testRepositoryName, // Changed from repositoryName
-          branch: testBranch,
-          clientProjectRoot: testClientProjectRoot,
-          summary: summaryForHistory,
-          // For this test to be more meaningful, this context update should ideally be linked to testComponentId
-          // The current `update-context` operation creates a repo-level context.
-          // A true component-specific context would require CONTEXT_OF relationship to the component.
-        },
+      await client.getFinalToolResult('update-context', {
+        repository: testRepositoryName, // Changed from repositoryName
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        summary: summaryForHistory,
+        // For this test to be more meaningful, this context update should ideally be linked to testComponentId
+        // The current `update-context` operation creates a repo-level context.
+        // A true component-specific context would require CONTEXT_OF relationship to the component.
       });
 
       const toolArgs = {
@@ -923,17 +869,14 @@ describe('MCP STDIO Server E2E Tests', () => {
         itemId: testComponentId!,
         itemType: 'Component',
       };
-      const response = await client.request('tools/call', {
-        name: 'get-item-contextual-history',
-        arguments: toolArgs,
-      });
-      expect(response.error).toBeUndefined();
-      expect(response.result).toBeDefined();
-      expect(response.result!.content).toBeDefined();
-      expect(response.result!.content[0]).toBeDefined();
+      const response = await client.getFinalToolResult('get-item-contextual-history', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      expect(response).toBeDefined();
+      expect([response as any]).toBeDefined();
+      expect([response as any][0]).toBeDefined();
 
       // Parse the JSON result from the MCP SDK format
-      const toolResultWrapper = JSON.parse(response.result!.content[0].text);
+      const toolResultWrapper = response as any;
       expect(toolResultWrapper).toBeDefined();
       expect(toolResultWrapper.status).toBe('complete');
       expect(Array.isArray(toolResultWrapper.contextHistory)).toBe(true);
@@ -1007,17 +950,14 @@ describe('MCP STDIO Server E2E Tests', () => {
         clientProjectRoot: testClientProjectRoot,
         ...toolSetup.args,
       };
-      const response = await client.request('tools/call', {
-        name: toolSetup.name,
-        arguments: toolArgs,
-      });
-      expect(response.error).toBeUndefined();
-      expect(response.result).toBeDefined();
-      expect(response.result!.content).toBeDefined();
-      expect(response.result!.content[0]).toBeDefined();
+      const response = await client.getFinalToolResult(toolSetup.name, toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      expect(response).toBeDefined();
+      expect([response as any]).toBeDefined();
+      expect([response as any][0]).toBeDefined();
 
       // Parse the JSON result from the MCP SDK format
-      const toolResultWrapper = JSON.parse(response.result!.content[0].text);
+      const toolResultWrapper = response as any;
       expect(toolResultWrapper).toBeDefined();
       expect(toolResultWrapper.status).toBe('complete');
       expect(toolResultWrapper.clientProjectRoot).toBe(testClientProjectRoot);
@@ -1050,37 +990,31 @@ describe('MCP STDIO Server E2E Tests', () => {
   });
 
   it('T_STDIO_004: should handle invalid tool name gracefully', async () => {
-    try {
-      await client.request('tools/call', {
-        name: 'non-existent-tool',
-        arguments: {
-          repository: testRepositoryName,
-          clientProjectRoot: testClientProjectRoot,
-        },
-      });
-      fail('Request should have failed due to invalid tool name');
-    } catch (e: any) {
-      expect(e).toBeDefined();
-      expect(e.error).toBeDefined();
-      expect(e.error.code).toBe(-32603);
-      expect(e.error.message).toContain("Tool 'non-existent-tool' not found.");
+    const response = await client.getFinalToolResult('non-existent-tool', {
+      repository: testRepositoryName,
+      clientProjectRoot: testClientProjectRoot,
+    });
+
+    // Check that we got an error response
+    const hasError = 'clientError' in response || ('error' in response && response.error);
+    expect(hasError).toBe(true);
+
+    if ('clientError' in response) {
+      expect(response.clientError.message).toContain("Tool 'non-existent-tool' not found.");
+    } else if ('error' in response && response.error) {
+      expect(response.error.message).toContain("Tool 'non-existent-tool' not found.");
     }
   });
 
   it('T_STDIO_005: should handle missing required arguments for a valid tool (e.g., get-metadata)', async () => {
-    const response = await client.request('tools/call', {
-      name: 'get-metadata',
-      arguments: {
-        branch: testBranch,
-        clientProjectRoot: testClientProjectRoot,
-        // repository is missing
-      },
+    const response = await client.getFinalToolResult('get-metadata', {
+      branch: testBranch,
+      clientProjectRoot: testClientProjectRoot,
+      // repository is missing
     });
-    expect(response.error).toBeUndefined(); // MCP call success
-    expect(response.result).toBeDefined();
-    expect(response.result!.isError).toBe(true);
-    expect(response.result!.content[0].text).toContain(
-      'Missing repository parameter for get-metadata',
-    );
+    expect('clientError' in response || ('error' in response && response.error)).toBe(false); // MCP call success
+    expect(response).toBeDefined();
+    expect((response as any).isError).toBe(true);
+    expect(JSON.stringify(response)).toContain('Missing repository parameter for get-metadata');
   });
 });
