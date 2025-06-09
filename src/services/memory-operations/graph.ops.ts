@@ -1,40 +1,33 @@
-import {
-  RepositoryRepository,
-  // Presumed: ComponentRepository or a dedicated GraphRepository might be needed
-  // For now, let's include ComponentRepository if graph ops are on components.
-  ComponentRepository,
-} from '../../repositories';
-import { Component, Context, Decision, Rule } from '../../types'; // Added Context and Decision imports
-import { KuzuDBClient } from '../../db/kuzu'; // Import KuzuDBClient
 import { z } from 'zod'; // Import z for using z.infer with schema types
+import { KuzuDBClient } from '../../db/kuzu'; // Import KuzuDBClient
 import {
-  PageRankInputSchema,
-  PageRankOutputSchema,
+  ContextSchema, // For getGoverningItemsForComponentOp, getRelatedItemsOp that might return components
+  DecisionSchema, // For getGoverningItemsForComponentOp
+  GetGoverningItemsForComponentInputSchema, // Corrected: Was GetGoverningItemsForComponentOutputSchema
+  GetGoverningItemsForComponentOutputSchema,
+  // Traversal Output Schemas might also be relevant if their structure is complex
+  // GetComponentDependenciesOutputSchema, // etc.
+  GetItemContextualHistoryInputSchema,
+  GetRelatedItemsInputSchema, // Corrected: Was GetRelatedItemsOutputSchema
+  GetRelatedItemsOutputSchema,
   // ... import other Algo Zod Input/Output Schemas as they are refactored
   KCoreDecompositionInputSchema,
   KCoreDecompositionOutputSchema, // Example for next one
   LouvainCommunityDetectionInputSchema,
   LouvainCommunityDetectionOutputSchema,
+  PageRankInputSchema,
+  PageRankOutputSchema,
+  RelatedItemBaseSchema, // For getGoverningItemsForComponentOp
+  RuleSchema,
+  ShortestPathInputSchema,
+  ShortestPathOutputSchema,
   StronglyConnectedComponentsInputSchema,
   StronglyConnectedComponentsOutputSchema,
   WeaklyConnectedComponentsInputSchema,
   WeaklyConnectedComponentsOutputSchema,
-  ShortestPathInputSchema,
-  ShortestPathOutputSchema,
-  // Traversal Output Schemas might also be relevant if their structure is complex
-  // GetComponentDependenciesOutputSchema, // etc.
-  GetItemContextualHistoryInputSchema,
-  ContextSchema,
-  ComponentSchema, // For getGoverningItemsForComponentOp, getRelatedItemsOp that might return components
-  DecisionSchema, // For getGoverningItemsForComponentOp
-  RuleSchema, // For getGoverningItemsForComponentOp
-  GetGoverningItemsForComponentInputSchema, // Corrected: Was GetGoverningItemsForComponentOutputSchema
-  GetGoverningItemsForComponentOutputSchema,
-  GetRelatedItemsInputSchema, // Corrected: Was GetRelatedItemsOutputSchema
-  GetRelatedItemsOutputSchema,
-  RelatedItemBaseSchema,
 } from '../../mcp/schemas/tool-schemas';
 import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom'; // Added
+import { RepositoryRepository } from '../../repositories';
 
 // This file is a placeholder for graph-related operations.
 // Implementations will depend on the capabilities of the underlying repositories
@@ -647,7 +640,9 @@ export async function shortestPathOp(
       const { repository, branch, startNodeId, endNodeId } = params;
       const startGraphId = `${repository}:${branch}:${startNodeId}`;
       const endGraphId = `${repository}:${branch}:${endNodeId}`;
-      const maxDepthClause = /* params.maxDepth && params.maxDepth > 0 ? params.maxDepth : */ 10;
+      // Determine the maximum depth to use. If the caller provided a positive maxDepth, respect it;
+      // otherwise default to 10 to avoid overly expensive graph searches.
+      const maxDepthClause = params.maxDepth && params.maxDepth > 0 ? params.maxDepth : 10;
 
       const query = `
         MATCH (start {graph_unique_id: $startGraphId}), (end {graph_unique_id: $endGraphId})
