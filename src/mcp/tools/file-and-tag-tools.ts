@@ -10,6 +10,11 @@ export const addFileTool: McpTool = {
   parameters: {
     type: 'object',
     properties: {
+      clientProjectRoot: {
+        type: 'string',
+        description:
+          "The absolute file system path to the root of the client's project where the memory bank will be stored.",
+      },
       repository: {
         type: 'string',
         description: 'Repository name',
@@ -52,7 +57,7 @@ export const addFileTool: McpTool = {
         description: 'File size in bytes (optional)',
       },
     },
-    required: ['repository', 'branch', 'id', 'name', 'path'],
+    required: ['clientProjectRoot', 'repository', 'branch', 'id', 'name', 'path'],
   },
   annotations: {
     title: 'Add File',
@@ -90,6 +95,11 @@ export const associateFileWithComponentTool: McpTool = {
   parameters: {
     type: 'object',
     properties: {
+      clientProjectRoot: {
+        type: 'string',
+        description:
+          "The absolute file system path to the root of the client's project where the memory bank will be stored.",
+      },
       repository: {
         type: 'string',
         description: 'Repository name',
@@ -107,7 +117,7 @@ export const associateFileWithComponentTool: McpTool = {
         description: 'File ID to associate',
       },
     },
-    required: ['repository', 'branch', 'componentId', 'fileId'],
+    required: ['clientProjectRoot', 'repository', 'branch', 'componentId', 'fileId'],
   },
   annotations: {
     title: 'Associate File with Component',
@@ -141,6 +151,11 @@ export const addTagTool: McpTool = {
   parameters: {
     type: 'object',
     properties: {
+      clientProjectRoot: {
+        type: 'string',
+        description:
+          "The absolute file system path to the root of the client's project where the memory bank will be stored.",
+      },
       repository: {
         type: 'string',
         description: 'Repository name',
@@ -166,7 +181,7 @@ export const addTagTool: McpTool = {
         description: 'Tag description (optional)',
       },
     },
-    required: ['repository', 'branch', 'id', 'name'],
+    required: ['clientProjectRoot', 'repository', 'branch', 'id', 'name'],
   },
   annotations: {
     title: 'Add Tag',
@@ -204,6 +219,11 @@ export const tagItemTool: McpTool = {
   parameters: {
     type: 'object',
     properties: {
+      clientProjectRoot: {
+        type: 'string',
+        description:
+          "The absolute file system path to the root of the client's project where the memory bank will be stored.",
+      },
       repository: {
         type: 'string',
         description: 'Repository name',
@@ -226,7 +246,7 @@ export const tagItemTool: McpTool = {
         description: 'Tag ID to apply',
       },
     },
-    required: ['repository', 'branch', 'itemId', 'itemType', 'tagId'],
+    required: ['clientProjectRoot', 'repository', 'branch', 'itemId', 'itemType', 'tagId'],
   },
   annotations: {
     title: 'Tag Item',
@@ -260,6 +280,11 @@ export const findItemsByTagTool: McpTool = {
   parameters: {
     type: 'object',
     properties: {
+      clientProjectRoot: {
+        type: 'string',
+        description:
+          "The absolute file system path to the root of the client's project where the memory bank will be stored.",
+      },
       repository: {
         type: 'string',
         description: 'Repository name',
@@ -278,7 +303,7 @@ export const findItemsByTagTool: McpTool = {
         enum: ['Component', 'Decision', 'Rule', 'File', 'Context', 'All'],
       },
     },
-    required: ['repository', 'branch', 'tagId'],
+    required: ['clientProjectRoot', 'repository', 'branch', 'tagId'],
   },
   annotations: {
     title: 'Find Items by Tag',

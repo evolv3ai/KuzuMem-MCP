@@ -517,6 +517,7 @@ export const ShortestPathOutputSchema = AlgoToolOutputBaseSchema.extend({
 // count_nodes_by_label
 // -------------------------------------
 export const CountNodesByLabelInputSchema = z.object({
+  clientProjectRoot: z.string().min(1, { message: 'clientProjectRoot is required' }),
   repository: z.string().min(1, { message: 'repository is required' }),
   branch: z.string().min(1, { message: 'branch is required' }),
   label: z.string().min(1, { message: 'Node label is required' }),
@@ -531,6 +532,7 @@ export const CountNodesByLabelOutputSchema = z.object({
 // list_nodes_by_label
 // -------------------------------------
 export const ListNodesByLabelInputSchema = z.object({
+  clientProjectRoot: z.string().min(1, { message: 'clientProjectRoot is required' }),
   repository: z.string().min(1, { message: 'repository is required' }),
   branch: z.string().min(1, { message: 'branch is required' }),
   label: z.string().min(1, { message: 'Node label is required' }),
@@ -560,6 +562,7 @@ export const ListNodesByLabelOutputSchema = z.object({
 // get_node_properties (schema/structure for a label)
 // -------------------------------------
 export const GetNodePropertiesInputSchema = z.object({
+  clientProjectRoot: z.string().min(1, { message: 'clientProjectRoot is required' }),
   repository: z.string().min(1, { message: 'repository is required' }),
   branch: z.string().min(1, { message: 'branch is required' }),
   label: z.string().min(1, { message: 'Node label is required' }),
@@ -581,6 +584,7 @@ export const GetNodePropertiesOutputSchema = z.object({
 // list_all_indexes
 // -------------------------------------
 export const ListAllIndexesInputSchema = z.object({
+  clientProjectRoot: z.string().min(1, { message: 'clientProjectRoot is required' }),
   repository: z.string().min(1, { message: 'repository is required' }),
   branch: z.string().min(1, { message: 'branch is required' }),
   label: z.string().optional(), // Optionally filter indexes by node label if Kuzu supports it
@@ -606,6 +610,7 @@ export const ListAllIndexesOutputSchema = z.object({
 // add_file
 // -------------------------------------
 export const AddFileInputSchema = z.object({
+  clientProjectRoot: z.string().min(1, { message: 'clientProjectRoot is required' }),
   repository: z.string().min(1, { message: 'repository is required' }),
   branch: z.string().min(1, { message: 'branch is required' }),
   id: z.string().min(1, { message: "File node ID is required (e.g., 'file-path/to/file.ts-v1')" }),
@@ -658,6 +663,7 @@ export const AddFileOutputSchema = z.object({
 // Creates a CONTAINS_FILE relationship from Component to File
 // -------------------------------------
 export const AssociateFileWithComponentInputSchema = z.object({
+  clientProjectRoot: z.string().min(1, { message: 'clientProjectRoot is required' }),
   repository: z.string().min(1, { message: 'repository is required' }),
   branch: z.string().min(1, { message: 'branch is required' }),
   componentId: z.string().min(1, { message: 'Component ID is required' }),
@@ -673,6 +679,7 @@ export const AssociateFileWithComponentOutputSchema = z.object({
 // add_tag
 // -------------------------------------
 export const AddTagInputSchema = z.object({
+  clientProjectRoot: z.string().min(1, { message: 'clientProjectRoot is required' }),
   repository: z.string().min(1, { message: 'repository is required' }),
   branch: z.string().min(1, { message: 'branch is required' }),
   id: z.string().min(1, { message: "Tag ID is required (e.g., 'tag-typescript')" }),
@@ -707,6 +714,7 @@ export const AddTagOutputSchema = z.object({
 // Creates an IS_TAGGED_WITH relationship from the item to the Tag node.
 // -------------------------------------
 export const TagItemInputSchema = z.object({
+  clientProjectRoot: z.string().min(1, { message: 'clientProjectRoot is required' }),
   repository: z.string().min(1, { message: 'repository is required' }),
   branch: z.string().min(1, { message: 'branch is required' }),
   itemId: z.string().min(1, { message: 'ID of the item to tag is required' }),
@@ -725,6 +733,7 @@ export const TagItemOutputSchema = z.object({
 // find_items_by_tag
 // -------------------------------------
 export const FindItemsByTagInputSchema = z.object({
+  clientProjectRoot: z.string().min(1, { message: 'clientProjectRoot is required' }),
   repository: z.string().min(1, { message: 'repository is required' }),
   branch: z.string().min(1, { message: 'branch is required' }),
   tagId: z.string().min(1, { message: 'Tag ID to search by is required' }),
@@ -741,6 +750,7 @@ export const FindItemsByTagOutputSchema = z.object({
 });
 
 export const ListAllLabelsInputSchema = z.object({
+  clientProjectRoot: z.string().min(1, { message: 'clientProjectRoot is required' }),
   repository: z.string().min(1, 'Repository name is required.'),
   branch: z.string().min(1, 'Branch name is required.'),
 });

@@ -203,7 +203,13 @@ program
     };
     try {
       const mockContext = createMockContext();
-      await memoryService.upsertRule(mockContext, clientProjectRoot, repositoryName, ruleDataForService, branch);
+      await memoryService.upsertRule(
+        mockContext,
+        clientProjectRoot,
+        repositoryName,
+        ruleDataForService,
+        branch,
+      );
       console.log(`✅ Rule ${id} added to repository: ${repositoryName} (branch: ${branch})`);
     } catch (error) {
       console.error('❌ Failed to add rule:', error);

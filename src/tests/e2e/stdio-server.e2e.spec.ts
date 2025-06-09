@@ -1031,7 +1031,7 @@ describe('MCP STDIO Server E2E Tests', () => {
       expect(toolResult).toBeDefined();
       expect(Array.isArray(toolResult.labels)).toBe(true);
       expect(toolResult.labels.length).toBeGreaterThan(0);
-      
+
       // Should contain the basic node types we've created
       expect(toolResult.labels).toContain('Component');
       expect(toolResult.labels).toContain('Decision');
@@ -1073,7 +1073,7 @@ describe('MCP STDIO Server E2E Tests', () => {
       expect(toolResult.nodes.length).toBeLessThanOrEqual(3);
       expect(toolResult.limit).toBe(3);
       expect(toolResult.offset).toBe(0);
-      
+
       // Each node should have at least an id
       if (toolResult.nodes.length > 0) {
         expect(toolResult.nodes[0]).toHaveProperty('id');
@@ -1094,7 +1094,7 @@ describe('MCP STDIO Server E2E Tests', () => {
       expect(toolResult.label).toBe('Component');
       expect(Array.isArray(toolResult.properties)).toBe(true);
       expect(toolResult.properties.length).toBeGreaterThan(0);
-      
+
       // Should contain basic Component properties
       const propNames = toolResult.properties.map((p: any) => p.name);
       expect(propNames).toContain('id');
@@ -1177,7 +1177,7 @@ describe('MCP STDIO Server E2E Tests', () => {
     it('T_STDIO_NEW_associate_file_with_component: should associate file with component', async () => {
       expect(testComponentId).not.toBeNull();
       expect(testFileId).toBeDefined();
-      
+
       const toolArgs = {
         repository: testRepositoryName,
         branch: testBranch,
@@ -1195,7 +1195,7 @@ describe('MCP STDIO Server E2E Tests', () => {
     it('T_STDIO_NEW_tag_item_component: should tag a component', async () => {
       expect(testComponentId).not.toBeNull();
       expect(testTagId).toBeDefined();
-      
+
       const toolArgs = {
         repository: testRepositoryName,
         branch: testBranch,
@@ -1214,7 +1214,7 @@ describe('MCP STDIO Server E2E Tests', () => {
     it('T_STDIO_NEW_tag_item_file: should tag a file', async () => {
       expect(testFileId).toBeDefined();
       expect(testTagId).toBeDefined();
-      
+
       const toolArgs = {
         repository: testRepositoryName,
         branch: testBranch,
@@ -1232,7 +1232,7 @@ describe('MCP STDIO Server E2E Tests', () => {
 
     it('T_STDIO_NEW_find_items_by_tag: should find items by tag', async () => {
       expect(testTagId).toBeDefined();
-      
+
       const toolArgs = {
         repository: testRepositoryName,
         branch: testBranch,
@@ -1247,7 +1247,7 @@ describe('MCP STDIO Server E2E Tests', () => {
       expect(toolResult.tagId).toBe(testTagId);
       expect(Array.isArray(toolResult.items)).toBe(true);
       expect(toolResult.items.length).toBeGreaterThanOrEqual(2); // Component + File that we tagged
-      
+
       // Should find the component and file we tagged
       const itemIds = toolResult.items.map((item: any) => item.id);
       expect(itemIds).toContain(testComponentId);
@@ -1256,7 +1256,7 @@ describe('MCP STDIO Server E2E Tests', () => {
 
     it('T_STDIO_NEW_find_items_by_tag_filtered: should find only Component items by tag', async () => {
       expect(testTagId).toBeDefined();
-      
+
       const toolArgs = {
         repository: testRepositoryName,
         branch: testBranch,
@@ -1271,7 +1271,7 @@ describe('MCP STDIO Server E2E Tests', () => {
       expect(toolResult.tagId).toBe(testTagId);
       expect(Array.isArray(toolResult.items)).toBe(true);
       expect(toolResult.items.length).toBeGreaterThanOrEqual(1); // At least the component we tagged
-      
+
       // Should only find components
       const componentItems = toolResult.items.filter((item: any) => item.id === testComponentId);
       expect(componentItems.length).toBe(1);
@@ -1288,7 +1288,7 @@ describe('MCP STDIO Server E2E Tests', () => {
         label: 'Component',
       });
       const initialComponentCount = (response as any).count;
-      
+
       // 2. Create a new component for this workflow
       const workflowComponentId = `workflow-comp-${Date.now()}`;
       response = await client.getFinalToolResult('add-component', {
@@ -1301,7 +1301,7 @@ describe('MCP STDIO Server E2E Tests', () => {
         status: 'active',
       });
       expect((response as any).success).toBe(true);
-      
+
       // 3. Verify component count increased
       response = await client.getFinalToolResult('count_nodes_by_label', {
         repository: testRepositoryName,
@@ -1310,7 +1310,7 @@ describe('MCP STDIO Server E2E Tests', () => {
         label: 'Component',
       });
       expect((response as any).count).toBe(initialComponentCount + 1);
-      
+
       // 4. Add a file related to this component
       const workflowFileId = `workflow-file-${Date.now()}`;
       response = await client.getFinalToolResult('add_file', {
@@ -1323,7 +1323,7 @@ describe('MCP STDIO Server E2E Tests', () => {
         language: 'typescript',
       });
       expect((response as any).success).toBe(true);
-      
+
       // 5. Associate the file with the component
       response = await client.getFinalToolResult('associate_file_with_component', {
         repository: testRepositoryName,
@@ -1333,7 +1333,7 @@ describe('MCP STDIO Server E2E Tests', () => {
         fileId: workflowFileId,
       });
       expect((response as any).success).toBe(true);
-      
+
       // 6. Create a tag for this workflow
       const workflowTagId = `workflow-tag-${Date.now()}`;
       response = await client.getFinalToolResult('add_tag', {
@@ -1345,7 +1345,7 @@ describe('MCP STDIO Server E2E Tests', () => {
         description: 'Items created during workflow test',
       });
       expect((response as any).success).toBe(true);
-      
+
       // 7. Tag both the component and file
       response = await client.getFinalToolResult('tag_item', {
         repository: testRepositoryName,
@@ -1356,7 +1356,7 @@ describe('MCP STDIO Server E2E Tests', () => {
         tagId: workflowTagId,
       });
       expect((response as any).success).toBe(true);
-      
+
       response = await client.getFinalToolResult('tag_item', {
         repository: testRepositoryName,
         branch: testBranch,
@@ -1366,7 +1366,7 @@ describe('MCP STDIO Server E2E Tests', () => {
         tagId: workflowTagId,
       });
       expect((response as any).success).toBe(true);
-      
+
       // 8. Find all items with the workflow tag
       response = await client.getFinalToolResult('find_items_by_tag', {
         repository: testRepositoryName,
@@ -1376,11 +1376,11 @@ describe('MCP STDIO Server E2E Tests', () => {
       });
       const taggedItems = response as any;
       expect(taggedItems.items.length).toBe(2);
-      
+
       const itemIds = taggedItems.items.map((item: any) => item.id);
       expect(itemIds).toContain(workflowComponentId);
       expect(itemIds).toContain(workflowFileId);
-      
+
       // 9. List all labels to verify File and Tag labels exist
       response = await client.getFinalToolResult('list_all_labels', {
         repository: testRepositoryName,
@@ -1391,8 +1391,10 @@ describe('MCP STDIO Server E2E Tests', () => {
       expect(labels).toContain('Component');
       expect(labels).toContain('File');
       expect(labels).toContain('Tag');
-      
-      console.log(`✅ Complete workflow test passed - created component ${workflowComponentId}, file ${workflowFileId}, and tag ${workflowTagId}`);
+
+      console.log(
+        `✅ Complete workflow test passed - created component ${workflowComponentId}, file ${workflowFileId}, and tag ${workflowTagId}`,
+      );
     });
   });
 });
