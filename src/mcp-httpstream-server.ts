@@ -457,11 +457,11 @@ process.on('SIGINT', async () => {
 
 // Start the server
 app.listen(PORT, () => {
-  console.log(`MCP HTTP Streaming Server (v3.0.0) running at http://localhost:${PORT}`);
-  console.log(`Transport: Streamable HTTP`);
-  console.log(`Debug level: ${DEBUG_LEVEL}`);
-  console.log(`Session timeout: ${SESSION_TIMEOUT}ms`);
-  console.log(`CORS origins: ${CORS_ORIGINS.join(', ')}`);
+  console.error(`MCP HTTP Streaming Server (v3.0.0) running at http://localhost:${PORT}`);
+  console.error(`Transport: Streamable HTTP`);
+  console.error(`Debug level: ${DEBUG_LEVEL}`);
+  console.error(`Session timeout: ${SESSION_TIMEOUT}ms`);
+  console.error(`CORS origins: ${CORS_ORIGINS.join(', ')}`);
   debugLog(1, 'Server started successfully');
 });
 

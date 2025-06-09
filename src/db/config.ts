@@ -1,6 +1,4 @@
 import dotenv from 'dotenv';
-import path from 'path';
-import fs from 'fs';
 
 // Load environment variables
 dotenv.config();
@@ -18,10 +16,11 @@ const KUZU_DB_RELATIVE_DIR = process.env.KUZU_DB_RELATIVE_DIR || '';
 const KUZU_DB_FILENAME =
   process.env.DB_FILENAME || process.env.KUZU_DB_FILENAME || 'test-memory-bank.kuzu';
 
-console.log(
+// Use console.error for MCP stdio server compatibility (stdout is reserved for JSON protocol)
+console.error(
   `KuzuDB default relative directory (should be empty for root placement): '${KUZU_DB_RELATIVE_DIR}'`,
 );
-console.log(`KuzuDB default database filename: '${KUZU_DB_FILENAME}'`);
+console.error(`KuzuDB default database filename: '${KUZU_DB_FILENAME}'`);
 
 /**
  * KuzuDB configuration object

@@ -271,6 +271,6 @@ app.get('/health', (req: Request, res: Response) => {
 // Start the server
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`MCP HTTP Streaming Server running at http://localhost:${PORT}`);
+  console.error(`MCP HTTP Streaming Server running at http://localhost:${PORT}`);
   debugLog(1, `Server started with debug level: ${debugLevel}`);
 });
