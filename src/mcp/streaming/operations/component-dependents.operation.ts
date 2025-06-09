@@ -1,6 +1,6 @@
 import { MemoryService } from '../../../services/memory.service';
-import { ProgressHandler } from '../progress-handler';
 import { EnrichedRequestHandlerExtra } from '../../types/sdk-custom';
+import { ProgressHandler } from '../progress-handler';
 
 /**
  * Operation class for component dependents retrieval with streaming support
@@ -43,11 +43,11 @@ export class ComponentDependentsOperation {
         signal: new AbortController().signal,
         requestId: 'streaming-operation',
         sendNotification: async () => {},
-        sendRequest: async () => ({ id: 'mock' } as any),
+        sendRequest: async () => ({ id: 'mock' }) as any,
         logger: console,
         session: {},
         sendProgress: async () => {},
-        memoryService: memoryService
+        memoryService: memoryService,
       };
 
       // Placeholder for actual logic that might involve complex graph traversal and path reconstruction

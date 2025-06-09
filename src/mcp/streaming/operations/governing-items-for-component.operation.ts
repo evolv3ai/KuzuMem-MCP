@@ -4,6 +4,8 @@
 
 export class GoverningItemsForComponentOperation {
   public static async execute(): Promise<any> {
-    throw new Error('GoverningItemsForComponentOperation is deprecated. Use tool handlers instead.');
+    throw new Error(
+      'GoverningItemsForComponentOperation is deprecated. Use tool handlers instead.',
+    );
   }
 }

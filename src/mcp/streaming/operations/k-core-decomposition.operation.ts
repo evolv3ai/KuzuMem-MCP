@@ -1,6 +1,6 @@
 import { MemoryService } from '../../../services/memory.service';
-import { ProgressHandler } from '../progress-handler';
 import { EnrichedRequestHandlerExtra } from '../../types/sdk-custom';
+import { ProgressHandler } from '../progress-handler';
 
 /**
  * Creates a mock context for service calls
@@ -57,14 +57,18 @@ export class KCoreDecompositionOperation {
       }
 
       // Call the MemoryService's kCoreDecomposition method with the correct signature
-      const kCoreOutput = await memoryService.kCoreDecomposition(createMockContext(), clientProjectRoot, {
-        repository: repositoryName,
-        branch: branch,
-        projectedGraphName: projectedGraphName,
-        nodeTableNames: nodeTableNames,
-        relationshipTableNames: relationshipTableNames,
-        k: k,
-      });
+      const kCoreOutput = await memoryService.kCoreDecomposition(
+        createMockContext(),
+        clientProjectRoot,
+        {
+          repository: repositoryName,
+          branch: branch,
+          projectedGraphName: projectedGraphName,
+          nodeTableNames: nodeTableNames,
+          relationshipTableNames: relationshipTableNames,
+          k: k,
+        },
+      );
 
       // Ensure kCoreOutput and kCoreOutput.results are defined before accessing components
       const components = kCoreOutput?.results?.components || [];

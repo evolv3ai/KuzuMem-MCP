@@ -1,5 +1,5 @@
 import { KuzuDBClient } from '../db/kuzu'; // Corrected path
-import { File, Component } from '../types'; // Internal domain types
+import { File } from '../types'; // Internal domain types
 import { RepositoryRepository } from './repository.repository'; // For context/scoping if needed
 
 export class FileRepository {
@@ -22,10 +22,7 @@ export class FileRepository {
     repoNodeId: string, // This is the actual PK of the Repository node in Kuzu
     branch: string,
     // Input data should be clean, matching internal File type structure for new node properties
-    fileData: Omit<
-      File,
-      'repository' | 'branch' | 'created_at' | 'updated_at'
-    > & { id: string },
+    fileData: Omit<File, 'repository' | 'branch' | 'created_at' | 'updated_at'> & { id: string },
   ): Promise<File | null> {
     const now = new Date();
     const fileNodeProps = {

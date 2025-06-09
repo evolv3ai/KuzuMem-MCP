@@ -485,7 +485,7 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
     expect(httpResponse.body.id).toBe('init_e2e_http');
     expect(httpResponse.body.result?.content).toBeDefined();
     expect(httpResponse.body.result?.content[0]).toBeDefined();
-    
+
     // Parse the JSON result from the MCP SDK format
     const initResult = JSON.parse(httpResponse.body.result.content[0].text);
     expect(initResult.success).toBe(true);
@@ -671,7 +671,7 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
     // This test verifies that the session was properly initialized in beforeAll
     expect(mcpSessionId).toBeDefined();
     console.log(`Test T_HTTPSTREAM_001: Using session ${mcpSessionId}`);
-    
+
     // Session should already be initialized, so we can verify it's working by making a simple request
     const response = await request(BASE_URL)
       .get('/tools/list')
@@ -711,7 +711,7 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
       architecture: 'test-driven',
       memory_spec_version: '3.0.0',
     };
-    
+
     const payload = {
       jsonrpc: '2.0',
       id: 'update_meta_http',
@@ -786,7 +786,7 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
 
           // Look for any message event (the SSE connection is working)
           const messageEvent = events.find((event: any) => event.type === 'message');
-          
+
           // If we get a message event, the SSE functionality is working
           // The specific tool response format may vary with the official SDK
           if (messageEvent) {
@@ -823,7 +823,7 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
         method: 'tools/call',
         params: { name: 'add-component', arguments: compArgs },
       };
-      
+
       const response = await makeMcpRequest(payload);
       expect(response.body.id).toBe('add_comp_crud');
       expect(response.body.result).toBeDefined();
@@ -855,7 +855,7 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
         method: 'tools/call',
         params: { name: 'add-component', arguments: compArgs },
       };
-      
+
       const response = await makeMcpRequest(payload);
       expect(response.body.id).toBe('add_dep_crud');
       expect(response.body.result).toBeDefined();
@@ -884,7 +884,7 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
         method: 'tools/call',
         params: { name: 'add-decision', arguments: decisionArgs },
       };
-      
+
       const response = await makeMcpRequest(payload);
       expect(response.body.id).toBe('add_dec_crud');
       expect(response.body.result).toBeDefined();
@@ -914,7 +914,7 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
         method: 'tools/call',
         params: { name: 'add-rule', arguments: ruleArgs },
       };
-      
+
       const response = await makeMcpRequest(payload);
       expect(response.body.id).toBe('add_rule_crud');
       expect(response.body.result).toBeDefined();
@@ -943,7 +943,7 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
         method: 'tools/call',
         params: { name: 'get-component-dependencies', arguments: toolArgs },
       };
-      
+
       const response = await makeMcpRequest(payload);
       expect(response.body.id).toBe('get_deps_json');
       expect(response.body.result).toBeDefined();
@@ -979,7 +979,7 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
         method: 'tools/call',
         params: { name: 'shortest-path', arguments: toolArgs },
       };
-      
+
       const response = await makeMcpRequest(payload);
       expect(response.body.id).toBe('sp_json');
       expect(response.body.result).toBeDefined();
@@ -1015,7 +1015,7 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
         method: 'tools/call',
         params: { name: 'get-component-dependents', arguments: toolArgs },
       };
-      
+
       const response = await makeMcpRequest(payload);
       expect(response.body.id).toBe('get_dependents_json');
       expect(response.body.result).toBeDefined();
@@ -1050,7 +1050,7 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
         method: 'tools/call',
         params: { name: 'shortest-path', arguments: toolArgs },
       };
-      
+
       const response = await makeMcpRequest(payload);
       expect(response.body.id).toBe('sp_reflex_json');
       expect(response.body.result).toBeDefined();
@@ -1137,7 +1137,7 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
           method: 'tools/call',
           params: { name: toolSetup.name, arguments: toolArgs },
         };
-        
+
         const response = await makeMcpRequest(payload);
         expect(response.body.id).toBe(`algo_json_${toolSetup.name}`);
         expect(response.body.result).toBeDefined();
