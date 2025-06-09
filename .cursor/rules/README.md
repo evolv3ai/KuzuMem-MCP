@@ -11,7 +11,8 @@ This directory contains focused, actionable rules for coding agents working with
 ├── mcp/                         # MCP-specific advanced rules
 │   ├── memory-management.mdc    # Memory bank and entity operations
 │   ├── graph-traversal.mdc      # Dependency analysis and queries
-│   └── graph-algorithms.mdc     # Advanced graph analysis tools
+│   ├── graph-algorithms.mdc     # Advanced graph analysis tools
+│   └── graph-introspection.mdc  # Graph introspection, file & tag management
 └── README.md                    # This file
 ```
 
@@ -25,6 +26,7 @@ This directory contains focused, actionable rules for coding agents working with
 - **memory-management.mdc**: Memory bank lifecycle, context handling, entity management
 - **graph-traversal.mdc**: Component relationships, dependency tracking, governance queries
 - **graph-algorithms.mdc**: PageRank, community detection, cycle analysis, pathfinding
+- **graph-introspection.mdc**: Schema exploration, node counting, file tracking, and tag management
 
 ## Design Principles
 
@@ -42,4 +44,4 @@ Rules are automatically attached when working with relevant files:
 
 ## Migration Notes
 
-This replaces the previous single 179-line rule with 5 focused rules totaling comprehensive coverage while maintaining clarity and actionability.
+This replaces the previous single 179-line rule with 6 focused rules totaling comprehensive coverage while maintaining clarity and actionability.

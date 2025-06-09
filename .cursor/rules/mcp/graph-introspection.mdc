@@ -1,0 +1,389 @@
+# KuzuMem-MCP Graph Introspection & File Management
+
+## Graph Introspection Tools
+
+These tools help you understand the structure and content of your memory bank graph database.
+
+### 1. List All Node Labels
+Get an overview of all entity types in your memory bank:
+
+```json
+{
+  "tool": {
+    "name": "list_all_labels",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main"
+    }
+  }
+}
+```
+
+**Returns:** Array of all node labels (e.g., Component, Decision, Rule, Context, File, Tag)
+**Use case:** 
+- Understand what types of entities exist in your memory bank
+- Debug schema issues
+- Plan queries across different entity types
+
+### 2. Count Nodes by Label
+Count how many entities of a specific type exist:
+
+```json
+{
+  "tool": {
+    "name": "count_nodes_by_label",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app", 
+      "branch": "main",
+      "label": "Component"
+    }
+  }
+}
+```
+
+**Returns:** Number of nodes with the specified label
+**Use case:**
+- Monitor memory bank growth
+- Validate data migration
+- Performance planning
+
+### 3. List Nodes by Label
+Browse entities of a specific type with pagination:
+
+```json
+{
+  "tool": {
+    "name": "list_nodes_by_label",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main",
+      "label": "Component",
+      "limit": 10,
+      "offset": 0
+    }
+  }
+}
+```
+
+**Parameters:**
+- `limit`: Number of results to return (default: 50, max: 100)
+- `offset`: Number of results to skip for pagination
+
+**Use case:**
+- Browse all components in your system
+- Export data for analysis
+- Debug specific entities
+
+### 4. Get Node Properties
+Inspect the schema and properties of entities with a specific label:
+
+```json
+{
+  "tool": {
+    "name": "get_node_properties",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main",
+      "label": "Component"
+    }
+  }
+}
+```
+
+**Returns:** Schema information including property names, types, and sample values
+**Use case:**
+- Understand data structure before queries
+- Debug schema evolution
+- Plan data migrations
+
+### 5. List All Indexes
+View database indexes for performance optimization:
+
+```json
+{
+  "tool": {
+    "name": "list_all_indexes",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main"
+    }
+  }
+}
+```
+
+**Returns:** Information about database indexes
+**Use case:**
+- Performance optimization
+- Query planning
+- Database maintenance
+
+## File Management Tools
+
+Track files and their relationships to components in your codebase.
+
+### 1. Add File Record
+Register a file in the memory bank with metadata:
+
+```json
+{
+  "tool": {
+    "name": "add_file",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "feature/auth",
+      "id": "file-src-auth-service-ts-v1",
+      "name": "AuthService.ts",
+      "path": "src/auth/AuthService.ts",
+      "content": "TypeScript service implementing JWT authentication",
+      "metrics": {
+        "line_count": 156,
+        "complexity": 8,
+        "last_modified": "2024-12-09"
+      }
+    }
+  }
+}
+```
+
+**File ID format:** `file-{path-slug}-v{version}`
+**Use case:**
+- Track important files in your codebase
+- Associate code files with architectural components
+- Monitor file changes and metrics
+
+### 2. Associate File with Component
+Link a file to a component it implements or supports:
+
+```json
+{
+  "tool": {
+    "name": "associate_file_with_component",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "feature/auth",
+      "fileId": "file-src-auth-service-ts-v1",
+      "componentId": "comp-AuthService"
+    }
+  }
+}
+```
+
+**Use case:**
+- Map source code to architectural components
+- Enable code-to-architecture traceability
+- Support impact analysis of file changes
+
+## Tag Management Tools
+
+Organize and categorize entities with flexible tagging.
+
+### 1. Add Tag Definition
+Create a reusable tag for categorizing entities:
+
+```json
+{
+  "tool": {
+    "name": "add_tag",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main",
+      "id": "tag-security-critical",
+      "name": "Security Critical",
+      "description": "Components that handle authentication, authorization, or sensitive data",
+      "color": "#ff4444",
+      "category": "security"
+    }
+  }
+}
+```
+
+**Tag categories:** `security`, `performance`, `architecture`, `business`, `technical-debt`
+**Use case:**
+- Create consistent categorization system
+- Support filtered queries
+- Enable visual organization
+
+### 2. Tag an Item
+Apply a tag to any entity (Component, Decision, Rule, File):
+
+```json
+{
+  "tool": {
+    "name": "tag_item",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app", 
+      "branch": "main",
+      "itemId": "comp-AuthService",
+      "tagId": "tag-security-critical"
+    }
+  }
+}
+```
+
+**Use case:**
+- Categorize components by concern
+- Mark decisions by impact level
+- Flag files for review or refactoring
+
+### 3. Find Items by Tag
+Query entities that have specific tags:
+
+```json
+{
+  "tool": {
+    "name": "find_items_by_tag",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main",
+      "tagId": "tag-security-critical",
+      "itemType": "Component",
+      "limit": 20
+    }
+  }
+}
+```
+
+**Parameters:**
+- `itemType`: Filter by entity type (optional)
+- `limit`: Maximum results to return
+
+**Use case:**
+- Find all security-critical components
+- List components needing performance review
+- Query by business domain or technical concern
+
+## Introspection Workflows
+
+### 1. Memory Bank Health Check
+Assess the overall state of your memory bank:
+
+```json
+// 1. Check what entity types exist
+{
+  "tool": {
+    "name": "list_all_labels",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main"
+    }
+  }
+}
+
+// 2. Count entities by type
+{
+  "tool": {
+    "name": "count_nodes_by_label",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main",
+      "label": "Component"
+    }
+  }
+}
+
+// 3. Check database performance
+{
+  "tool": {
+    "name": "list_all_indexes",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main"
+    }
+  }
+}
+```
+
+### 2. Schema Exploration
+Understand data structure before complex queries:
+
+```json
+// 1. Inspect component schema
+{
+  "tool": {
+    "name": "get_node_properties",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main",
+      "label": "Component"
+    }
+  }
+}
+
+// 2. Browse sample components
+{
+  "tool": {
+    "name": "list_nodes_by_label",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main",
+      "label": "Component",
+      "limit": 5
+    }
+  }
+}
+```
+
+### 3. File-Component Mapping
+Track code-to-architecture relationships:
+
+```json
+// 1. Register important files
+{
+  "tool": {
+    "name": "add_file",
+    "arguments": {
+      "id": "file-core-service-ts",
+      "name": "CoreService.ts",
+      "path": "src/core/CoreService.ts"
+    }
+  }
+}
+
+// 2. Link to components
+{
+  "tool": {
+    "name": "associate_file_with_component",
+    "arguments": {
+      "fileId": "file-core-service-ts",
+      "componentId": "comp-CoreService"
+    }
+  }
+}
+```
+
+## Best Practices
+
+### 1. Introspection Timing
+- Run health checks weekly or after major changes
+- Use schema exploration before writing complex queries
+- Monitor entity counts for unusual growth patterns
+
+### 2. File Management
+- Register files that implement key components
+- Update file metrics when significant changes occur
+- Use file associations for traceability in code reviews
+
+### 3. Tag Organization
+- Define tags consistently across the team
+- Use categories to group related tags
+- Apply tags systematically rather than ad-hoc
+
+### 4. Performance Considerations
+- Use pagination for large result sets (`limit` and `offset`)
+- Start with `count_nodes_by_label` before `list_nodes_by_label`
+- Cache introspection results during a session
