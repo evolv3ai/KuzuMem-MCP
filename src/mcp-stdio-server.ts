@@ -220,6 +220,14 @@ async function startServer() {
 process.on('SIGINT', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));
 
+// Redirect console.log to stderr so only JSON responses go to stdout
+/* eslint-disable no-console */
+console.log = (...args: any[]): void => {
+  // Avoid breaking tests that rely on return value of console.log
+  console.error('[STDERR-LOG]', ...args);
+};
+/* eslint-enable no-console */
+
 // Start the server
 startServer().catch((error) => {
   console.error('Failed to start MCP stdio server:', error);
