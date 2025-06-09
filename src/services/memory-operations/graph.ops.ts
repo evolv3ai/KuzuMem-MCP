@@ -529,7 +529,8 @@ export async function louvainCommunityDetectionOp(
         nodeId: r.nodeId?.toString(),
         communityId: Number(r.communityId),
       }));
-      // TODO: Check if Kuzu's Louvain returns modularity or if it needs separate calculation/query
+      // Note: KuzuDB's Louvain algorithm does not return modularity score by default.
+      // Modularity calculation would require a separate computation over the communities.
       return { communities, modularity: undefined };
     },
   );

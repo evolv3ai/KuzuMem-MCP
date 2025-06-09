@@ -140,12 +140,45 @@ export class RepositoryRepository {
   }
 
   async update(repositoryId: string, repository: Partial<Repository>): Promise<void> {
-    console.warn('RepositoryRepository.update not implemented');
-    throw new Error('Not implemented');
+    const escapedId = this.escapeStr(repositoryId);
+    const setParts: string[] = [];
+
+    if (repository.name !== undefined) {
+      setParts.push(`r.name = '${this.escapeStr(repository.name)}'`);
+    }
+    if (repository.branch !== undefined) {
+      setParts.push(`r.branch = '${this.escapeStr(repository.branch)}'`);
+    }
+
+    if (setParts.length === 0) {
+      return; // Nothing to update
+    }
+
+    const nowIso = new Date().toISOString();
+    const kuzuTimestamp = nowIso.replace('T', ' ').replace('Z', '');
+    setParts.push(`r.updated_at = timestamp('${kuzuTimestamp}')`);
+
+    const query = `MATCH (r:Repository {id: '${escapedId}'}) SET ${setParts.join(', ')}`;
+
+    try {
+      await this.kuzuClient.executeQuery(query);
+    } catch (error) {
+      console.error(`RepositoryRepository: Error during update of ${repositoryId}:`, error);
+      throw error;
+    }
   }
 
   async delete(id: string): Promise<void> {
-    console.warn('RepositoryRepository.delete not implemented');
-    throw new Error('Not implemented');
+    const escapedId = this.escapeStr(id);
+
+    // Delete the repository and all its relationships
+    const query = `MATCH (r:Repository {id: '${escapedId}'}) DETACH DELETE r`;
+
+    try {
+      await this.kuzuClient.executeQuery(query);
+    } catch (error) {
+      console.error(`RepositoryRepository: Error during delete of ${id}:`, error);
+      throw error;
+    }
   }
 }
