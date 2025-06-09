@@ -115,8 +115,8 @@ export async function tagItemOp(
     }
 
     // Construct the specific relationship type, e.g., TAGGED_COMPONENT, TAGGED_FILE
-    // This should align with DDL and TagRepository.addItemTag expectations
-    const relationshipType = `TAGGED_${itemType.toUpperCase()}`;
+    // Graph schema uses a generic relationship
+    const relationshipType = 'IS_TAGGED_WITH';
 
     const success = await tagRepo.addItemTag(
       repoNode.id,
