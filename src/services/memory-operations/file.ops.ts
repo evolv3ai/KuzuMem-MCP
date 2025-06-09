@@ -124,7 +124,7 @@ export async function associateFileWithComponentOp(
     }
 
     // Use schema-defined relationship type
-    const relationshipType = 'CONTAINS_FILE';
+    const relationshipType = 'COMPONENT_IMPLEMENTS_FILE';
 
     const success = await fileRepo.linkComponentToFile(
       repoNode.id,

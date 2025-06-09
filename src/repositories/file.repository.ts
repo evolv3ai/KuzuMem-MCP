@@ -112,11 +112,13 @@ export class FileRepository {
     branch: string,
     componentId: string,
     fileId: string,
-    relationshipType: string = 'CONTAINS_FILE',
+    relationshipType: string = 'COMPONENT_IMPLEMENTS_FILE',
   ): Promise<boolean> {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
+    // Component schema: graph_unique_id, id, name, kind, status, branch, created_at, updated_at
+    // File schema: id, graph_unique_id, name, path, language, metrics, content_hash, mime_type, size_bytes, created_at, updated_at, repository, branch
     const query = `
-      MATCH (c:Component {id: $componentId, repository: $repoNodeId, branch: $branch}), 
+      MATCH (c:Component {id: $componentId, branch: $branch}), 
             (f:File {id: $fileId, repository: $repoNodeId, branch: $branch})
       MERGE (c)-[r:${safeRelType}]->(f)
       RETURN r
@@ -149,8 +151,8 @@ export class FileRepository {
   ): Promise<File[]> {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
     const query = `
-      MATCH (c:Component {id: $componentId, repository: $repoNodeId, branch: $branch})-[r:${safeRelType}]->(f:File)
-      WHERE f.repository = $repoNodeId AND f.branch = $branch // Ensure file is also in same repo/branch
+      MATCH (c:Component {id: $componentId, branch: $branch})-[r:${safeRelType}]->(f:File)
+      WHERE f.repository = $repoNodeId AND f.branch = $branch
       RETURN f
     `;
     try {

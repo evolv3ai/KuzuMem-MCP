@@ -1,18 +1,18 @@
 import { z } from 'zod';
 import {
-  RepositoryRepository,
-  TagRepository /*, other needed Item Repositories for tagItemOp */,
-} from '../../repositories';
-import {
-  TagNodeSchema,
   AddTagInputSchema,
   AddTagOutputSchema,
-  TagItemInputSchema,
-  TagItemOutputSchema,
   FindItemsByTagInputSchema,
   FindItemsByTagOutputSchema,
   RelatedItemBaseSchema,
+  TagItemInputSchema,
+  TagItemOutputSchema,
+  TagNodeSchema,
 } from '../../mcp/schemas/tool-schemas';
+import {
+  RepositoryRepository,
+  TagRepository /*, other needed Item Repositories for tagItemOp */,
+} from '../../repositories';
 import {
   Tag /* Component, Decision, Rule, File, Context - if used for casting */,
 } from '../../types'; // Internal Tag type
@@ -116,7 +116,7 @@ export async function tagItemOp(
 
     // Construct the specific relationship type, e.g., TAGGED_COMPONENT, TAGGED_FILE
     // Graph schema uses a generic relationship
-    const relationshipType = 'IS_TAGGED_WITH';
+    const relationshipType = `TAGGED_${itemType.toUpperCase()}`;
 
     const success = await tagRepo.addItemTag(
       repoNode.id,
