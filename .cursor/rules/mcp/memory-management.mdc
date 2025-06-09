@@ -1,3 +1,14 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: KuzuMem-MCP Memory Managemenet Guidelines
+globs: 
+alwaysApply: true
+---
+
 # KuzuMem-MCP Memory Management
 
 ## Memory Bank Lifecycle

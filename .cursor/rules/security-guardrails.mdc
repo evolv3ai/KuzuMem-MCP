@@ -1,3 +1,14 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: KuzuMem-MCP Security Guardrails
+globs: 
+alwaysApply: true
+---
+
 # KuzuMem-MCP Security & Guardrails
 
 ## Critical Safety Rules
