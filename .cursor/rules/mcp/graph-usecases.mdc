@@ -1,0 +1,18 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Graph Query Cheatsheet
+
+## 1. Impact Analysis
+Use `get-component-dependents` (depth 1–2) to list what breaks if you touch a component. Chain with `get-governing-items-for-component` to reveal blocking rules/decisions.
+
+## 2. Architecture Health
+Run `pagerank` to spot critical services, `k-core` for tightly-coupled clusters, `strongly-connected-components` for cycles, `weakly-connected-components` for isolated orphans.
+
+## 3. Relationship Discovery
+`get-related-items` (depth 2, relationshipFilter ALL) gives the neighbourhood of any item (Component/Rule/Decision). `shortest-path` shows how two nodes connect.
+
+## 4. Tag & File Insights
+`find_items_by_tag(tagId)` fetches all TypeScript server files. Combine with `associate_file_with_component` for code-to-architecture traceability; use `list_nodes_by_label('File')` for tech-debt dashboards.
