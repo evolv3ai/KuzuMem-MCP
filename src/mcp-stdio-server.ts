@@ -1,3 +1,14 @@
+#!/usr/bin/env node
+
+// Redirect console.log to stderr IMMEDIATELY to prevent protocol interference
+/* eslint-disable no-console */
+const originalConsoleLog = console.log;
+console.log = (...args: any[]): void => {
+  // Avoid breaking tests that rely on return value of console.log
+  console.error('[STDERR-LOG]', ...args);
+};
+/* eslint-enable no-console */
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -12,25 +23,30 @@ import { createProgressHandler } from './mcp/streaming/progress-handler';
 import { StdioProgressTransport } from './mcp/streaming/stdio-transport';
 import { toolHandlers } from './mcp/tool-handlers';
 
-// Determine Client Project Root at startup (for context only, not for DB initialization)
-const detectedClientProjectRoot = process.cwd();
-console.error(`MCP stdio server detected client project root: ${detectedClientProjectRoot}`);
+console.error('[MCP-DEBUG] Starting KuzuMem-MCP-Stdio server');
+console.error('[MCP-DEBUG] Node version:', process.version);
+console.error('[MCP-DEBUG] MCP SDK loaded');
 
 // Debug configuration
-const DEBUG_LEVEL = process.env.DEBUG ? parseInt(process.env.DEBUG, 10) || 1 : 0;
+const DEBUG_LEVEL = parseInt(process.env.DEBUG_LEVEL || '1', 10);
 
 function debugLog(level: number, message: string, data?: any): void {
-  if (DEBUG_LEVEL >= level) {
-    if (data) {
-      console.error(
-        `[MCP-STDIO-DEBUG${level}] ${message}`,
-        typeof data === 'string' ? data : JSON.stringify(data, null, 2),
-      );
+  if (level <= DEBUG_LEVEL) {
+    const timestamp = new Date().toISOString();
+    const prefix = `[MCP-STDIO-DEBUG${level}]`;
+    if (data !== undefined) {
+      console.error(`${timestamp} ${prefix} ${message}`, JSON.stringify(data, null, 2));
     } else {
-      console.error(`[MCP-STDIO-DEBUG${level}] ${message}`);
+      console.error(`${timestamp} ${prefix} ${message}`);
     }
   }
 }
+
+debugLog(1, 'MCP stdio server initializing');
+
+// Determine Client Project Root at startup (for context only, not for DB initialization)
+const detectedClientProjectRoot = process.cwd();
+console.error(`MCP stdio server detected client project root: ${detectedClientProjectRoot}`);
 
 // Adapter to convert SdkToolHandler to ToolHandler format
 function adaptSdkToolHandler(
@@ -81,7 +97,7 @@ for (const [toolName, handler] of Object.entries(toolHandlers)) {
 // Create the server instance
 const server = new Server(
   {
-    name: 'memory-bank-mcp',
+    name: 'KuzuMem-MCP-Stdio',
     version: '3.0.0',
   },
   {
@@ -92,6 +108,8 @@ const server = new Server(
     },
   },
 );
+
+console.error('[MCP-DEBUG] Server instance created successfully');
 
 const progressTransport = new StdioProgressTransport(debugLog);
 
@@ -211,25 +229,57 @@ server.setRequestHandler(ListPromptsRequestSchema, async () => {
 
 // Start the server
 async function startServer() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.log('MCP_STDIO_SERVER_READY_FOR_TESTING');
+  try {
+    debugLog(1, 'Creating StdioServerTransport');
+    const transport = new StdioServerTransport();
+
+    debugLog(1, 'Attempting to connect server to transport');
+    await server.connect(transport);
+
+    debugLog(1, 'Server connected successfully');
+    console.error('[MCP-SUCCESS] KuzuMem-MCP-Stdio server running on stdio');
+    console.error('[MCP-SUCCESS] Server ready to receive requests');
+
+    // Keep the process alive and handle errors
+    process.on('uncaughtException', (error) => {
+      console.error('[MCP-ERROR] Uncaught exception:', error);
+      process.exit(1);
+    });
+
+    process.on('unhandledRejection', (reason, promise) => {
+      console.error('[MCP-ERROR] Unhandled rejection at:', promise, 'reason:', reason);
+      process.exit(1);
+    });
+  } catch (error) {
+    console.error('[MCP-ERROR] Failed to start MCP stdio server:', error);
+    console.error(
+      '[MCP-ERROR] Error stack:',
+      error instanceof Error ? error.stack : 'No stack trace',
+    );
+    process.exit(1);
+  }
 }
 
 // Handle graceful shutdown
-process.on('SIGINT', () => process.exit(0));
-process.on('SIGTERM', () => process.exit(0));
+process.on('SIGINT', async () => {
+  try {
+    await server.close();
+  } catch (error) {
+    console.error('Error during server shutdown:', error);
+  }
+  process.exit(0);
+});
 
-// Redirect console.log to stderr so only JSON responses go to stdout
-/* eslint-disable no-console */
-console.log = (...args: any[]): void => {
-  // Avoid breaking tests that rely on return value of console.log
-  console.error('[STDERR-LOG]', ...args);
-};
-/* eslint-enable no-console */
+process.on('SIGTERM', async () => {
+  try {
+    await server.close();
+  } catch (error) {
+    console.error('Error during server shutdown:', error);
+  }
+  process.exit(0);
+});
+
+// console.log already redirected at top of file to prevent import-time interference
 
 // Start the server
-startServer().catch((error) => {
-  console.error('Failed to start MCP stdio server:', error);
-  process.exit(1);
-});
+startServer();

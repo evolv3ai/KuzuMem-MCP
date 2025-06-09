@@ -39,8 +39,19 @@ export class FileRepository {
       mime_type: fileData.mime_type || null,
     };
 
+    // KuzuDB doesn't support setting properties from a map parameter, so we set them individually
     const query = `
-      CREATE (f:File $fileNodeProps)
+      CREATE (f:File {
+        id: $id,
+        repository: $repository,
+        branch: $branch,
+        name: $name,
+        path: $path,
+        size_bytes: $size_bytes,
+        mime_type: $mime_type,
+        created_at: $created_at,
+        updated_at: $updated_at
+      })
       RETURN f
     `;
     // KuzuDB might require MERGE for unique PKs:
@@ -51,7 +62,17 @@ export class FileRepository {
     // Simpler CREATE for now, assuming ID + repo + branch makes it unique or handled by PK constraint
 
     try {
-      const result = await this.kuzuClient.executeQuery(query, { fileNodeProps });
+      const result = await this.kuzuClient.executeQuery(query, {
+        id: fileNodeProps.id,
+        repository: fileNodeProps.repository,
+        branch: fileNodeProps.branch,
+        name: fileNodeProps.name,
+        path: fileNodeProps.path,
+        size_bytes: fileNodeProps.size,
+        mime_type: fileNodeProps.mime_type,
+        created_at: fileNodeProps.created_at,
+        updated_at: fileNodeProps.updated_at,
+      });
       if (result && result.length > 0) {
         const createdNode = result[0].f.properties || result[0].f; // Kuzu specific result access
         return { ...createdNode, id: createdNode.id?.toString() } as File;

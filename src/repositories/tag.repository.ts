@@ -35,15 +35,22 @@ export class TagRepository {
     };
 
     // MERGE is good for upserting based on a unique property (id for Tag)
+    // KuzuDB doesn't support setting properties from a map parameter, so we set them individually
     const query = `
-      MERGE (t:Tag {id: $props.id})
-      ON CREATE SET t = $props, t.created_at = $props.created_at
-      ON MATCH SET t.name = $props.name, t.color = $props.color, t.description = $props.description
+      MERGE (t:Tag {id: $id})
+      ON CREATE SET t.id = $id, t.name = $name, t.color = $color, t.description = $description, t.created_at = $created_at
+      ON MATCH SET t.name = $name, t.color = $color, t.description = $description
       RETURN t
     `;
 
     try {
-      const result = await this.kuzuClient.executeQuery(query, { props: tagNodeProps });
+      const result = await this.kuzuClient.executeQuery(query, {
+        id: tagNodeProps.id,
+        name: tagNodeProps.name,
+        color: tagNodeProps.color,
+        description: tagNodeProps.description,
+        created_at: tagNodeProps.created_at,
+      });
       if (result && result.length > 0) {
         const node = result[0].t.properties || result[0].t;
         return { ...node, id: node.id?.toString() } as Tag;
