@@ -662,8 +662,25 @@ export async function shortestPathOp(
         return { pathFound: false, path: [], length: 0 };
       }
 
-      const pathObj = res[0].p;
-      const nodesArr = (pathObj._nodes || []).map((n: any) => {
+      // Additional safety checks for malformed results
+      const resultRow = res[0];
+      if (!resultRow || !resultRow.p) {
+        logger.warn(`[graph.ops] Malformed shortest path result: missing path data`);
+        return { pathFound: false, path: [], length: 0 };
+      }
+
+      const pathObj = resultRow.p;
+      const pathNodes = pathObj._nodes;
+
+      // If path nodes are undefined or empty, no valid path was found
+      if (!pathNodes || !Array.isArray(pathNodes) || pathNodes.length === 0) {
+        logger.debug(
+          `[graph.ops] No valid path nodes found between ${startNodeId} and ${endNodeId}`,
+        );
+        return { pathFound: false, path: [], length: 0 };
+      }
+
+      const nodesArr = pathNodes.map((n: any) => {
         const props = n._properties || n;
         return { id: props.id?.toString() || '', _label: (n._labels || [])[0] || 'Unknown' };
       });
