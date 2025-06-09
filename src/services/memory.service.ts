@@ -22,6 +22,8 @@ import * as decisionOps from './memory-operations/decision.ops';
 import * as graphOps from './memory-operations/graph.ops';
 import * as metadataOps from './memory-operations/metadata.ops';
 import * as ruleOps from './memory-operations/rule.ops';
+import * as fileOps from './memory-operations/file.ops';
+import * as tagOps from './memory-operations/tag.ops';
 
 /**
  * Service for memory bank operations
@@ -1738,23 +1740,23 @@ export class MemoryService {
     const logger = mcpContext.logger || console;
     logger.info(`[MemoryService.addFile] For path ${fileData.path} in ${repositoryName}:${branch}`);
     await this.getKuzuClient(mcpContext, clientProjectRoot);
-    const repoId = `${repositoryName}:${branch}`;
-    const fileNode = {
-      id: fileData.id,
-      name: fileData.name,
-      path: fileData.path,
-      language: fileData.language || null,
-      metrics: fileData.metrics || null,
-      content_hash: fileData.content_hash || null,
-      mime_type: fileData.mime_type || null,
-      size_bytes: fileData.size_bytes === null ? null : Number(fileData.size_bytes),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      repository: repoId,
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.addFile] RepositoryProvider not initialized');
+      return { success: false, message: 'RepositoryProvider not initialized' } as any;
+    }
+
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const fileRepo = this.repositoryProvider.getFileRepository(clientProjectRoot);
+
+    // Delegate write logic to file.ops
+    return (await fileOps.addFileOp(
+      mcpContext,
+      repositoryName,
       branch,
-    };
-    logger.warn('TODO: Implement addFile with kuzuClient.runWriteQuery and FileRepository');
-    return { success: true, message: 'File added (stub)', file: fileNode as any };
+      fileData as any,
+      repositoryRepo,
+      fileRepo,
+    )) as z.infer<typeof toolSchemas.AddFileOutputSchema>;
   }
 
   async associateFileWithComponent(
@@ -1770,8 +1772,23 @@ export class MemoryService {
       `[MemoryService.associateFileWithComponent] C:${componentId} F:${fileId} in ${repositoryName}:${branch}`,
     );
     await this.getKuzuClient(mcpContext, clientProjectRoot);
-    logger.warn('TODO: Implement associateFileWithComponent with kuzuClient.runWriteQuery');
-    return { success: true, message: 'File associated (stub)' };
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.associateFileWithComponent] RepositoryProvider not initialized');
+      return { success: false, message: 'RepositoryProvider not initialized' } as any;
+    }
+
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const fileRepo = this.repositoryProvider.getFileRepository(clientProjectRoot);
+
+    return (await fileOps.associateFileWithComponentOp(
+      mcpContext,
+      repositoryName,
+      branch,
+      componentId,
+      fileId,
+      repositoryRepo,
+      fileRepo,
+    )) as z.infer<typeof toolSchemas.AssociateFileWithComponentOutputSchema>;
   }
 
   async addTag(
@@ -1784,15 +1801,22 @@ export class MemoryService {
     const logger = mcpContext.logger || console;
     logger.info(`[MemoryService.addTag] For tag ${tagData.name} in ${repositoryName}:${branch}`);
     await this.getKuzuClient(mcpContext, clientProjectRoot);
-    const placeholderTag = {
-      id: tagData.id,
-      name: tagData.name,
-      color: tagData.color || null,
-      description: tagData.description || null,
-      created_at: new Date().toISOString(),
-    };
-    logger.warn('TODO: Implement addTag with kuzuClient.runWriteQuery and TagRepository');
-    return { success: true, message: 'Tag added/updated (stub)', tag: placeholderTag as any };
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.addTag] RepositoryProvider not initialized');
+      return { success: false, message: 'RepositoryProvider not initialized' } as any;
+    }
+
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const tagRepo = this.repositoryProvider.getTagRepository(clientProjectRoot);
+
+    return (await tagOps.addTagOp(
+      mcpContext,
+      repositoryName,
+      branch,
+      tagData as any,
+      repositoryRepo,
+      tagRepo,
+    )) as z.infer<typeof toolSchemas.AddTagOutputSchema>;
   }
 
   async tagItem(
@@ -1809,8 +1833,24 @@ export class MemoryService {
       `[MemoryService.tagItem] ${itemType}:${itemId} with Tag:${tagId} in ${repositoryName}:${branch}`,
     );
     await this.getKuzuClient(mcpContext, clientProjectRoot);
-    logger.warn('TODO: Implement tagItem with kuzuClient.runWriteQuery');
-    return { success: true, message: 'Item tagged (stub)' };
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.tagItem] RepositoryProvider not initialized');
+      return { success: false, message: 'RepositoryProvider not initialized' } as any;
+    }
+
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const tagRepo = this.repositoryProvider.getTagRepository(clientProjectRoot);
+
+    return (await tagOps.tagItemOp(
+      mcpContext,
+      repositoryName,
+      branch,
+      itemId,
+      itemType as any,
+      tagId,
+      repositoryRepo,
+      tagRepo,
+    )) as z.infer<typeof toolSchemas.TagItemOutputSchema>;
   }
 
   async findItemsByTag(
@@ -1826,8 +1866,23 @@ export class MemoryService {
       `[MemoryService.findItemsByTag] Tag:${tagId}, Filter:${itemTypeFilter} in ${repositoryName}:${branch}`,
     );
     await this.getKuzuClient(mcpContext, clientProjectRoot);
-    logger.warn('TODO: Implement findItemsByTag with kuzuClient.runReadOnlyQuery');
-    return { tagId, items: [] };
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.findItemsByTag] RepositoryProvider not initialized');
+      return { tagId, items: [] } as any;
+    }
+
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const tagRepo = this.repositoryProvider.getTagRepository(clientProjectRoot);
+
+    return (await tagOps.findItemsByTagOp(
+      mcpContext,
+      repositoryName,
+      branch,
+      tagId,
+      (itemTypeFilter as any) || 'All',
+      repositoryRepo,
+      tagRepo,
+    )) as z.infer<typeof toolSchemas.FindItemsByTagOutputSchema>;
   }
 
   async listAllNodeLabels(

@@ -235,6 +235,49 @@ export class RepositoryProvider {
   }
 
   /**
+   * Get FileRepository for a client project root
+   *
+   * @param clientProjectRoot The client project root path
+   * @throws Error if repositories are not initialized for this client
+   * @returns FileRepository instance
+   */
+  public getFileRepository(clientProjectRoot: string): FileRepository {
+    // Ensure path is absolute
+    if (!path.isAbsolute(clientProjectRoot)) {
+      clientProjectRoot = path.resolve(clientProjectRoot);
+    }
+
+    if (!this.fileRepositories.has(clientProjectRoot)) {
+      throw new Error(
+        `FileRepository not initialized for client project: ${clientProjectRoot}. Call initializeRepositories first.`,
+      );
+    }
+
+    return this.fileRepositories.get(clientProjectRoot)!;
+  }
+
+  /**
+   * Get TagRepository for a client project root
+   *
+   * @param clientProjectRoot The client project root path
+   * @throws Error if repositories are not initialized for this client
+   * @returns TagRepository instance
+   */
+  public getTagRepository(clientProjectRoot: string): TagRepository {
+    if (!path.isAbsolute(clientProjectRoot)) {
+      clientProjectRoot = path.resolve(clientProjectRoot);
+    }
+
+    if (!this.tagRepositories.has(clientProjectRoot)) {
+      throw new Error(
+        `TagRepository not initialized for client project: ${clientProjectRoot}. Call initializeRepositories first.`,
+      );
+    }
+
+    return this.tagRepositories.get(clientProjectRoot)!;
+  }
+
+  /**
    * Clear repositories for a specific client project root
    * Useful for testing or when cleaning up resources
    *

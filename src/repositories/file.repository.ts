@@ -91,7 +91,7 @@ export class FileRepository {
     branch: string,
     componentId: string,
     fileId: string,
-    relationshipType: string = 'COMPONENT_IMPLEMENTS_FILE',
+    relationshipType: string = 'CONTAINS_FILE',
   ): Promise<boolean> {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
     const query = `
