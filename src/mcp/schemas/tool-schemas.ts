@@ -489,6 +489,12 @@ export const WeaklyConnectedComponentsOutputSchema = AlgoToolOutputBaseSchema.ex
 export const ShortestPathInputSchema = AlgoToolInputBaseSchema.extend({
   startNodeId: z.string().min(1, { message: 'startNodeId is required' }),
   endNodeId: z.string().min(1, { message: 'endNodeId is required' }),
+  maxDepth: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Maximum depth to search for the shortest path (defaults to 10 if omitted)'),
   // costPropertyName: z.string().optional(), // If weighted paths are supported
 });
 
