@@ -75,25 +75,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   // For init-memory-bank, clientProjectRoot comes from toolArgs.
-  // For others, we use detectedClientProjectRoot from server's context.
-  const effectiveClientProjectRoot =
-    toolName === 'init-memory-bank' ? toolArgs.clientProjectRoot : detectedClientProjectRoot;
-
-  if (!effectiveClientProjectRoot && toolName === 'init-memory-bank') {
-    throw new Error(`Tool '${toolName}' requires clientProjectRoot argument.`);
-  }
+  // For others, we use the provided clientProjectRoot from tool arguments
+  const effectiveClientProjectRoot = toolArgs.clientProjectRoot as string;
 
   if (!effectiveClientProjectRoot) {
-    console.error(
-      `CRITICAL: effectiveClientProjectRoot is not defined for tool ${toolName}. This indicates a problem with server launch context or tool argument passing.`,
-    );
     throw new Error(
-      `Server error: clientProjectRoot context not established for tool '${toolName}'.`,
+      toolName === 'init-memory-bank'
+        ? `Tool '${toolName}' requires clientProjectRoot argument.`
+        : `Server error: clientProjectRoot context not established for tool '${toolName}'. Provide clientProjectRoot in tool arguments.`,
     );
   }
 
   try {
-    const progressHandler = createProgressHandler(requestId, progressTransport, debugLog);
+    let capturedFinalResult: any = null;
+    let capturedIsError: boolean = false;
+
+    const progressHandler = createProgressHandler(
+      requestId,
+      {
+        sendNotification: (payload: object, eventName?: string) => {
+          // If this is the final response, capture it
+          if (eventName === 'mcpResponse') {
+            const responsePayload = payload as any;
+            if (responsePayload.result) {
+              capturedFinalResult = responsePayload.result;
+              capturedIsError = false;
+            } else if (responsePayload.error) {
+              capturedFinalResult = responsePayload.error;
+              capturedIsError = true;
+            }
+          }
+          // Send progress notifications through the stdio transport
+          progressTransport.sendNotification(payload, eventName);
+        },
+      },
+      debugLog,
+    );
+
     const toolExecutionService = await ToolExecutionService.getInstance();
 
     const toolResult = await toolExecutionService.executeTool(
@@ -105,23 +123,33 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       debugLog,
     );
 
-    if (toolResult !== null) {
+    // If we captured a final result from the progress handler, use that
+    if (capturedFinalResult !== null) {
       return {
-        content: [{ type: 'text', text: JSON.stringify(toolResult, null, 2) }],
-        isError: !!toolResult?.error,
+        content: [{ type: 'text', text: JSON.stringify(capturedFinalResult, null, 2) }],
+        isError: capturedIsError,
       };
-    } else {
+    }
+
+    // For tools that use progress handlers but don't send final response,
+    // or tools that return results directly
+    if (toolResult === null) {
       return {
         content: [{ type: 'text', text: 'Tool executed successfully' }],
       };
     }
-  } catch (err: any) {
-    debugLog(
-      0,
-      `FATAL ERROR (tools/call in stdio-server): ${err.message || String(err)}`,
-      err.stack,
-    );
-    throw new Error(`Server error: ${err.message || String(err)}`);
+
+    // For tools that don't use progress or return results directly
+    return {
+      content: [{ type: 'text', text: JSON.stringify(toolResult, null, 2) }],
+      isError: !!toolResult?.error,
+    };
+  } catch (error: any) {
+    debugLog(0, `Error in CallToolRequest handler: ${error.message}`, error.stack);
+    return {
+      content: [{ type: 'text', text: `Error executing tool: ${error.message}` }],
+      isError: true,
+    };
   }
 });
 

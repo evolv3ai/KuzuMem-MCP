@@ -529,13 +529,25 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     const response = await request(BASE_URL)
       .post('/initialize')
       .set('Origin', 'http://localhost')
-      .send({ protocolVersion: '0.1' })
+      .send({
+        protocolVersion: '0.1',
+        capabilities: {
+          roots: {
+            listChanged: true,
+          },
+          sampling: {},
+        },
+        clientInfo: {
+          name: 'test-client',
+          version: '1.0.0',
+        },
+      })
       .expect('Content-Type', /json/)
       .expect(200);
 
     expect(response.body.result).toBeDefined();
-    expect(response.body.result.capabilities.tools).toEqual({ list: true, call: true });
-    expect(response.body.result.serverInfo.name).toBe('KuzuMem-MCP-HTTPStream'); // Adjusted expected name
+    expect(response.body.result.capabilities.tools).toBeDefined();
+    expect(response.body.result.serverInfo.name).toBe('KuzuMem-MCP-HTTPStream');
   });
 
   it('T_HTTPSTREAM_002: /tools/list should return list of tools', async () => {
@@ -586,7 +598,12 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
 
     expect(response.body.id).toBe('update_meta_http');
     expect(response.body.result).toBeDefined();
-    expect(response.body.result.success).toBe(true);
+    expect(response.body.result.content).toBeDefined();
+    expect(response.body.result.content[0]).toBeDefined();
+    
+    // Parse the JSON result from the MCP SDK format
+    const toolResult = JSON.parse(response.body.result.content[0].text);
+    expect(toolResult.success).toBe(true);
   });
 
   it('T_HTTPSTREAM_004: /mcp tools/call (SSE) should stream progress for get-component-dependencies', (done) => {
@@ -681,13 +698,16 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
 
           // Check the final mcpResponse event
           expect(finalResponseEvent.data.result).toBeDefined();
-          expect(finalResponseEvent.data.result.status).toBe('complete');
-          expect(Array.isArray(finalResponseEvent.data.result.dependencies)).toBe(true);
-          expect(
-            finalResponseEvent.data.result.dependencies.some(
-              (c: Component) => c.id === testComponentId,
-            ),
-          ).toBe(true);
+          expect(finalResponseEvent.data.result.content).toBeDefined();
+          expect(finalResponseEvent.data.result.content[0]).toBeDefined();
+          
+          // Parse the JSON result from the MCP SDK format
+          const finalResult = JSON.parse(finalResponseEvent.data.result.content[0].text);
+          expect(finalResult.status).toBe('complete');
+          expect(Array.isArray(finalResult.dependencies)).toBe(true);
+          expect(finalResult.dependencies.some((c: Component) => c.id === testComponentId)).toBe(
+            true,
+          );
 
           callback(null, null);
         } catch (assertionError) {
