@@ -4,6 +4,8 @@
 
 export class StronglyConnectedComponentsOperation {
   public static async execute(): Promise<any> {
-    throw new Error('StronglyConnectedComponentsOperation is deprecated. Use tool handlers instead.');
+    throw new Error(
+      'StronglyConnectedComponentsOperation is deprecated. Use tool handlers instead.',
+    );
   }
 }

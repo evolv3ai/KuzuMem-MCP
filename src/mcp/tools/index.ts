@@ -26,6 +26,24 @@ export { stronglyConnectedComponentsTool } from './strongly-connected-components
 export { weaklyConnectedComponentsTool } from './weakly-connected-components-tool';
 export { shortestPathTool } from './shortest-path-tool';
 
+// New Graph Introspection Tools
+export {
+  countNodesByLabelTool,
+  listNodesByLabelTool,
+  getNodePropertiesTool,
+  listAllIndexesTool,
+  listAllLabelsTool,
+} from './introspection-tools';
+
+// New File and Tag Tools
+export {
+  addFileTool,
+  associateFileWithComponentTool,
+  addTagTool,
+  tagItemTool,
+  findItemsByTagTool,
+} from './file-and-tag-tools';
+
 // Import all tools for the combined array
 import { initMemoryBankTool } from './init-memory';
 import { getMetadataTool, updateMetadataTool } from './metadata-tools';
@@ -49,6 +67,24 @@ import { pageRankTool } from './pagerank-tool';
 import { stronglyConnectedComponentsTool } from './strongly-connected-components-tool';
 import { weaklyConnectedComponentsTool } from './weakly-connected-components-tool';
 import { shortestPathTool } from './shortest-path-tool';
+
+// Imports for New Graph Introspection Tools
+import {
+  countNodesByLabelTool,
+  listNodesByLabelTool,
+  getNodePropertiesTool,
+  listAllIndexesTool,
+  listAllLabelsTool,
+} from './introspection-tools';
+
+// Imports for New File and Tag Tools
+import {
+  addFileTool,
+  associateFileWithComponentTool,
+  addTagTool,
+  tagItemTool,
+  findItemsByTagTool,
+} from './file-and-tag-tools';
 
 /**
  * Combined array of all MCP tools
@@ -76,4 +112,16 @@ export const MEMORY_BANK_MCP_TOOLS: McpTool[] = [
   stronglyConnectedComponentsTool,
   weaklyConnectedComponentsTool,
   shortestPathTool,
+  // New Graph Introspection Tools
+  countNodesByLabelTool,
+  listNodesByLabelTool,
+  getNodePropertiesTool,
+  listAllIndexesTool,
+  listAllLabelsTool,
+  // New File and Tag Tools
+  addFileTool,
+  associateFileWithComponentTool,
+  addTagTool,
+  tagItemTool,
+  findItemsByTagTool,
 ];

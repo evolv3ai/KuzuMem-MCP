@@ -1,3 +1,4 @@
+import path from 'path';
 import { MemoryService } from '../services/memory.service';
 import {
   AddComponentInputSchema,
@@ -42,7 +43,7 @@ export type SdkToolHandler = (
   params: any,
   context: EnrichedRequestHandlerExtra, // CHANGED
   memoryService: MemoryService, // Explicitly passing MemoryService for now
-) => Promise<any>;
+) => Promise<unknown>;
 
 /**
  * Ensures that the clientProjectRoot is available in the session context.
@@ -83,7 +84,11 @@ function ensureValidSessionContext(
   }
 
   // Check that the repository and branch match what's in the session
-  if (params.repository && params.branch && (sessionRepository !== params.repository || sessionBranch !== params.branch)) {
+  if (
+    params.repository &&
+    params.branch &&
+    (sessionRepository !== params.repository || sessionBranch !== params.branch)
+  ) {
     const errorMsg = `Session/Tool mismatch for tool '${toolName}': Current session is for '${sessionRepository}:${sessionBranch}', but tool is targeting '${params.repository}:${params.branch}'. Initialize a new session for the target repository/branch if needed.`;
     logger.error(errorMsg);
     throw new Error(errorMsg);
@@ -96,12 +101,12 @@ function ensureValidSessionContext(
     throw new Error(errorMsg);
   }
 
-  if (!require('path').isAbsolute(clientProjectRoot)) {
+  if (!path.isAbsolute(clientProjectRoot)) {
     const errorMsg = `Invalid clientProjectRoot path for tool '${toolName}': '${clientProjectRoot}'. Path must be absolute.`;
     logger.error(errorMsg);
     throw new Error(errorMsg);
   }
-  
+
   return clientProjectRoot;
 }
 
@@ -114,14 +119,14 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
       params: params,
       sessionClientProjectRoot: context.session.clientProjectRoot,
     });
-    
+
     // Send initial progress notification
     await context.sendProgress({
       status: 'initializing',
       message: 'Starting memory bank initialization...',
       percent: 5,
     });
-    
+
     console.error('[DEBUG-HANDLER] About to validate params with schema...');
     const validatedParams = InitMemoryBankInputSchema.parse(params);
     console.error('[DEBUG-HANDLER] Params validated:', validatedParams);
@@ -151,26 +156,26 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
         message: `Initializing Kuzu database client...`,
         percent: 40,
       });
-      
+
       result = await memoryService.initMemoryBank(
         context,
         validatedParams.clientProjectRoot,
         validatedParams.repository,
         validatedParams.branch,
       );
-      
+
       // Send progress after database initialization is complete
       await context.sendProgress({
         status: 'in_progress',
         message: `Database client initialized successfully`,
         percent: 80,
       });
-      
+
       console.error('[DEBUG-HANDLER] memoryService.initMemoryBank returned:', result);
     } catch (err: any) {
       const error = err as Error;
       console.error('[DEBUG-HANDLER] memoryService.initMemoryBank threw an exception:', error);
-      
+
       // Send error progress notification
       try {
         await context.sendProgress({
@@ -186,15 +191,15 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
       } catch (progressError) {
         context.logger.error(`Failed to send error progress: ${String(progressError)}`);
       }
-      
+
       throw error;
     }
-    
+
     // MemoryService.initMemoryBank now returns an object matching InitMemoryBankOutputSchema
     if (!result.success) {
       console.error('[DEBUG-HANDLER] MemoryService failed with result:', result);
       context.logger.error('init-memory-bank call to MemoryService failed.', { result });
-      
+
       // Send error progress notification for unsuccessful result
       try {
         await context.sendProgress({
@@ -206,12 +211,12 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
       } catch (progressError) {
         context.logger.error(`Failed to send error progress: ${String(progressError)}`);
       }
-      
+
       throw new Error(
         `[DEBUG-HANDLER] MemoryService failed: ${result.message || 'init-memory-bank failed in MemoryService'}`,
       );
     }
-    
+
     // Send final success progress notification
     await context.sendProgress({
       status: 'complete',
@@ -219,7 +224,7 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
       percent: 100,
       isFinal: true,
     });
-    
+
     console.error('[DEBUG-HANDLER] init-memory-bank SUCCESS! Returning result:', result);
     return result; // This matches InitMemoryBankOutputSchema
   },

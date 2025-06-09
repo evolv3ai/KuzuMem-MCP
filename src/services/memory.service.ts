@@ -5,13 +5,13 @@ import { KuzuDBClient } from '../db/kuzu';
 import * as toolSchemas from '../mcp/schemas/tool-schemas';
 import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
 import {
-    Component,
-    ComponentStatus,
-    Context,
-    Decision,
-    Metadata,
-    Repository,
-    Rule
+  Component,
+  ComponentStatus,
+  Context,
+  Decision,
+  Metadata,
+  Repository,
+  Rule,
 } from '../types';
 import { Mutex } from '../utils/mutex';
 
@@ -48,10 +48,12 @@ export class MemoryService {
     // This will make the MemoryService lightweight during creation
     // The real database work will be done on-demand when specific methods are called with valid clientProjectRoot
     this.repositoryProvider = await RepositoryProvider.getInstance();
-    
+
     // Use logger if available, otherwise console for this early init log
     const logger = initialMcpContext?.logger || console;
-    logger.info('MemoryService: Initialized with RepositoryProvider - database access deferred until needed');
+    logger.info(
+      'MemoryService: Initialized with RepositoryProvider - database access deferred until needed',
+    );
   }
 
   /**
@@ -69,47 +71,61 @@ export class MemoryService {
       `[STDOUT-DEBUG] MemoryService.getKuzuClient ENTERED with CPR: ${clientProjectRoot}\n`,
     );
     const logger = mcpContext.logger || console; // Fallback for safety, though context should always have logger
-    
+
     // Validate clientProjectRoot - this is critical for correct operation
     if (!clientProjectRoot) {
       const error = new Error('clientProjectRoot is required but was undefined or empty');
-      logger.error('[MemoryService.getKuzuClient] CRITICAL ERROR: clientProjectRoot is missing', error);
+      logger.error(
+        '[MemoryService.getKuzuClient] CRITICAL ERROR: clientProjectRoot is missing',
+        error,
+      );
       throw error;
     }
-    
+
     // Ensure path is absolute
     clientProjectRoot = this.ensureAbsoluteRoot(clientProjectRoot);
-    logger.info(`[MemoryService.getKuzuClient] Using absolute clientProjectRoot: ${clientProjectRoot}`);
-    
+    logger.info(
+      `[MemoryService.getKuzuClient] Using absolute clientProjectRoot: ${clientProjectRoot}`,
+    );
+
     // Check repository provider
     if (!this.repositoryProvider) {
       logger.error('[MemoryService.getKuzuClient] RepositoryProvider not initialized');
       throw new Error('RepositoryProvider not initialized');
     }
-    
+
     // Return cached client if available
     if (this.kuzuClients.has(clientProjectRoot)) {
-      logger.info(`[MemoryService.getKuzuClient] Found cached KuzuDBClient for: ${clientProjectRoot}`);
+      logger.info(
+        `[MemoryService.getKuzuClient] Found cached KuzuDBClient for: ${clientProjectRoot}`,
+      );
       const cachedClient = this.kuzuClients.get(clientProjectRoot)!;
       return cachedClient;
     }
-    
+
     // Create new client if needed
     logger.info(
       `[MemoryService.getKuzuClient] Creating new KuzuDBClient for: ${clientProjectRoot}`,
     );
-    
+
     try {
       const newClient = new KuzuDBClient(clientProjectRoot); // KuzuDBClient constructor handles path joining for db file
       // Pass the mcpContext to allow for progress notifications during initialization
       await newClient.initialize(mcpContext); // This now also handles schema init
       this.kuzuClients.set(clientProjectRoot, newClient);
       await this.repositoryProvider.initializeRepositories(clientProjectRoot, newClient);
-      logger.info(`[MemoryService.getKuzuClient] KuzuDBClient and repositories initialized for: ${clientProjectRoot}`);
+      logger.info(
+        `[MemoryService.getKuzuClient] KuzuDBClient and repositories initialized for: ${clientProjectRoot}`,
+      );
       return newClient;
     } catch (error) {
-      logger.error(`[MemoryService.getKuzuClient] Failed to initialize KuzuDBClient for ${clientProjectRoot}:`, error);
-      throw new Error(`Failed to initialize database for project root ${clientProjectRoot}: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error(
+        `[MemoryService.getKuzuClient] Failed to initialize KuzuDBClient for ${clientProjectRoot}:`,
+        error,
+      );
+      throw new Error(
+        `Failed to initialize database for project root ${clientProjectRoot}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -183,14 +199,14 @@ export class MemoryService {
       logger.info(
         `[MemoryService.initMemoryBank] Attempting to call this.getKuzuClient for CPR: ${clientProjectRoot}`,
       );
-      
+
       // Send progress update for database client initialization
       await mcpContext.sendProgress({
         status: 'in_progress',
         message: `Creating Kuzu database client for ${repositoryName}:${branch}...`,
         percent: 45,
       });
-      
+
       console.error(`[DEBUG] MemoryService.initMemoryBank ABOUT TO CALL getKuzuClient`);
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
       console.error(`[DEBUG] MemoryService.initMemoryBank getKuzuClient RETURNED:`, !!kuzuClient);
@@ -235,14 +251,14 @@ export class MemoryService {
         };
       }
       logger.info(`Repository node ID for ${repositoryName}:${branch} is ${repository.id}`);
-      
+
       // Send progress update for metadata initialization
       await mcpContext.sendProgress({
         status: 'in_progress',
         message: `Looking for existing metadata for ${repositoryName}:${branch}...`,
         percent: 80,
       });
-      
+
       const existingMetadata = await metadataRepo.findMetadata(
         mcpContext,
         repositoryName,
@@ -255,7 +271,7 @@ export class MemoryService {
           message: `Creating initial metadata for ${repositoryName}:${branch}...`,
           percent: 85,
         });
-        
+
         logger.info(`No existing metadata for ${repositoryName}:${branch}, creating stub...`);
         const today = new Date().toISOString().split('T')[0];
         const metadataToCreate = {
@@ -279,14 +295,14 @@ export class MemoryService {
       } else {
         logger.info(`Existing metadata found for ${repositoryName}:${branch}`);
       }
-      
+
       // Send progress update for completion
       await mcpContext.sendProgress({
         status: 'in_progress',
         message: `Finalizing memory bank initialization for ${repositoryName}:${branch}...`,
         percent: 90,
       });
-      
+
       return {
         success: true,
         message: `Memory bank initialized for ${repositoryName} (branch: ${branch})`,
@@ -298,7 +314,7 @@ export class MemoryService {
         error: error.toString(),
         stack: error.stack,
       });
-      
+
       // Send error progress notification
       try {
         await mcpContext.sendProgress({
@@ -312,7 +328,7 @@ export class MemoryService {
       } catch (progressError: any) {
         logger.error(`Failed to send error progress: ${String(progressError)}`);
       }
-      
+
       return { success: false, message: error.message || 'Failed to initialize memory bank' };
     }
   }
@@ -1546,10 +1562,16 @@ export class MemoryService {
       );
       return { label: label, count: -1 };
     }
-    const query = `MATCH (n:\`${sanitizedLabel}\`) WHERE n.repository = $repoId AND n.branch = $branch RETURN count(n) AS node_count`;
+    const query =
+      sanitizedLabel === 'Repository'
+        ? `MATCH (n:Repository {id: $repoId, branch: $branch}) RETURN count(n) AS node_count`
+        : `MATCH (n:\`${sanitizedLabel}\`) WHERE n.repository = $repoId AND n.branch = $branch RETURN count(n) AS node_count`;
     try {
-      logger.debug(`[MemoryService.countNodesByLabel] Executing Kuzu query: ${query}`, { repoId });
-      const result = await kuzuClient.executeQuery(query, { repoId });
+      logger.debug(`[MemoryService.countNodesByLabel] Executing Kuzu query: ${query}`, {
+        repoId,
+        branch,
+      });
+      const result = await kuzuClient.executeQuery(query, { repoId, branch });
       const count =
         result && result.length > 0 && result[0].node_count !== null
           ? Number(result[0].node_count)
@@ -1589,17 +1611,25 @@ export class MemoryService {
       });
       return { label, nodes: [], limit, offset, totalInLabel: -1 };
     }
-    const query = `MATCH (n:\`${sanitizedLabel}\`) WHERE n.repository = $repoId AND n.branch = $branch RETURN n SKIP $offset LIMIT $limit`;
-    const countQuery = `MATCH (n:\`${sanitizedLabel}\`) WHERE n.repository = $repoId AND n.branch = $branch RETURN count(n) AS total`;
+    const query =
+      sanitizedLabel === 'Repository'
+        ? `MATCH (n:Repository {id: $repoId, branch: $branch}) RETURN n SKIP $offset LIMIT $limit`
+        : `MATCH (n:\`${sanitizedLabel}\`) WHERE n.repository = $repoId AND n.branch = $branch RETURN n SKIP $offset LIMIT $limit`;
+
+    const countQuery =
+      sanitizedLabel === 'Repository'
+        ? `MATCH (n:Repository {id: $repoId, branch: $branch}) RETURN count(n) AS total`
+        : `MATCH (n:\`${sanitizedLabel}\`) WHERE n.repository = $repoId AND n.branch = $branch RETURN count(n) AS total`;
     try {
       logger.debug(`[MemoryService.listNodesByLabel] Query: ${query}, CountQuery: ${countQuery}`, {
         repoId,
+        branch,
         offset,
         limit,
       });
       const [nodesResult, countResult] = await Promise.all([
-        kuzuClient.executeQuery(query, { repoId, offset, limit }),
-        kuzuClient.executeQuery(countQuery, { repoId }),
+        kuzuClient.executeQuery(query, { repoId, branch, offset, limit }),
+        kuzuClient.executeQuery(countQuery, { repoId, branch }),
       ]);
       const nodes = nodesResult
         ? nodesResult.map((n: any) => ({ id: n._id?.toString() || n.id?.toString(), ...n }))
@@ -1822,10 +1852,14 @@ export class MemoryService {
       const repoRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
       const kuzuClient = repoRepo.getClient();
 
-      const query = "CALL TABLE_INFO() RETURN name WHERE type = 'NODE' ORDER BY name;";
+      // FIXED: Use proper Kuzu syntax - query all tables first, then filter for NODE tables
+      const query = 'CALL show_tables() RETURN *;';
       const queryResult = await kuzuClient.executeQuery(query);
 
-      const labels = queryResult.map((row: any) => row.name as string);
+      // Filter for NODE tables from the results
+      const labels = queryResult
+        .filter((row: any) => row.type === 'NODE')
+        .map((row: any) => row.name as string);
 
       logger.info(`[MemoryService] Found ${labels.length} labels for ${repository}:${branch}.`);
       return {

@@ -29,7 +29,7 @@ describe('MCP STDIO Server E2E Tests', () => {
     client = new McpStdioClient({
       envVars: {
         DEBUG: '0',
-        DB_PATH_OVERRIDE: testClientProjectRoot,
+        DB_PATH_OVERRIDE: dbPathForStdioTest,
       },
       debug: false,
     });
@@ -1016,5 +1016,385 @@ describe('MCP STDIO Server E2E Tests', () => {
     expect(response).toBeDefined();
     expect((response as any).isError).toBe(true);
     expect(JSON.stringify(response)).toContain('Missing repository parameter for get-metadata');
+  });
+
+  describe('Graph Introspection Tools E2E Tests', () => {
+    it('T_STDIO_NEW_list_all_labels: should list all node labels in the graph', async () => {
+      const toolArgs = {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+      };
+      const response = await client.getFinalToolResult('list_all_labels', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      const toolResult = response as any;
+      expect(toolResult).toBeDefined();
+      expect(Array.isArray(toolResult.labels)).toBe(true);
+      expect(toolResult.labels.length).toBeGreaterThan(0);
+
+      // Should contain the basic node types we've created
+      expect(toolResult.labels).toContain('Component');
+      expect(toolResult.labels).toContain('Decision');
+      expect(toolResult.labels).toContain('Rule');
+      expect(toolResult.labels).toContain('Context');
+    });
+
+    it('T_STDIO_NEW_count_nodes_by_label: should count Component nodes', async () => {
+      const toolArgs = {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        label: 'Component',
+      };
+      const response = await client.getFinalToolResult('count_nodes_by_label', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      const toolResult = response as any;
+      expect(toolResult).toBeDefined();
+      expect(toolResult.label).toBe('Component');
+      expect(typeof toolResult.count).toBe('number');
+      expect(toolResult.count).toBeGreaterThanOrEqual(5); // We seeded 5 components + created more in tests
+    });
+
+    it('T_STDIO_NEW_list_nodes_by_label: should list Component nodes with pagination', async () => {
+      const toolArgs = {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        label: 'Component',
+        limit: 3,
+        offset: 0,
+      };
+      const response = await client.getFinalToolResult('list_nodes_by_label', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      const toolResult = response as any;
+      expect(toolResult).toBeDefined();
+      expect(toolResult.label).toBe('Component');
+      expect(Array.isArray(toolResult.nodes)).toBe(true);
+      expect(toolResult.nodes.length).toBeLessThanOrEqual(3);
+      expect(toolResult.limit).toBe(3);
+      expect(toolResult.offset).toBe(0);
+
+      // Each node should have at least an id
+      if (toolResult.nodes.length > 0) {
+        expect(toolResult.nodes[0]).toHaveProperty('id');
+      }
+    });
+
+    it('T_STDIO_NEW_get_node_properties: should get properties for Component label', async () => {
+      const toolArgs = {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        label: 'Component',
+      };
+      const response = await client.getFinalToolResult('get_node_properties', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      const toolResult = response as any;
+      expect(toolResult).toBeDefined();
+      expect(toolResult.label).toBe('Component');
+      expect(Array.isArray(toolResult.properties)).toBe(true);
+      expect(toolResult.properties.length).toBeGreaterThan(0);
+
+      // Should contain basic Component properties
+      const propNames = toolResult.properties.map((p: any) => p.name);
+      expect(propNames).toContain('id');
+      expect(propNames).toContain('name');
+    });
+
+    it('T_STDIO_NEW_list_all_indexes: should list database indexes', async () => {
+      const toolArgs = {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+      };
+      const response = await client.getFinalToolResult('list_all_indexes', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      const toolResult = response as any;
+      expect(toolResult).toBeDefined();
+      expect(Array.isArray(toolResult.indexes)).toBe(true);
+      // Indexes array may be empty or contain primary key indexes
+    });
+  });
+
+  describe('File and Tag Management Tools E2E Tests', () => {
+    let testFileId: string;
+    let testTagId: string;
+
+    beforeAll(async () => {
+      testFileId = `file-e2e-test-${Date.now()}`;
+      testTagId = `tag-e2e-test-${Date.now()}`;
+    });
+
+    it('T_STDIO_NEW_add_file: should add a file record', async () => {
+      const toolArgs = {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        id: testFileId,
+        name: 'test-file.ts',
+        path: '/src/test-file.ts',
+        language: 'typescript',
+        metrics: {
+          line_count: 100,
+          complexity: 5,
+        },
+        content_hash: 'abc123def456',
+        mime_type: 'text/typescript',
+        size_bytes: 2048,
+      };
+      const response = await client.getFinalToolResult('add_file', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      const toolResult = response as any;
+      expect(toolResult).toBeDefined();
+      expect(toolResult.success).toBe(true);
+      expect(toolResult.file).toBeDefined();
+      expect(toolResult.file.id).toBe(testFileId);
+      expect(toolResult.file.name).toBe('test-file.ts');
+      expect(toolResult.file.language).toBe('typescript');
+    });
+
+    it('T_STDIO_NEW_add_tag: should add a tag', async () => {
+      const toolArgs = {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        id: testTagId,
+        name: 'frontend',
+        color: '#FF6B6B',
+        description: 'Frontend-related items',
+      };
+      const response = await client.getFinalToolResult('add_tag', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      const toolResult = response as any;
+      expect(toolResult).toBeDefined();
+      expect(toolResult.success).toBe(true);
+      expect(toolResult.tag).toBeDefined();
+      expect(toolResult.tag.id).toBe(testTagId);
+      expect(toolResult.tag.name).toBe('frontend');
+      expect(toolResult.tag.color).toBe('#FF6B6B');
+    });
+
+    it('T_STDIO_NEW_associate_file_with_component: should associate file with component', async () => {
+      expect(testComponentId).not.toBeNull();
+      expect(testFileId).toBeDefined();
+
+      const toolArgs = {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        componentId: testComponentId!,
+        fileId: testFileId,
+      };
+      const response = await client.getFinalToolResult('associate_file_with_component', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      const toolResult = response as any;
+      expect(toolResult).toBeDefined();
+      expect(toolResult.success).toBe(true);
+    });
+
+    it('T_STDIO_NEW_tag_item_component: should tag a component', async () => {
+      expect(testComponentId).not.toBeNull();
+      expect(testTagId).toBeDefined();
+
+      const toolArgs = {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        itemId: testComponentId!,
+        itemType: 'Component',
+        tagId: testTagId,
+      };
+      const response = await client.getFinalToolResult('tag_item', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      const toolResult = response as any;
+      expect(toolResult).toBeDefined();
+      expect(toolResult.success).toBe(true);
+    });
+
+    it('T_STDIO_NEW_tag_item_file: should tag a file', async () => {
+      expect(testFileId).toBeDefined();
+      expect(testTagId).toBeDefined();
+
+      const toolArgs = {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        itemId: testFileId,
+        itemType: 'File',
+        tagId: testTagId,
+      };
+      const response = await client.getFinalToolResult('tag_item', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      const toolResult = response as any;
+      expect(toolResult).toBeDefined();
+      expect(toolResult.success).toBe(true);
+    });
+
+    it('T_STDIO_NEW_find_items_by_tag: should find items by tag', async () => {
+      expect(testTagId).toBeDefined();
+
+      const toolArgs = {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        tagId: testTagId,
+        itemTypeFilter: 'All',
+      };
+      const response = await client.getFinalToolResult('find_items_by_tag', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      const toolResult = response as any;
+      expect(toolResult).toBeDefined();
+      expect(toolResult.tagId).toBe(testTagId);
+      expect(Array.isArray(toolResult.items)).toBe(true);
+      expect(toolResult.items.length).toBeGreaterThanOrEqual(2); // Component + File that we tagged
+
+      // Should find the component and file we tagged
+      const itemIds = toolResult.items.map((item: any) => item.id);
+      expect(itemIds).toContain(testComponentId);
+      expect(itemIds).toContain(testFileId);
+    });
+
+    it('T_STDIO_NEW_find_items_by_tag_filtered: should find only Component items by tag', async () => {
+      expect(testTagId).toBeDefined();
+
+      const toolArgs = {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        tagId: testTagId,
+        itemTypeFilter: 'Component',
+      };
+      const response = await client.getFinalToolResult('find_items_by_tag', toolArgs);
+      expect('clientError' in response || ('error' in response && response.error)).toBe(false);
+      const toolResult = response as any;
+      expect(toolResult).toBeDefined();
+      expect(toolResult.tagId).toBe(testTagId);
+      expect(Array.isArray(toolResult.items)).toBe(true);
+      expect(toolResult.items.length).toBeGreaterThanOrEqual(1); // At least the component we tagged
+
+      // Should only find components
+      const componentItems = toolResult.items.filter((item: any) => item.id === testComponentId);
+      expect(componentItems.length).toBe(1);
+    });
+  });
+
+  describe('Integration Test: Complete Workflow', () => {
+    it('T_STDIO_NEW_complete_workflow: should demonstrate end-to-end workflow with new tools', async () => {
+      // 1. Count existing components
+      let response = await client.getFinalToolResult('count_nodes_by_label', {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        label: 'Component',
+      });
+      const initialComponentCount = (response as any).count;
+
+      // 2. Create a new component for this workflow
+      const workflowComponentId = `workflow-comp-${Date.now()}`;
+      response = await client.getFinalToolResult('add-component', {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        id: workflowComponentId,
+        name: 'Workflow Test Component',
+        kind: 'utility',
+        status: 'active',
+      });
+      expect((response as any).success).toBe(true);
+
+      // 3. Verify component count increased
+      response = await client.getFinalToolResult('count_nodes_by_label', {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        label: 'Component',
+      });
+      expect((response as any).count).toBe(initialComponentCount + 1);
+
+      // 4. Add a file related to this component
+      const workflowFileId = `workflow-file-${Date.now()}`;
+      response = await client.getFinalToolResult('add_file', {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        id: workflowFileId,
+        name: 'workflow-component.ts',
+        path: '/src/workflow-component.ts',
+        language: 'typescript',
+      });
+      expect((response as any).success).toBe(true);
+
+      // 5. Associate the file with the component
+      response = await client.getFinalToolResult('associate_file_with_component', {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        componentId: workflowComponentId,
+        fileId: workflowFileId,
+      });
+      expect((response as any).success).toBe(true);
+
+      // 6. Create a tag for this workflow
+      const workflowTagId = `workflow-tag-${Date.now()}`;
+      response = await client.getFinalToolResult('add_tag', {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        id: workflowTagId,
+        name: 'workflow-test',
+        description: 'Items created during workflow test',
+      });
+      expect((response as any).success).toBe(true);
+
+      // 7. Tag both the component and file
+      response = await client.getFinalToolResult('tag_item', {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        itemId: workflowComponentId,
+        itemType: 'Component',
+        tagId: workflowTagId,
+      });
+      expect((response as any).success).toBe(true);
+
+      response = await client.getFinalToolResult('tag_item', {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        itemId: workflowFileId,
+        itemType: 'File',
+        tagId: workflowTagId,
+      });
+      expect((response as any).success).toBe(true);
+
+      // 8. Find all items with the workflow tag
+      response = await client.getFinalToolResult('find_items_by_tag', {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+        tagId: workflowTagId,
+      });
+      const taggedItems = response as any;
+      expect(taggedItems.items.length).toBe(2);
+
+      const itemIds = taggedItems.items.map((item: any) => item.id);
+      expect(itemIds).toContain(workflowComponentId);
+      expect(itemIds).toContain(workflowFileId);
+
+      // 9. List all labels to verify File and Tag labels exist
+      response = await client.getFinalToolResult('list_all_labels', {
+        repository: testRepositoryName,
+        branch: testBranch,
+        clientProjectRoot: testClientProjectRoot,
+      });
+      const labels = (response as any).labels;
+      expect(labels).toContain('Component');
+      expect(labels).toContain('File');
+      expect(labels).toContain('Tag');
+
+      console.log(
+        `✅ Complete workflow test passed - created component ${workflowComponentId}, file ${workflowFileId}, and tag ${workflowTagId}`,
+      );
+    });
   });
 });

@@ -515,9 +515,9 @@ describe('MCP HTTP Streaming Server E2E Tests (Modern)', () => {
       const resultWrapper = JSON.parse(parsedResponse.result.content[0].text);
       expect(resultWrapper.status).toBe('complete');
       expect(Array.isArray(resultWrapper.dependencies)).toBe(true);
-      expect(
-        resultWrapper.dependencies.some((c: Component) => c.id === testComponentId),
-      ).toBe(true);
+      expect(resultWrapper.dependencies.some((c: Component) => c.id === testComponentId)).toBe(
+        true,
+      );
     });
   });
 

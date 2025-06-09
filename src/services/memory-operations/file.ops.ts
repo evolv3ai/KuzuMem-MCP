@@ -1,12 +1,11 @@
 import { z } from 'zod';
-import { RepositoryRepository, FileRepository, ComponentRepository } from '../../repositories';
 import {
-  FileNodeSchema,
   AddFileInputSchema,
-  AssociateFileWithComponentInputSchema,
-  AssociateFileWithComponentOutputSchema,
   AddFileOutputSchema,
+  AssociateFileWithComponentOutputSchema,
+  FileNodeSchema,
 } from '../../mcp/schemas/tool-schemas';
+import { FileRepository, RepositoryRepository } from '../../repositories';
 import { File } from '../../types'; // Internal File type
 
 // Simple context type to avoid SDK import issues
@@ -39,10 +38,9 @@ export async function addFileOp(
 
     // Transform Zod input to internal File type fields expected by FileRepository.createFileNode
     // Omit repository, branch, created_at, updated_at as repo method handles them
-    const fileRepoInput: Omit<
-      File,
-      'repository' | 'branch' | 'created_at' | 'updated_at'
-    > & { id: string } = {
+    const fileRepoInput: Omit<File, 'repository' | 'branch' | 'created_at' | 'updated_at'> & {
+      id: string;
+    } = {
       id: fileDataFromTool.id,
       name: fileDataFromTool.name,
       path: fileDataFromTool.path,
