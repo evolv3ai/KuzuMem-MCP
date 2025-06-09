@@ -1,3 +1,4 @@
+import path from 'path';
 import { MemoryService } from '../services/memory.service';
 import {
   AddComponentInputSchema,
@@ -100,7 +101,7 @@ function ensureValidSessionContext(
     throw new Error(errorMsg);
   }
 
-  if (!require('path').isAbsolute(clientProjectRoot)) {
+  if (!path.isAbsolute(clientProjectRoot)) {
     const errorMsg = `Invalid clientProjectRoot path for tool '${toolName}': '${clientProjectRoot}'. Path must be absolute.`;
     logger.error(errorMsg);
     throw new Error(errorMsg);
@@ -1395,7 +1396,11 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   count_nodes_by_label: async (params, context, memoryService) => {
     const validatedParams = CountNodesByLabelInputSchema.parse(params);
-    const clientProjectRoot = validatedParams.clientProjectRoot;
+    const clientProjectRoot = ensureValidSessionContext(
+      validatedParams,
+      context,
+      'count_nodes_by_label',
+    );
     context.logger.info(
       `Executing count_nodes_by_label for ${validatedParams.repository}:${validatedParams.branch}`,
       { label: validatedParams.label, clientProjectRoot },
@@ -1425,7 +1430,11 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   list_nodes_by_label: async (params, context, memoryService) => {
     const validatedParams = ListNodesByLabelInputSchema.parse(params);
-    const clientProjectRoot = validatedParams.clientProjectRoot;
+    const clientProjectRoot = ensureValidSessionContext(
+      validatedParams,
+      context,
+      'list_nodes_by_label',
+    );
     context.logger.info(
       `Executing list_nodes_by_label for ${validatedParams.repository}:${validatedParams.branch}`,
       { ...validatedParams, clientProjectRoot },
@@ -1457,7 +1466,11 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   get_node_properties: async (params, context, memoryService) => {
     const validatedParams = GetNodePropertiesInputSchema.parse(params);
-    const clientProjectRoot = validatedParams.clientProjectRoot;
+    const clientProjectRoot = ensureValidSessionContext(
+      validatedParams,
+      context,
+      'get_node_properties',
+    );
     context.logger.info(
       `Executing get_node_properties for ${validatedParams.repository}:${validatedParams.branch}`,
       { label: validatedParams.label, clientProjectRoot },
@@ -1482,7 +1495,11 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   list_all_indexes: async (params, context, memoryService) => {
     const validatedParams = ListAllIndexesInputSchema.parse(params);
-    const clientProjectRoot = validatedParams.clientProjectRoot;
+    const clientProjectRoot = ensureValidSessionContext(
+      validatedParams,
+      context,
+      'list_all_indexes',
+    );
     context.logger.info(
       `Executing list_all_indexes for ${validatedParams.repository}:${validatedParams.branch}`,
       { label: validatedParams.label, clientProjectRoot },
@@ -1507,7 +1524,7 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   add_file: async (params, context, memoryService) => {
     const validatedParams = AddFileInputSchema.parse(params);
-    const clientProjectRoot = validatedParams.clientProjectRoot;
+    const clientProjectRoot = ensureValidSessionContext(validatedParams, context, 'add_file');
     context.logger.info(
       `Executing add_file for ${validatedParams.repository}:${validatedParams.branch}`,
       { path: validatedParams.path, clientProjectRoot },
@@ -1535,7 +1552,11 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   associate_file_with_component: async (params, context, memoryService) => {
     const validatedParams = AssociateFileWithComponentInputSchema.parse(params);
-    const clientProjectRoot = validatedParams.clientProjectRoot;
+    const clientProjectRoot = ensureValidSessionContext(
+      validatedParams,
+      context,
+      'associate_file_with_component',
+    );
     context.logger.info(
       `Executing associate_file_with_component for ${validatedParams.repository}:${validatedParams.branch}`,
       { componentId: validatedParams.componentId, fileId: validatedParams.fileId },
@@ -1564,7 +1585,7 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   add_tag: async (params, context, memoryService) => {
     const validatedParams = AddTagInputSchema.parse(params);
-    const clientProjectRoot = validatedParams.clientProjectRoot;
+    const clientProjectRoot = ensureValidSessionContext(validatedParams, context, 'add_tag');
     context.logger.info(
       `Executing add_tag for ${validatedParams.repository}:${validatedParams.branch}`,
       { tagName: validatedParams.name },
@@ -1592,7 +1613,7 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   tag_item: async (params, context, memoryService) => {
     const validatedParams = TagItemInputSchema.parse(params);
-    const clientProjectRoot = validatedParams.clientProjectRoot;
+    const clientProjectRoot = ensureValidSessionContext(validatedParams, context, 'tag_item');
     context.logger.info(
       `Executing tag_item for ${validatedParams.repository}:${validatedParams.branch}`,
       {
@@ -1625,7 +1646,11 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   find_items_by_tag: async (params, context, memoryService) => {
     const validatedParams = FindItemsByTagInputSchema.parse(params);
-    const clientProjectRoot = validatedParams.clientProjectRoot;
+    const clientProjectRoot = ensureValidSessionContext(
+      validatedParams,
+      context,
+      'find_items_by_tag',
+    );
     context.logger.info(
       `Executing find_items_by_tag for ${validatedParams.repository}:${validatedParams.branch}`,
       { tagId: validatedParams.tagId, itemTypeFilter: validatedParams.itemTypeFilter },
@@ -1651,7 +1676,11 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   list_all_labels: async (params, context, memoryService) => {
     const validatedParams = ListAllLabelsInputSchema.parse(params);
-    const clientProjectRoot = validatedParams.clientProjectRoot;
+    const clientProjectRoot = ensureValidSessionContext(
+      validatedParams,
+      context,
+      'list_all_labels',
+    );
     context.logger.info(
       `Executing list_all_labels for ${validatedParams.repository}:${validatedParams.branch}`,
       { clientProjectRoot },

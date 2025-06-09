@@ -1562,10 +1562,13 @@ export class MemoryService {
       );
       return { label: label, count: -1 };
     }
-    const query = `MATCH (n:\`${sanitizedLabel}\`) WHERE n.repository = $repoId AND n.branch = $branch RETURN count(n) AS node_count`;
+    const query = `MATCH (repo:Repository {id: $repoId})--(n:\`${sanitizedLabel}\`) WHERE n.branch = $branch RETURN count(n) AS node_count`;
     try {
-      logger.debug(`[MemoryService.countNodesByLabel] Executing Kuzu query: ${query}`, { repoId });
-      const result = await kuzuClient.executeQuery(query, { repoId });
+      logger.debug(`[MemoryService.countNodesByLabel] Executing Kuzu query: ${query}`, {
+        repoId,
+        branch,
+      });
+      const result = await kuzuClient.executeQuery(query, { repoId, branch });
       const count =
         result && result.length > 0 && result[0].node_count !== null
           ? Number(result[0].node_count)
@@ -1605,17 +1608,18 @@ export class MemoryService {
       });
       return { label, nodes: [], limit, offset, totalInLabel: -1 };
     }
-    const query = `MATCH (n:\`${sanitizedLabel}\`) WHERE n.repository = $repoId AND n.branch = $branch RETURN n SKIP $offset LIMIT $limit`;
-    const countQuery = `MATCH (n:\`${sanitizedLabel}\`) WHERE n.repository = $repoId AND n.branch = $branch RETURN count(n) AS total`;
+    const query = `MATCH (repo:Repository {id: $repoId})--(n:\`${sanitizedLabel}\`) WHERE n.branch = $branch RETURN n SKIP $offset LIMIT $limit`;
+    const countQuery = `MATCH (repo:Repository {id: $repoId})--(n:\`${sanitizedLabel}\`) WHERE n.branch = $branch RETURN count(n) AS total`;
     try {
       logger.debug(`[MemoryService.listNodesByLabel] Query: ${query}, CountQuery: ${countQuery}`, {
         repoId,
+        branch,
         offset,
         limit,
       });
       const [nodesResult, countResult] = await Promise.all([
-        kuzuClient.executeQuery(query, { repoId, offset, limit }),
-        kuzuClient.executeQuery(countQuery, { repoId }),
+        kuzuClient.executeQuery(query, { repoId, branch, offset, limit }),
+        kuzuClient.executeQuery(countQuery, { repoId, branch }),
       ]);
       const nodes = nodesResult
         ? nodesResult.map((n: any) => ({ id: n._id?.toString() || n.id?.toString(), ...n }))
