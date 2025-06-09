@@ -19,10 +19,10 @@ import { Mutex } from '../utils/mutex';
 import * as componentOps from './memory-operations/component.ops';
 import * as contextOps from './memory-operations/context.ops';
 import * as decisionOps from './memory-operations/decision.ops';
+import * as fileOps from './memory-operations/file.ops';
 import * as graphOps from './memory-operations/graph.ops';
 import * as metadataOps from './memory-operations/metadata.ops';
 import * as ruleOps from './memory-operations/rule.ops';
-import * as fileOps from './memory-operations/file.ops';
 import * as tagOps from './memory-operations/tag.ops';
 
 /**
@@ -1411,7 +1411,7 @@ export class MemoryService {
       logger.error('[MemoryService.shortestPath] RepositoryProvider not initialized');
       return {
         status: 'error',
-        results: { pathFound: false, path: [] },
+        results: { pathFound: false, path: [], length: 0 },
         message: 'RepositoryProvider not initialized',
         clientProjectRoot,
         repository: params.repository,
@@ -1448,7 +1448,7 @@ export class MemoryService {
       );
       return {
         status: 'error',
-        results: { pathFound: false, path: [] },
+        results: { pathFound: false, path: [], length: 0 },
         message: error.message || 'ShortestPath failed in MemoryService',
         clientProjectRoot,
         repository: params.repository,
