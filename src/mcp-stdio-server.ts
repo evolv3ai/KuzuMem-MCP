@@ -1,8 +1,12 @@
-import readline from 'readline';
-import fs from 'fs';
-import path from 'path';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import {
+  ListToolsRequestSchema,
+  CallToolRequestSchema,
+  ListResourcesRequestSchema,
+  ListPromptsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp';
-import { MemoryService } from './services/memory.service';
 import { toolHandlers } from './mcp/tool-handlers';
 import { createProgressHandler } from './mcp/streaming/progress-handler';
 import { StdioProgressTransport } from './mcp/streaming/stdio-transport';
@@ -12,32 +16,7 @@ import { ToolExecutionService } from './mcp/services/tool-execution.service';
 const detectedClientProjectRoot = process.cwd();
 console.error(`MCP stdio server detected client project root: ${detectedClientProjectRoot}`);
 
-// IMPORTANT: We do NOT initialize directories or memory service at startup!
-// Database initialization should only happen through the init-memory-bank tool
-// or when explicitly requested by a tool call
-
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-  terminal: false,
-});
-
-let initialized = false;
-
-interface McpRequest {
-  jsonrpc: string;
-  id: number | string;
-  method: string;
-  params?: any;
-}
-
-interface McpResponse {
-  jsonrpc: string;
-  id: number | string | null;
-  result?: any;
-  error?: { code: number; message: string; data?: any };
-}
-
+// Debug configuration
 const DEBUG_LEVEL = process.env.DEBUG ? parseInt(process.env.DEBUG, 10) || 1 : 0;
 
 function debugLog(level: number, message: string, data?: any): void {
@@ -53,206 +32,122 @@ function debugLog(level: number, message: string, data?: any): void {
   }
 }
 
+// Create the server instance
+const server = new Server(
+  {
+    name: 'memory-bank-mcp',
+    version: '3.0.0',
+  },
+  {
+    capabilities: {
+      tools: {},
+      resources: {},
+      prompts: {},
+    },
+  },
+);
+
 const progressTransport = new StdioProgressTransport(debugLog);
 
-function sendResponse(response: McpResponse): void {
-  debugLog(1, `Sending response for id: ${response.id}`);
-  debugLog(2, 'Response details:', response);
-  process.stdout.write(JSON.stringify(response) + '\n');
-}
+// Set up the list tools handler
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  debugLog(1, `Returning tools/list with ${MEMORY_BANK_MCP_TOOLS.length} tools`);
 
-rl.on('line', async (line) => {
-  let request: McpRequest;
+  const tools = MEMORY_BANK_MCP_TOOLS.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    inputSchema: tool.parameters || { type: 'object', properties: {}, required: [] },
+  }));
+
+  return { tools };
+});
+
+// Set up the call tool handler
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name: toolName, arguments: toolArgs = {} } = request.params;
+  const requestId = 'id' in request ? String(request.id) : 'unknown';
+
+  debugLog(1, `Handling tools/call for tool: ${toolName}`);
+
+  const toolDefinition = MEMORY_BANK_MCP_TOOLS.find((t) => t.name === toolName);
+  if (!toolDefinition) {
+    throw new Error(`Tool '${toolName}' not found.`);
+  }
+
+  // For init-memory-bank, clientProjectRoot comes from toolArgs.
+  // For others, we use detectedClientProjectRoot from server's context.
+  const effectiveClientProjectRoot =
+    toolName === 'init-memory-bank' ? toolArgs.clientProjectRoot : detectedClientProjectRoot;
+
+  if (!effectiveClientProjectRoot && toolName === 'init-memory-bank') {
+    throw new Error(`Tool '${toolName}' requires clientProjectRoot argument.`);
+  }
+
+  if (!effectiveClientProjectRoot) {
+    console.error(
+      `CRITICAL: effectiveClientProjectRoot is not defined for tool ${toolName}. This indicates a problem with server launch context or tool argument passing.`,
+    );
+    throw new Error(
+      `Server error: clientProjectRoot context not established for tool '${toolName}'.`,
+    );
+  }
+
   try {
-    request = JSON.parse(line);
-    debugLog(1, `Received request: ${request.method}`);
-    debugLog(2, 'Request details:', request);
+    const progressHandler = createProgressHandler(requestId, progressTransport, debugLog);
+    const toolExecutionService = await ToolExecutionService.getInstance();
 
-    if (!request.jsonrpc || !request.method) {
-      sendResponse({
-        jsonrpc: '2.0',
-        id: request.id || null,
-        error: { code: -32600, message: 'Invalid Request: missing required fields' },
-      });
-      return;
-    }
+    const toolResult = await toolExecutionService.executeTool(
+      toolName,
+      toolArgs,
+      toolHandlers,
+      effectiveClientProjectRoot,
+      progressHandler,
+      debugLog,
+    );
 
-    switch (request.method) {
-      case 'initialize':
-        const protocolVersion = request.params?.protocolVersion || '0.1';
-        initialized = true;
-        sendResponse({
-          jsonrpc: '2.0',
-          id: request.id,
-          result: {
-            protocolVersion,
-            capabilities: { memory: { list: true }, tools: { list: true, call: true } },
-            serverInfo: { name: 'memory-bank-mcp', version: '1.0.0' },
-          },
-        });
-        break;
-      case 'initialized':
-        initialized = true;
-        break;
-      case 'notifications/initialized':
-        debugLog(1, 'Handling notifications/initialized');
-        sendResponse({ jsonrpc: '2.0', id: request.id, result: {} });
-        break;
-      case 'resources/list':
-      case 'resources/templates/list':
-        sendResponse({
-          jsonrpc: '2.0',
-          id: request.id,
-          result: { resources: [], templates: [], cursor: null },
-        });
-        break;
-      case 'tools/list':
-        debugLog(1, `Returning tools/list with ${MEMORY_BANK_MCP_TOOLS.length} tools`);
-        const convertedTools = MEMORY_BANK_MCP_TOOLS.map((tool) => ({
-          name: tool.name,
-          description: tool.description,
-          inputSchema: tool.parameters || { type: 'object', properties: {}, required: [] },
-          outputSchema: tool.returns || { type: 'object', properties: {} },
-          annotations: tool.annotations || {
-            title: tool.name,
-            readOnlyHint: true,
-            destructiveHint: false,
-            idempotentHint: true,
-            openWorldHint: false,
-          },
-        }));
-        sendResponse({ jsonrpc: '2.0', id: request.id, result: { tools: convertedTools } });
-        break;
-      case 'tools/call':
-        const toolName = request.params?.name;
-        const toolArgs = request.params?.arguments || {};
-        debugLog(1, `Handling tools/call for tool: ${toolName}`);
-
-        const toolDefinition = MEMORY_BANK_MCP_TOOLS.find((t) => t.name === toolName);
-        if (!toolDefinition) {
-          sendResponse({
-            jsonrpc: '2.0',
-            id: request.id,
-            result: {
-              content: [{ type: 'text', text: `Tool '${toolName}' not found.` }],
-              isError: true,
-            },
-          });
-          break;
-        }
-
-        // For init-memory-bank, clientProjectRoot comes from toolArgs.
-        // For others, we use detectedClientProjectRoot from server's context.
-        const effectiveClientProjectRoot =
-          toolName === 'init-memory-bank' ? toolArgs.clientProjectRoot : detectedClientProjectRoot;
-
-        if (!effectiveClientProjectRoot && toolName === 'init-memory-bank') {
-          sendResponse({
-            jsonrpc: '2.0',
-            id: request.id,
-            result: {
-              content: [
-                { type: 'text', text: `Tool '${toolName}' requires clientProjectRoot argument.` },
-              ],
-              isError: true,
-            },
-          });
-          break;
-        }
-        if (!effectiveClientProjectRoot) {
-          // Should not happen if init-memory-bank was called correctly first for other tools
-          console.error(
-            `CRITICAL: effectiveClientProjectRoot is not defined for tool ${toolName}. This indicates a problem with server launch context or tool argument passing.`,
-          );
-          sendResponse({
-            jsonrpc: '2.0',
-            id: request.id,
-            result: {
-              content: [
-                {
-                  type: 'text',
-                  text: `Server error: clientProjectRoot context not established for tool '${toolName}'.`,
-                },
-              ],
-              isError: true,
-            },
-          });
-          break;
-        }
-
-        try {
-          const progressHandler = createProgressHandler(
-            String(request.id),
-            progressTransport,
-            debugLog,
-          );
-          const toolExecutionService = await ToolExecutionService.getInstance();
-
-          const toolResult = await toolExecutionService.executeTool(
-            toolName,
-            toolArgs,
-            toolHandlers,
-            effectiveClientProjectRoot, // Pass the determined clientProjectRoot
-            progressHandler,
-            debugLog,
-          );
-
-          if (toolResult !== null) {
-            sendResponse({
-              jsonrpc: '2.0',
-              id: String(request.id),
-              result: {
-                content: [{ type: 'text', text: JSON.stringify(toolResult, null, 2) }],
-                isError: !!toolResult?.error,
-              },
-            });
-          }
-        } catch (err: any) {
-          debugLog(
-            0,
-            `FATAL ERROR (tools/call in stdio-server): ${err.message || String(err)}`,
-            err.stack,
-          );
-          sendResponse({
-            jsonrpc: '2.0',
-            id: request.id,
-            result: {
-              content: [{ type: 'text', text: `Server error: ${err.message || String(err)}` }],
-              isError: true,
-            },
-          });
-        }
-        break;
-      default:
-        if (!initialized) {
-          sendResponse({
-            jsonrpc: '2.0',
-            id: String(request.id),
-            error: { code: -32002, message: 'Server not initialized' },
-          });
-          return;
-        }
-        // Fallback for other methods - this section is largely legacy and might be removed
-        // as all actions should ideally go through tools/call with the new refactor.
-        console.error(
-          `Warning: Received direct method call '${request.method}' which is deprecated. Use 'tools/call'.`,
-        );
-        sendResponse({
-          jsonrpc: '2.0',
-          id: String(request.id),
-          error: {
-            code: -32601,
-            message: `Method not implemented: ${request.method}. Use tools/call.`,
-          },
-        });
+    if (toolResult !== null) {
+      return {
+        content: [{ type: 'text', text: JSON.stringify(toolResult, null, 2) }],
+        isError: !!toolResult?.error,
+      };
+    } else {
+      return {
+        content: [{ type: 'text', text: 'Tool executed successfully' }],
+      };
     }
   } catch (err: any) {
-    debugLog(0, `Parse error or other top-level error: ${err.message || String(err)}`, err);
-    sendResponse({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
+    debugLog(
+      0,
+      `FATAL ERROR (tools/call in stdio-server): ${err.message || String(err)}`,
+      err.stack,
+    );
+    throw new Error(`Server error: ${err.message || String(err)}`);
   }
 });
 
+// Set up the list resources handler
+server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  return { resources: [] };
+});
+
+// Set up the list prompts handler
+server.setRequestHandler(ListPromptsRequestSchema, async () => {
+  return { prompts: [] };
+});
+
+// Start the server
+async function startServer() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  console.log('MCP_STDIO_SERVER_READY_FOR_TESTING');
+}
+
+// Handle graceful shutdown
 process.on('SIGINT', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));
 
-console.log('MCP_STDIO_SERVER_READY_FOR_TESTING');
+// Start the server
+startServer().catch((error) => {
+  console.error('Failed to start MCP stdio server:', error);
+  process.exit(1);
+});

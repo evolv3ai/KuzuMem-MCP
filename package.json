@@ -17,6 +17,7 @@
     "lint:check": "eslint \"{src,apps,libs,test}/**/*.ts\" --quiet"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
     "@types/node": "^22.15.17",
     "better-sse": "^0.14.1",
     "commander": "^11.1.0",
