@@ -1050,38 +1050,37 @@ describe('MCP STDIO Server E2E Tests', () => {
   });
 
   it('T_STDIO_004: should handle invalid tool name gracefully', async () => {
+    try {
+      await client.request('tools/call', {
+        name: 'non-existent-tool',
+        arguments: {
+          repository: testRepositoryName,
+          clientProjectRoot: testClientProjectRoot,
+        },
+      });
+      fail('Request should have failed due to invalid tool name');
+    } catch (e: any) {
+      expect(e).toBeDefined();
+      expect(e.error).toBeDefined();
+      expect(e.error.code).toBe(-32603);
+      expect(e.error.message).toContain("Tool 'non-existent-tool' not found.");
+    }
+  });
+
+  it('T_STDIO_005: should handle missing required arguments for a valid tool (e.g., get-metadata)', async () => {
     const response = await client.request('tools/call', {
-      name: 'non-existent-tool',
+      name: 'get-metadata',
       arguments: {
-        repository: testRepositoryName,
+        branch: testBranch,
         clientProjectRoot: testClientProjectRoot,
+        // repository is missing
       },
     });
     expect(response.error).toBeUndefined(); // MCP call success
     expect(response.result).toBeDefined();
     expect(response.result!.isError).toBe(true);
-    expect(response.result!.content[0].text).toContain("Tool 'non-existent-tool' not found.");
-  });
-
-  it('T_STDIO_005: should handle missing required arguments for a valid tool (e.g., get-metadata)', async () => {
-    try {
-      await client.request('tools/call', {
-        name: 'get-metadata',
-        arguments: {
-          branch: testBranch,
-          clientProjectRoot: testClientProjectRoot,
-          // repository is missing
-        },
-      });
-      fail('Request should have failed due to missing arguments');
-    } catch (e: any) {
-      console.log('Caught error object in T_STDIO_005:', JSON.stringify(e, null, 2));
-      expect(e).toBeDefined();
-      expect(e.error).toBeDefined();
-      // The actual tool error message is nested if ProgressHandler packaged it
-      const toolErrorMessage =
-        e.error.data?.error || e.error.message || e.error.error || JSON.stringify(e.error);
-      expect(toolErrorMessage).toMatch(/Missing repository parameter for get-metadata/i);
-    }
+    expect(response.result!.content[0].text).toContain(
+      'Missing repository parameter for get-metadata',
+    );
   });
 });
