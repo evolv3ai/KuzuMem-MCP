@@ -511,6 +511,7 @@ export const ShortestPathOutputSchema = AlgoToolOutputBaseSchema.extend({
         })
         .catchall(z.any()),
     ),
+    length: z.number().int().nonnegative().describe('The number of nodes in the path'),
     // cost: z.number().optional(), // If weighted
   }),
 });
