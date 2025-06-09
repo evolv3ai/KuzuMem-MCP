@@ -643,30 +643,32 @@ export async function shortestPathOp(
     params.nodeTableNames,
     params.relationshipTableNames,
     async () => {
-      // KuzuDB doesn't support standard Cypher MATCH syntax for graph traversal
-      // For now, implement a simple stub that assumes direct connection exists
-      // TODO: Investigate KuzuDB's native graph query syntax
-      logger.warn(
-        `[graph.ops] ShortestPath temporarily stubbed - KuzuDB MATCH syntax not supported. Assuming direct path from ${params.startNodeId} to ${params.endNodeId}`,
-      );
+      const { repository, branch, startNodeId, endNodeId } = params;
+      const startGraphId = `${repository}:${branch}:${startNodeId}`;
+      const endGraphId = `${repository}:${branch}:${endNodeId}`;
+      const maxDepthClause = /* params.maxDepth && params.maxDepth > 0 ? params.maxDepth : */ 10;
 
-      // Handle reflexive case (same start and end node)
-      if (params.startNodeId === params.endNodeId) {
-        return {
-          pathFound: true,
-          path: [{ id: params.startNodeId, _label: 'Component' }],
-          length: 1,
-        };
+      const query = `
+        MATCH (start {graph_unique_id: $startGraphId}), (end {graph_unique_id: $endGraphId})
+        MATCH p = (start)-[* SHORTEST 1..${maxDepthClause}]-(end)
+        RETURN p LIMIT 1
+      `;
+      const res = await kuzuClient.executeQuery(query, { startGraphId, endGraphId });
+
+      if (!res || res.length === 0) {
+        return { pathFound: false, path: [], length: 0 };
       }
 
-      // Handle normal case (different start and end nodes)
+      const pathObj = res[0].p;
+      const nodesArr = (pathObj._nodes || []).map((n: any) => {
+        const props = n._properties || n;
+        return { id: props.id?.toString() || '', _label: (n._labels || [])[0] || 'Unknown' };
+      });
+
       return {
         pathFound: true,
-        path: [
-          { id: params.startNodeId, _label: 'Component' },
-          { id: params.endNodeId, _label: 'Component' },
-        ],
-        length: 2,
+        path: nodesArr,
+        length: nodesArr.length,
       };
     },
   );
