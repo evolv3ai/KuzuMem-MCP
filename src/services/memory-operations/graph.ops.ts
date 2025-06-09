@@ -650,12 +650,13 @@ export async function shortestPathOp(
           : 10;
 
       // Use a parameterised query to avoid potential Cypher injection issues.
+      // Note: maxDepth must be string-interpolated as Cypher doesn't support parameterizing hop counts
       const query = `
         MATCH (start {graph_unique_id: $startGraphId}), (end {graph_unique_id: $endGraphId})
-        MATCH p = (start)-[* SHORTEST 1..$maxDepth]-(end)
+        MATCH p = (start)-[* SHORTEST 1..${maxDepth}]-(end)
         RETURN p LIMIT 1
       `;
-      const res = await kuzuClient.executeQuery(query, { startGraphId, endGraphId, maxDepth });
+      const res = await kuzuClient.executeQuery(query, { startGraphId, endGraphId });
 
       if (!res || res.length === 0) {
         return { pathFound: false, path: [], length: 0 };
