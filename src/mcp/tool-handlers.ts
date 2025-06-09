@@ -42,7 +42,7 @@ export type SdkToolHandler = (
   params: any,
   context: EnrichedRequestHandlerExtra, // CHANGED
   memoryService: MemoryService, // Explicitly passing MemoryService for now
-) => Promise<any>;
+) => Promise<unknown>;
 
 /**
  * Ensures that the clientProjectRoot is available in the session context.
@@ -83,7 +83,11 @@ function ensureValidSessionContext(
   }
 
   // Check that the repository and branch match what's in the session
-  if (params.repository && params.branch && (sessionRepository !== params.repository || sessionBranch !== params.branch)) {
+  if (
+    params.repository &&
+    params.branch &&
+    (sessionRepository !== params.repository || sessionBranch !== params.branch)
+  ) {
     const errorMsg = `Session/Tool mismatch for tool '${toolName}': Current session is for '${sessionRepository}:${sessionBranch}', but tool is targeting '${params.repository}:${params.branch}'. Initialize a new session for the target repository/branch if needed.`;
     logger.error(errorMsg);
     throw new Error(errorMsg);
@@ -101,7 +105,7 @@ function ensureValidSessionContext(
     logger.error(errorMsg);
     throw new Error(errorMsg);
   }
-  
+
   return clientProjectRoot;
 }
 
@@ -114,14 +118,14 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
       params: params,
       sessionClientProjectRoot: context.session.clientProjectRoot,
     });
-    
+
     // Send initial progress notification
     await context.sendProgress({
       status: 'initializing',
       message: 'Starting memory bank initialization...',
       percent: 5,
     });
-    
+
     console.error('[DEBUG-HANDLER] About to validate params with schema...');
     const validatedParams = InitMemoryBankInputSchema.parse(params);
     console.error('[DEBUG-HANDLER] Params validated:', validatedParams);
@@ -151,26 +155,26 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
         message: `Initializing Kuzu database client...`,
         percent: 40,
       });
-      
+
       result = await memoryService.initMemoryBank(
         context,
         validatedParams.clientProjectRoot,
         validatedParams.repository,
         validatedParams.branch,
       );
-      
+
       // Send progress after database initialization is complete
       await context.sendProgress({
         status: 'in_progress',
         message: `Database client initialized successfully`,
         percent: 80,
       });
-      
+
       console.error('[DEBUG-HANDLER] memoryService.initMemoryBank returned:', result);
     } catch (err: any) {
       const error = err as Error;
       console.error('[DEBUG-HANDLER] memoryService.initMemoryBank threw an exception:', error);
-      
+
       // Send error progress notification
       try {
         await context.sendProgress({
@@ -186,15 +190,15 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
       } catch (progressError) {
         context.logger.error(`Failed to send error progress: ${String(progressError)}`);
       }
-      
+
       throw error;
     }
-    
+
     // MemoryService.initMemoryBank now returns an object matching InitMemoryBankOutputSchema
     if (!result.success) {
       console.error('[DEBUG-HANDLER] MemoryService failed with result:', result);
       context.logger.error('init-memory-bank call to MemoryService failed.', { result });
-      
+
       // Send error progress notification for unsuccessful result
       try {
         await context.sendProgress({
@@ -206,12 +210,12 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
       } catch (progressError) {
         context.logger.error(`Failed to send error progress: ${String(progressError)}`);
       }
-      
+
       throw new Error(
         `[DEBUG-HANDLER] MemoryService failed: ${result.message || 'init-memory-bank failed in MemoryService'}`,
       );
     }
-    
+
     // Send final success progress notification
     await context.sendProgress({
       status: 'complete',
@@ -219,7 +223,7 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
       percent: 100,
       isFinal: true,
     });
-    
+
     console.error('[DEBUG-HANDLER] init-memory-bank SUCCESS! Returning result:', result);
     return result; // This matches InitMemoryBankOutputSchema
   },
@@ -1391,11 +1395,7 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   count_nodes_by_label: async (params, context, memoryService) => {
     const validatedParams = CountNodesByLabelInputSchema.parse(params);
-    const clientProjectRoot = ensureValidSessionContext(
-      validatedParams,
-      context,
-      'count_nodes_by_label',
-    );
+    const clientProjectRoot = validatedParams.clientProjectRoot;
     context.logger.info(
       `Executing count_nodes_by_label for ${validatedParams.repository}:${validatedParams.branch}`,
       { label: validatedParams.label, clientProjectRoot },
@@ -1425,11 +1425,7 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   list_nodes_by_label: async (params, context, memoryService) => {
     const validatedParams = ListNodesByLabelInputSchema.parse(params);
-    const clientProjectRoot = ensureValidSessionContext(
-      validatedParams,
-      context,
-      'list_nodes_by_label',
-    );
+    const clientProjectRoot = validatedParams.clientProjectRoot;
     context.logger.info(
       `Executing list_nodes_by_label for ${validatedParams.repository}:${validatedParams.branch}`,
       { ...validatedParams, clientProjectRoot },
@@ -1461,11 +1457,7 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   get_node_properties: async (params, context, memoryService) => {
     const validatedParams = GetNodePropertiesInputSchema.parse(params);
-    const clientProjectRoot = ensureValidSessionContext(
-      validatedParams,
-      context,
-      'get_node_properties',
-    );
+    const clientProjectRoot = validatedParams.clientProjectRoot;
     context.logger.info(
       `Executing get_node_properties for ${validatedParams.repository}:${validatedParams.branch}`,
       { label: validatedParams.label, clientProjectRoot },
@@ -1490,11 +1482,7 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   list_all_indexes: async (params, context, memoryService) => {
     const validatedParams = ListAllIndexesInputSchema.parse(params);
-    const clientProjectRoot = ensureValidSessionContext(
-      validatedParams,
-      context,
-      'list_all_indexes',
-    );
+    const clientProjectRoot = validatedParams.clientProjectRoot;
     context.logger.info(
       `Executing list_all_indexes for ${validatedParams.repository}:${validatedParams.branch}`,
       { label: validatedParams.label, clientProjectRoot },
@@ -1519,7 +1507,7 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   add_file: async (params, context, memoryService) => {
     const validatedParams = AddFileInputSchema.parse(params);
-    const clientProjectRoot = ensureValidSessionContext(validatedParams, context, 'add_file');
+    const clientProjectRoot = validatedParams.clientProjectRoot;
     context.logger.info(
       `Executing add_file for ${validatedParams.repository}:${validatedParams.branch}`,
       { path: validatedParams.path, clientProjectRoot },
@@ -1547,11 +1535,7 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   associate_file_with_component: async (params, context, memoryService) => {
     const validatedParams = AssociateFileWithComponentInputSchema.parse(params);
-    const clientProjectRoot = ensureValidSessionContext(
-      validatedParams,
-      context,
-      'associate_file_with_component',
-    );
+    const clientProjectRoot = validatedParams.clientProjectRoot;
     context.logger.info(
       `Executing associate_file_with_component for ${validatedParams.repository}:${validatedParams.branch}`,
       { componentId: validatedParams.componentId, fileId: validatedParams.fileId },
@@ -1580,7 +1564,7 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   add_tag: async (params, context, memoryService) => {
     const validatedParams = AddTagInputSchema.parse(params);
-    const clientProjectRoot = ensureValidSessionContext(validatedParams, context, 'add_tag');
+    const clientProjectRoot = validatedParams.clientProjectRoot;
     context.logger.info(
       `Executing add_tag for ${validatedParams.repository}:${validatedParams.branch}`,
       { tagName: validatedParams.name },
@@ -1608,7 +1592,7 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   tag_item: async (params, context, memoryService) => {
     const validatedParams = TagItemInputSchema.parse(params);
-    const clientProjectRoot = ensureValidSessionContext(validatedParams, context, 'tag_item');
+    const clientProjectRoot = validatedParams.clientProjectRoot;
     context.logger.info(
       `Executing tag_item for ${validatedParams.repository}:${validatedParams.branch}`,
       {
@@ -1641,11 +1625,7 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   find_items_by_tag: async (params, context, memoryService) => {
     const validatedParams = FindItemsByTagInputSchema.parse(params);
-    const clientProjectRoot = ensureValidSessionContext(
-      validatedParams,
-      context,
-      'find_items_by_tag',
-    );
+    const clientProjectRoot = validatedParams.clientProjectRoot;
     context.logger.info(
       `Executing find_items_by_tag for ${validatedParams.repository}:${validatedParams.branch}`,
       { tagId: validatedParams.tagId, itemTypeFilter: validatedParams.itemTypeFilter },
@@ -1671,11 +1651,7 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   list_all_labels: async (params, context, memoryService) => {
     const validatedParams = ListAllLabelsInputSchema.parse(params);
-    const clientProjectRoot = ensureValidSessionContext(
-      validatedParams,
-      context,
-      'list_all_labels',
-    );
+    const clientProjectRoot = validatedParams.clientProjectRoot;
     context.logger.info(
       `Executing list_all_labels for ${validatedParams.repository}:${validatedParams.branch}`,
       { clientProjectRoot },

@@ -1,6 +1,6 @@
 import { MemoryService } from '../../../services/memory.service';
-import { ProgressHandler } from '../progress-handler';
 import { EnrichedRequestHandlerExtra } from '../../types/sdk-custom';
+import { ProgressHandler } from '../progress-handler';
 
 /**
  * Creates a mock context for service calls
@@ -74,7 +74,11 @@ export class PageRankOperation {
         params.maxIterations = maxIterations;
       }
 
-      const pageRankOutput = await memoryService.pageRank(createMockContext(), clientProjectRoot, params);
+      const pageRankOutput = await memoryService.pageRank(
+        createMockContext(),
+        clientProjectRoot,
+        params,
+      );
 
       const ranks = pageRankOutput?.results?.ranks || [];
       const resultStatus = pageRankOutput?.status || 'error';

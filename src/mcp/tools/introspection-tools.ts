@@ -10,6 +10,11 @@ export const countNodesByLabelTool: McpTool = {
   parameters: {
     type: 'object',
     properties: {
+      clientProjectRoot: {
+        type: 'string',
+        description:
+          "The absolute file system path to the root of the client's project where the memory bank will be stored.",
+      },
       repository: {
         type: 'string',
         description: 'Repository name',
@@ -23,7 +28,7 @@ export const countNodesByLabelTool: McpTool = {
         description: 'Node label to count (e.g., Component, Decision, Rule, Context)',
       },
     },
-    required: ['repository', 'branch', 'label'],
+    required: ['clientProjectRoot', 'repository', 'branch', 'label'],
   },
   annotations: {
     title: 'Count Nodes by Label',
@@ -57,6 +62,11 @@ export const listNodesByLabelTool: McpTool = {
   parameters: {
     type: 'object',
     properties: {
+      clientProjectRoot: {
+        type: 'string',
+        description:
+          "The absolute file system path to the root of the client's project where the memory bank will be stored.",
+      },
       repository: {
         type: 'string',
         description: 'Repository name',
@@ -78,7 +88,7 @@ export const listNodesByLabelTool: McpTool = {
         description: 'Number of nodes to skip for pagination (optional)',
       },
     },
-    required: ['repository', 'branch', 'label'],
+    required: ['clientProjectRoot', 'repository', 'branch', 'label'],
   },
   annotations: {
     title: 'List Nodes by Label',
@@ -124,6 +134,11 @@ export const getNodePropertiesTool: McpTool = {
   parameters: {
     type: 'object',
     properties: {
+      clientProjectRoot: {
+        type: 'string',
+        description:
+          "The absolute file system path to the root of the client's project where the memory bank will be stored.",
+      },
       repository: {
         type: 'string',
         description: 'Repository name',
@@ -137,7 +152,7 @@ export const getNodePropertiesTool: McpTool = {
         description: 'Node label to get properties for (e.g., Component, Decision, Rule)',
       },
     },
-    required: ['repository', 'branch', 'label'],
+    required: ['clientProjectRoot', 'repository', 'branch', 'label'],
   },
   annotations: {
     title: 'Get Node Properties',
@@ -171,6 +186,11 @@ export const listAllIndexesTool: McpTool = {
   parameters: {
     type: 'object',
     properties: {
+      clientProjectRoot: {
+        type: 'string',
+        description:
+          "The absolute file system path to the root of the client's project where the memory bank will be stored.",
+      },
       repository: {
         type: 'string',
         description: 'Repository name',
@@ -184,7 +204,7 @@ export const listAllIndexesTool: McpTool = {
         description: 'Optional: filter indexes by node label',
       },
     },
-    required: ['repository', 'branch'],
+    required: ['clientProjectRoot', 'repository', 'branch'],
   },
   annotations: {
     title: 'List All Indexes',
@@ -214,6 +234,11 @@ export const listAllLabelsTool: McpTool = {
   parameters: {
     type: 'object',
     properties: {
+      clientProjectRoot: {
+        type: 'string',
+        description:
+          "The absolute file system path to the root of the client's project where the memory bank will be stored.",
+      },
       repository: {
         type: 'string',
         description: 'Repository name',
@@ -223,7 +248,7 @@ export const listAllLabelsTool: McpTool = {
         description: "Repository branch (defaults to 'main')",
       },
     },
-    required: ['repository', 'branch'],
+    required: ['clientProjectRoot', 'repository', 'branch'],
   },
   annotations: {
     title: 'List All Labels',
