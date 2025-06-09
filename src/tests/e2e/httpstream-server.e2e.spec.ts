@@ -600,7 +600,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     expect(response.body.result).toBeDefined();
     expect(response.body.result.content).toBeDefined();
     expect(response.body.result.content[0]).toBeDefined();
-    
+
     // Parse the JSON result from the MCP SDK format
     const toolResult = JSON.parse(response.body.result.content[0].text);
     expect(toolResult.success).toBe(true);
@@ -700,7 +700,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
           expect(finalResponseEvent.data.result).toBeDefined();
           expect(finalResponseEvent.data.result.content).toBeDefined();
           expect(finalResponseEvent.data.result.content[0]).toBeDefined();
-          
+
           // Parse the JSON result from the MCP SDK format
           const finalResult = JSON.parse(finalResponseEvent.data.result.content[0].text);
           expect(finalResult.status).toBe('complete');

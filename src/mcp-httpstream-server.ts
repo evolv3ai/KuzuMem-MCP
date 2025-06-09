@@ -1,7 +1,7 @@
 /**
  * MCP HTTP Streaming Server
  * Implements the Model Context Protocol using the official TypeScript SDK
- * Based on the TypeScript SDK: https://github.com/modelcontextprotocol/typescript-sdk
+ * Based on the official TypeScript SDK: https://github.com/modelcontextprotocol/typescript-sdk
  */
 
 import express, { Request, Response } from 'express';
@@ -23,52 +23,18 @@ import { toolHandlers } from './mcp/tool-handlers';
 import { ToolExecutionService } from './mcp/services/tool-execution.service';
 
 // Load environment variables
-dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
-const HTTP_STREAM_PROJECT_ROOT = process.env.HTTP_STREAM_PROJECT_ROOT;
-if (!HTTP_STREAM_PROJECT_ROOT) {
-  console.warn(
-    'WARNING: HTTP_STREAM_PROJECT_ROOT is not set. The server will rely entirely on client-provided project roots for memory operations.',
-  );
-}
+// Debug level
+const debugLevel = parseInt(process.env.DEBUG_LEVEL || '0', 10);
 
-// The server's own root, mainly for logging or if it ever had server-specific static assets.
-const absoluteHttpStreamServerOperationalRoot = HTTP_STREAM_PROJECT_ROOT
-  ? path.resolve(HTTP_STREAM_PROJECT_ROOT)
-  : process.cwd();
-console.error(
-  `MCP HTTP Stream server operational root: ${absoluteHttpStreamServerOperationalRoot}`,
-);
-
-// Debug levels
-const DEBUG_LEVEL = process.env.DEBUG ? parseInt(process.env.DEBUG, 10) || 1 : 0;
-
-function debugLog(level: number, message: string, data?: any): void {
-  if (DEBUG_LEVEL >= level) {
-    if (data) {
-      console.error(
-        `[MCP-HTTP-DEBUG${level}] ${message}`,
-        typeof data === 'string' ? data : JSON.stringify(data, null, 2),
-      );
-    } else {
-      console.error(`[MCP-HTTP-DEBUG${level}] ${message}`);
-    }
+function debugLog(level: number, message: string): void {
+  if (debugLevel >= level) {
+    console.error(`[DEBUG-${level}] ${new Date().toISOString()} ${message}`);
   }
 }
 
-// Create Express app
-export const app = express();
-const port = process.env.HTTP_STREAM_PORT || 3001;
-const host = process.env.HOST || 'localhost';
-
-// Configure middleware
-app.use(express.json({ limit: '5mb' }));
-app.use(cors());
-
-// Map to store transports by session ID
-const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
-
-// Create an MCP server
+// Create an MCP server factory function
 function createMcpServer(): Server {
   const server = new Server(
     {
@@ -100,30 +66,23 @@ function createMcpServer(): Server {
   // Set up the call tool handler
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name: toolName, arguments: toolArgs = {} } = request.params;
-    const requestId = 'id' in request ? String(request.id) : 'unknown';
+    const requestId = (request as any).id?.toString() || randomUUID();
 
-    debugLog(1, `Handling tools/call for tool: ${toolName}`);
+    debugLog(1, `Executing tool: ${toolName} with args: ${JSON.stringify(toolArgs)}`);
 
-    const toolDefinition = MEMORY_BANK_MCP_TOOLS.find((t) => t.name === toolName);
-    if (!toolDefinition) {
-      throw new Error(`Tool '${toolName}' not found.`);
-    }
-
-    // For init-memory-bank, clientProjectRoot comes from toolArgs.
-    // For others, we use the provided clientProjectRoot from tool arguments
+    // Extract clientProjectRoot from tool arguments
     const effectiveClientProjectRoot = toolArgs.clientProjectRoot as string;
 
     if (!effectiveClientProjectRoot) {
       throw new Error(
         toolName === 'init-memory-bank'
-          ? 'Invalid params: clientProjectRoot is required in tool arguments for init-memory-bank'
+          ? `Tool '${toolName}' requires clientProjectRoot argument.`
           : `Server error: clientProjectRoot context not established for tool '${toolName}'. Provide clientProjectRoot in tool arguments.`,
       );
     }
 
     try {
-      // For the official MCP SDK HTTP transport, we don't need the custom progress handler
-      // The official SDK handles progress internally
+      // For HTTP transport, we execute tools without progress handlers as they don't support streaming
       const toolExecutionService = await ToolExecutionService.getInstance();
 
       const toolResult = await toolExecutionService.executeTool(
@@ -145,28 +104,40 @@ function createMcpServer(): Server {
           content: [{ type: 'text', text: 'Tool executed successfully' }],
         };
       }
-    } catch (err: any) {
-      debugLog(
-        0,
-        `FATAL ERROR (tools/call in http-server): ${err.message || String(err)}`,
-        err.stack,
-      );
-      throw new Error(`Server error: ${err.message || String(err)}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      debugLog(1, `Tool execution error: ${errorMessage}`);
+      return {
+        content: [{ type: 'text', text: `Error: ${errorMessage}` }],
+        isError: true,
+      };
     }
   });
 
-  // Set up the list resources handler
+  // Set up other request handlers as needed
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
     return { resources: [] };
   });
 
-  // Set up the list prompts handler
   server.setRequestHandler(ListPromptsRequestSchema, async () => {
     return { prompts: [] };
   });
 
   return server;
 }
+
+// Create Express app
+const app = express();
+app.use(express.json());
+app.use(
+  cors({
+    origin: ['http://localhost:3000', 'http://localhost:3001'],
+    credentials: true,
+  }),
+);
+
+// Map to store transports by session ID
+const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
 // Handle POST requests for client-to-server communication
 app.post('/mcp', async (req: Request, res: Response) => {
@@ -184,17 +155,20 @@ app.post('/mcp', async (req: Request, res: Response) => {
       onsessioninitialized: (sessionId) => {
         // Store the transport by session ID
         transports[sessionId] = transport;
+        debugLog(1, `New MCP session initialized: ${sessionId}`);
       },
     });
 
     // Clean up transport when closed
     transport.onclose = () => {
       if (transport.sessionId) {
+        debugLog(1, `Cleaning up MCP session: ${transport.sessionId}`);
         delete transports[transport.sessionId];
       }
     };
 
     const server = createMcpServer();
+
     // Connect to the MCP server
     await server.connect(transport);
   } else {
@@ -233,62 +207,24 @@ app.get('/mcp', handleSessionRequest);
 app.delete('/mcp', handleSessionRequest);
 
 // Legacy endpoints for backward compatibility
-app.post('/initialize', (req: Request, res: Response) => {
-  const requestedVersion = req.body?.protocolVersion || '0.1';
-  const requestId = req.body?.id || null;
-
-  debugLog(1, `Legacy initialize request with protocolVersion: ${requestedVersion}`);
-
-  res.json({
-    jsonrpc: '2.0',
-    id: requestId,
-    result: {
-      protocolVersion: requestedVersion,
-      capabilities: {
-        tools: { list: true, call: true },
-      },
-      serverInfo: {
-        name: 'KuzuMem-MCP-HTTPStream',
-        version: '3.0.0',
-      },
-    },
-  });
-});
-
-app.get('/tools/list', (req, res) => {
-  debugLog(1, `Legacy tools/list request`);
-
+app.get('/tools/list', async (req: Request, res: Response) => {
   const tools = MEMORY_BANK_MCP_TOOLS.map((tool) => ({
     name: tool.name,
     description: tool.description,
-    inputSchema: tool.parameters,
-    outputSchema: tool.returns,
-    annotations: tool.annotations,
+    inputSchema: tool.parameters || { type: 'object', properties: {}, required: [] },
   }));
 
   res.json({ tools });
 });
 
+// Health check endpoint
+app.get('/health', (req: Request, res: Response) => {
+  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
 // Start the server
-export async function startServer(): Promise<void> {
-  app.listen(port, () => {
-    console.log(`MCP HTTP Streaming Server running at http://${host}:${port}`);
-  });
-}
-
-// Graceful shutdown
-function gracefulShutdown(signal: string): void {
-  console.log(`Received ${signal}. Gracefully shutting down...`);
-  process.exit(0);
-}
-
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-
-// Start the server if this file is run directly
-if (require.main === module) {
-  startServer().catch((error) => {
-    console.error('Failed to start MCP HTTP streaming server:', error);
-    process.exit(1);
-  });
-}
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.error(`MCP HTTP Streaming Server running at http://localhost:${PORT}`);
+  debugLog(1, `Server started with debug level: ${debugLevel}`);
+});
