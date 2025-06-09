@@ -67,10 +67,10 @@ export class MemoryService {
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
   ): Promise<KuzuDBClient> {
-    process.stdout.write(
-      `[STDOUT-DEBUG] MemoryService.getKuzuClient ENTERED with CPR: ${clientProjectRoot}\n`,
-    );
-    const logger = mcpContext.logger || console; // Fallback for safety, though context should always have logger
+    const logger = mcpContext.logger || console;
+    if (typeof (logger as any).debug === 'function') {
+      (logger as any).debug(`[MemoryService.getKuzuClient] ENTERED with CPR: ${clientProjectRoot}`);
+    }
 
     // Validate clientProjectRoot - this is critical for correct operation
     if (!clientProjectRoot) {
