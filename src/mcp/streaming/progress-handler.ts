@@ -94,27 +94,6 @@ export class ProgressHandler {
     );
     this.transport.sendNotification(responsePayload, 'mcpResponse');
   }
-
-  // Deprecate or remove sendProgressNotification and sendResponse if functionality is covered by progress() and sendFinalResponse()
-  // For now, keeping them but they should ideally be consolidated.
-
-  /** @deprecated Use progress() with an object that includes an isFinal property. */
-  sendProgressNotification(content: any, isFinal: boolean): void {
-    this.debugLog(2, 'ProgressHandler: sendProgressNotification is deprecated. Use progress().', {
-      toolCallId: this.toolCallId,
-      isFinal,
-    });
-    this.progress({ ...content, isFinal });
-  }
-
-  /** @deprecated Use sendFinalResponse(). */
-  sendResponse(content: any, isError: boolean): void {
-    this.debugLog(2, 'ProgressHandler: sendResponse is deprecated. Use sendFinalResponse().', {
-      toolCallId: this.toolCallId,
-      isError,
-    });
-    this.sendFinalResponse(content, isError);
-  }
 }
 
 /**

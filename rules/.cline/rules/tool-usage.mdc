@@ -1,0 +1,66 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Cursor MCP Tool Usage Rule
+
+## 1. Tool System Overview
+- MCP tools are the primary interface for interacting with the project knowledge graph (KuzuMem-MCP).
+- Tools are defined in [`src/mcp/tools/`](mdc:src/mcp/tools) and catalogued in [`index.ts`](mdc:src/mcp/tools/index.ts).
+- Each tool has a canonical name, parameter schema, and return type. Use canonical names exactly as defined.
+
+## 2. When to Use a Tool
+- Use a tool whenever you need to **read from** or **write to** the project memory graph (context, metadata, components, decisions, rules, relationships, or graph analytics).
+- Prefer tool calls over direct DB or file access—tools enforce branch isolation, audit, and response formatting.
+- For all graph traversal, context/history, or analytics (e.g., dependencies, PageRank, community detection), use the corresponding tool.
+- For memory bank setup or metadata, use the memory/metadata tools.
+
+## 3. Tool Invocation Patterns
+- Always include `repository` and `branch` in tool arguments (branch defaults to 'main' if not specified).
+- For creation/updating, use the appropriate tool (e.g., `add-component`, `update-context`).
+- For queries, use the corresponding get/fetch tool (e.g., `get-context`, `get-component-dependencies`).
+- For graph algorithms, ensure you provide all required projection parameters (see tool docs).
+- Never call tools with incomplete or ambiguous arguments—validate input first.
+
+## 4. Progressive/Streaming Tools
+- Some tools support progressive results via the `tools/progress` channel.
+  - Use these for long-running graph operations (e.g., PageRank, traversal, community detection).
+  - Inform the user if an operation may take time and stream progress if supported by the transport.
+  - Handle `isFinal: true` notifications as the completion signal.
+- Always present the final result in a user-friendly summary, and explain intermediate results if asked.
+
+## 5. Tool Selection Table
+| Use Case                        | Tool Name(s)                        |
+|----------------------------------|-------------------------------------|
+| Initialise memory bank           | `init-memory-bank`                  |
+| Get/update repo metadata         | `get-metadata`, `update-metadata`   |
+| Add/query context                | `update-context`, `get-context`     |
+| Add/query components/decisions   | `add-component`, `add-decision`     |
+| Add/query rules                  | `add-rule`                          |
+| Get dependencies/dependents      | `get-component-dependencies`, `get-component-dependents` |
+| Get contextual history           | `get-item-contextual-history`       |
+| Get governing items              | `get-governing-items-for-component` |
+| Get related items                | `get-related-items`                 |
+| Run graph algorithms             | `pagerank`, `louvain-community-detection`, `k-core-decomposition`, `strongly-connected-components`, `weakly-connected-components`, `shortest-path` |
+
+## 6. Best Practices
+- Validate all arguments before tool invocation.
+- Never leak secrets or personal data in tool calls.
+- Use the tool's return schema to structure your response.
+- For any operation not covered by a tool, escalate or refuse.
+- Log every write operation for auditability.
+
+## 7. Example Tool Call
+```json
+{
+  "tool": {
+    "name": "get-context",
+    "arguments": {
+      "repository": "my-repo",
+      "branch": "feature-x",
+      "latest": true
+    }
+  }
+}
+```

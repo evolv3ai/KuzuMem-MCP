@@ -1,285 +1,230 @@
 /**
  * MCP HTTP Streaming Server
- * Official MCP TypeScript SDK implementation using McpServer and StreamableHTTPServerTransport
- * Based on: https://github.com/modelcontextprotocol/typescript-sdk
+ * Implements the Model Context Protocol using the official TypeScript SDK
+ * Based on the official TypeScript SDK: https://github.com/modelcontextprotocol/typescript-sdk
  */
 
-import { createServer, type Server } from 'node:http';
-import { AddressInfo } from 'node:net';
+import express, { Request, Response } from 'express';
+import cors from 'cors';
 import { randomUUID } from 'node:crypto';
 import dotenv from 'dotenv';
-import { z } from 'zod';
-
-// Official MCP SDK imports
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import path from 'path';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-
-// Our tool handlers and services
-import { toolHandlers as sdkToolHandlers } from './mcp/tool-handlers';
-import { MemoryService } from './services/memory.service';
+import {
+  ListToolsRequestSchema,
+  CallToolRequestSchema,
+  ListResourcesRequestSchema,
+  ListPromptsRequestSchema,
+  isInitializeRequest,
+} from '@modelcontextprotocol/sdk/types.js';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
+import { toolHandlers } from './mcp/tool-handlers';
+import { ToolExecutionService } from './mcp/services/tool-execution.service';
 
 // Load environment variables
-dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
-// Server configuration
-const port = parseInt(process.env.HTTP_STREAM_PORT || '3001', 10);
-const host = process.env.HOST || 'localhost';
+// Debug level
+const debugLevel = parseInt(process.env.DEBUG_LEVEL || '0', 10);
 
-// Debug logging
-const DEBUG_LEVEL = parseInt(process.env.DEBUG || '0', 10);
-
-function debugLog(level: number, message: string, data?: any): void {
-  if (DEBUG_LEVEL >= level) {
-    const timestamp = new Date().toISOString();
-    const logEntry = {
-      timestamp,
-      level: level === 0 ? 'ERROR' : level === 1 ? 'WARN' : level === 2 ? 'INFO' : 'DEBUG',
-      message,
-      component: 'mcp-httpstream-server',
-      data: DEBUG_LEVEL >= 3 ? data : undefined,
-    };
-    console.log(JSON.stringify(logEntry));
+function debugLog(level: number, message: string): void {
+  if (debugLevel >= level) {
+    console.error(`[DEBUG-${level}] ${new Date().toISOString()} ${message}`);
   }
 }
 
-// Map to store clientProjectRoot for each repository and branch
-const repositoryRootMap = new Map<string, string>();
+// Create an MCP server factory function
+function createMcpServer(): Server {
+  const server = new Server(
+    {
+      name: 'KuzuMem-MCP-HTTPStream',
+      version: '3.0.0',
+    },
+    {
+      capabilities: {
+        tools: {},
+        resources: {},
+        prompts: {},
+      },
+    },
+  );
 
-// Create the official MCP server
-const mcpServer = new McpServer(
-  { name: 'KuzuMem-MCP-HTTPStream', version: '1.0.0' },
-  { capabilities: { tools: { list: true, call: true } } },
+  // Set up the list tools handler
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    debugLog(1, `Returning tools/list with ${MEMORY_BANK_MCP_TOOLS.length} tools`);
+
+    const tools = MEMORY_BANK_MCP_TOOLS.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.parameters || { type: 'object', properties: {}, required: [] },
+    }));
+
+    return { tools };
+  });
+
+  // Set up the call tool handler
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name: toolName, arguments: toolArgs = {} } = request.params;
+    const requestId = (request as any).id?.toString() || randomUUID();
+
+    debugLog(1, `Executing tool: ${toolName} with args: ${JSON.stringify(toolArgs)}`);
+
+    // Extract clientProjectRoot from tool arguments
+    const effectiveClientProjectRoot = toolArgs.clientProjectRoot as string;
+
+    if (!effectiveClientProjectRoot) {
+      throw new Error(
+        toolName === 'init-memory-bank'
+          ? `Tool '${toolName}' requires clientProjectRoot argument.`
+          : `Server error: clientProjectRoot context not established for tool '${toolName}'. Provide clientProjectRoot in tool arguments.`,
+      );
+    }
+
+    try {
+      // For HTTP transport, we execute tools without progress handlers as they don't support streaming
+      const toolExecutionService = await ToolExecutionService.getInstance();
+
+      const toolResult = await toolExecutionService.executeTool(
+        toolName,
+        toolArgs,
+        toolHandlers,
+        effectiveClientProjectRoot,
+        undefined, // No progress handler for HTTP transport
+        debugLog,
+      );
+
+      if (toolResult !== null) {
+        return {
+          content: [{ type: 'text', text: JSON.stringify(toolResult, null, 2) }],
+          isError: !!toolResult?.error,
+        };
+      } else {
+        return {
+          content: [{ type: 'text', text: 'Tool executed successfully' }],
+        };
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      debugLog(1, `Tool execution error: ${errorMessage}`);
+      return {
+        content: [{ type: 'text', text: `Error: ${errorMessage}` }],
+        isError: true,
+      };
+    }
+  });
+
+  // Set up other request handlers as needed
+  server.setRequestHandler(ListResourcesRequestSchema, async () => {
+    return { resources: [] };
+  });
+
+  server.setRequestHandler(ListPromptsRequestSchema, async () => {
+    return { prompts: [] };
+  });
+
+  return server;
+}
+
+// Create Express app
+const app = express();
+app.use(express.json());
+app.use(
+  cors({
+    origin: ['http://localhost:3000', 'http://localhost:3001'],
+    credentials: true,
+  }),
 );
 
-// Create tool schema helper
-function createZodSchema(tool: any) {
-  const shape: Record<string, z.ZodTypeAny> = {};
+// Map to store transports by session ID
+const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
-  if (tool.parameters && tool.parameters.properties) {
-    for (const [propName, propDef] of Object.entries(tool.parameters.properties)) {
-      const prop = propDef as any;
-      let zodType: z.ZodTypeAny = z.string(); // Default to string
+// Handle POST requests for client-to-server communication
+app.post('/mcp', async (req: Request, res: Response) => {
+  // Check for existing session ID
+  const sessionId = req.headers['mcp-session-id'] as string | undefined;
+  let transport: StreamableHTTPServerTransport;
 
-      if (prop.type === 'string') {
-        zodType = z.string();
-      } else if (prop.type === 'number') {
-        zodType = z.number();
-      } else if (prop.type === 'boolean') {
-        zodType = z.boolean();
-      } else if (prop.type === 'array') {
-        zodType = z.array(z.string()); // Assume string array
-      } else if (prop.type === 'object') {
-        zodType = z.object({}).passthrough(); // Allow any object
-      }
-
-      if (prop.description) {
-        zodType = zodType.describe(prop.description);
-      }
-
-      // Handle optional fields
-      if (!tool.parameters.required?.includes(propName)) {
-        zodType = zodType.optional();
-      }
-
-      shape[propName] = zodType;
-    }
-  }
-
-  return shape;
-}
-
-// Register all our tools with the MCP server
-function registerTools() {
-  debugLog(2, 'Registering MCP tools...');
-
-  // Add the initialize method handler (this is handled automatically by McpServer)
-  // Just logging for debugging
-  debugLog(2, 'MCP server will handle initialization automatically');
-
-  for (const tool of MEMORY_BANK_MCP_TOOLS) {
-    debugLog(3, `Registering tool: ${tool.name}`);
-
-    const schema = createZodSchema(tool);
-
-    mcpServer.tool(
-      tool.name,
-      tool.description,
-      schema as any, // Type assertion to bypass complex inference
-      async (args, context): Promise<CallToolResult> => {
-        debugLog(3, `Executing tool: ${tool.name}`, args);
-
-        // Handle clientProjectRoot storage for init-memory-bank
-        if (tool.name === 'init-memory-bank') {
-          const repoBranchKey = `${args.repository}:${args.branch}`;
-          repositoryRootMap.set(repoBranchKey, args.clientProjectRoot);
-          debugLog(3, `Stored clientProjectRoot for ${repoBranchKey}: ${args.clientProjectRoot}`);
-        }
-
-        // Get clientProjectRoot from stored map or args
-        let effectiveClientProjectRoot = args.clientProjectRoot;
-        if (!effectiveClientProjectRoot && args.repository && args.branch) {
-          const repoBranchKey = `${args.repository}:${args.branch}`;
-          effectiveClientProjectRoot = repositoryRootMap.get(repoBranchKey);
-        }
-
-        if (!effectiveClientProjectRoot) {
-          throw new Error(
-            `ClientProjectRoot not established for tool '${tool.name}'. Initialize memory bank first.`,
-          );
-        }
-
-        // Get the SDK handler
-        const handler = sdkToolHandlers[tool.name];
-        if (!handler) {
-          throw new Error(`Tool handler not found: ${tool.name}`);
-        }
-
-        // Create enriched context
-        const memoryService = await MemoryService.getInstance();
-        const enrichedContext = {
-          ...context,
-          logger: {
-            debug: (msg: string, data?: any) => debugLog(3, `[${tool.name}] ${msg}`, data),
-            info: (msg: string, data?: any) => debugLog(2, `[${tool.name}] ${msg}`, data),
-            warn: (msg: string, data?: any) => debugLog(1, `[${tool.name}] ${msg}`, data),
-            error: (msg: string, data?: any) => debugLog(0, `[${tool.name}] ${msg}`, data),
-          },
-          session: {
-            clientProjectRoot: effectiveClientProjectRoot,
-            repository: args.repository,
-            branch: args.branch,
-          },
-          sendProgress: async (progressData: any) => {
-            // Send progress notifications through MCP
-            await context.sendNotification({
-              method: 'notifications/progress',
-              params: {
-                progressToken: context.requestId || randomUUID(),
-                ...progressData,
-              },
-            });
-          },
-          memoryService,
-        };
-
-        // Add clientProjectRoot to args
-        const enhancedArgs = { ...args, clientProjectRoot: effectiveClientProjectRoot };
-
-        const result = await handler(enhancedArgs, enrichedContext, memoryService);
-        debugLog(3, `Tool ${tool.name} completed`, { success: !!result });
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(result),
-            },
-          ],
-        };
+  if (sessionId && transports[sessionId]) {
+    // Reuse existing transport
+    transport = transports[sessionId];
+  } else if (!sessionId && isInitializeRequest(req.body)) {
+    // New initialization request
+    transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+      onsessioninitialized: (sessionId) => {
+        // Store the transport by session ID
+        transports[sessionId] = transport;
+        debugLog(1, `New MCP session initialized: ${sessionId}`);
       },
-    );
-  }
-
-  debugLog(2, `Registered ${MEMORY_BANK_MCP_TOOLS.length} tools`);
-}
-
-// Server variables
-let server: Server;
-let transport: StreamableHTTPServerTransport;
-
-async function startServer(): Promise<void> {
-  debugLog(2, 'Starting MCP HTTP Stream server...');
-
-  // Register all tools
-  registerTools();
-
-  // Create the streamable HTTP transport
-  transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => randomUUID(),
-    enableJsonResponse: false, // Use SSE by default
-  });
-
-  // Connect the transport to the MCP server
-  await mcpServer.connect(transport);
-  debugLog(3, 'MCP server connected to transport');
-
-  // Create simple HTTP server - delegate everything to the transport
-  server = createServer(async (req, res) => {
-    try {
-      debugLog(3, `HTTP ${req.method} ${req.url}`, {
-        headers: req.headers,
-        method: req.method,
-        url: req.url,
-      });
-
-      // Let the official transport handle all requests
-      await transport.handleRequest(req, res);
-    } catch (error) {
-      debugLog(0, 'Error handling HTTP request', {
-        error: error instanceof Error ? error.message : String(error),
-        method: req.method,
-        url: req.url,
-      });
-
-      if (!res.headersSent) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(
-          JSON.stringify({
-            error: {
-              code: -32603,
-              message: 'Internal error',
-            },
-          }),
-        );
-      }
-    }
-  });
-
-  // Start listening
-  server.listen(port, host, () => {
-    debugLog(2, `MCP HTTP Streaming Server running at http://${host}:${port}`);
-    console.log(`MCP HTTP Streaming Server running at http://${host}:${port}`);
-  });
-
-  // Handle server errors
-  server.on('error', (err: Error) => {
-    debugLog(0, `HTTP server error: ${err.message}`, { stack: err.stack });
-    process.exit(1);
-  });
-}
-
-// Graceful shutdown
-function gracefulShutdown(signal: string): void {
-  debugLog(2, `Received ${signal}, starting graceful shutdown`);
-
-  if (server) {
-    server.close(() => {
-      debugLog(2, 'HTTP server closed');
-      process.exit(0);
     });
 
-    setTimeout(() => {
-      debugLog(0, 'Graceful shutdown timed out, forcing exit');
-      process.exit(1);
-    }, 30000);
+    // Clean up transport when closed
+    transport.onclose = () => {
+      if (transport.sessionId) {
+        debugLog(1, `Cleaning up MCP session: ${transport.sessionId}`);
+        delete transports[transport.sessionId];
+      }
+    };
+
+    const server = createMcpServer();
+
+    // Connect to the MCP server
+    await server.connect(transport);
   } else {
-    process.exit(0);
+    // Invalid request
+    res.status(400).json({
+      jsonrpc: '2.0',
+      error: {
+        code: -32000,
+        message: 'Bad Request: No valid session ID provided',
+      },
+      id: null,
+    });
+    return;
   }
-}
 
-// Main execution
-if (require.main === module) {
-  // Handle shutdown signals
-  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  // Handle the request
+  await transport.handleRequest(req, res, req.body);
+});
 
-  // Start the server
-  startServer().catch((error) => {
-    debugLog(0, `Failed to start server: ${error.message}`, { stack: error.stack });
-    process.exit(1);
-  });
-}
+// Reusable handler for GET and DELETE requests
+const handleSessionRequest = async (req: Request, res: Response) => {
+  const sessionId = req.headers['mcp-session-id'] as string | undefined;
+  if (!sessionId || !transports[sessionId]) {
+    res.status(400).send('Invalid or missing session ID');
+    return;
+  }
 
-export { mcpServer, transport };
+  const transport = transports[sessionId];
+  await transport.handleRequest(req, res);
+};
+
+// Handle GET requests for server-to-client notifications via SSE
+app.get('/mcp', handleSessionRequest);
+
+// Handle DELETE requests for session termination
+app.delete('/mcp', handleSessionRequest);
+
+// Legacy endpoints for backward compatibility
+app.get('/tools/list', async (req: Request, res: Response) => {
+  const tools = MEMORY_BANK_MCP_TOOLS.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    inputSchema: tool.parameters || { type: 'object', properties: {}, required: [] },
+  }));
+
+  res.json({ tools });
+});
+
+// Health check endpoint
+app.get('/health', (req: Request, res: Response) => {
+  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
+// Start the server
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`MCP HTTP Streaming Server running at http://localhost:${PORT}`);
+  debugLog(1, `Server started with debug level: ${debugLevel}`);
+});

@@ -1,8 +1,8 @@
 # 🧠 KuzuMem-MCP
 
-> **Enhance AI coding assistants with persistent, graph-based knowledge**
+> **Enhance AI coding assistants with persistent, graph-based knowledge using the official MCP TypeScript SDK**
 
-The KuzuMem-MCP server provides a structured approach to storing and retrieving repository knowledge, enabling AI coding assistants to maintain context across sessions and branches.
+The KuzuMem-MCP server provides a structured approach to storing and retrieving repository knowledge, enabling AI coding assistants to maintain context across sessions and branches. **Built with the official MCP TypeScript SDK** for guaranteed protocol compliance and seamless integration.
 
 ## 🎯 Purpose & Goals
 
@@ -14,6 +14,7 @@ This project addresses several key challenges in AI-assisted development:
 - **Provide graph-based memory storage** for enhanced context retrieval
 - **Enable AI tools** to understand project architecture
 - **Client isolation** for supporting multiple client projects with dedicated memory banks
+- **Official MCP compliance** using the official TypeScript SDK for reliable integration
 
 ## ✨ Key Benefits
 
@@ -57,6 +58,16 @@ The enhanced architecture now supports:
 - Dedicated memory banks stored within each client's project root
 - Lazy database initialization that only happens when explicitly requested
 - Improved database path handling with proper error messages
+
+### 🏗️ Official MCP TypeScript SDK Integration
+
+Built with the official SDK for:
+
+- **Standards compliance** with MCP protocol specifications
+- **Session management** with proper session ID handling for HTTP streaming
+- **Server-Sent Events (SSE)** for real-time streaming using official transport
+- **Request/Response handling** using official schemas (`ListToolsRequestSchema`, `CallToolRequestSchema`, etc.)
+- **Future compatibility** with MCP protocol updates and improvements
 
 ## 🔍 Advanced Graph Queries & Traversals
 
@@ -232,18 +243,21 @@ These examples demonstrate how the graph-based architecture enables complex quer
 
 This graph structure enables the system to answer complex questions that would be difficult with a traditional database, such as "What components might be affected if I change this service?" or "What context led to this architectural decision?"
 
-## 💻 MCP Integration
+## 💻 MCP Integration - Official SDK
 
-This server implements Model Context Protocol standards:
+This server implements Model Context Protocol standards using the **official MCP TypeScript SDK**:
 
-- **Full tool schema definitions** for IDE auto-discovery
-- **Multiple transport protocols** (HTTP, HTTP Streaming, stdio)
-- **Progressive result streaming** for long-running operations
-- **Error handling and status reporting**
-- **Separation of protocol and business logic**
+- **Full tool schema definitions** for IDE auto-discovery using official schemas
+- **Multiple transport protocols** - HTTP Streaming (SSE) with `StreamableHTTPServerTransport` and stdio with `StdioServerTransport`
+- **Session management** - Proper MCP session handling with session IDs for HTTP streaming
+- **Progressive result streaming** for long-running operations with official progress notifications
+- **Error handling and status reporting** using official SDK patterns
+- **Request/Response handling** using official request schemas (`ListToolsRequestSchema`, `CallToolRequestSchema`, etc.)
+- **Server-Sent Events** for real-time streaming using official transport implementations
 
 ## 🚀 Technical Features
 
+- **🏗️ Official MCP TypeScript SDK** - Built with `@modelcontextprotocol/sdk` for guaranteed compliance
 - **🧵 Thread-Safe Singleton Pattern** - Ensures each resource is instantiated once
 - **📂 Distributed Memory Structure** - Follows memory bank specification
 - **🔍 Repository & Branch Filtering** - Operations isolated by repository and branch
@@ -251,13 +265,15 @@ This server implements Model Context Protocol standards:
 - **🔌 Multiple Access Methods** - REST API, CLI, and MCP integration
 - **📊 KùzuDB Backend** - Graph database for relationship queries
 - **🧩 Modular Architecture** - Clean separation between layers
-- **🔄 JSON-RPC Communication** - Standard protocol support
+- **🔄 JSON-RPC Communication** - Standard protocol support using official SDK
+- **📡 Server-Sent Events (SSE)** - Real-time streaming with official `StreamableHTTPServerTransport`
 - **🗺️ Graph Traversal Tools** - Path finding and dependency analysis
 - **🔐 Client Project Isolation** - Each client project gets its own memory bank
+- **🎯 Session Management** - Proper MCP session handling with session IDs
 
 ## 📅 Feature Timeline
 
-### Spring 2025 - KùzuDB Migration
+### Spring 2025 - KùzuDB Migration & Official SDK Integration
 
 - ✅ **Graph Database Migration** - Transitioned from SQLite to KùzuDB
 - ✅ **Branch Isolation** - Implemented repository synthetic IDs (`name + ':' + branch`)
@@ -270,6 +286,10 @@ This server implements Model Context Protocol standards:
 - ✅ **Repository Provider** - Added intermediary between services and repositories
 - ✅ **Lazy Database Initialization** - Databases only created when explicitly requested
 - ✅ **Improved Error Handling** - Better error messages for database path issues
+- ✅ **Official MCP TypeScript SDK Migration** - Migrated from custom MCP implementation to official SDK
+- ✅ **Session Management** - Implemented proper MCP session handling with session IDs
+- ✅ **Server-Sent Events** - Added real-time streaming using official transport implementations
+- ✅ **Request Schema Compliance** - Updated all request handling to use official MCP schemas
 
 ## 💡 Use Cases
 
@@ -279,6 +299,7 @@ This server implements Model Context Protocol standards:
 - **Impact Assessment** - Identify affected components when making changes
 - **Onboarding** - Help new team members understand system structure
 - **Multi-Project Support** - Maintain separate memory banks for different projects
+- **Real-time Collaboration** - Stream updates and progress using official MCP SSE transport
 
 ## 🔧 Installation & Usage
 
@@ -287,7 +308,7 @@ This server implements Model Context Protocol standards:
 git clone git@github.com:Jakedismo/KuzuMem-MCP.git
 cd kuzumem-mcp
 
-# Install dependencies
+# Install dependencies (includes official MCP TypeScript SDK)
 npm install
 
 # Build the project
@@ -309,19 +330,19 @@ HOST=localhost
 DEBUG=1
 ```
 
-### Server Options
+### Server Options (Official SDK)
 
-- **HTTP Server:** `npm start`
-- **HTTP Streaming:** `npx ts-node src/mcp-httpstream-server.ts`
-- **stdio Server:** `npx ts-node src/mcp-stdio-server.ts`
+- **HTTP Streaming Server (Recommended):** `npx ts-node src/mcp-httpstream-server.ts` - Uses official `StreamableHTTPServerTransport`
+- **stdio Server (Recommended):** `npx ts-node src/mcp-stdio-server.ts` - Uses official `StdioServerTransport`
+- **HTTP Server (Legacy):** `npm start` - Traditional Express.js implementation
 
 ### MCP Tools
 
-The server provides tools for repository operations, memory management, and graph traversal. See [README.md](../README.md) for the complete tool list.
+The server provides tools for repository operations, memory management, and graph traversal using official MCP schemas. See [README.md](../README.md) for the complete tool list.
 
-## 🏗️ Architecture
+## 🏗️ Architecture - Official SDK Integration
 
-This project follows a multi-layer architecture:
+This project follows a multi-layer architecture with **official MCP TypeScript SDK integration**:
 
 - **Database Layer:**
   - KùzuDB graph database with Cypher queries
@@ -340,20 +361,23 @@ This project follows a multi-layer architecture:
   - Core orchestration through MemoryService
   - Client project awareness for database operations
 
-- **MCP Layer:**
-  - Tool definitions, handlers, and server implementations
-  - Client project root propagation
+- **MCP Layer (Official SDK):**
+  - **Server Implementations**: Using official `Server` class with `StreamableHTTPServerTransport` and `StdioServerTransport`
+  - **Request Handling**: Official schemas (`ListToolsRequestSchema`, `CallToolRequestSchema`, etc.)
+  - **Session Management**: Proper MCP session handling with session IDs
+  - **Tool definitions, handlers, and streaming support**
+  - **Client project root propagation**
 
 - **CLI Layer:**
   - Command-line interface for direct interaction
 
 ## 🙏 Acknowledgements
 
+- **[Model Context Protocol](https://modelcontextprotocol.io/introduction)** - Agent-tool communication standard and **official TypeScript SDK**
 - **[KùzuDB](https://kuzudb.com/)** - Embedded property graph database
 - **[TypeScript](https://www.typescriptlang.org/)** - Type-safe programming language
 - **[Node.js](https://nodejs.org/)** - JavaScript runtime
 - **[Express](https://expressjs.com/)** - Web framework
-- **[Model Context Protocol](https://modelcontextprotocol.io/introduction)** - Agent-tool communication standard
 - **[Commander.js](https://github.com/tj/commander.js/)** - Command-line application framework
 
 ## 📄 License
