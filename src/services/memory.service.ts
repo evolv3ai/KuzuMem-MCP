@@ -1822,10 +1822,14 @@ export class MemoryService {
       const repoRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
       const kuzuClient = repoRepo.getClient();
 
-      const query = "CALL TABLE_INFO() RETURN name WHERE type = 'NODE' ORDER BY name;";
+      // FIXED: Use proper Kuzu syntax - query all tables first, then filter for NODE tables
+      const query = "CALL show_tables() RETURN *;";
       const queryResult = await kuzuClient.executeQuery(query);
 
-      const labels = queryResult.map((row: any) => row.name as string);
+      // Filter for NODE tables from the results
+      const labels = queryResult
+        .filter((row: any) => row.type === 'NODE')
+        .map((row: any) => row.name as string);
 
       logger.info(`[MemoryService] Found ${labels.length} labels for ${repository}:${branch}.`);
       return {
