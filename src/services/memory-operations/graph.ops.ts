@@ -1,40 +1,34 @@
-import {
-  RepositoryRepository,
-  // Presumed: ComponentRepository or a dedicated GraphRepository might be needed
-  // For now, let's include ComponentRepository if graph ops are on components.
-  ComponentRepository,
-} from '../../repositories';
-import { Component, Context, Decision, Rule } from '../../types'; // Added Context and Decision imports
-import { KuzuDBClient } from '../../db/kuzu'; // Import KuzuDBClient
 import { z } from 'zod'; // Import z for using z.infer with schema types
+import { KuzuDBClient } from '../../db/kuzu'; // Import KuzuDBClient
 import {
-  PageRankInputSchema,
-  PageRankOutputSchema,
+  ContextSchema, // For getGoverningItemsForComponentOp, getRelatedItemsOp that might return components
+  DecisionSchema, // For getGoverningItemsForComponentOp
+  GetGoverningItemsForComponentInputSchema, // Corrected: Was GetGoverningItemsForComponentOutputSchema
+  GetGoverningItemsForComponentOutputSchema,
+  // Traversal Output Schemas might also be relevant if their structure is complex
+  // GetComponentDependenciesOutputSchema, // etc.
+  GetItemContextualHistoryInputSchema,
+  GetRelatedItemsInputSchema, // Corrected: Was GetRelatedItemsOutputSchema
+  GetRelatedItemsOutputSchema,
   // ... import other Algo Zod Input/Output Schemas as they are refactored
   KCoreDecompositionInputSchema,
   KCoreDecompositionOutputSchema, // Example for next one
   LouvainCommunityDetectionInputSchema,
   LouvainCommunityDetectionOutputSchema,
+  PageRankInputSchema,
+  PageRankOutputSchema,
+  RelatedItemBaseSchema, // For getGoverningItemsForComponentOp
+  RuleSchema,
+  ShortestPathInputSchema,
+  ShortestPathOutputSchema,
   StronglyConnectedComponentsInputSchema,
   StronglyConnectedComponentsOutputSchema,
   WeaklyConnectedComponentsInputSchema,
   WeaklyConnectedComponentsOutputSchema,
-  ShortestPathInputSchema,
-  ShortestPathOutputSchema,
-  // Traversal Output Schemas might also be relevant if their structure is complex
-  // GetComponentDependenciesOutputSchema, // etc.
-  GetItemContextualHistoryInputSchema,
-  ContextSchema,
-  ComponentSchema, // For getGoverningItemsForComponentOp, getRelatedItemsOp that might return components
-  DecisionSchema, // For getGoverningItemsForComponentOp
-  RuleSchema, // For getGoverningItemsForComponentOp
-  GetGoverningItemsForComponentInputSchema, // Corrected: Was GetGoverningItemsForComponentOutputSchema
-  GetGoverningItemsForComponentOutputSchema,
-  GetRelatedItemsInputSchema, // Corrected: Was GetRelatedItemsOutputSchema
-  GetRelatedItemsOutputSchema,
-  RelatedItemBaseSchema,
 } from '../../mcp/schemas/tool-schemas';
 import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom'; // Added
+import { RepositoryRepository } from '../../repositories';
+import { formatGraphUniqueId } from '../../utils/id.utils'; // Ensure consistent graph_unique_id formatting
 
 // This file is a placeholder for graph-related operations.
 // Implementations will depend on the capabilities of the underlying repositories
@@ -529,7 +523,8 @@ export async function louvainCommunityDetectionOp(
         nodeId: r.nodeId?.toString(),
         communityId: Number(r.communityId),
       }));
-      // TODO: Check if Kuzu's Louvain returns modularity or if it needs separate calculation/query
+      // Note: KuzuDB's Louvain algorithm does not return modularity score by default.
+      // Modularity calculation would require a separate computation over the communities.
       return { communities, modularity: undefined };
     },
   );
@@ -643,30 +638,57 @@ export async function shortestPathOp(
     params.nodeTableNames,
     params.relationshipTableNames,
     async () => {
-      // KuzuDB doesn't support standard Cypher MATCH syntax for graph traversal
-      // For now, implement a simple stub that assumes direct connection exists
-      // TODO: Investigate KuzuDB's native graph query syntax
-      logger.warn(
-        `[graph.ops] ShortestPath temporarily stubbed - KuzuDB MATCH syntax not supported. Assuming direct path from ${params.startNodeId} to ${params.endNodeId}`,
-      );
+      const { repository, branch, startNodeId, endNodeId } = params;
+      // Construct graph_unique_id values using the shared utility for consistency.
+      const startGraphId = formatGraphUniqueId(repository, branch, startNodeId);
+      const endGraphId = formatGraphUniqueId(repository, branch, endNodeId);
 
-      // Handle reflexive case (same start and end node)
-      if (params.startNodeId === params.endNodeId) {
-        return {
-          pathFound: true,
-          path: [{ id: params.startNodeId, _label: 'Component' }],
-          length: 1,
-        };
+      // Validate and sanitize the maximum traversal depth. Fallback to 10 if the provided value is invalid.
+      const maxDepth =
+        params.maxDepth && Number.isInteger(params.maxDepth) && params.maxDepth > 0
+          ? params.maxDepth
+          : 10;
+
+      // Use a parameterised query to avoid potential Cypher injection issues.
+      // Note: maxDepth must be string-interpolated as Cypher doesn't support parameterizing hop counts
+      const query = `
+        MATCH (start {graph_unique_id: $startGraphId}), (end {graph_unique_id: $endGraphId})
+        MATCH p = (start)-[* SHORTEST 1..${maxDepth}]-(end)
+        RETURN p LIMIT 1
+      `;
+      const res = await kuzuClient.executeQuery(query, { startGraphId, endGraphId });
+
+      if (!res || res.length === 0) {
+        return { pathFound: false, path: [], length: 0 };
       }
 
-      // Handle normal case (different start and end nodes)
+      // Additional safety checks for malformed results
+      const resultRow = res[0];
+      if (!resultRow || !resultRow.p) {
+        logger.warn(`[graph.ops] Malformed shortest path result: missing path data`);
+        return { pathFound: false, path: [], length: 0 };
+      }
+
+      const pathObj = resultRow.p;
+      const pathNodes = pathObj._nodes;
+
+      // If path nodes are undefined or empty, no valid path was found
+      if (!pathNodes || !Array.isArray(pathNodes) || pathNodes.length === 0) {
+        logger.debug(
+          `[graph.ops] No valid path nodes found between ${startNodeId} and ${endNodeId}`,
+        );
+        return { pathFound: false, path: [], length: 0 };
+      }
+
+      const nodesArr = pathNodes.map((n: any) => {
+        const props = n._properties || n;
+        return { id: props.id?.toString() || '', _label: (n._labels || [])[0] || 'Unknown' };
+      });
+
       return {
         pathFound: true,
-        path: [
-          { id: params.startNodeId, _label: 'Component' },
-          { id: params.endNodeId, _label: 'Component' },
-        ],
-        length: 2,
+        path: nodesArr,
+        length: nodesArr.length,
       };
     },
   );

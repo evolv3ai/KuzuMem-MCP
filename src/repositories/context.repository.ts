@@ -406,23 +406,13 @@ export class ContextRepository {
         logger.info(
           `[ContextRepository] Context ${logicalId} upserted successfully for ${repositoryNodeId}`,
         );
-        // Temporary fix: return a basic context object instead of calling formatKuzuRowToContext
-        // TODO: Fix the formatKuzuRowToContext infinite loop issue
-        return {
-          id: logicalId,
-          graph_unique_id: graphUniqueId,
-          name: propsOnCreate.name,
-          summary: propsOnCreate.summary,
-          iso_date: kuzuIsoDate,
-          branch: effectiveBranch,
-          repository: repositoryNodeId,
-          created_at: propsOnCreate.created_at,
-          updated_at: propsOnCreate.updated_at,
-          agent: agent || null,
-          related_issue: related_issue || null,
-          decisions: decisions || [],
-          observations: observations || [],
-        } as Context;
+        // Use the proper formatter method
+        return this.formatKuzuRowToContext(
+          result[0].c,
+          logicalRepositoryName,
+          effectiveBranch,
+          logger,
+        );
       }
       logger.warn(
         `[ContextRepository] UpsertContext did not return a node for GID ${graphUniqueId}`,

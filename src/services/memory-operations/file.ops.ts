@@ -123,9 +123,8 @@ export async function associateFileWithComponentOp(
       return { success: false, message: `Repository ${repoIdForLog} not found.` };
     }
 
-    // Assuming a relationship type like COMPONENT_IMPLEMENTS_FILE
-    // This could also be File BELONGS_TO Component or Component CONTAINS_FILE
-    const relationshipType = 'COMPONENT_IMPLEMENTS_FILE'; // Or make this a parameter if flexible
+    // Use schema-defined relationship type
+    const relationshipType = 'CONTAINS_FILE';
 
     const success = await fileRepo.linkComponentToFile(
       repoNode.id,

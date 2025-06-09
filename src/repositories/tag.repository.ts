@@ -144,23 +144,14 @@ export class TagRepository {
     tagId: string,
     itemTypeFilter?: TaggableItemType | 'All', // Use the TaggableItemType
   ): Promise<any[]> {
-    // Should return array of items {id, type, ...properties}
-    let matchClause = '(item)'; // Default match any node type
-    if (itemTypeFilter && itemTypeFilter !== 'All') {
-      const safeItemLabel = itemTypeFilter.replace(/[^a-zA-Z0-9_]/g, '');
-      matchClause = `(item:\`${safeItemLabel}\`)`;
-    }
-
-    let relationshipPattern: string;
-    if (itemTypeFilter && itemTypeFilter !== 'All') {
-      const safeRelType = `TAGGED_${itemTypeFilter.toUpperCase()}`.replace(/[^a-zA-Z0-9_]/g, '');
-      relationshipPattern = `-[:${safeRelType}]->`;
-    } else {
-      relationshipPattern = `-[:TAGGED_COMPONENT|TAGGED_RULE|TAGGED_CONTEXT|TAGGED_FILE|TAGGED_DECISION]->`;
-    }
+    // Build MATCH clause depending on filter
+    const matchClause =
+      itemTypeFilter && itemTypeFilter !== 'All'
+        ? `(item:\`${itemTypeFilter.replace(/[^a-zA-Z0-9_]/g, '')}\`)`
+        : '(item)';
 
     const query = `
-      MATCH ${matchClause}${relationshipPattern}(t:Tag {id: $tagId})
+      MATCH ${matchClause}-[:IS_TAGGED_WITH]->(t:Tag {id: $tagId})
       WHERE item.repository = $repoNodeId AND item.branch = $branch
       RETURN item.id AS id, labels(item)[0] AS type, item AS properties
     `;
