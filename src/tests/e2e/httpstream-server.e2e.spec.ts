@@ -221,7 +221,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
   let sharedTestDecisionId: string | null = null;
   let sharedTestRuleId: string | null = null;
 
-  // Helper function to make MCP requests with proper session management
+  // Helper function to make MCP requests with proper session management and SSE handling
   const makeMcpRequest = async (payload: any, expectStatus = 200) => {
     const headers: any = {
       'Content-Type': 'application/json',
@@ -233,7 +233,54 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       headers['mcp-session-id'] = mcpSessionId;
     }
 
-    return await request(BASE_URL).post('/mcp').set(headers).send(payload).expect(expectStatus);
+    return new Promise<any>((resolve, reject) => {
+      const sseRequest = request(BASE_URL).post('/mcp').set(headers).send(payload);
+
+      sseRequest
+        .expect(expectStatus)
+        .parse(async (res: any, callback: any) => {
+          try {
+            const { events, finalResponseEvent, errorEvent }: CollectedSseEvents =
+              await collectStreamEvents(res);
+
+            if (errorEvent) {
+              reject(new Error(`SSE error: ${JSON.stringify(errorEvent)}`));
+              return;
+            }
+
+            // Look for the response event with the matching request ID
+            const responseEvent = events.find(
+              (event: any) =>
+                event.type === 'message' &&
+                event.data &&
+                event.data.id === payload.id &&
+                (event.data.result || event.data.error),
+            );
+
+            if (!responseEvent) {
+              reject(new Error(`No response event found for request ID: ${payload.id}`));
+              return;
+            }
+
+            // Return a response object that mimics the old format
+            const response = {
+              body: responseEvent.data,
+              headers: res.headers,
+            };
+
+            callback(null, null);
+            resolve(response);
+          } catch (error) {
+            callback(error, null);
+            reject(error);
+          }
+        })
+        .end((err: any) => {
+          if (err) {
+            reject(err);
+          }
+        });
+    });
   };
 
   // Helper function to initialize MCP session with SSE handling
