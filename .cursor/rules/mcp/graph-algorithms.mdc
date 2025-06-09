@@ -1,3 +1,13 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: KuzuMem-MCP Graph Algorithm usage
+globs: 
+alwaysApply: true
+---
 # KuzuMem-MCP Graph Algorithms
 
 ## System Analysis Algorithms

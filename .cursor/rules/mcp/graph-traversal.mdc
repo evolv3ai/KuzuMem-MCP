@@ -1,3 +1,13 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: KuzuMem-MCP Graph Traversal guides
+globs: 
+alwaysApply: true
+---
 # KuzuMem-MCP Graph Traversal
 
 ## Dependency Analysis
