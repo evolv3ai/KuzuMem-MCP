@@ -1,0 +1,6 @@
+{
+  "terraform.experimentalFeatures.prefillRequiredFields": true,
+  "terraform.experimentalFeatures.validateOnSave": true,
+  "microsoft-authentication.implementation": "msal",
+  "prettier.experimentalTernaries": true
+}
