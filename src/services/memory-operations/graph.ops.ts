@@ -28,6 +28,7 @@ import {
 } from '../../mcp/schemas/tool-schemas';
 import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom'; // Added
 import { RepositoryRepository } from '../../repositories';
+import { formatGraphUniqueId } from '../../utils/id.utils'; // Ensure consistent graph_unique_id formatting
 
 // This file is a placeholder for graph-related operations.
 // Implementations will depend on the capabilities of the underlying repositories
@@ -638,18 +639,23 @@ export async function shortestPathOp(
     params.relationshipTableNames,
     async () => {
       const { repository, branch, startNodeId, endNodeId } = params;
-      const startGraphId = `${repository}:${branch}:${startNodeId}`;
-      const endGraphId = `${repository}:${branch}:${endNodeId}`;
-      // Determine the maximum depth to use. If the caller provided a positive maxDepth, respect it;
-      // otherwise default to 10 to avoid overly expensive graph searches.
-      const maxDepthClause = params.maxDepth && params.maxDepth > 0 ? params.maxDepth : 10;
+      // Construct graph_unique_id values using the shared utility for consistency.
+      const startGraphId = formatGraphUniqueId(repository, branch, startNodeId);
+      const endGraphId = formatGraphUniqueId(repository, branch, endNodeId);
 
+      // Validate and sanitize the maximum traversal depth. Fallback to 10 if the provided value is invalid.
+      const maxDepth =
+        params.maxDepth && Number.isInteger(params.maxDepth) && params.maxDepth > 0
+          ? params.maxDepth
+          : 10;
+
+      // Use a parameterised query to avoid potential Cypher injection issues.
       const query = `
         MATCH (start {graph_unique_id: $startGraphId}), (end {graph_unique_id: $endGraphId})
-        MATCH p = (start)-[* SHORTEST 1..${maxDepthClause}]-(end)
+        MATCH p = (start)-[* SHORTEST 1..$maxDepth]-(end)
         RETURN p LIMIT 1
       `;
-      const res = await kuzuClient.executeQuery(query, { startGraphId, endGraphId });
+      const res = await kuzuClient.executeQuery(query, { startGraphId, endGraphId, maxDepth });
 
       if (!res || res.length === 0) {
         return { pathFound: false, path: [], length: 0 };
