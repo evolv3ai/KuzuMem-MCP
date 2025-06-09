@@ -49,6 +49,23 @@ describe('MCP HTTP Streaming Server E2E Tests (Modern)', () => {
     return response;
   };
 
+  // Helper function to parse MCP response (handles both JSON and SSE formats)
+  const parseMcpResponse = (response: any) => {
+    // Check if this is an SSE response
+    if (response.text && response.text.includes('event: message')) {
+      // Parse SSE format: extract the data line
+      const lines = response.text.split('\n');
+      const dataLine = lines.find((line: string) => line.startsWith('data: '));
+      if (dataLine) {
+        const jsonData = dataLine.substring(6); // Remove "data: " prefix
+        return JSON.parse(jsonData);
+      }
+    }
+
+    // Otherwise, assume it's regular JSON
+    return response.body;
+  };
+
   // Helper function to initialize MCP session
   const initializeMcpSession = async () => {
     const initializePayload = {
@@ -84,10 +101,13 @@ describe('MCP HTTP Streaming Server E2E Tests (Modern)', () => {
     mcpSessionId = response.headers['mcp-session-id'];
     console.log(`MCP session ID received: ${mcpSessionId}`);
 
+    // Parse the response (could be JSON or SSE)
+    const parsedResponse = parseMcpResponse(response);
+
     // Validate the initialize response
-    expect(response.body.result).toBeDefined();
-    expect(response.body.result.capabilities).toBeDefined();
-    expect(response.body.result.serverInfo.name).toBe('KuzuMem-MCP-HTTPStream');
+    expect(parsedResponse.result).toBeDefined();
+    expect(parsedResponse.result.capabilities).toBeDefined();
+    expect(parsedResponse.result.serverInfo.name).toBe('KuzuMem-MCP-HTTPStream');
     expect(mcpSessionId).toBeDefined();
 
     console.log(`MCP session initialized successfully: ${mcpSessionId}`);
@@ -100,7 +120,7 @@ describe('MCP HTTP Streaming Server E2E Tests (Modern)', () => {
         PORT: String(STREAM_PORT),
         DEBUG_LEVEL: '3',
         SESSION_TIMEOUT: '300000', // 5 minutes for tests
-        DB_FILENAME: dbPathForTest,
+        DB_FILENAME: path.basename(dbPathForTest), // Use only the filename, not full path
         ...envVars,
       };
 
@@ -209,12 +229,13 @@ describe('MCP HTTP Streaming Server E2E Tests (Modern)', () => {
     };
 
     let httpResponse = await makeMcpRequest(initPayload);
-    expect(httpResponse.body.id).toBe('init_e2e_http_modern');
-    expect(httpResponse.body.result?.content).toBeDefined();
-    expect(httpResponse.body.result?.content[0]).toBeDefined();
+    let parsedResponse = parseMcpResponse(httpResponse);
+    expect(parsedResponse.id).toBe('init_e2e_http_modern');
+    expect(parsedResponse.result?.content).toBeDefined();
+    expect(parsedResponse.result?.content[0]).toBeDefined();
 
     // Parse the JSON result from the MCP SDK format
-    const initResult = JSON.parse(httpResponse.body.result.content[0].text);
+    const initResult = JSON.parse(parsedResponse.result.content[0].text);
     expect(initResult.success).toBe(true);
     console.log('HTTP Streaming E2E: Memory bank initialized.');
 
@@ -257,8 +278,9 @@ describe('MCP HTTP Streaming Server E2E Tests (Modern)', () => {
         },
       };
       httpResponse = await makeMcpRequest(addCompPayload);
-      expect(httpResponse.body.result?.content).toBeDefined();
-      const compResult = JSON.parse(httpResponse.body.result.content[0].text);
+      parsedResponse = parseMcpResponse(httpResponse);
+      expect(parsedResponse.result?.content).toBeDefined();
+      const compResult = JSON.parse(parsedResponse.result.content[0].text);
       expect(compResult.success).toBe(true);
     }
     console.log(`${componentsToSeed.length} components seeded for HTTP Streaming E2E.`);
@@ -288,8 +310,9 @@ describe('MCP HTTP Streaming Server E2E Tests (Modern)', () => {
         },
       };
       httpResponse = await makeMcpRequest(updateCtxPayload);
-      expect(httpResponse.body.result?.content).toBeDefined();
-      const ctxResult = JSON.parse(httpResponse.body.result.content[0].text);
+      parsedResponse = parseMcpResponse(httpResponse);
+      expect(parsedResponse.result?.content).toBeDefined();
+      const ctxResult = JSON.parse(parsedResponse.result.content[0].text);
       expect(ctxResult.success).toBe(true);
     }
     console.log('HTTP Streaming E2E: Database seeding complete.');
@@ -343,13 +366,14 @@ describe('MCP HTTP Streaming Server E2E Tests (Modern)', () => {
     };
 
     const response = await makeMcpRequest(listToolsPayload);
-    expect(response.body.id).toBe('list_tools_modern');
-    expect(response.body.result).toBeDefined();
-    expect(response.body.result.tools).toBeDefined();
-    expect(Array.isArray(response.body.result.tools)).toBe(true);
-    expect(response.body.result.tools.length).toBe(MEMORY_BANK_MCP_TOOLS.length);
-    expect(response.body.result.tools[0]).toHaveProperty('name');
-    expect(response.body.result.tools[0]).toHaveProperty('inputSchema');
+    const parsedResponse = parseMcpResponse(response);
+    expect(parsedResponse.id).toBe('list_tools_modern');
+    expect(parsedResponse.result).toBeDefined();
+    expect(parsedResponse.result.tools).toBeDefined();
+    expect(Array.isArray(parsedResponse.result.tools)).toBe(true);
+    expect(parsedResponse.result.tools.length).toBe(MEMORY_BANK_MCP_TOOLS.length);
+    expect(parsedResponse.result.tools[0]).toHaveProperty('name');
+    expect(parsedResponse.result.tools[0]).toHaveProperty('inputSchema');
   });
 
   it('T_HTTP_MODERN_003: Should execute tools/call with session context', async () => {
@@ -382,12 +406,13 @@ describe('MCP HTTP Streaming Server E2E Tests (Modern)', () => {
     };
 
     const response = await makeMcpRequest(payload);
-    expect(response.body.id).toBe('update_meta_modern');
-    expect(response.body.result).toBeDefined();
-    expect(response.body.result.content).toBeDefined();
-    expect(response.body.result.content[0]).toBeDefined();
+    const parsedResponse = parseMcpResponse(response);
+    expect(parsedResponse.id).toBe('update_meta_modern');
+    expect(parsedResponse.result).toBeDefined();
+    expect(parsedResponse.result.content).toBeDefined();
+    expect(parsedResponse.result.content[0]).toBeDefined();
 
-    const toolResult = JSON.parse(response.body.result.content[0].text);
+    const toolResult = JSON.parse(parsedResponse.result.content[0].text);
     expect(toolResult.success).toBe(true);
   });
 
@@ -444,10 +469,11 @@ describe('MCP HTTP Streaming Server E2E Tests (Modern)', () => {
       };
 
       const response = await makeMcpRequest(payload);
-      expect(response.body.id).toBe('add_comp_modern_crud');
-      expect(response.body.result).toBeDefined();
+      const parsedResponse = parseMcpResponse(response);
+      expect(parsedResponse.id).toBe('add_comp_modern_crud');
+      expect(parsedResponse.result).toBeDefined();
 
-      const toolResult = JSON.parse(response.body.result.content[0].text);
+      const toolResult = JSON.parse(parsedResponse.result.content[0].text);
       expect(toolResult.success).toBe(true);
       expect(toolResult.message).toContain(sharedTestComponentId);
     });
@@ -467,10 +493,11 @@ describe('MCP HTTP Streaming Server E2E Tests (Modern)', () => {
       };
 
       const response = await makeMcpRequest(payload);
-      expect(response.body.id).toBe('get_deps_modern');
-      expect(response.body.result).toBeDefined();
+      const parsedResponse = parseMcpResponse(response);
+      expect(parsedResponse.id).toBe('get_deps_modern');
+      expect(parsedResponse.result).toBeDefined();
 
-      const resultWrapper = JSON.parse(response.body.result.content[0].text);
+      const resultWrapper = JSON.parse(parsedResponse.result.content[0].text);
       expect(resultWrapper.status).toBe('complete');
       expect(Array.isArray(resultWrapper.dependencies)).toBe(true);
       expect(
@@ -501,8 +528,9 @@ describe('MCP HTTP Streaming Server E2E Tests (Modern)', () => {
 
       const responses = await Promise.all(requests);
       for (let i = 0; i < 3; i++) {
-        expect(responses[i].body.id).toBe(`concurrent_request_${i}`);
-        expect(responses[i].body.result).toBeDefined();
+        const parsedResponse = parseMcpResponse(responses[i]);
+        expect(parsedResponse.id).toBe(`concurrent_request_${i}`);
+        expect(parsedResponse.result).toBeDefined();
       }
     });
 
