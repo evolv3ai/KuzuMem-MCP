@@ -1,6 +1,6 @@
 # KuzuMem-MCP
 
-A TypeScript implementation of a distributed memory bank as an MCP (Model Context Protocol) tool, storing memories in a **KùzuDB graph database** with repository and branch filtering capabilities. Branch isolation is achieved by using a graph-unique identifier for entities, enabling a centralized memory bank while allowing repository-specific and branch-specific views. 
+A TypeScript implementation of a distributed memory bank as an MCP (Model Context Protocol) tool, storing memories in a **KùzuDB graph database** with repository and branch filtering capabilities. Branch isolation is achieved by using a graph-unique identifier for entities, enabling a centralized memory bank while allowing repository-specific and branch-specific views.
 
 **Built with the official MCP TypeScript SDK** for full protocol compliance and seamless integration with IDEs and AI agents.
 
@@ -66,17 +66,17 @@ HOST=localhost
 DEBUG=1
 ```
 
-Add the following to your IDEs MCP configuration:
+Add the following to your IDE's MCP configuration (typically `~/.cursor/mcp.json` for Cursor):
+
+**Recommended - Production (Compiled JavaScript):**
 
 ```json
 {
   "mcpServers": {
-    "KuzuMemo-MCP": {
-      "command": "npx",
+    "KuzuMem-MCP": {
+      "command": "node",
       "args": [
-        "-y",
-        "ts-node",
-        "/Users/<absolute_path>/src/mcp-stdio-server.ts" // or "src/mcp-httpstream-server.ts" if your IDE supports SSE
+        "/absolute/path/to/kuzumem-mcp/dist/mcp-stdio-server.js"
       ],
       "env": {
         "PORT": "3000",
@@ -84,11 +84,43 @@ Add the following to your IDEs MCP configuration:
         "DB_FILENAME": "memory-bank.kuzu",
         "HTTP_STREAM_PORT": "3001"
       },
-      "protocol": "stdio" // or "sse" for HTTP streaming
+      "protocol": "stdio"
     }
   }
 }
 ```
+
+**Alternative - Development (TypeScript with ts-node):**
+
+```json
+{
+  "mcpServers": {
+    "KuzuMem-MCP": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "ts-node",
+        "/absolute/path/to/kuzumem-mcp/src/mcp-stdio-server.ts"
+      ],
+      "env": {
+        "PORT": "3000",
+        "HOST": "localhost",
+        "DB_FILENAME": "memory-bank.kuzu",
+        "HTTP_STREAM_PORT": "3001"
+      },
+      "protocol": "stdio"
+    }
+  }
+}
+```
+
+**Important Notes:**
+
+- **Use the compiled version** (`dist/mcp-stdio-server.js`) for reliable production usage
+- The compiled version includes all optimizations and has been thoroughly tested
+- Make sure to run `npm run build` first to generate the compiled version
+- Replace `/absolute/path/to/kuzumem-mcp/` with your actual project path
+- For HTTP streaming with SSE support, use `dist/mcp-httpstream-server.js` or `src/mcp-httpstream-server.ts` respectively
 
 ![IDE MCP Configuration](docs/client_view.png)
 

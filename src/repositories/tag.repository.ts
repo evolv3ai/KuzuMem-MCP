@@ -114,9 +114,24 @@ export class TagRepository {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
     const safeItemLabel = itemLabel.replace(/[^a-zA-Z0-9_]/g, '');
 
-    // Ensure item is matched within its specific repository and branch context
+    // Schema-aware matching: Component and File have different properties
+    // Component: id, branch (no repository property)
+    // File: id, repository, branch
+    let matchClause: string;
+    if (
+      itemLabel === 'Component' ||
+      itemLabel === 'Decision' ||
+      itemLabel === 'Rule' ||
+      itemLabel === 'Context'
+    ) {
+      matchClause = `(item:\`${safeItemLabel}\` {id: $itemId, branch: $branch})`;
+    } else {
+      // File has repository property
+      matchClause = `(item:\`${safeItemLabel}\` {id: $itemId, repository: $repoNodeId, branch: $branch})`;
+    }
+
     const query = `
-      MATCH (item:\`${safeItemLabel}\` {id: $itemId, repository: $repoNodeId, branch: $branch}),
+      MATCH ${matchClause},
              (tag:Tag {id: $tagId})
       MERGE (item)-[r:${safeRelType}]->(tag)
       RETURN r
@@ -129,12 +144,19 @@ export class TagRepository {
     //   RETURN r
     // \`;
     try {
-      const result = await this.kuzuClient.executeQuery(query, {
+      // Only pass parameters that are used in the query
+      const params: Record<string, any> = {
         itemId,
-        repoNodeId,
         branch,
         tagId,
-      });
+      };
+
+      // Only add repoNodeId if the item is a File
+      if (itemLabel === 'File') {
+        params.repoNodeId = repoNodeId;
+      }
+
+      const result = await this.kuzuClient.executeQuery(query, params);
       return result && result.length > 0;
     } catch (error) {
       console.error(
@@ -157,11 +179,13 @@ export class TagRepository {
         ? `(item:\`${itemTypeFilter.replace(/[^a-zA-Z0-9_]/g, '')}\`)`
         : '(item)';
 
+    // Use pattern to match any relationship that starts with "TAGGED_"
     const query = `
-      MATCH ${matchClause}-[:IS_TAGGED_WITH]->(t:Tag {id: $tagId})
-      WHERE item.repository = $repoNodeId AND item.branch = $branch
+      MATCH ${matchClause}-[r]->(t:Tag {id: $tagId})
+      WHERE item.branch = $branch AND startsWith(type(r), 'TAGGED_')
       RETURN item.id AS id, labels(item)[0] AS type, item AS properties
     `;
+
     try {
       const result = await this.kuzuClient.executeQuery(query, { tagId, repoNodeId, branch });
       if (Array.isArray(result)) {
