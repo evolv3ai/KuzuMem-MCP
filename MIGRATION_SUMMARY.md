@@ -58,6 +58,21 @@ Created comprehensive documentation:
 - **`TRANSPORT_MIGRATION.md`**: Detailed comparison and migration guide
 - **`MIGRATION_SUMMARY.md`**: This summary document
 
+### 5. Test Suite Reorganization
+
+Reorganized e2e tests to match the server structure:
+
+**Legacy SSE Server Tests**:
+- **File**: `src/tests/e2e/sse-server.e2e.spec.ts` (renamed from `httpstream-server.e2e.spec.ts`)
+- **Port**: 3002 (to avoid conflicts)
+- **Target**: Tests the legacy SSE server (`mcp-sse-server.ts`)
+
+**Modern HTTP Streaming Server Tests**:
+- **File**: `src/tests/e2e/httpstream-server.e2e.spec.ts` (new)
+- **Port**: 3001 (default)
+- **Target**: Tests the modern HTTP streaming server (`mcp-httpstream-server.ts`)
+- **Features**: Session management, concurrent requests, session termination
+
 ## Technical Implementation
 
 ### Session State Management

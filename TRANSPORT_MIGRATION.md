@@ -134,10 +134,72 @@ You can test both servers using the MCP Inspector or compatible MCP clients:
 curl -X POST http://localhost:3001/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json,text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":"1","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}'
+  -d '{"jsonrpc":"2.0","id":"1","method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}'
 
 # Health check
 curl http://localhost:3001/health
+```
+
+### E2E Tests
+
+The repository includes comprehensive end-to-end tests for both server implementations:
+
+#### HTTP Streaming Server Tests (Modern)
+- **File**: `src/tests/e2e/httpstream-server.e2e.spec.ts`
+- **Port**: 3001 (default)
+- **Features Tested**:
+  - MCP session initialization and management
+  - Session termination and cleanup
+  - Tool execution with session context
+  - Concurrent request handling
+  - Server-sent events support
+  - Component CRUD operations
+  - Health endpoint monitoring
+
+```bash
+# Run modern HTTP streaming tests
+npm test -- --testPathPattern=httpstream-server.e2e.spec.ts
+```
+
+#### SSE Server Tests (Legacy)
+- **File**: `src/tests/e2e/sse-server.e2e.spec.ts`  
+- **Port**: 3002 (to avoid conflicts)
+- **Features Tested**:
+  - Legacy SSE streaming patterns
+  - Basic HTTP requests
+  - Tool execution (without session management)
+  - Component operations
+
+```bash
+# Run legacy SSE tests
+npm test -- --testPathPattern=sse-server.e2e.spec.ts
+```
+
+#### Running Both Test Suites
+```bash
+# Run all e2e tests
+npm run test:e2e
+
+# Run specific test files
+npm test -- --testPathPattern="server.e2e.spec.ts"
+```
+
+### Test Environment Variables
+
+Configure test execution with environment variables:
+
+```bash
+# HTTP Streaming Server tests
+HTTP_STREAM_PORT=3001
+DEBUG_LEVEL=3
+SESSION_TIMEOUT=300000
+
+# SSE Server tests  
+SSE_STREAM_PORT=3002
+DEBUG_LEVEL=3
+
+# Run tests with custom config
+HTTP_STREAM_PORT=3001 npm test -- --testPathPattern=httpstream-server.e2e.spec.ts
 ```
 
 ## Recommendations
