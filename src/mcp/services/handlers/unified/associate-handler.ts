@@ -1,14 +1,32 @@
 import { SdkToolHandler } from '../../../tool-handlers';
-import { AssociateInputSchema, AssociateOutputSchema } from '../../../schemas/unified-tool-schemas';
-import { z } from 'zod';
+
+// TypeScript interfaces for associate parameters
+interface AssociateParams {
+  type: 'file-component' | 'tag-item';
+  repository: string;
+  branch?: string;
+  fileId?: string;
+  componentId?: string;
+  itemId?: string;
+  tagId?: string;
+}
 
 /**
  * Associate Handler
  * Handles relationship creation between entities
  */
 export const associateHandler: SdkToolHandler = async (params, context, memoryService) => {
-  // 1. Parse and validate parameters
-  const validatedParams = AssociateInputSchema.parse(params);
+  // 1. Validate and extract parameters
+  const validatedParams = params as AssociateParams;
+  
+  // Basic validation
+  if (!validatedParams.type) {
+    throw new Error('type parameter is required');
+  }
+  if (!validatedParams.repository) {
+    throw new Error('repository parameter is required');
+  }
+  
   const { type, repository, branch = 'main' } = validatedParams;
 
   // 2. Get clientProjectRoot from session
@@ -75,7 +93,7 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
             to: componentId!,
             relationship: 'IMPLEMENTS',
           },
-        } satisfies z.infer<typeof AssociateOutputSchema>;
+        };
       }
 
       case 'tag-item': {
@@ -114,7 +132,7 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
             to: tagId!,
             relationship: 'TAGGED_WITH',
           },
-        } satisfies z.infer<typeof AssociateOutputSchema>;
+        };
       }
 
       default:

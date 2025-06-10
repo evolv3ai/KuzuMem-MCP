@@ -38,16 +38,16 @@ const sessionStore = new Map<
 function getSchemaKeyForTool(toolName: string): keyof typeof toolSchemas | undefined {
   // Map unified tool names to their schema names
   const unifiedToolSchemas: Record<string, string> = {
-    'memory-bank': 'MemoryBankSchema',
-    entity: 'EntitySchema',
-    introspect: 'IntrospectSchema',
-    context: 'ContextSchema',
-    query: 'QuerySchema',
-    associate: 'AssociateSchema',
-    analyze: 'AnalyzeSchema',
-    detect: 'DetectSchema',
-    'bulk-import': 'BulkImportSchema',
-    'semantic-search': 'SemanticSearchSchema',
+    'memory-bank': 'MemoryBankInputSchema',
+    entity: 'EntityInputSchema',
+    introspect: 'IntrospectInputSchema',
+    context: 'ContextInputSchema',
+    query: 'QueryInputSchema',
+    associate: 'AssociateInputSchema',
+    analyze: 'AnalyzeInputSchema',
+    detect: 'DetectInputSchema',
+    'bulk-import': 'BulkImportInputSchema',
+    'semantic-search': 'SemanticSearchInputSchema',
   };
 
   const schemaKey = unifiedToolSchemas[toolName];
@@ -271,7 +271,7 @@ async function main() {
   const transport = new StdioServerTransport();
   await mcpServer.connect(transport);
 
-  console.info('MCP Server (stdio) initialized and listening...'); // Use console for this global message
+  console.error('MCP Server (stdio) initialized and listening...'); // Use console.error so tests can detect on stderr
 }
 
 main().catch((e) => {

@@ -1,23 +1,41 @@
 import { SdkToolHandler } from '../../../tool-handlers';
-import {
-  QueryInputSchema,
-  ContextQueryOutputSchema,
-  EntitiesQueryOutputSchema,
-  RelationshipsQueryOutputSchema,
-  DependenciesQueryOutputSchema,
-  GovernanceQueryOutputSchema,
-  HistoryQueryOutputSchema,
-  TagsQueryOutputSchema,
-} from '../../../schemas/unified-tool-schemas';
-import { z } from 'zod';
+
+// TypeScript interfaces for query parameters
+interface QueryParams {
+  type: 'context' | 'entities' | 'relationships' | 'dependencies' | 'governance' | 'history' | 'tags';
+  repository: string;
+  branch?: string;
+  limit?: number;
+  offset?: number;
+  label?: string;
+  startItemId?: string;
+  depth?: number;
+  relationshipFilter?: string;
+  targetNodeTypeFilter?: string;
+  componentId?: string;
+  direction?: 'dependencies' | 'dependents';
+  itemId?: string;
+  itemType?: string;
+  tagId?: string;
+  entityType?: string;
+}
 
 /**
  * Query Handler
  * Handles all search and query operations across 7 different query types
  */
 export const queryHandler: SdkToolHandler = async (params, context, memoryService) => {
-  // 1. Parse and validate parameters
-  const validatedParams = QueryInputSchema.parse(params);
+  // 1. Validate and extract parameters
+  const validatedParams = params as QueryParams;
+  
+  // Basic validation
+  if (!validatedParams.type) {
+    throw new Error('type parameter is required');
+  }
+  if (!validatedParams.repository) {
+    throw new Error('repository parameter is required');
+  }
+  
   const { type, repository, branch = 'main' } = validatedParams;
 
   // 2. Get clientProjectRoot from session
@@ -104,7 +122,7 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
             created_at: ctx.created_at || null,
             updated_at: ctx.updated_at || null,
           })),
-        } satisfies z.infer<typeof ContextQueryOutputSchema>;
+        };
       }
 
       case 'entities': {
@@ -138,7 +156,7 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
           limit: result.limit,
           offset: result.offset,
           totalCount: result.totalCount,
-        } satisfies z.infer<typeof EntitiesQueryOutputSchema>;
+        };
       }
 
       case 'relationships': {
@@ -174,7 +192,7 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
           relatedItems: result.relatedItems,
           relationshipFilter: validatedParams.relationshipFilter,
           depth: validatedParams.depth,
-        } satisfies z.infer<typeof RelationshipsQueryOutputSchema>;
+        };
       }
 
       case 'dependencies': {
@@ -217,7 +235,7 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
           componentId: validatedParams.componentId!,
           direction,
           components,
-        } satisfies z.infer<typeof DependenciesQueryOutputSchema>;
+        };
       }
 
       case 'governance': {
@@ -247,7 +265,7 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
           componentId: validatedParams.componentId!,
           decisions: result.decisions,
           rules: result.rules,
-        } satisfies z.infer<typeof GovernanceQueryOutputSchema>;
+        };
       }
 
       case 'history': {
@@ -278,7 +296,7 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
           itemId: validatedParams.itemId!,
           itemType: validatedParams.itemType!,
           contextHistory: result.contextHistory,
-        } satisfies z.infer<typeof HistoryQueryOutputSchema>;
+        };
       }
 
       case 'tags': {
@@ -312,7 +330,7 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
             type: item.type || 'Unknown',
             ...item,
           })),
-        } satisfies z.infer<typeof TagsQueryOutputSchema>;
+        };
       }
 
       default:

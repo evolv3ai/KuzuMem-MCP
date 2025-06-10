@@ -1,14 +1,55 @@
 import { SdkToolHandler } from '../../../tool-handlers';
-import { ContextInputSchema, ContextUpdateOutputSchema } from '../../../schemas/unified-tool-schemas';
-import { z } from 'zod';
+
+// TypeScript interfaces for context parameters
+interface ContextParams {
+  operation: 'update';
+  repository: string;
+  branch?: string;
+  agent: string;
+  summary: string;
+  observation?: string;
+}
+
+interface ContextData {
+  id: string;
+  iso_date: string;
+  agent: string;
+  summary: string;
+  observation: string | null;
+  repository: string;
+  branch: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+interface ContextUpdateOutput {
+  success: boolean;
+  message?: string;
+  context?: ContextData;
+}
 
 /**
  * Context Handler
  * Handles context update operations
  */
 export const contextHandler: SdkToolHandler = async (params, context, memoryService) => {
-  // 1. Parse and validate parameters
-  const validatedParams = ContextInputSchema.parse(params);
+  // 1. Validate and extract parameters
+  const validatedParams = params as ContextParams;
+  
+  // Basic validation
+  if (!validatedParams.operation) {
+    throw new Error('operation parameter is required');
+  }
+  if (!validatedParams.repository) {
+    throw new Error('repository parameter is required');
+  }
+  if (!validatedParams.agent) {
+    throw new Error('agent parameter is required');
+  }
+  if (!validatedParams.summary) {
+    throw new Error('summary parameter is required');
+  }
+  
   const { operation, repository, branch = 'main', agent, summary, observation } = validatedParams;
 
   // 2. Get clientProjectRoot from session
@@ -56,14 +97,14 @@ export const contextHandler: SdkToolHandler = async (params, context, memoryServ
           return {
             success: false,
             message: 'Failed to update context - unexpected response format',
-          } satisfies z.infer<typeof ContextUpdateOutputSchema>;
+          } as ContextUpdateOutput;
         }
 
         if (!result.success || !result.context) {
           return {
             success: false,
             message: result.message || 'Failed to update context',
-          } satisfies z.infer<typeof ContextUpdateOutputSchema>;
+          } as ContextUpdateOutput;
         }
 
         // Map the context from UpdateContextOutputSchema to our schema
@@ -82,7 +123,7 @@ export const contextHandler: SdkToolHandler = async (params, context, memoryServ
             created_at: contextData.created_at || null,
             updated_at: contextData.updated_at || null,
           },
-        } satisfies z.infer<typeof ContextUpdateOutputSchema>;
+        } as ContextUpdateOutput;
       }
 
       default:
@@ -105,6 +146,6 @@ export const contextHandler: SdkToolHandler = async (params, context, memoryServ
     return {
       success: false,
       message: errorMessage,
-    } satisfies z.infer<typeof ContextUpdateOutputSchema>;
+    } as ContextUpdateOutput;
   }
 };
