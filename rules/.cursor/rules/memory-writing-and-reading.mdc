@@ -8,19 +8,19 @@ alwaysApply: true
 ## 1. When to **Write** Memories
 Write a memory to the KuzuMem-MCP graph **immediately after** any of the following events:
 
-| Event/Trigger                                 | Tool to Use         | Memory Type/Content                                      |
+| Event/Trigger                                 | Tool to Use         | Operation/Parameters                                     |
 |-----------------------------------------------|---------------------|----------------------------------------------------------|
-| You complete a significant code edit          | `update-context`    | Summary of the change, rationale, observations           |
-| You resolve a bug or discover a pattern       | `update-context`    | Bug pattern, fix summary, new insight                    |
-| You make a key architectural decision         | `add-decision`      | Decision ID, name, context, date, rationale              |
-| You add or refactor a module/component        | `add-component`     | Component ID, name, kind, dependencies, status           |
-| You establish or update a coding rule/standard| `add-rule`          | Rule ID, name, triggers, content, status, created date   |
-| You update repository-level metadata          | `update-metadata`   | Any change to repo-wide settings or attributes           |
+| You complete a significant code edit          | `context`           | `operation: "update"`, summary, observation              |
+| You resolve a bug or discover a pattern       | `context`           | `operation: "update"`, bug pattern, fix summary          |
+| You make a key architectural decision         | `entity`            | `operation: "create", entityType: "decision"`            |
+| You add or refactor a module/component        | `entity`            | `operation: "create", entityType: "component"`           |
+| You establish or update a coding rule/standard| `entity`            | `operation: "create", entityType: "rule"`                |
+| You update repository-level metadata          | `memory-bank`       | `operation: "update-metadata"`                           |
 
 **Best Practice:**  
 - Always include the current `repository` and `branch` in every tool call.
 - Write memories as soon as the event occurs—do not batch or delay.
-- Use the most specific tool for the memory type (see table above).
+- Use the most specific tool and operation for the memory type (see table above).
 - Never write to the `main` branch unless explicitly instructed.
 
 ---
@@ -28,60 +28,118 @@ Write a memory to the KuzuMem-MCP graph **immediately after** any of the followi
 ## 2. When to **Read** Memories
 Read from the memory graph at these key moments:
 
-| Development Moment                           | Tool to Use         | What to Retrieve                                         |
+| Development Moment                           | Tool to Use         | Query Type/Parameters                                    |
 |----------------------------------------------|---------------------|----------------------------------------------------------|
-| At the start of a coding session             | `get-context`       | Latest context entries for the repo/branch               |
-| Before making a design or architectural change| `get-decision`, `get-context` | Past decisions and context summaries           |
-| When working on or refactoring a component   | `get-component-dependencies`, `get-item-contextual-history` | Dependencies, related context, history |
-| When reviewing or enforcing standards        | `get-governing-items-for-component`, `get-rule` | Rules and decisions for the relevant component |
-| When debugging or investigating regressions  | `get-context`, `get-item-contextual-history` | Past bug patterns, context, related items      |
+| At the start of a coding session             | `query`             | `type: "context", latest: true`                         |
+| Before making a design or architectural change| `entity`           | `operation: "get", entityType: "decision"`               |
+| When working on or refactoring a component   | `query`             | `type: "dependencies"` or `type: "history"`             |
+| When reviewing or enforcing standards        | `query`             | `type: "governance"` for rules and decisions            |
+| When debugging or investigating regressions  | `query`             | `type: "context"` or `type: "history"`                  |
 
 **Best Practice:**  
 - Always query the latest context before starting new work.
-- Use traversal/history tools to understand dependencies and rationale.
-- Use decision/rule tools to ensure consistency and compliance.
+- Use the `query` tool with appropriate `type` for complex searches.
+- Use the `entity` tool with `operation: "get"` for direct entity retrieval.
 
 ---
 
-## 3. Tool Selection Quick Reference
-| Memory Type      | Write Tool         | Read Tool(s)                        |
-|------------------|--------------------|-------------------------------------|
-| Context/Note     | `update-context`   | `get-context`, `get-item-contextual-history` |
-| Component        | `add-component`    | `get-component-dependencies`, `get-related-items` |
-| Decision         | `add-decision`     | `get-decision`, `get-governing-items-for-component` |
-| Rule             | `add-rule`         | `get-rule`, `get-governing-items-for-component` |
-| Metadata         | `update-metadata`  | `get-metadata`                      |
+## 3. Unified Tool Reference
+| Memory Type      | Write Tool         | Write Operation     | Read Tool    | Read Operation/Type    |
+|------------------|--------------------|---------------------|--------------|------------------------|
+| Context/Note     | `context`          | `operation: "update"` | `query`      | `type: "context"`      |
+| Component        | `entity`           | `operation: "create", entityType: "component"` | `query` | `type: "dependencies"` |
+| Decision         | `entity`           | `operation: "create", entityType: "decision"` | `query` | `type: "governance"`   |
+| Rule             | `entity`           | `operation: "create", entityType: "rule"` | `query` | `type: "governance"`   |
+| Metadata         | `memory-bank`      | `operation: "update-metadata"` | `memory-bank` | `operation: "get-metadata"` |
 
 ---
 
 ## 4. General Guidance
 - **Write** memories for every meaningful change, insight, or decision.
 - **Read** memories to inform every new task, design, or investigation.
-- Use the **most specific tool** for the memory type and context.
+- Use the **unified tools** with appropriate operations and types.
 - **Never** store secrets, credentials, or personal data.
 - **Log** every write for auditability.
 
 ---
 
-## 5. When to Use Graph Tools
-Use the following graph tools to analyze, traverse, or understand the structure and relationships within your project knowledge graph. Invoke these tools when you need to answer structural, dependency, or influence questions about components, decisions, rules, or context.
+## 5. When to Use Graph Analysis Tools
+Use the following analysis and detection tools to analyze, traverse, or understand the structure and relationships within your project knowledge graph:
 
-| Tool Name                        | When to Use / Scenario                                                                 |
-|-----------------------------------|--------------------------------------------------------------------------------------|
-| `get-component-dependencies`      | To find all upstream dependencies of a component (what it relies on, directly/indirectly) |
-| `get-component-dependents`        | To find all downstream dependents of a component (what relies on it)                     |
-| `get-related-items`               | To explore all items related to a given item within a certain relationship depth         |
-| `get-item-contextual-history`     | To retrieve all context items linked to a specific component, decision, or rule          |
-| `get-governing-items-for-component`| To find all decisions and rules governing a component                                    |
-| `strongly-connected-components`   | To detect cycles or tightly coupled feedback loops in the graph (e.g., circular dependencies) |
-| `weakly-connected-components`     | To identify isolated clusters or "islands" in the project graph                         |
-| `pagerank`                        | To identify the most influential or central items in the project knowledge graph         |
-| `louvain-community-detection`     | To discover natural communities or thematic clusters among memory items                  |
-| `k-core-decomposition`            | To find highly interconnected subgraphs (core project areas)                             |
-| `shortest-path`                   | To find the most direct relationship or sequence of connections between two items        |
+| Tool & Type                      | When to Use / Scenario                                                                 |
+|----------------------------------|--------------------------------------------------------------------------------------|
+| `query` (type: "dependencies")    | To find all upstream dependencies or downstream dependents of a component             |
+| `query` (type: "relationships")   | To explore all items related to a given item within a certain relationship depth      |
+| `query` (type: "history")         | To retrieve all context items linked to a specific component, decision, or rule       |
+| `query` (type: "governance")      | To find all decisions and rules governing a component                                |
+| `detect` (type: "strongly-connected") | To detect cycles or tightly coupled feedback loops in the graph                   |
+| `detect` (type: "weakly-connected")   | To identify isolated clusters or "islands" in the project graph                   |
+| `analyze` (type: "pagerank")      | To identify the most influential or central items in the project knowledge graph      |
+| `analyze` (type: "louvain")       | To discover natural communities or thematic clusters among memory items               |
+| `analyze` (type: "k-core")        | To find highly interconnected subgraphs (core project areas)                          |
+| `analyze` (type: "shortest-path") | To find the most direct relationship or sequence of connections between two items     |
 
 **Best Practice:**
-- Use graph tools to inform refactoring, impact analysis, dependency management, and architectural reviews.
-- Prefer the most specific tool for your question (e.g., use `get-component-dependencies` for dependency chains, `pagerank` for influence ranking).
-- For large or complex queries, inform the user that the operation may take time and stream progress if supported.
+- Use the `query` tool for standard traversals and relationships.
+- Use the `analyze` tool for complex graph algorithms requiring projection.
+- Use the `detect` tool for pattern detection like cycles or islands.
+- For large or complex queries, inform the user that the operation may take time.
 - Always include `repository` and `branch` in every call.
+
+---
+
+## 6. Example Tool Calls
+
+### Writing Context:
+```json
+{
+  "tool": {
+    "name": "context",
+    "arguments": {
+      "operation": "update",
+      "repository": "my-app",
+      "branch": "feature/auth",
+      "agent": "cursor",
+      "summary": "Implemented JWT authentication",
+      "observation": "Used refresh token pattern for better security"
+    }
+  }
+}
+```
+
+### Creating a Decision:
+```json
+{
+  "tool": {
+    "name": "entity",
+    "arguments": {
+      "operation": "create",
+      "entityType": "decision",
+      "repository": "my-app",
+      "branch": "main",
+      "data": {
+        "id": "dec-20241210-auth-strategy",
+        "name": "JWT Authentication Strategy",
+        "date": "2024-12-10",
+        "context": "Needed stateless auth for microservices"
+      }
+    }
+  }
+}
+```
+
+### Querying Dependencies:
+```json
+{
+  "tool": {
+    "name": "query",
+    "arguments": {
+      "type": "dependencies",
+      "repository": "my-app",
+      "branch": "main",
+      "componentId": "comp-auth-service",
+      "direction": "dependents"
+    }
+  }
+}
+```

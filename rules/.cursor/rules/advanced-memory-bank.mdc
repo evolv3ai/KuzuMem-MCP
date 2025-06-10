@@ -21,7 +21,7 @@ alwaysApply: true
 You are **Cursor**, an autonomous coding assistant.  
 Persist all long-term knowledge in the KuzuMem-MCP graph so future
 conversations remain coherent. Keep the graph healthy, **branch-aware** and
-free of secrets or personal data.
+free of secrets or personal data. Use the unified tool architecture for all operations.
 
 ---
 
@@ -59,32 +59,33 @@ Respond with **one** of:
 
 ---
 
-## 5  Tool Catalogue (canonical names)
+## 5  Unified Tool Catalogue (11 tools)
 
-Memory-bank management  
-  • init-memory-bank — initialise empty graph  
-  • get-metadata / update-metadata — repo-level info  
-  • get-context / update-context — timestamped notes  
-  • add-component / add-decision / add-rule — create core nodes  
+Core Operations:
+  • **memory-bank** — Initialize bank, get/update metadata
+  • **entity** — Create/read/update/delete all entity types
+  • **context** — Manage work session context
+  • **introspect** — Explore graph schema and metadata
 
-Graph traversal  
-  • get-component-dependencies / dependents  
-  • get-governing-items-for-component  
-  • get-item-contextual-history  
-  • get-related-items  
+Query & Analysis:
+  • **query** — Unified search (context, entities, relationships, dependencies, governance, history, tags)
+  • **associate** — Create relationships between entities
+  • **analyze** — Graph algorithms (pagerank, louvain, k-core, shortest-path)
+  • **detect** — Pattern detection (strongly/weakly connected components)
 
-Graph algorithms  
-  • pagerank · louvain-community-detection · k-core-decomposition  
-  • strongly-connected-components · weakly-connected-components · shortest-path  
+Data Operations:
+  • **bulk-import** — Efficient bulk entity import
+  • **search** — Standard search capabilities
+  • **semantic-search** — Semantic search (placeholder)
 
-Tip: canonical names are case-sensitive—spell exactly as above.
+Tip: Tool names are case-sensitive—spell exactly as above.
 
 ---
 
 ## 6  Knowledge-Model Reference
-Repository, Metadata, Context, Component, Decision, Rule
+Repository, Metadata, Context, Component, Decision, Rule, File, Tag
 
-(The last two are new, mapping code artefacts and reusable labels.)
+All entities are branch-aware and stored in the graph database.
 
 ---
 
@@ -98,8 +99,9 @@ Assistant thought: Need to initialise memory.
 Tool call
 {
   "tool": {
-    "name": "init-memory-bank",
+    "name": "memory-bank",
     "arguments": {
+      "operation": "init",
       "clientProjectRoot": "/path/to/client/project",
       "repository": "cart-service",
       "branch": "feature/cart-refactor"
@@ -120,8 +122,9 @@ Assistant thought: Need to query governing items.
 Tool call
 {
   "tool": {
-    "name": "get-governing-items-for-component",
+    "name": "query",
     "arguments": {
+      "type": "governance",
       "clientProjectRoot": "/path/to/client/project",
       "repository": "cart-service",
       "branch": "feature/cart-refactor",
@@ -130,24 +133,57 @@ Tool call
   }
 }
 
-Tool response: { "decisions": [...], "rules": [...], "contextHistory": [...] }
+Tool response: { "decisions": [...], "rules": [...] }
 
 Assistant response: The Checkout component is governed by 3 rules: validation requirements, error handling standards, and performance guidelines.
+</example>
+
+<example>
+User: Create a new authentication service component.
+
+Assistant thought: Need to create a component entity.
+
+Tool call
+{
+  "tool": {
+    "name": "entity",
+    "arguments": {
+      "operation": "create",
+      "entityType": "component",
+      "clientProjectRoot": "/path/to/client/project",
+      "repository": "cart-service",
+      "branch": "feature/cart-refactor",
+      "data": {
+        "id": "comp-auth-service",
+        "name": "Authentication Service",
+        "kind": "service",
+        "status": "active",
+        "depends_on": ["comp-user-service", "comp-token-service"]
+      }
+    }
+  }
+}
+
+Tool response: { "success": true, "entity": {...} }
+
+Assistant response: Created Authentication Service component with dependencies on User Service and Token Service.
 </example>
 
 ---
 
 ## 8  When to CREATE vs. QUERY
 
-| Action                | Triggers                                                        |
+| Action                | Tool & Operation                                                |
 |-----------------------|-----------------------------------------------------------------|
-| Add Context           | New insight, bug pattern, post-discussion summary               |
-| Add Component         | New module discovered/created, architecture doc                 |
-| Add Decision          | Tech choice, design pattern, trade-off resolved                 |
-| Add Rule              | Coding standard, security requirement, user preference          |
-| Query Context         | Session start, recall previous reasoning                        |
-| Query Components      | Understand structure, evaluate change impact                    |
-| Query Decisions/Rules | Ensure consistency before recommendations                       |
+| Add Context           | `context` with `operation: "update"`                           |
+| Add Component         | `entity` with `operation: "create", entityType: "component"`   |
+| Add Decision          | `entity` with `operation: "create", entityType: "decision"`    |
+| Add Rule              | `entity` with `operation: "create", entityType: "rule"`        |
+| Query Context         | `query` with `type: "context"`                                 |
+| Query Components      | `query` with `type: "dependencies"` or `type: "entities"`      |
+| Query Decisions/Rules | `query` with `type: "governance"`                              |
+| Run Analysis          | `analyze` with appropriate algorithm `type`                     |
+| Detect Patterns       | `detect` with appropriate pattern `type`                        |
 
 ---
 
@@ -168,12 +204,21 @@ Refuse unsafe requests; log every MCP write with timestamp + branch for audit.
 
 ## 11 Client Project Isolation
 * Each client project gets its own isolated memory bank
-* Databases are created only when explicitly requested through init-memory-bank
+* Databases are created only when explicitly requested through memory-bank init
 * All tool calls must include the clientProjectRoot parameter pointing to the client's project root directory
 * Databases are stored within the client's project root directory
 
 ---
 
+## 12 Tool Consolidation Benefits
+* Reduced from 29 individual tools to 11 unified tools
+* Consistent parameter patterns across all tools
+* Simplified learning curve and better maintainability
+* All TypeScript compilation errors resolved
+* Comprehensive E2E testing infrastructure
+
+---
+
 By strictly following this rule, **Cursor** will store and retrieve knowledge
 deterministically, provide reproducible recommendations, and maintain project
-coherence across sessions.
+coherence across sessions using the unified tool architecture.
