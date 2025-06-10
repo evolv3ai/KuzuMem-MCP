@@ -9,7 +9,7 @@ import { MemoryService } from './services/memory.service';
 // Determine Client Project Root at startup (for context only, not for DB initialization)
 const serverCwd = process.cwd();
 // console.error(
-//   `MCP stdio server CWD (Current Working Directory): ${serverCwd}. Note: Actual memory bank paths are determined by \'init-memory-bank\' calls per repository/branch.`,
+//   `MCP stdio server CWD (Current Working Directory): ${serverCwd}. Note: Actual memory bank paths are determined by 'memory-bank' tool calls per repository/branch.`,
 // );
 
 if (process.env.DB_PATH_OVERRIDE) {

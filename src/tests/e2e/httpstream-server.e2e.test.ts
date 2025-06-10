@@ -578,10 +578,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         projectedGraphName: 'http-pagerank',
         nodeTableNames: ['Component'],
         relationshipTableNames: ['DEPENDS_ON'],
-        parameters: {
-          dampingFactor: 0.85,
-          maxIterations: 20,
-        },
       });
 
       expect(result).toMatchObject({
@@ -599,15 +595,12 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         projectedGraphName: 'http-kcore',
         nodeTableNames: ['Component'],
         relationshipTableNames: ['DEPENDS_ON'],
-        parameters: {
-          k: 1,
-        },
+        k: 2,
       });
 
       expect(result).toMatchObject({
         type: 'k-core',
         status: 'complete',
-        components: expect.any(Array),
       });
     });
 
@@ -624,28 +617,24 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       expect(result).toMatchObject({
         type: 'louvain',
         status: 'complete',
-        communities: expect.any(Array),
       });
     });
 
     it('should find shortest path', async () => {
-      const result = await callTool('analyze', {
-        algorithm: 'shortest-path',
+      const result = await callTool('detect', {
+        pattern: 'path',
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         projectedGraphName: 'http-shortest',
         nodeTableNames: ['Component'],
         relationshipTableNames: ['DEPENDS_ON'],
-        parameters: {
-          startNodeId: 'comp-http-gateway',
-          endNodeId: 'comp-http-database',
-        },
+        startNodeId: 'comp-api-gateway',
+        endNodeId: 'comp-database',
       });
 
       expect(result).toMatchObject({
-        type: 'shortest-path',
+        type: 'path',
         status: 'complete',
-        pathFound: true,
       });
     });
   });

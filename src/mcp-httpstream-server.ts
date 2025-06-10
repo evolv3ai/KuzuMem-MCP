@@ -110,8 +110,8 @@ function registerTools() {
       async (args, context): Promise<CallToolResult> => {
         debugLog(3, `Executing tool: ${tool.name}`, args);
 
-        // Handle clientProjectRoot storage for init-memory-bank
-        if (tool.name === 'init-memory-bank') {
+        // Handle clientProjectRoot storage for memory-bank init operations
+        if (tool.name === 'memory-bank' && args.operation === 'init') {
           const repoBranchKey = `${args.repository}:${args.branch}`;
           repositoryRootMap.set(repoBranchKey, args.clientProjectRoot);
           debugLog(3, `Stored clientProjectRoot for ${repoBranchKey}: ${args.clientProjectRoot}`);
