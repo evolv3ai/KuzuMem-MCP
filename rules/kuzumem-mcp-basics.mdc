@@ -1,0 +1,102 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: KuzuMem-MCP Core Usage Guidelines
+globs: 
+alwaysApply: true
+---
+
+# KuzuMem-MCP Server - Core Usage
+
+## Overview
+
+You are working with a **KuzuMem-MCP Server** that provides persistent, graph-based memory storage for AI coding assistants. The server uses the **official MCP TypeScript SDK** with full protocol compliance.
+
+## Essential Parameters
+
+**Every MCP tool call MUST include:**
+- `clientProjectRoot`: Absolute path to the client project (e.g., `"/path/to/project"`)
+- `repository`: Repository name (e.g., `"my-app"`)  
+- `branch`: Git branch name (defaults to `"main"`)
+
+## Tool Call Format
+
+Use this exact JSON structure for tool calls:
+
+```json
+{
+  "tool": {
+    "name": "tool-name",
+    "arguments": {
+      "clientProjectRoot": "/path/to/project",
+      "repository": "repository-name", 
+      "branch": "branch-name",
+      // ... additional tool-specific arguments
+    }
+  }
+}
+```
+
+## Core Tool Categories
+
+### 1. Memory Bank Management
+- `init-memory-bank` - Initialize new memory bank
+- `get-metadata` / `update-metadata` - Repository-level information
+- `get-context` / `update-context` - Session and work context
+
+### 2. Entity Management  
+- `add-component` - Add/update system components
+- `add-decision` - Record architectural decisions
+- `add-rule` - Define coding/architectural rules
+
+### 3. Graph Queries
+- `get-component-dependencies` - Find what component depends on
+- `get-component-dependents` - Find what depends on component  
+- `get-governing-items-for-component` - Get rules/decisions affecting component
+
+### 4. Graph Algorithms
+- `pagerank` - Identify critical components
+- `shortest-path` - Find relationships between components
+- `louvain-community-detection` - Discover system modules
+
+## Basic Workflow
+
+1. **Initialize** (if needed): Use `init-memory-bank` for new repositories
+2. **Query Context**: Use `get-metadata` and `get-context` to understand current state  
+3. **Perform Work**: Use appropriate tools based on the task
+4. **Update Memory**: Use `update-context`, `add-component`, etc. to persist new knowledge
+
+## ID Naming Conventions
+
+- **Components**: `comp-{Name}` (e.g., `comp-AuthService`)
+- **Decisions**: `dec-{YYYYMMDD}-{slug}` (e.g., `dec-20250609-api-versioning`)  
+- **Rules**: `rule-{category}-{description}` (e.g., `rule-security-authentication`)
+
+## Response Formats
+
+The server returns results in MCP-compliant format:
+- Success: `{"result": {"content": [{"type": "text", "text": "JSON_RESULT"}]}}`
+- Error: `{"error": {"code": -32603, "message": "Error description"}}`
+
+Always parse the `content[0].text` field to get the actual tool result.
+
+## Example: Basic Component Query
+
+```json
+{
+  "tool": {
+    "name": "get-component-dependencies", 
+    "arguments": {
+      "clientProjectRoot": "/workspace/my-project",
+      "repository": "ecommerce-api",
+      "branch": "feature/checkout", 
+      "componentId": "comp-PaymentService"
+    }
+  }
+}
+```
+
+This returns components that PaymentService depends on, helping understand impact before changes.
