@@ -254,7 +254,15 @@ Use this section to track discoveries, issues, and decisions during implementati
 
 ---
 
-## Tool 2: entity
+## Tool 2: entity (universal entity CRUD) ✅
+**Status**: COMPLETE
+- Created: `src/mcp/tools/unified/entity-tool.ts`
+- Created: `src/mcp/services/handlers/unified/entity-handler.ts`
+- Created: `src/__tests__/tools/unified/entity-tool.test.ts`
+- Updated: `src/mcp/schemas/unified-tool-schemas.ts`
+- Updated: exports and registrations
+- Tests: 12/12 passing
+- Notes: get/delete operations are placeholders pending MemoryService updates
 
 ### Files to Create
 - `src/mcp/tools/unified/entity-tool.ts`
@@ -340,7 +348,12 @@ const entityFieldMap = {
 
 ---
 
-## Tool 3: introspect
+## Tool 3: introspect (schema operations)
+- [ ] Create schemas: `IntrospectInputSchema`, `IntrospectOutputSchema`
+- [ ] Create tool: `src/mcp/tools/unified/introspect-tool.ts`
+- [ ] Create handler: `src/mcp/services/handlers/unified/introspect-handler.ts`
+- [ ] Create tests: `src/__tests__/tools/unified/introspect-tool.test.ts`
+- [ ] Update exports
 
 ### Files to Create
 - `src/mcp/tools/unified/introspect-tool.ts`
@@ -901,42 +914,27 @@ rm src/__tests__/tools/*-tool.test.ts # (old ones)
 
 ---
 
-## Progress Tracking
+## 10. Progress Tracker
 
-### Overall Progress
-- [x] Pre-implementation tasks complete ✅
-- [x] Tool 1: memory-bank ✅
-- [ ] Tool 2: entity ⬜
-- [ ] Tool 3: introspect ⬜
-- [ ] Tool 4: context ⬜
-- [ ] Tool 5: query ⬜
-- [ ] Tool 6: associate ⬜
-- [ ] Tool 7: analyze ⬜
-- [ ] Tool 8: detect ⬜
-- [ ] Tool 9: bulk-import ⬜
-- [ ] Tool 10: semantic-search ⬜
-- [ ] Phase 2: Integration ⬜
-- [ ] Phase 3: Testing ⬜
-- [ ] Phase 4: Cleanup ⬜
+### Overall Progress: 18% (2/11 tools)
 
-### Risk Areas
-1. **Query tool complexity** - Most complex consolidation
-2. **Service method gaps** - May need new methods for update/delete
-3. **Parameter validation** - Different params per operation/type
-4. **Test coverage** - Need comprehensive tests for all paths
-5. **Performance** - Ensure no regression from consolidation
+#### Phase 1: Setup ✅
+- [x] Created directories
+- [x] Created schema file
+- [x] Studied patterns
 
-### Notes Section
-Use this section to track discoveries, issues, and decisions during implementation:
-
-**2024-12-10:** Pre-implementation tasks completed. Discovered current implementation has 19 tools instead of 29. Missing tools (file, tag, introspection) have corresponding MemoryService methods but no tool implementations yet. Will proceed with consolidating existing 19 tools.
-
-**2024-12-10:** Completed Tool 1 (memory-bank):
-- Successfully consolidated `init-memory-bank`, `get-metadata`, and `update-metadata` into a single tool
-- Created unified tool definition with operation parameter
-- Implemented handler with proper session management and progress reporting
-- Added comprehensive unit tests
-- Tool is now available as 'memory-bank' with operations: init, get-metadata, update-metadata
+#### Phase 2: Tool Implementation (2/11 complete)
+- [x] Tool 1: memory-bank (init, get-metadata, update-metadata)
+- [x] Tool 2: entity (add-component, add-decision, add-rule, add-file, add-tag)
+- [ ] Tool 3: introspect
+- [ ] Tool 4: context
+- [ ] Tool 5: query
+- [ ] Tool 6: associate
+- [ ] Tool 7: analyze
+- [ ] Tool 8: detect
+- [ ] Tool 9: bulk-import
+- [ ] Tool 10: (reserved for future)
+- [ ] Tool 11: (reserved for future)
 
 ---
 
@@ -1116,6 +1114,6 @@ After all tools are implemented:
 ---
 
 _Last Updated: 2024-12-10_
-_Current Phase: Tool Implementation - Tool 1 Complete ✅_
+_Current Phase: Tool Implementation - Tool 2 Complete ✅_
 _Blockers: None_
-_Next Action: Start implementing Tool 2: entity_
+_Next Action: Start implementing Tool 3: introspect_
