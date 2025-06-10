@@ -26,6 +26,9 @@ export { stronglyConnectedComponentsTool } from './strongly-connected-components
 export { weaklyConnectedComponentsTool } from './weakly-connected-components-tool';
 export { shortestPathTool } from './shortest-path-tool';
 
+// Unified Tools (New Consolidated Tools)
+export { memoryBankTool } from './unified/memory-bank-tool';
+
 // Import all tools for the combined array
 import { initMemoryBankTool } from './init-memory';
 import { getMetadataTool, updateMetadataTool } from './metadata-tools';
@@ -49,6 +52,9 @@ import { pageRankTool } from './pagerank-tool';
 import { stronglyConnectedComponentsTool } from './strongly-connected-components-tool';
 import { weaklyConnectedComponentsTool } from './weakly-connected-components-tool';
 import { shortestPathTool } from './shortest-path-tool';
+
+// Imports for Unified Tools
+import { memoryBankTool } from './unified/memory-bank-tool';
 
 /**
  * Combined array of all MCP tools
@@ -76,4 +82,6 @@ export const MEMORY_BANK_MCP_TOOLS: McpTool[] = [
   stronglyConnectedComponentsTool,
   weaklyConnectedComponentsTool,
   shortestPathTool,
+  // Unified Tools (temporary - will replace old tools in phase 2)
+  memoryBankTool,
 ];

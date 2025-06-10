@@ -1,7 +1,14 @@
 # Tool Consolidation Implementation Plan
 
 ## Overview
-This document tracks the step-by-step implementation of consolidating 29 tools into 11 unified tools. Each section includes files to modify, queries to implement, and a progress checklist.
+This document tracks the step-by-step implementation of consolidating 29 tool functionalities into 11 unified tools. While the current codebase only has 19 implemented tools, the MemoryService supports additional features (file management, tagging, and introspection) that will be included in the consolidated tools.
+
+### Current vs Planned Tool Coverage
+- **Currently Implemented:** 19 tools
+- **Service Methods Available:** Support for 29+ operations
+- **Consolidation Target:** 11 unified tools covering all functionality
+
+The missing tool implementations (file, tag, introspection) will be incorporated into the appropriate unified tools since the underlying service methods already exist.
 
 ## Implementation Order
 Tools are ordered by dependencies and complexity:
@@ -34,7 +41,13 @@ These tools were mentioned in the plan but not yet implemented. The MemoryServic
 - `addFile()`, `associateFileWithComponent()`, `addTag()`, `tagItem()`, `findItemsByTag()`
 - `countNodesByLabel()`, `listNodesByLabel()`, `getNodeProperties()`, `listAllIndexes()`, `listAllNodeLabels()`
 
-We'll proceed with consolidating the existing 19 tools while keeping in mind that these additional features exist in the service layer.
+**Decision:** We'll implement these missing features as part of the consolidated tools:
+- File and tag creation → `entity` tool
+- File-component association and tagging → `associate` tool  
+- Tag search → `query` tool
+- All introspection operations → `introspect` tool
+
+This ensures the consolidated tools provide complete functionality even for features that weren't previously exposed as individual tools.
 
 ## Handler Pattern Template
 
@@ -212,19 +225,32 @@ export const memoryBankTool: McpTool = {
 - `MemoryService.updateMetadata()`
 
 ### Checklist
-- [ ] Create tool definition file
-- [ ] Create handler with operation dispatch
-- [ ] Handle 'init' operation
-- [ ] Handle 'get-metadata' operation
-- [ ] Handle 'update-metadata' operation
-- [ ] Add parameter validation
-- [ ] Write unit tests
-- [ ] Test all three operations
-- [ ] Update exports in `src/mcp/tools/index.ts`
+- [x] Create tool definition file ✅
+- [x] Create handler with operation dispatch ✅
+- [x] Handle 'init' operation ✅
+- [x] Handle 'get-metadata' operation ✅
+- [x] Handle 'update-metadata' operation ✅
+- [x] Add parameter validation ✅
+- [x] Write unit tests ✅
+- [x] Test all three operations ✅
+- [x] Update exports in `src/mcp/tools/index.ts` ✅
+- [x] Register handler in `src/mcp/tool-handlers.ts` ✅
 
 ### Files to Delete (After Phase 2)
 - `src/mcp/tools/init-memory.ts`
 - `src/mcp/tools/metadata-tools.ts`
+
+### Notes Section
+Use this section to track discoveries, issues, and decisions during implementation:
+
+**2024-12-10:** Pre-implementation tasks completed. Discovered current implementation has 19 tools instead of 29. Missing tools (file, tag, introspection) have corresponding MemoryService methods but no tool implementations yet. Will proceed with consolidating existing 19 tools.
+
+**2024-12-10:** Completed Tool 1 (memory-bank):
+- Successfully consolidated `init-memory-bank`, `get-metadata`, and `update-metadata` into a single tool
+- Created unified tool definition with operation parameter
+- Implemented handler with proper session management and progress reporting
+- Added comprehensive unit tests
+- Tool is now available as 'memory-bank' with operations: init, get-metadata, update-metadata
 
 ---
 
@@ -879,7 +905,7 @@ rm src/__tests__/tools/*-tool.test.ts # (old ones)
 
 ### Overall Progress
 - [x] Pre-implementation tasks complete ✅
-- [ ] Tool 1: memory-bank ⬜
+- [x] Tool 1: memory-bank ✅
 - [ ] Tool 2: entity ⬜
 - [ ] Tool 3: introspect ⬜
 - [ ] Tool 4: context ⬜
@@ -904,6 +930,13 @@ rm src/__tests__/tools/*-tool.test.ts # (old ones)
 Use this section to track discoveries, issues, and decisions during implementation:
 
 **2024-12-10:** Pre-implementation tasks completed. Discovered current implementation has 19 tools instead of 29. Missing tools (file, tag, introspection) have corresponding MemoryService methods but no tool implementations yet. Will proceed with consolidating existing 19 tools.
+
+**2024-12-10:** Completed Tool 1 (memory-bank):
+- Successfully consolidated `init-memory-bank`, `get-metadata`, and `update-metadata` into a single tool
+- Created unified tool definition with operation parameter
+- Implemented handler with proper session management and progress reporting
+- Added comprehensive unit tests
+- Tool is now available as 'memory-bank' with operations: init, get-metadata, update-metadata
 
 ---
 
@@ -1083,6 +1116,6 @@ After all tools are implemented:
 ---
 
 _Last Updated: 2024-12-10_
-_Current Phase: Pre-implementation Complete ✅_
+_Current Phase: Tool Implementation - Tool 1 Complete ✅_
 _Blockers: None_
-_Next Action: Start implementing Tool 1: memory-bank_
+_Next Action: Start implementing Tool 2: entity_
