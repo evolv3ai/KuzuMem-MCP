@@ -199,7 +199,33 @@ export const IntrospectOutputSchema = z.union([
 // Context Tool Schemas
 // ============================================
 
-// TODO: Add context tool schemas
+export const ContextInputSchema = z.object({
+  operation: z.enum(['update']), // Only update operation for now
+  clientProjectRoot: z.string().optional(), // From session
+  repository: z.string(),
+  branch: z.string().default('main'),
+  agent: z.string(),
+  summary: z.string(),
+  observation: z.string().optional(),
+});
+
+export const ContextUpdateOutputSchema = z.object({
+  success: z.boolean(),
+  message: z.string().optional(),
+  context: z
+    .object({
+      id: z.string(),
+      iso_date: z.string(),
+      agent: z.string(),
+      summary: z.string(),
+      observation: z.string().nullable(),
+      repository: z.string(),
+      branch: z.string(),
+      created_at: z.string().nullable(),
+      updated_at: z.string().nullable(),
+    })
+    .optional(),
+});
 
 // ============================================
 // Query Tool Schemas

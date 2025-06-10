@@ -348,12 +348,15 @@ const entityFieldMap = {
 
 ---
 
-## Tool 3: introspect (schema operations)
-- [ ] Create schemas: `IntrospectInputSchema`, `IntrospectOutputSchema`
-- [ ] Create tool: `src/mcp/tools/unified/introspect-tool.ts`
-- [ ] Create handler: `src/mcp/services/handlers/unified/introspect-handler.ts`
-- [ ] Create tests: `src/__tests__/tools/unified/introspect-tool.test.ts`
-- [ ] Update exports
+## Tool 3: introspect (schema operations) ✅
+**Status**: COMPLETE
+- Created: `src/mcp/tools/unified/introspect-tool.ts`
+- Created: `src/mcp/services/handlers/unified/introspect-handler.ts`
+- Created: `src/__tests__/tools/unified/introspect-tool.test.ts`
+- Updated: `src/mcp/schemas/unified-tool-schemas.ts`
+- Updated: exports and registrations
+- Tests: 11/11 passing
+- Notes: Implements all 4 query types (labels, count, properties, indexes)
 
 ### Files to Create
 - `src/mcp/tools/unified/introspect-tool.ts`
@@ -406,6 +409,11 @@ export const introspectTool: McpTool = {
 ---
 
 ## Tool 4: context
+- [ ] Create schemas: `ContextInputSchema`, `ContextUpdateOutputSchema`
+- [ ] Create tool: `src/mcp/tools/unified/context-tool.ts`
+- [ ] Create handler: `src/mcp/services/handlers/unified/context-handler.ts`
+- [ ] Create tests: `src/__tests__/tools/unified/context-tool.test.ts`
+- [ ] Update exports
 
 ### Files to Create
 - `src/mcp/tools/unified/context-tool.ts`
@@ -916,17 +924,17 @@ rm src/__tests__/tools/*-tool.test.ts # (old ones)
 
 ## 10. Progress Tracker
 
-### Overall Progress: 18% (2/11 tools)
+### Overall Progress: 27% (3/11 tools)
 
 #### Phase 1: Setup ✅
 - [x] Created directories
 - [x] Created schema file
 - [x] Studied patterns
 
-#### Phase 2: Tool Implementation (2/11 complete)
+#### Phase 2: Tool Implementation (3/11 complete)
 - [x] Tool 1: memory-bank (init, get-metadata, update-metadata)
 - [x] Tool 2: entity (add-component, add-decision, add-rule, add-file, add-tag)
-- [ ] Tool 3: introspect
+- [x] Tool 3: introspect (list-all-labels, count-nodes-by-label, get-node-properties, list-all-indexes)
 - [ ] Tool 4: context
 - [ ] Tool 5: query
 - [ ] Tool 6: associate
@@ -1114,6 +1122,6 @@ After all tools are implemented:
 ---
 
 _Last Updated: 2024-12-10_
-_Current Phase: Tool Implementation - Tool 2 Complete ✅_
+_Current Phase: Tool Implementation - Tool 3 Complete ✅_
 _Blockers: None_
-_Next Action: Start implementing Tool 3: introspect_
+_Next Action: Start implementing Tool 4: context_
