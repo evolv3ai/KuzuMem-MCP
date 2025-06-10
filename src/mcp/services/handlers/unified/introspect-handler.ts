@@ -140,12 +140,10 @@ export const introspectHandler: SdkToolHandler = async (params, context, memoryS
         });
 
         // Ensure all required fields are populated in indexes
-        const normalizedIndexes = result.indexes.map((idx) => ({
-          name: idx.name,
-          tableName: idx.tableName,
-          propertyName: idx.propertyName,
-          isPrimaryKey: idx.isPrimaryKey ?? false,
-          indexType: idx.indexType ?? 'UNKNOWN',
+        const normalizedIndexes = result.indexes.map((idx: any) => ({
+          table_name: idx.table_name,
+          index_name: idx.index_name,
+          is_primary: idx.is_primary,
         }));
 
         return {

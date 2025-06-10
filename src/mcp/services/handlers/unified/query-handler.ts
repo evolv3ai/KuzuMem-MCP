@@ -93,12 +93,12 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
 
         return {
           type: 'context' as const,
-          contexts: result.map((ctx) => ({
+          contexts: result.map((ctx: any) => ({
             id: ctx.id,
             iso_date: ctx.iso_date,
             agent: ctx.agent || null,
             summary: ctx.summary || null,
-            observation: (ctx as any).observation || null,
+            observation: ctx.observation || null,
             repository: ctx.repository,
             branch: ctx.branch,
             created_at: ctx.created_at || null,

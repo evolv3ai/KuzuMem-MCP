@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { AnyZodObject, z, ZodObject } from 'zod';
-import * as toolSchemas from './mcp/schemas/tool-schemas';
+import * as toolSchemas from './mcp/schemas/unified-tool-schemas';
 import { toolHandlers } from './mcp/tool-handlers';
 import { McpProgressNotification } from './mcp/types/sdk-custom';
 import { MemoryService } from './services/memory.service';
@@ -34,31 +34,25 @@ const sessionStore = new Map<
   { clientProjectRoot?: string; repository?: string; branch?: string }
 >();
 
-// Helper function to derive schema name (e.g., init-memory-bank -> InitMemoryBankInputSchema)
+// Helper function to derive schema name for unified tools
 function getSchemaKeyForTool(toolName: string): keyof typeof toolSchemas | undefined {
-  // Special handling for algorithm tools with compound words
-  const specialCases: Record<string, string> = {
-    pagerank: 'PageRank',
-    'k-core-decomposition': 'KCoreDecomposition',
-    'louvain-community-detection': 'LouvainCommunityDetection',
-    'strongly-connected-components': 'StronglyConnectedComponents',
-    'weakly-connected-components': 'WeaklyConnectedComponents',
-    'shortest-path': 'ShortestPath',
+  // Map unified tool names to their schema names
+  const unifiedToolSchemas: Record<string, string> = {
+    'memory-bank': 'MemoryBankSchema',
+    entity: 'EntitySchema',
+    introspect: 'IntrospectSchema',
+    context: 'ContextSchema',
+    query: 'QuerySchema',
+    associate: 'AssociateSchema',
+    analyze: 'AnalyzeSchema',
+    detect: 'DetectSchema',
+    'bulk-import': 'BulkImportSchema',
+    'semantic-search': 'SemanticSearchSchema',
   };
 
-  let pascalCaseName: string;
-  if (specialCases[toolName]) {
-    pascalCaseName = specialCases[toolName];
-  } else {
-    pascalCaseName = toolName
-      .split('-')
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join('');
-  }
+  const schemaKey = unifiedToolSchemas[toolName];
 
-  const schemaKey = `${pascalCaseName}InputSchema`;
-
-  if (schemaKey in toolSchemas) {
+  if (schemaKey && schemaKey in toolSchemas) {
     return schemaKey as keyof typeof toolSchemas;
   }
   return undefined;
@@ -108,19 +102,6 @@ async function main() {
       );
     }
 
-    // DEBUG: Special logging for get-context
-    if (toolName === 'get-context') {
-      serverLogger.info(`[DEBUG get-context] schemaKey: ${schemaKey}`);
-      serverLogger.info(`[DEBUG get-context] currentInputSchema: ${currentInputSchema}`);
-      serverLogger.info(
-        `[DEBUG get-context] schemaForSdk: ${JSON.stringify(schemaForSdk, null, 2)}`,
-      );
-      serverLogger.info(`[DEBUG get-context] isDefaultSchema: ${isDefaultSchema}`);
-      serverLogger.info(
-        `[DEBUG get-context] Available schemas: ${Object.keys(toolSchemas).join(', ')}`,
-      );
-    }
-
     mcpServer.tool(
       toolName,
       schemaForSdk as any, // Cast to any to avoid deep type recursion
@@ -134,13 +115,6 @@ async function main() {
           JSON.stringify(sdkProvidedParams, null, 2),
         );
         // console.error(`[Tool: ${toolName}] Received full sdkContext from SDK:`, JSON.stringify(sdkContext, null, 2)); // Too verbose usually
-
-        // DEBUG: Special logging for get-context
-        if (toolName === 'get-context') {
-          console.error(
-            `[DEBUG get-context wrapper] About to parse params and build enrichedContext`,
-          );
-        }
 
         try {
           // sdkProvidedParams are ALREADY parsed by the SDK according to currentInputSchema.
@@ -168,11 +142,12 @@ async function main() {
           }
 
           if (
-            toolName === 'init-memory-bank' &&
+            toolName === 'memory-bank' &&
             validatedParams &&
-            typeof validatedParams === 'object'
+            typeof validatedParams === 'object' &&
+            validatedParams.operation === 'init'
           ) {
-            const params = validatedParams as z.infer<typeof toolSchemas.InitMemoryBankInputSchema>;
+            const params = validatedParams as z.infer<typeof toolSchemas.MemoryBankInputSchema>;
             if (!currentSessionData) {
               currentSessionData = {
                 clientProjectRoot: undefined,
@@ -190,7 +165,7 @@ async function main() {
               currentSessionData.branch = params.branch;
             }
             serverLogger.info(
-              `[Tool: init-memory-bank] Attempting to set session data for ${sessionId}: CPR=${params.clientProjectRoot}, Repo=${params.repository}, Branch=${params.branch}`,
+              `[Tool: memory-bank] Attempting to set session data for ${sessionId}: CPR=${params.clientProjectRoot}, Repo=${params.repository}, Branch=${params.branch}`,
             );
           }
           if (currentSessionData) {
@@ -253,15 +228,6 @@ async function main() {
           // It expects (params, enrichedContext, memoryService)
           // We pass sdkProvidedParams as 'params' (already parsed by SDK if schema matched)
 
-          // DEBUG: Special logging for get-context
-          if (toolName === 'get-context') {
-            console.error(`[DEBUG get-context wrapper] About to call actualToolHandler`, {
-              hasActualToolHandler: !!actualToolHandler,
-              enrichedContextKeys: Object.keys(enrichedContext),
-              hasMemoryService: !! MemoryService,
-            });
-          }
-
           // Create a new MemoryService instance on-demand for each tool call
           let memoryServiceInstance: MemoryService;
           try {
@@ -275,12 +241,6 @@ async function main() {
           
           const result = await actualToolHandler(sdkProvidedParams, enrichedContext, memoryServiceInstance);
 
-          // DEBUG: Special logging for get-context
-          if (toolName === 'get-context') {
-            console.error(`[DEBUG get-context wrapper] actualToolHandler returned:`, result);
-            console.error(`[DEBUG get-context wrapper] Converting to MCP CallToolResult format...`);
-          }
-
           // Convert raw result to MCP CallToolResult format
           const mcpResult = {
             content: [
@@ -291,18 +251,8 @@ async function main() {
             ],
           };
 
-          // DEBUG: Special logging for get-context
-          if (toolName === 'get-context') {
-            console.error(`[DEBUG get-context wrapper] Returning MCP-formatted result:`, mcpResult);
-          }
-
           return mcpResult;
         } catch (error) {
-          // DEBUG: Special logging for get-context
-          if (toolName === 'get-context') {
-            console.error(`[DEBUG get-context wrapper] Exception caught:`, error);
-          }
-
           if (error instanceof z.ZodError) {
             // This error could be from the SDK's parsing (if sdkProvidedParams was a direct forward)
             // or from within actualToolHandler if it re-parses.

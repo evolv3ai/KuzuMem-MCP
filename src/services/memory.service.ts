@@ -1,8 +1,8 @@
 import * as path from 'path';
 import { z } from 'zod';
-import { RepositoryProvider } from '../db';
+import { RepositoryProvider } from '../db/repository-provider';
 import { KuzuDBClient } from '../db/kuzu';
-import * as toolSchemas from '../mcp/schemas/tool-schemas';
+import * as toolSchemas from '../mcp/schemas/unified-tool-schemas';
 import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
 import {
     Component,
@@ -14,6 +14,7 @@ import {
     Rule
 } from '../types';
 import { Mutex } from '../utils/mutex';
+import { Config } from '../config';
 
 // Import operation modules
 import * as componentOps from './memory-operations/component.ops';
