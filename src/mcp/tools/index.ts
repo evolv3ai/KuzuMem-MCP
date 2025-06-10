@@ -33,6 +33,7 @@ export { introspectTool } from './unified/introspect-tool';
 export { contextTool } from './unified/context-tool';
 export { queryTool } from './unified/query-tool';
 export { associateTool } from './unified/associate-tool';
+export { analyzeTool } from './unified/analyze-tool';
 
 // Import all tools for the combined array
 import { initMemoryBankTool } from './init-memory';

@@ -395,7 +395,79 @@ export const AssociateOutputSchema = z.object({
 // Analyze Tool Schemas
 // ============================================
 
-// TODO: Add analyze tool schemas
+export const AnalyzeInputSchema = z.object({
+  type: z.enum(['pagerank', 'shortest-path', 'k-core', 'louvain']),
+  clientProjectRoot: z.string().optional(), // From session
+  repository: z.string(),
+  branch: z.string().default('main'),
+  
+  // Common graph projection parameters
+  projectedGraphName: z.string(),
+  nodeTableNames: z.array(z.string()),
+  relationshipTableNames: z.array(z.string()),
+  
+  // PageRank specific
+  damping: z.number().optional(),
+  maxIterations: z.number().optional(),
+  
+  // Shortest Path specific
+  startNodeId: z.string().optional(),
+  endNodeId: z.string().optional(),
+  
+  // K-Core specific
+  k: z.number().int().positive().optional(),
+});
+
+// Different output schemas for each analysis type
+export const PageRankOutputSchema = z.object({
+  type: z.literal('pagerank'),
+  status: z.string(),
+  nodes: z.array(z.object({
+    id: z.string(),
+    pagerank: z.number(),
+  })),
+  projectedGraphName: z.string(),
+  message: z.string().optional(),
+});
+
+export const ShortestPathOutputSchema = z.object({
+  type: z.literal('shortest-path'),
+  status: z.string(),
+  pathFound: z.boolean(),
+  path: z.array(z.string()).optional(),
+  pathLength: z.number().optional(),
+  message: z.string().optional(),
+});
+
+export const KCoreOutputSchema = z.object({
+  type: z.literal('k-core'),
+  status: z.string(),
+  nodes: z.array(z.object({
+    id: z.string(),
+    coreNumber: z.number(),
+  })),
+  projectedGraphName: z.string(),
+  message: z.string().optional(),
+});
+
+export const LouvainOutputSchema = z.object({
+  type: z.literal('louvain'),
+  status: z.string(),
+  nodes: z.array(z.object({
+    id: z.string(),
+    communityId: z.number(),
+  })),
+  projectedGraphName: z.string(),
+  message: z.string().optional(),
+});
+
+// Union of all analyze outputs
+export const AnalyzeOutputSchema = z.union([
+  PageRankOutputSchema,
+  ShortestPathOutputSchema,
+  KCoreOutputSchema,
+  LouvainOutputSchema,
+]);
 
 // ============================================
 // Detect Tool Schemas
