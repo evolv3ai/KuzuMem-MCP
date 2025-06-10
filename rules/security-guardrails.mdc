@@ -72,6 +72,8 @@ Every tool call must validate:
 - Component IDs: Must start with `comp-`
 - Decision IDs: Must follow `dec-YYYYMMDD-slug` format
 - Rule IDs: Must start with `rule-`
+- File IDs: Must start with `file-`
+- Tag IDs: Must start with `tag-`
 - No special characters except hyphens and underscores
 
 ### 3. Content Filtering
@@ -128,23 +130,47 @@ Maintain audit trail for:
 - Keep historical versions for decisions
 - Maintain dependency chains for rollback scenarios
 
-## Example: Safe Tool Call
+## Example: Safe Tool Call (Unified Architecture)
 
 ```json
 {
   "tool": {
-    "name": "add-component",
+    "name": "entity",
     "arguments": {
+      "operation": "create",
+      "entityType": "component",
       "clientProjectRoot": "/workspace/project",
       "repository": "shopping-cart",
       "branch": "feature/new-checkout",
-      "id": "comp-CheckoutService",
-      "name": "Checkout Service",
-      "kind": "service",
-      "status": "active"
+      "data": {
+        "id": "comp-CheckoutService",
+        "name": "Checkout Service",
+        "kind": "service",
+        "status": "active",
+        "depends_on": ["comp-CartService"]
+      }
     }
   }
 }
 ```
 
-This example follows all safety rules: proper branch isolation, valid entity ID, no sensitive data, and complete required parameters.
+This example follows all safety rules: proper branch isolation, valid entity ID, no sensitive data, complete required parameters, and uses the unified `entity` tool with proper operation type.
+
+## Unified Tool Security Notes
+
+### 1. Tool-Specific Validations
+- **memory-bank**: Validate `operation` is one of: `init`, `get-metadata`, `update-metadata`
+- **entity**: Validate `operation` and `entityType` combinations
+- **query**: Validate `type` parameter for allowed query types
+- **analyze**: Ensure graph projection parameters are provided
+- **detect**: Validate algorithm type selection
+
+### 2. Progressive Operations
+- Long-running operations (analyze, detect) should inform users
+- Stream progress updates when supported
+- Handle timeouts gracefully
+
+### 3. Bulk Operations
+- **bulk-import**: Limit batch sizes to prevent memory exhaustion
+- Validate all entities in batch before processing
+- Rollback entire batch on any validation failure

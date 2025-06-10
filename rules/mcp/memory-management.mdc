@@ -19,8 +19,9 @@ Use when starting work on a new repository or branch:
 ```json
 {
   "tool": {
-    "name": "init-memory-bank",
+    "name": "memory-bank",
     "arguments": {
+      "operation": "init",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app",
       "branch": "main"
@@ -40,8 +41,9 @@ Use when starting work on a new repository or branch:
 ```json
 {
   "tool": {
-    "name": "get-metadata",
+    "name": "memory-bank",
     "arguments": {
+      "operation": "get-metadata",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app",
       "branch": "main"
@@ -54,15 +56,26 @@ Use when starting work on a new repository or branch:
 ```json
 {
   "tool": {
-    "name": "update-metadata", 
+    "name": "memory-bank", 
     "arguments": {
+      "operation": "update-metadata",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app",
       "branch": "main",
       "metadata": {
-        "techStack": ["Node.js", "TypeScript", "Kuzu"],
+        "id": "meta",
+        "project": {
+          "name": "My App",
+          "created": "2024-12-10",
+          "description": "E-commerce platform"
+        },
+        "tech_stack": {
+          "backend": "Node.js",
+          "frontend": "React",
+          "database": "KuzuDB"
+        },
         "architecture": "microservices",
-        "lastUpdated": "2024-12-09"
+        "memory_spec_version": "1.0"
       }
     }
   }
@@ -77,8 +90,9 @@ Query recent work context at session start:
 ```json
 {
   "tool": {
-    "name": "get-context",
+    "name": "query",
     "arguments": {
+      "type": "context",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app", 
       "branch": "feature/auth",
@@ -95,8 +109,9 @@ Record significant work progress:
 ```json
 {
   "tool": {
-    "name": "update-context",
+    "name": "context",
     "arguments": {
+      "operation": "update",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app",
       "branch": "feature/auth",
@@ -122,16 +137,20 @@ Represent system modules, services, or major code units:
 ```json
 {
   "tool": {
-    "name": "add-component",
+    "name": "entity",
     "arguments": {
+      "operation": "create",
+      "entityType": "component",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app",
       "branch": "feature/auth",
-      "id": "comp-AuthService",
-      "name": "Authentication Service", 
-      "kind": "service",
-      "dependsOn": ["comp-UserRepository", "comp-TokenService"],
-      "status": "active"
+      "data": {
+        "id": "comp-AuthService",
+        "name": "Authentication Service", 
+        "kind": "service",
+        "depends_on": ["comp-UserRepository", "comp-TokenService"],
+        "status": "active"
+      }
     }
   }
 }
@@ -145,15 +164,19 @@ Record architectural and technical decisions:
 ```json
 {
   "tool": {
-    "name": "add-decision",
+    "name": "entity",
     "arguments": {
+      "operation": "create",
+      "entityType": "decision",
       "clientProjectRoot": "/workspace/project", 
       "repository": "my-app",
       "branch": "feature/auth",
-      "id": "dec-20241209-jwt-tokens",
-      "name": "Use JWT for session tokens",
-      "context": "Needed stateless authentication for microservices architecture",
-      "date": "2024-12-09"
+      "data": {
+        "id": "dec-20241210-jwt-tokens",
+        "name": "Use JWT for session tokens",
+        "context": "Needed stateless authentication for microservices architecture",
+        "date": "2024-12-10"
+      }
     }
   }
 }
@@ -167,17 +190,21 @@ Define coding standards and architectural constraints:
 ```json
 {
   "tool": {
-    "name": "add-rule",
+    "name": "entity",
     "arguments": {
+      "operation": "create",
+      "entityType": "rule",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app", 
       "branch": "main",
-      "id": "rule-security-authentication",
-      "name": "All API endpoints must be authenticated",
-      "created": "2024-12-09",
-      "triggers": ["api", "endpoint", "route"],
-      "content": "Every API endpoint must validate JWT tokens except for /health and /login endpoints",
-      "status": "active"
+      "data": {
+        "id": "rule-security-authentication",
+        "name": "All API endpoints must be authenticated",
+        "created": "2024-12-10",
+        "triggers": ["api", "endpoint", "route"],
+        "content": "Every API endpoint must validate JWT tokens except for /health and /login endpoints",
+        "status": "active"
+      }
     }
   }
 }
@@ -186,11 +213,11 @@ Define coding standards and architectural constraints:
 ## Best Practices
 
 ### 1. Component Dependencies
-Always specify accurate `dependsOn` relationships:
+Always specify accurate `depends_on` relationships:
 
 ```json
 {
-  "dependsOn": [
+  "depends_on": [
     "comp-DatabaseConnection",
     "comp-Logger", 
     "comp-ConfigService"
@@ -221,18 +248,18 @@ Update context at these key moments:
 ## Common Workflows
 
 ### New Feature Development
-1. `get-context` - Understand current state
-2. `add-component` - Define new feature components
-3. `add-decision` - Record key design choices
-4. `update-context` - Track progress throughout development
+1. Use `query` with `type: "context"` - Understand current state
+2. Use `entity` with `operation: "create"` - Define new feature components
+3. Use `entity` with `operation: "create"` - Record key design decisions
+4. Use `context` with `operation: "update"` - Track progress throughout
 
 ### Refactoring Session  
-1. `get-component-dependencies` - Understand current structure
-2. `add-decision` - Document refactoring approach
-3. `add-component` - Create new/updated components
-4. `update-context` - Record refactoring progress
+1. Use `query` with `type: "dependencies"` - Understand current structure
+2. Use `entity` to create decision - Document refactoring approach
+3. Use `entity` to update components - Create new/updated components
+4. Use `context` to update - Record refactoring progress
 
 ### Code Review Preparation
-1. `get-context` - Review recent changes
-2. `get-governing-items-for-component` - Check standards compliance
-3. `add-rule` - Document new standards if needed
+1. Use `query` with `type: "context"` - Review recent changes
+2. Use `query` with `type: "governance"` - Check standards compliance
+3. Use `entity` to create rule - Document new standards if needed

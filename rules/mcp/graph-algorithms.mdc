@@ -18,8 +18,9 @@ Identify the most critical components in your system:
 ```json
 {
   "tool": {
-    "name": "pagerank",
+    "name": "analyze",
     "arguments": {
+      "type": "pagerank",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app",
       "branch": "main",
@@ -43,8 +44,9 @@ Discover natural groupings and modules in your architecture:
 ```json
 {
   "tool": {
-    "name": "louvain-community-detection",
+    "name": "analyze",
     "arguments": {
+      "type": "louvain",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app", 
       "branch": "main",
@@ -68,8 +70,9 @@ Find tightly coupled component clusters:
 ```json
 {
   "tool": {
-    "name": "k-core-decomposition",
+    "name": "analyze",
     "arguments": {
+      "type": "k-core",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app",
       "branch": "main", 
@@ -96,8 +99,9 @@ Detect circular dependency issues:
 ```json
 {
   "tool": {
-    "name": "strongly-connected-components",
+    "name": "detect",
     "arguments": {
+      "type": "strongly-connected",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app",
       "branch": "main",
@@ -121,8 +125,9 @@ Find isolated parts of your system:
 ```json
 {
   "tool": {
-    "name": "weakly-connected-components",
+    "name": "detect",
     "arguments": {
+      "type": "weakly-connected",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app",
       "branch": "main",
@@ -146,8 +151,9 @@ Find how two components are connected:
 ```json
 {
   "tool": {
-    "name": "shortest-path",
+    "name": "analyze",
     "arguments": {
+      "type": "shortest-path",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app",
       "branch": "main",
@@ -175,8 +181,9 @@ Analyze relationships across different entity types:
 ```json
 {
   "tool": {
-    "name": "pagerank",
+    "name": "analyze",
     "arguments": {
+      "type": "pagerank",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app",
       "branch": "main",
@@ -196,8 +203,9 @@ Understand rule and decision relationships:
 ```json
 {
   "tool": {
-    "name": "louvain-community-detection",
+    "name": "analyze",
     "arguments": {
+      "type": "louvain",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app",
       "branch": "main",
@@ -218,8 +226,12 @@ Understand rule and decision relationships:
 // 1. Find critical components (high PageRank)
 {
   "tool": {
-    "name": "pagerank",
+    "name": "analyze",
     "arguments": {
+      "type": "pagerank",
+      "repository": "my-app",
+      "branch": "main",
+      "projectedGraphName": "critical-components",
       "nodeTableNames": ["Component"],
       "relationshipTableNames": ["DEPENDS_ON"]
     }
@@ -229,8 +241,12 @@ Understand rule and decision relationships:
 // 2. Check for circular dependencies
 {
   "tool": {
-    "name": "strongly-connected-components", 
+    "name": "detect", 
     "arguments": {
+      "type": "strongly-connected",
+      "repository": "my-app",
+      "branch": "main",
+      "projectedGraphName": "circular-deps",
       "nodeTableNames": ["Component"],
       "relationshipTableNames": ["DEPENDS_ON"]
     }
@@ -240,8 +256,12 @@ Understand rule and decision relationships:
 // 3. Find isolated components
 {
   "tool": {
-    "name": "weakly-connected-components",
+    "name": "detect",
     "arguments": {
+      "type": "weakly-connected",
+      "repository": "my-app",
+      "branch": "main",
+      "projectedGraphName": "isolated-comps",
       "nodeTableNames": ["Component"],
       "relationshipTableNames": ["DEPENDS_ON"]
     }
@@ -254,8 +274,12 @@ Understand rule and decision relationships:
 // 1. Discover natural modules
 {
   "tool": {
-    "name": "louvain-community-detection",
+    "name": "analyze",
     "arguments": {
+      "type": "louvain",
+      "repository": "my-app",
+      "branch": "main",
+      "projectedGraphName": "natural-modules",
       "nodeTableNames": ["Component"],
       "relationshipTableNames": ["DEPENDS_ON"]
     }
@@ -265,8 +289,12 @@ Understand rule and decision relationships:
 // 2. Find tightly coupled clusters
 {
   "tool": {
-    "name": "k-core-decomposition",
+    "name": "analyze",
     "arguments": {
+      "type": "k-core",
+      "repository": "my-app",
+      "branch": "main",
+      "projectedGraphName": "tight-clusters",
       "nodeTableNames": ["Component"],
       "relationshipTableNames": ["DEPENDS_ON"],
       "k": 3
@@ -308,12 +336,19 @@ Consider persisting algorithm results as components:
 ```json
 {
   "tool": {
-    "name": "add-component",
+    "name": "entity",
     "arguments": {
-      "id": "comp-AnalysisResults-PageRank-20241209",
-      "name": "PageRank Analysis Results",
-      "kind": "analysis",
-      "status": "active"
+      "operation": "create",
+      "entityType": "component",
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main",
+      "data": {
+        "id": "comp-AnalysisResults-PageRank-20241210",
+        "name": "PageRank Analysis Results",
+        "kind": "analysis",
+        "status": "active"
+      }
     }
   }
 }
@@ -324,3 +359,11 @@ Consider persisting algorithm results as components:
 - Combine multiple algorithms for comprehensive analysis
 - Use results to guide architectural decisions
 - Document significant findings as decisions
+
+## Unified Tool Benefits
+
+### Algorithm Organization
+- **analyze** tool: PageRank, K-Core, Louvain, Shortest Path
+- **detect** tool: Strongly Connected, Weakly Connected Components
+- Consistent parameter patterns across all algorithms
+- Better error handling and progress streaming
