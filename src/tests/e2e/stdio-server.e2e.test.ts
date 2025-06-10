@@ -567,21 +567,19 @@ describe('MCP Stdio Server E2E Tests', () => {
     });
     
     it('should find shortest path', async () => {
-      const result = await callTool('analyze', {
-        algorithm: 'shortest-path',
+      const result = await callTool('detect', {
+        pattern: 'path',
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         projectedGraphName: 'test-shortest',
         nodeTableNames: ['Component'],
         relationshipTableNames: ['DEPENDS_ON'],
-        parameters: {
-          startNodeId: 'comp-api-gateway',
-          endNodeId: 'comp-database'
-        }
+        startNodeId: 'comp-api-gateway',
+        endNodeId: 'comp-database'
       });
       
       expect(result).toMatchObject({
-        type: 'shortest-path',
+        type: 'path',
         status: 'complete'
       });
     });

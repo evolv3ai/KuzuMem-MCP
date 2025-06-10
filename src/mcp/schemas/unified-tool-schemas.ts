@@ -396,7 +396,7 @@ export const AssociateOutputSchema = z.object({
 // ============================================
 
 export const AnalyzeInputSchema = z.object({
-  type: z.enum(['pagerank', 'shortest-path', 'k-core', 'louvain']),
+  type: z.enum(['pagerank', 'k-core', 'louvain']),
   clientProjectRoot: z.string().optional(), // From session
   repository: z.string(),
   branch: z.string().default('main'),
@@ -409,10 +409,6 @@ export const AnalyzeInputSchema = z.object({
   // PageRank specific
   damping: z.number().optional(),
   maxIterations: z.number().optional(),
-  
-  // Shortest Path specific
-  startNodeId: z.string().optional(),
-  endNodeId: z.string().optional(),
   
   // K-Core specific
   k: z.number().int().positive().optional(),
@@ -464,7 +460,6 @@ export const LouvainOutputSchema = z.object({
 // Union of all analyze outputs
 export const AnalyzeOutputSchema = z.union([
   PageRankOutputSchema,
-  ShortestPathOutputSchema,
   KCoreOutputSchema,
   LouvainOutputSchema,
 ]);
@@ -474,7 +469,7 @@ export const AnalyzeOutputSchema = z.union([
 // ============================================
 
 export const DetectInputSchema = z.object({
-  type: z.enum(['strongly-connected', 'weakly-connected']),
+  type: z.enum(['cycles', 'islands', 'path']),
   clientProjectRoot: z.string().optional(), // From session
   repository: z.string(),
   branch: z.string().default('main'),
@@ -483,18 +478,26 @@ export const DetectInputSchema = z.object({
   projectedGraphName: z.string(),
   nodeTableNames: z.array(z.string()),
   relationshipTableNames: z.array(z.string()),
+  
+  // Path-specific parameters
+  startNodeId: z.string().optional(),
+  endNodeId: z.string().optional(),
 });
 
 export const DetectOutputSchema = z.object({
-  type: z.enum(['strongly-connected', 'weakly-connected']),
+  type: z.enum(['cycles', 'islands', 'path']),
   status: z.string(),
   components: z.array(z.object({
     componentId: z.number(),
     nodes: z.array(z.string()),
-  })),
-  totalComponents: z.number(),
+  })).optional(),
+  totalComponents: z.number().optional(),
   projectedGraphName: z.string(),
   message: z.string().optional(),
+  // Path-specific fields
+  pathFound: z.boolean().optional(),
+  path: z.array(z.string()).optional(),
+  pathLength: z.number().optional(),
 });
 
 // ============================================

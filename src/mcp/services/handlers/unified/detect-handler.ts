@@ -1,10 +1,14 @@
 import { SdkToolHandler } from '../../../tool-handlers';
-import { DetectInputSchema, DetectOutputSchema } from '../../../schemas/unified-tool-schemas';
+import {
+  DetectInputSchema,
+  DetectOutputSchema,
+  ShortestPathOutputSchema,
+} from '../../../schemas/unified-tool-schemas';
 import { z } from 'zod';
 
 /**
  * Detect Handler
- * Handles pattern detection algorithms
+ * Handles pattern detection algorithms: cycles, islands, and shortest paths
  */
 export const detectHandler: SdkToolHandler = async (params, context, memoryService) => {
   // 1. Parse and validate parameters
@@ -17,7 +21,14 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
     throw new Error('No active session. Use memory-bank tool with operation "init" first.');
   }
 
-  // 3. Log the operation
+  // 3. Validate type-specific required parameters
+  if (type === 'path') {
+    if (!validatedParams.startNodeId || !validatedParams.endNodeId) {
+      throw new Error('startNodeId and endNodeId are required for path detection');
+    }
+  }
+
+  // 4. Log the operation
   context.logger.info(`Executing pattern detection: ${type}`, {
     repository,
     branch,
@@ -27,10 +38,10 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
 
   try {
     switch (type) {
-      case 'strongly-connected': {
+      case 'cycles': {
         await context.sendProgress({
           status: 'in_progress',
-          message: 'Detecting strongly connected components (circular dependencies)...',
+          message: 'Detecting cycles (strongly connected components)...',
           percent: 50,
         });
 
@@ -38,7 +49,7 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
           context,
           clientProjectRoot,
           {
-            type: 'strongly-connected',
+            type: 'strongly-connected' as any, // Temporary type assertion during cleanup
             repository,
             branch,
             projectedGraphName: validatedParams.projectedGraphName,
@@ -49,18 +60,21 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
 
         await context.sendProgress({
           status: 'complete',
-          message: `Found ${result.totalComponents || 0} strongly connected components`,
+          message: `Found ${result.totalComponents || 0} cycles`,
           percent: 100,
           isFinal: true,
         });
 
-        return result;
+        return {
+          ...result,
+          type: 'cycles',
+        };
       }
 
-      case 'weakly-connected': {
+      case 'islands': {
         await context.sendProgress({
           status: 'in_progress',
-          message: 'Detecting weakly connected components (isolated subsystems)...',
+          message: 'Detecting islands (weakly connected components)...',
           percent: 50,
         });
 
@@ -68,7 +82,7 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
           context,
           clientProjectRoot,
           {
-            type: 'weakly-connected',
+            type: 'weakly-connected' as any, // Temporary type assertion during cleanup
             repository,
             branch,
             projectedGraphName: validatedParams.projectedGraphName,
@@ -79,12 +93,48 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
 
         await context.sendProgress({
           status: 'complete',
-          message: `Found ${result.totalComponents || 0} weakly connected components`,
+          message: `Found ${result.totalComponents || 0} islands`,
           percent: 100,
           isFinal: true,
         });
 
-        return result;
+        return {
+          ...result,
+          type: 'islands',
+        };
+      }
+
+      case 'path': {
+        await context.sendProgress({
+          status: 'in_progress',
+          message: `Finding shortest path from ${validatedParams.startNodeId} to ${validatedParams.endNodeId}...`,
+          percent: 50,
+        });
+
+        const result = await memoryService.shortestPath(context, clientProjectRoot, {
+          type: 'shortest-path',
+          repository,
+          branch,
+          projectedGraphName: validatedParams.projectedGraphName,
+          nodeTableNames: validatedParams.nodeTableNames,
+          relationshipTableNames: validatedParams.relationshipTableNames,
+          startNodeId: validatedParams.startNodeId!,
+          endNodeId: validatedParams.endNodeId!,
+        } as any); // Temporary type assertion during cleanup
+
+        await context.sendProgress({
+          status: 'complete',
+          message: result.pathFound
+            ? `Path found with length ${result.pathLength || 0}`
+            : 'No path found between nodes',
+          percent: 100,
+          isFinal: true,
+        });
+
+        return {
+          ...result,
+          type: 'path',
+        };
       }
 
       default:

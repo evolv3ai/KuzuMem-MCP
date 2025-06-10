@@ -12,7 +12,7 @@ export const analyzeTool: McpTool = {
     properties: {
       algorithm: {
         type: 'string',
-        enum: ['pagerank', 'kcore', 'community', 'centrality'],
+        enum: ['pagerank', 'k-core', 'louvain'],
         description: 'Analysis algorithm to execute',
       },
       graphName: {
