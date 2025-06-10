@@ -47,10 +47,6 @@ describe('context tool handler', () => {
           branch: 'main',
           created_at: '2024-12-10T12:00:00.000Z',
           updated_at: '2024-12-10T12:00:00.000Z',
-          name: null,
-          issue: null,
-          decision_ids: null,
-          observation_ids: null,
         },
       };
       mockMemoryService.updateContext.mockResolvedValueOnce(mockUpdateResult);
@@ -110,14 +106,11 @@ describe('context tool handler', () => {
           iso_date: '2024-12-10',
           agent: 'cursor',
           summary: 'Simple update',
+          observation: null,
           repository: 'test-repo:main',
           branch: 'main',
           created_at: null,
           updated_at: null,
-          name: null,
-          issue: null,
-          decision_ids: null,
-          observation_ids: null,
         },
       };
       mockMemoryService.updateContext.mockResolvedValueOnce(mockUpdateResult);
@@ -246,14 +239,11 @@ describe('context tool handler', () => {
           iso_date: '2024-12-10',
           agent: 'cursor',
           summary: 'Test update',
+          observation: null,
           repository: 'test-repo:main',
           branch: 'main',
           created_at: null,
           updated_at: null,
-          name: null,
-          issue: null,
-          decision_ids: null,
-          observation_ids: null,
         },
       };
       mockMemoryService.updateContext.mockResolvedValueOnce(mockUpdateResult);

@@ -126,7 +126,7 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
 
         await context.sendProgress({
           status: 'complete',
-          message: `Found ${result.nodes.length} entities`,
+          message: `Found ${result.entities.length} entities`,
           percent: 100,
           isFinal: true,
         });
@@ -134,10 +134,10 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
         return {
           type: 'entities' as const,
           label: result.label,
-          entities: result.nodes,
+          entities: result.entities,
           limit: result.limit,
           offset: result.offset,
-          totalCount: result.totalInLabel,
+          totalCount: result.totalCount,
         } satisfies z.infer<typeof EntitiesQueryOutputSchema>;
       }
 

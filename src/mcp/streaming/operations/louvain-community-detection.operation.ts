@@ -56,6 +56,7 @@ export class LouvainCommunityDetectionOperation {
       }
 
       const params = {
+        type: 'louvain' as const,
         repository: repositoryName,
         branch: branch,
         projectedGraphName: projectedGraphName,
@@ -70,8 +71,7 @@ export class LouvainCommunityDetectionOperation {
         params,
       );
 
-      const communities = louvainOutput?.results?.communities || [];
-      const modularity = louvainOutput?.results?.modularity ?? null;
+      const communities = louvainOutput?.nodes || [];
       const resultStatus = louvainOutput?.status || 'error';
 
       const resultPayload = {
@@ -81,8 +81,11 @@ export class LouvainCommunityDetectionOperation {
         branch,
         projectedGraphName,
         results: {
-          communities: communities,
-          modularity: modularity,
+          communities: communities.map((node) => ({
+            nodeId: node.id,
+            communityId: node.communityId,
+          })),
+          modularity: null, // Modularity is not returned in the new API
         },
         message: louvainOutput?.message,
       };
@@ -90,9 +93,8 @@ export class LouvainCommunityDetectionOperation {
       if (progressHandler) {
         progressHandler.progress({
           status: 'in_progress',
-          message: `Louvain Community Detection processing for ${repositoryName}/${branch}. Communities found: ${communities.length}. Modularity: ${modularity}.`,
+          message: `Louvain Community Detection processing for ${repositoryName}/${branch}. Communities found: ${communities.length}.`,
           communitiesCount: communities.length,
-          modularity: modularity,
         });
 
         // Send final progress event

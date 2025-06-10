@@ -33,8 +33,14 @@ describe('Associate Tool Tests', () => {
   describe('File-Component Association', () => {
     it('should create file-component association', async () => {
       const mockResult = {
+        type: 'file-component' as const,
         success: true,
-        message: 'Association created',
+        message: 'File associated with component successfully',
+        association: {
+          from: 'file-auth-ts',
+          to: 'comp-AuthService',
+          relationship: 'IMPLEMENTS',
+        },
       };
       mockMemoryService.associateFileWithComponent.mockResolvedValue(mockResult);
 
@@ -97,8 +103,14 @@ describe('Associate Tool Tests', () => {
   describe('Tag-Item Association', () => {
     it('should create tag-item association', async () => {
       const mockResult = {
+        type: 'tag-item' as const,
         success: true,
-        message: 'Item tagged',
+        message: 'Component tagged successfully',
+        association: {
+          from: 'tag-security',
+          to: 'comp-AuthService',
+          relationship: 'TAGS',
+        },
       };
       mockMemoryService.tagItem.mockResolvedValue(mockResult);
 
@@ -258,8 +270,14 @@ describe('Associate Tool Tests', () => {
   describe('Progress Reporting', () => {
     it('should report progress for file-component association', async () => {
       mockMemoryService.associateFileWithComponent.mockResolvedValue({
+        type: 'file-component' as const,
         success: true,
         message: 'Associated',
+        association: {
+          from: 'file-1',
+          to: 'comp-1',
+          relationship: 'IMPLEMENTS',
+        },
       });
 
       await associateHandler(
@@ -289,8 +307,14 @@ describe('Associate Tool Tests', () => {
 
     it('should report progress for tag-item association', async () => {
       mockMemoryService.tagItem.mockResolvedValue({
+        type: 'tag-item' as const,
         success: true,
         message: 'Tagged',
+        association: {
+          from: 'tag-1',
+          to: 'comp-1',
+          relationship: 'TAGS',
+        },
       });
 
       await associateHandler(

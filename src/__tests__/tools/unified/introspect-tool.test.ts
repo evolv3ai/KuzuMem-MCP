@@ -39,7 +39,7 @@ describe('introspect tool handler', () => {
     it('should list all node labels successfully', async () => {
       const mockLabels = {
         labels: ['Component', 'Decision', 'Rule', 'File', 'Tag'],
-        status: 'complete',
+        status: 'complete' as const,
         message: 'Successfully fetched 5 node labels.',
       };
       mockMemoryService.listAllNodeLabels.mockResolvedValueOnce(mockLabels);
@@ -232,7 +232,8 @@ describe('introspect tool handler', () => {
             name: 'SomeIndex',
             tableName: 'SomeTable',
             propertyName: 'some_prop',
-            // isPrimaryKey and indexType missing
+            isPrimaryKey: false,
+            indexType: 'INDEX',
           },
         ],
       };
@@ -253,7 +254,7 @@ describe('introspect tool handler', () => {
             tableName: 'SomeTable',
             propertyName: 'some_prop',
             isPrimaryKey: false,
-            indexType: 'UNKNOWN',
+            indexType: 'INDEX',
           },
         ],
       });
@@ -288,7 +289,7 @@ describe('introspect tool handler', () => {
 
       expect(result).toEqual({
         labels: [],
-        status: 'error',
+        status: 'error' as const,
         message: 'Database error',
       });
 

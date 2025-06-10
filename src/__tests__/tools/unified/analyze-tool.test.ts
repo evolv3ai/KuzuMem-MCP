@@ -35,13 +35,13 @@ describe('Analyze Tool Tests', () => {
   describe('PageRank Analysis', () => {
     it('should run pagerank analysis', async () => {
       const mockResult = {
+        type: 'pagerank' as const,
         status: 'complete',
-        results: {
-          ranks: [
-            { nodeId: 'comp-1', score: 0.25 },
-            { nodeId: 'comp-2', score: 0.15 },
-          ],
-        },
+        projectedGraphName: 'component-deps',
+        nodes: [
+          { id: 'comp-1', pagerank: 0.25 },
+          { id: 'comp-2', pagerank: 0.15 },
+        ],
         message: 'PageRank completed',
       };
       mockMemoryService.pageRank.mockResolvedValue(mockResult);
@@ -66,6 +66,7 @@ describe('Analyze Tool Tests', () => {
       expect(result.nodes).toHaveLength(2);
       expect(result.nodes[0]).toEqual({ id: 'comp-1', pagerank: 0.25 });
       expect(mockMemoryService.pageRank).toHaveBeenCalledWith(mockContext, '/test/project', {
+        type: 'pagerank',
         repository: 'test-repo',
         branch: 'main',
         projectedGraphName: 'component-deps',
@@ -78,8 +79,10 @@ describe('Analyze Tool Tests', () => {
 
     it('should use default parameters for pagerank', async () => {
       mockMemoryService.pageRank.mockResolvedValue({
+        type: 'pagerank' as const,
         status: 'complete',
-        results: { ranks: [] },
+        projectedGraphName: 'deps',
+        nodes: [],
       });
 
       await analyzeHandler(
@@ -98,6 +101,7 @@ describe('Analyze Tool Tests', () => {
         mockContext,
         '/test/project',
         expect.objectContaining({
+          type: 'pagerank',
           dampingFactor: undefined,
           maxIterations: undefined,
         }),
@@ -108,15 +112,12 @@ describe('Analyze Tool Tests', () => {
   describe('Shortest Path Analysis', () => {
     it('should find shortest path between nodes', async () => {
       const mockResult = {
+        type: 'shortest-path' as const,
         status: 'complete',
-        results: {
-          pathFound: true,
-          path: [
-            { id: 'comp-1' },
-            { id: 'comp-2' },
-            { id: 'comp-3' },
-          ],
-        },
+        projectedGraphName: 'deps',
+        pathFound: true,
+        path: ['comp-1', 'comp-2', 'comp-3'],
+        pathLength: 3,
       };
       mockMemoryService.shortestPath.mockResolvedValue(mockResult);
 
@@ -142,11 +143,12 @@ describe('Analyze Tool Tests', () => {
 
     it('should handle no path found', async () => {
       const mockResult = {
+        type: 'shortest-path' as const,
         status: 'complete',
-        results: {
-          pathFound: false,
-          path: [],
-        },
+        projectedGraphName: 'deps',
+        pathFound: false,
+        path: [],
+        pathLength: 0,
       };
       mockMemoryService.shortestPath.mockResolvedValue(mockResult);
 
@@ -190,14 +192,14 @@ describe('Analyze Tool Tests', () => {
   describe('K-Core Analysis', () => {
     it('should run k-core decomposition', async () => {
       const mockResult = {
+        type: 'k-core' as const,
         status: 'complete',
-        results: {
-          components: [
-            { nodeId: 'comp-1', coreness: 3 },
-            { nodeId: 'comp-2', coreness: 3 },
-          ],
-          k: 3,
-        },
+        projectedGraphName: 'deps',
+        nodes: [
+          { id: 'comp-1', coreNumber: 3 },
+          { id: 'comp-2', coreNumber: 3 },
+        ],
+        k: 3,
       };
       mockMemoryService.kCoreDecomposition.mockResolvedValue(mockResult);
 
@@ -239,15 +241,15 @@ describe('Analyze Tool Tests', () => {
   describe('Louvain Community Detection', () => {
     it('should run community detection', async () => {
       const mockResult = {
+        type: 'louvain' as const,
         status: 'complete',
-        results: {
-          communities: [
-            { nodeId: 'comp-1', communityId: 0 },
-            { nodeId: 'comp-2', communityId: 0 },
-            { nodeId: 'comp-3', communityId: 1 },
-          ],
-          modularity: 0.42,
-        },
+        projectedGraphName: 'deps',
+        nodes: [
+          { id: 'comp-1', communityId: 0 },
+          { id: 'comp-2', communityId: 0 },
+          { id: 'comp-3', communityId: 1 },
+        ],
+        modularity: 0.42,
       };
       mockMemoryService.louvainCommunityDetection.mockResolvedValue(mockResult);
 
@@ -349,8 +351,10 @@ describe('Analyze Tool Tests', () => {
   describe('Progress Reporting', () => {
     it('should report progress for each analysis type', async () => {
       mockMemoryService.pageRank.mockResolvedValue({
+        type: 'pagerank' as const,
         status: 'complete',
-        results: { ranks: [] },
+        projectedGraphName: 'deps',
+        nodes: [],
       });
 
       await analyzeHandler(
