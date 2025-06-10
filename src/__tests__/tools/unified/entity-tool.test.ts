@@ -34,6 +34,21 @@ describe('entity tool handler', () => {
       upsertRule: jest.fn(),
       addFile: jest.fn(),
       addTag: jest.fn(),
+      getComponent: jest.fn(),
+      getDecision: jest.fn(),
+      getRule: jest.fn(),
+      getFile: jest.fn(),
+      getTag: jest.fn(),
+      updateComponent: jest.fn(),
+      updateDecision: jest.fn(),
+      updateRule: jest.fn(),
+      updateFile: jest.fn(),
+      updateTag: jest.fn(),
+      deleteComponent: jest.fn(),
+      deleteDecision: jest.fn(),
+      deleteRule: jest.fn(),
+      deleteFile: jest.fn(),
+      deleteTag: jest.fn(),
     } as unknown as jest.Mocked<MemoryService>;
   });
 
@@ -240,7 +255,19 @@ describe('entity tool handler', () => {
   });
 
   describe('get operation', () => {
-    it('should return not implemented for get operation', async () => {
+    it('should get a component successfully', async () => {
+      const mockComponent = {
+        id: 'comp-AuthService',
+        name: 'Auth Service',
+        type: 'component' as const,
+        kind: 'service',
+        status: 'active' as const,
+        depends_on: ['comp-Database'],
+        repository: 'test-repo:main',
+        branch: 'main',
+      };
+      mockMemoryService.getComponent.mockResolvedValueOnce(mockComponent);
+
       const params = {
         operation: 'get',
         entityType: 'component',
@@ -251,15 +278,54 @@ describe('entity tool handler', () => {
 
       const result = await entityHandler(params, mockContext, mockMemoryService);
 
+      expect(mockMemoryService.getComponent).toHaveBeenCalledWith(
+        mockContext,
+        '/test/project',
+        'test-repo',
+        'main',
+        'comp-AuthService',
+      );
+
+      expect(result).toEqual({
+        success: true,
+        entity: mockComponent,
+      });
+    });
+
+    it('should handle not found entity', async () => {
+      mockMemoryService.getDecision.mockResolvedValueOnce(null);
+
+      const params = {
+        operation: 'get',
+        entityType: 'decision',
+        repository: 'test-repo',
+        branch: 'main',
+        id: 'dec-20241210-missing',
+      };
+
+      const result = await entityHandler(params, mockContext, mockMemoryService);
+
       expect(result).toEqual({
         success: false,
-        message: 'Get operation not yet implemented for component',
+        message: 'decision with ID dec-20241210-missing not found',
       });
     });
   });
 
   describe('update operation', () => {
-    it('should update a component using upsert', async () => {
+    it('should update a component successfully', async () => {
+      const updatedComponent = {
+        id: 'comp-AuthService',
+        name: 'Updated Auth Service',
+        type: 'component' as const,
+        kind: 'service',
+        status: 'deprecated' as const,
+        depends_on: ['comp-Database'],
+        repository: 'test-repo:main',
+        branch: 'main',
+      };
+      mockMemoryService.updateComponent.mockResolvedValueOnce(updatedComponent);
+
       const params = {
         operation: 'update',
         entityType: 'component',
@@ -274,13 +340,13 @@ describe('entity tool handler', () => {
 
       const result = await entityHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.upsertComponent).toHaveBeenCalledWith(
+      expect(mockMemoryService.updateComponent).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
         'main',
+        'comp-AuthService',
         expect.objectContaining({
-          id: 'comp-AuthService',
           name: 'Updated Auth Service',
           status: 'deprecated',
         }),
@@ -289,13 +355,37 @@ describe('entity tool handler', () => {
       expect(result).toEqual({
         success: true,
         message: 'component comp-AuthService updated successfully',
-        entity: expect.any(Object),
+        entity: updatedComponent,
+      });
+    });
+
+    it('should handle update of non-existent entity', async () => {
+      mockMemoryService.updateRule.mockResolvedValueOnce(null);
+
+      const params = {
+        operation: 'update',
+        entityType: 'rule',
+        repository: 'test-repo',
+        branch: 'main',
+        id: 'rule-missing',
+        data: {
+          name: 'Updated Rule',
+        },
+      };
+
+      const result = await entityHandler(params, mockContext, mockMemoryService);
+
+      expect(result).toEqual({
+        success: false,
+        message: 'rule with ID rule-missing not found for update',
       });
     });
   });
 
   describe('delete operation', () => {
-    it('should return not implemented for delete operation', async () => {
+    it('should delete a component successfully', async () => {
+      mockMemoryService.deleteComponent.mockResolvedValueOnce(true);
+
       const params = {
         operation: 'delete',
         entityType: 'component',
@@ -306,9 +396,36 @@ describe('entity tool handler', () => {
 
       const result = await entityHandler(params, mockContext, mockMemoryService);
 
+      expect(mockMemoryService.deleteComponent).toHaveBeenCalledWith(
+        mockContext,
+        '/test/project',
+        'test-repo',
+        'main',
+        'comp-AuthService',
+      );
+
+      expect(result).toEqual({
+        success: true,
+        message: 'component comp-AuthService deleted successfully',
+      });
+    });
+
+    it('should handle delete of non-existent entity', async () => {
+      mockMemoryService.deleteFile.mockResolvedValueOnce(false);
+
+      const params = {
+        operation: 'delete',
+        entityType: 'file',
+        repository: 'test-repo',
+        branch: 'main',
+        id: 'file-missing',
+      };
+
+      const result = await entityHandler(params, mockContext, mockMemoryService);
+
       expect(result).toEqual({
         success: false,
-        message: 'Delete operation not yet implemented for component',
+        message: 'file with ID file-missing not found',
       });
     });
   });
