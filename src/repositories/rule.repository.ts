@@ -1,5 +1,5 @@
-import { Rule } from '../types';
 import { KuzuDBClient } from '../db/kuzu';
+import { Rule } from '../types';
 import { formatGraphUniqueId } from '../utils/id.utils';
 import { RepositoryRepository } from './repository.repository';
 
@@ -140,6 +140,7 @@ export class RuleRepository {
       content: content || null,
       status: statusFromInput || 'active',
       branch: effectiveBranch,
+      repository: repositoryNodeId,
       created_at: now,
       updated_at: now,
     };
@@ -164,6 +165,7 @@ export class RuleRepository {
         r.content = $contentParam,
         r.status = $statusParam,
         r.branch = $branchParam,
+        r.repository = $repositoryNodeIdParam,
         r.created_at = $createdAtParam,
         r.updated_at = $updatedAtParam
       ON MATCH SET 

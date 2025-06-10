@@ -2,11 +2,20 @@ import { McpTool } from '../../types';
 
 /**
  * Unified Entity Tool
- * Handles CRUD operations for components, decisions, rules, files, and tags
+ * Handles CRUD operations for all entities
  */
 export const entityTool: McpTool = {
   name: 'entity',
-  description: 'Create, read, update, and delete entities in the memory bank',
+  description: `Create, read, update, and delete entities in the memory bank. 
+Entity types available:
+- component: System modules, services, or code units (e.g., AuthService, DatabaseConnection)
+- decision: Architectural and technical decisions with context and rationale
+- rule: Coding standards and architectural constraints
+- file: Source code files with metadata and metrics
+- tag: Labels for categorizing entities (e.g., security-critical, performance)
+
+Operations: create, update, get, delete
+Each entity has relationships to other entities forming a knowledge graph.`,
   parameters: {
     type: 'object',
     properties: {
@@ -50,13 +59,13 @@ export const entityTool: McpTool = {
         type: 'boolean',
         description: 'Whether the operation succeeded',
       },
-      data: {
-        type: 'object',
-        description: 'Entity data or operation result',
-      },
       message: {
         type: 'string',
         description: 'Result message',
+      },
+      data: {
+        type: 'object',
+        description: 'Entity data or operation result',
       },
     },
   },

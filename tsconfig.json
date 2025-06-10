@@ -1,9 +1,10 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "target": "ES2020",
+    "module": "CommonJS",
+    "moduleResolution": "node",
     "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "strict": true,
     "outDir": "dist",
     "sourceMap": true,
@@ -12,6 +13,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
+    "downlevelIteration": true,
     "types": ["node", "jest"],
     "typeRoots": ["./node_modules/@types"]
   },

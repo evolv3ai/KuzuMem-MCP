@@ -2,11 +2,25 @@ import { McpTool } from '../../types';
 
 /**
  * Unified Context Tool
- * Handles context updates and session management
+ * Updates and manages session context
  */
 export const contextTool: McpTool = {
   name: 'context',
-  description: 'Update and manage session context',
+  description: `Update and manage session context to track work progress and maintain continuity across sessions.
+Operation:
+- update: Record what work has been done, observations made, and progress achieved
+
+Context is used to:
+- Maintain continuity between coding sessions
+- Track architectural decisions and their implementation
+- Record important observations about the codebase
+- Document progress on features or refactoring
+
+Best practices:
+- Update context after completing significant work
+- Include both summary (high-level) and observation (detailed) information
+- Reference specific components or files that were modified
+- Note any decisions made or patterns discovered`,
   parameters: {
     type: 'object',
     properties: {
@@ -27,10 +41,6 @@ export const contextTool: McpTool = {
         type: 'string',
         description: 'Detailed observations',
       },
-      clientProjectRoot: {
-        type: 'string',
-        description: 'Absolute path to the client project root',
-      },
       repository: {
         type: 'string',
         description: 'Repository name',
@@ -38,6 +48,10 @@ export const contextTool: McpTool = {
       branch: {
         type: 'string',
         description: 'Git branch name',
+      },
+      clientProjectRoot: {
+        type: 'string',
+        description: 'Absolute path to the client project root',
       },
     },
     required: ['operation', 'agent', 'summary', 'repository'],
@@ -47,15 +61,15 @@ export const contextTool: McpTool = {
     properties: {
       success: {
         type: 'boolean',
-        description: 'Whether the operation succeeded',
-      },
-      contextId: {
-        type: 'string',
-        description: 'ID of the created context entry',
+        description: 'Whether the context update succeeded',
       },
       message: {
         type: 'string',
         description: 'Result message',
+      },
+      data: {
+        type: 'object',
+        description: 'Context entry data',
       },
     },
   },
