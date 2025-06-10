@@ -230,9 +230,12 @@ export class MemoryController {
       this.createMockContext(),
       clientProjectRoot,
       {
+        operation: 'update' as const,
         repository: repositoryName,
         branch,
-        ...result.data,
+        agent: result.data.agent || 'controller',
+        summary: result.data.summary || '',
+        observation: result.data.observations?.[0] || undefined,
       }
     );
 

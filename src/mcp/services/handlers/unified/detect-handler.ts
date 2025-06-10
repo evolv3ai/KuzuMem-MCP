@@ -38,6 +38,7 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
           context,
           clientProjectRoot,
           {
+            type: 'strongly-connected',
             repository,
             branch,
             projectedGraphName: validatedParams.projectedGraphName,
@@ -48,26 +49,12 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
 
         await context.sendProgress({
           status: 'complete',
-          message: `Found ${result.results?.components?.length || 0} strongly connected components`,
+          message: `Found ${result.totalComponents || 0} strongly connected components`,
           percent: 100,
           isFinal: true,
         });
 
-        // Transform results to match our schema
-        const components =
-          result.results?.components?.map((comp: any) => ({
-            componentId: comp.component_id,
-            nodes: comp.nodes || [],
-          })) || [];
-
-        return {
-          type: 'strongly-connected' as const,
-          status: result.status,
-          components,
-          totalComponents: components.length,
-          projectedGraphName: validatedParams.projectedGraphName,
-          message: result.message,
-        } satisfies z.infer<typeof DetectOutputSchema>;
+        return result;
       }
 
       case 'weakly-connected': {
@@ -81,6 +68,7 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
           context,
           clientProjectRoot,
           {
+            type: 'weakly-connected',
             repository,
             branch,
             projectedGraphName: validatedParams.projectedGraphName,
@@ -91,26 +79,12 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
 
         await context.sendProgress({
           status: 'complete',
-          message: `Found ${result.results?.components?.length || 0} weakly connected components`,
+          message: `Found ${result.totalComponents || 0} weakly connected components`,
           percent: 100,
           isFinal: true,
         });
 
-        // Transform results to match our schema
-        const components =
-          result.results?.components?.map((comp: any) => ({
-            componentId: comp.component_id,
-            nodes: comp.nodes || [],
-          })) || [];
-
-        return {
-          type: 'weakly-connected' as const,
-          status: result.status,
-          components,
-          totalComponents: components.length,
-          projectedGraphName: validatedParams.projectedGraphName,
-          message: result.message,
-        } satisfies z.infer<typeof DetectOutputSchema>;
+        return result;
       }
 
       default:
