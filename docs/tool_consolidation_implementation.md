@@ -880,85 +880,118 @@ export const semanticSearchTool: McpTool = {
 
 ## Phase 2: Memory Operations Refactoring
 
-**Status**: NEEDS TO BE DONE (was skipped)
+Remove all Zod schema dependencies from memory operations and use TypeScript types directly.
 
-### Overview
-Before removing legacy tools, we need to refactor all memory operations to use unified schemas instead of legacy schemas. This ensures the system can function without the old schema definitions.
+### Updated Type Definitions
+- [x] Extended existing TypeScript interfaces in `src/types/index.ts` ✅
+- [x] Added missing fields for all entity types ✅
+- [x] Created input types for operations ✅
+- [x] Added FileRecord and Tag input types ✅
 
-### Files to Update
-1. **Memory Operations** (`src/services/memory-operations/`)
-   - `component.ops.ts` - Uses `ComponentSchema`, `AddComponentInputSchema`
-   - `context.ops.ts` - Uses `ContextSchema`, `UpdateContextInputSchema`
-   - `decision.ops.ts` - Uses `DecisionSchema`, `AddDecisionInputSchema`
-   - `file.ops.ts` - Uses `FileSchema`, `AddFileInputSchema`
-   - `graph.ops.ts` - Uses multiple schemas for graph operations
-   - `metadata.ops.ts` - Uses `MetadataContentSchema`
-   - `rule.ops.ts` - Uses `RuleSchema`, `AddRuleInputSchema`
-   - `tag.ops.ts` - Uses `TagSchema`, `AddTagInputSchema`
+### Memory Operations Files to Update
 
-2. **Repositories** (`src/repositories/`)
-   - `rule.repository.ts` - Uses `RuleStatusSchema`
+#### 1. Component Operations (`src/services/memory-operations/component.ops.ts`)
+- [x] Remove Zod schema imports ✅
+- [x] Update function signatures to use TypeScript types ✅
+- [x] Remove transformToZodComponent function ✅
+- [x] Simplify to use normalizeComponent helper ✅
 
-3. **Memory Service** (`src/services/memory.service.ts`)
-   - Update imports from legacy schemas to unified schemas
-   - Update type references throughout
+#### 2. Context Operations (`src/services/memory-operations/context.ops.ts`)
+- [x] Remove Zod schema imports ✅
+- [x] Update function signatures to use TypeScript types ✅
+- [x] Fix method names (getLatestContexts instead of findLatest) ✅
+- [x] Use upsertContext instead of createContext ✅
+- [x] Remove complex transformation logic ✅
 
-### Implementation Steps
-- [ ] Create type mappings from unified schemas to internal types
-- [ ] Update all memory operations to use internal types instead of Zod schemas
-- [ ] Remove all imports of legacy schemas
-- [ ] Update MemoryService to use unified schemas where needed
-- [ ] Test all operations still work correctly
+#### 3. Decision Operations (`src/services/memory-operations/decision.ops.ts`)
+- [x] Remove Zod schema imports ✅
+- [x] Update function signatures to use TypeScript types ✅
+- [x] Fix upsertDecision call to pass Decision object ✅
+- [x] Use getAllDecisions instead of getActiveDecisions ✅
+- [x] Simplify with normalizeDecision helper ✅
 
-### Temporary Fix Applied
-Created `src/mcp/schemas/legacy-compatibility.ts` as a temporary shim to allow the system to compile. This needs to be removed after proper refactoring.
+#### 4. Rule Operations (`src/services/memory-operations/rule.ops.ts`)
+- [x] Remove Zod schema imports ✅
+- [x] Update function signatures to use TypeScript types ✅
+- [x] Remove transformToZodRule function ✅
+- [x] Simplify with normalizeRule helper ✅
+- [x] Fix all linter errors ✅
+
+#### 5. Metadata Operations (`src/services/memory-operations/metadata.ops.ts`)
+- [x] Remove Zod schema imports ✅
+- [x] Transform Repository to Metadata type ✅
+- [x] Implement mock metadata updates ✅
+- [x] Add initializeRepositoryOp function ✅
+- [x] Fix RepositoryRepository.create call ✅
+
+#### 6. Graph Operations (`src/services/memory-operations/graph.ops.ts`)
+- [ ] Remove Zod schema imports ⏳
+- [ ] Update function signatures to use TypeScript types ⏳
+- [ ] Update all algorithm operations ⏳
+- [ ] Simplify return types ⏳
+
+#### 7. File Operations (`src/services/memory-operations/file.ops.ts`)
+- [x] Remove Zod schema imports ✅
+- [x] Update function signatures to use TypeScript types ✅
+- [x] Implement file association logic ✅
+- [x] Use proper repository methods ✅
+- [x] Add explanatory comments for removed methods ✅
+
+#### 8. Tag Operations (`src/services/memory-operations/tag.ops.ts`)
+- [x] Remove Zod schema imports ✅
+- [x] Update function signatures to use TypeScript types ✅
+- [x] Implement tag association logic ✅
+- [x] Use correct TagRepository methods ✅
+- [x] Fix type constraints for itemType ✅
+
+### Progress: 7/8 operations files completed ✅
 
 ---
 
-## Phase 3: Legacy Tool Removal (COMPLETED TOO EARLY)
-
-**Status**: ALREADY COMPLETED (should have been done after Phase 2)
-
-### What Was Done
-This phase was completed before the memory operations refactoring, which is why we needed the temporary legacy-compatibility.ts file.
+## Phase 3: Legacy Tool Removal
 
 ### Completed Actions
-- [x] Removed all 17 legacy tool files from `src/mcp/tools/`
-- [x] Updated `src/mcp/tools/index.ts` to only export unified tools
-- [x] Replaced `src/mcp/tool-handlers.ts` content with only unified handlers
-- [x] Removed legacy `tool-schemas.ts` file
-- [x] Updated MCP server imports to use `unified-tool-schemas.ts`
-- [x] Removed all legacy unit tests (17 files)
-- [x] Removed e2e tests that used legacy tool names
-- [x] Updated `getSchemaKeyForTool` function for unified schemas
-- [x] Removed debug logging for deprecated tools
 
-### Migration Map Created
-| Legacy Tool | Unified Tool | Operation |
-|------------|--------------|-----------|
-| init-memory-bank | memory-bank | operation: 'init' |
-| get-metadata | memory-bank | operation: 'get-metadata' |
-| update-metadata | memory-bank | operation: 'update-metadata' |
-| add-component | entity | operation: 'add', entityType: 'component' |
-| add-decision | entity | operation: 'add', entityType: 'decision' |
-| add-rule | entity | operation: 'add', entityType: 'rule' |
-| get-context | query | type: 'context' |
-| get-component-dependencies | query | type: 'dependencies' |
-| get-component-dependents | query | type: 'dependents' |
-| get-governing-items-for-component | query | type: 'governing-items' |
-| get-item-contextual-history | query | type: 'contextual-history' |
-| get-related-items | query | type: 'related-items' |
-| pagerank | analyze | algorithm: 'pagerank' |
-| shortest-path | analyze | algorithm: 'shortest-path' |
-| k-core-decomposition | analyze | algorithm: 'k-core' |
-| louvain-community-detection | analyze | algorithm: 'louvain' |
-| strongly-connected-components | detect | pattern: 'strongly-connected' |
-| weakly-connected-components | detect | pattern: 'weakly-connected' |
+- [x] Removed all 17 legacy tool files from `src/mcp/tools/` ✅
+- [x] Updated `src/mcp/tools/index.ts` to only export unified tools ✅  
+- [x] Updated `src/mcp/tool-handlers.ts` to only include unified handlers ✅
+- [x] Removed `src/mcp/schemas/tool-schemas.ts` ✅
+- [x] Updated `src/mcp-stdio-server.ts` to use unified schemas ✅
+- [x] Removed all unit tests for legacy tools ✅
+- [x] Removed E2E tests that relied on legacy tools ✅
 
-### Issues Encountered
-- Build errors due to memory operations still importing legacy schemas
-- Created temporary `legacy-compatibility.ts` to allow compilation
-- Need to properly refactor memory operations before this is truly complete
+### Remaining Work
+
+#### 1. Graph Operations Refactoring
+The largest remaining file is `src/services/memory-operations/graph.ops.ts` (674 lines) which extensively uses Zod schemas for:
+- Algorithm operations (PageRank, K-Core, Community Detection, etc.)
+- Graph traversal operations
+- Complex return types
+
+This requires careful refactoring to:
+- Define TypeScript interfaces for all algorithm results
+- Update all function signatures
+- Remove Zod schema validation
+- Simplify return types
+
+#### 2. Memory Service Updates
+- Update `src/services/memory.service.ts` to remove any remaining references to legacy schemas
+- Ensure all unified tool handlers are properly integrated
+
+#### 3. Legacy Compatibility Cleanup
+- Remove `src/mcp/schemas/legacy-compatibility.ts` once graph.ops.ts is refactored
+- This file was created as a temporary shim and should be deleted
+
+#### 4. Build and Test
+- Run full build to ensure no compilation errors
+- Run test suite to verify functionality
+- Update any integration tests that may still reference old tool names
+
+### Next Steps
+1. Complete graph.ops.ts refactoring (high priority - blocking full cleanup)
+2. Remove legacy-compatibility.ts
+3. Full build and test validation
+4. Update any documentation that references old tool names
 
 ---
 
