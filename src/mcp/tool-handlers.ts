@@ -42,6 +42,7 @@ import { associateHandler } from './services/handlers/unified/associate-handler'
 import { analyzeHandler } from './services/handlers/unified/analyze-handler';
 import { detectHandler } from './services/handlers/unified/detect-handler';
 import { bulkImportHandler } from './services/handlers/unified/bulk-import-handler';
+import { semanticSearchHandler } from './services/handlers/unified/semantic-search-handler';
 
 // Import Operation Classes - these will be refactored or their logic moved/simplified
 // For now, keep them to avoid breaking streaming tool stubs immediately.
@@ -1745,6 +1746,7 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
   'analyze': analyzeHandler,
   'detect': detectHandler,
   'bulk-import': bulkImportHandler,
+  'semantic-search': semanticSearchHandler,
 
   // Legacy tool handlers
 };
