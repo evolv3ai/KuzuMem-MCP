@@ -10,22 +10,14 @@ export const introspectTool: McpTool = {
   parameters: {
     type: 'object',
     properties: {
-      operation: {
+      query: {
         type: 'string',
-        enum: ['labels', 'count', 'list', 'properties', 'indexes'],
-        description: 'Introspection operation to perform',
+        enum: ['labels', 'count', 'properties', 'indexes'],
+        description: 'Introspection query to perform',
       },
-      label: {
+      target: {
         type: 'string',
-        description: 'Node label for count/list/properties operations',
-      },
-      limit: {
-        type: 'string',
-        description: 'Maximum number of results',
-      },
-      offset: {
-        type: 'string',
-        description: 'Number of results to skip',
+        description: 'Node label for count/properties operations',
       },
       clientProjectRoot: {
         type: 'string',
@@ -40,7 +32,7 @@ export const introspectTool: McpTool = {
         description: 'Git branch name',
       },
     },
-    required: ['operation', 'clientProjectRoot', 'repository'],
+    required: ['query', 'repository'],
   },
   returns: {
     type: 'object',

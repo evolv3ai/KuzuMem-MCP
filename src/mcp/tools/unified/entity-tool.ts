@@ -12,10 +12,10 @@ export const entityTool: McpTool = {
     properties: {
       operation: {
         type: 'string',
-        enum: ['create', 'read', 'update', 'delete'],
+        enum: ['create', 'update', 'get', 'delete'],
         description: 'CRUD operation to perform',
       },
-      type: {
+      entityType: {
         type: 'string',
         enum: ['component', 'decision', 'rule', 'file', 'tag'],
         description: 'Type of entity to operate on',
@@ -41,7 +41,7 @@ export const entityTool: McpTool = {
         description: 'Git branch name',
       },
     },
-    required: ['operation', 'type', 'clientProjectRoot', 'repository'],
+    required: ['operation', 'entityType', 'repository'],
   },
   returns: {
     type: 'object',

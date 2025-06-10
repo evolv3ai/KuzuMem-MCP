@@ -13,31 +13,15 @@ export const queryTool: McpTool = {
       type: {
         type: 'string',
         enum: [
-          'dependencies',
-          'dependents',
-          'governance',
           'context',
-          'metadata',
+          'entities',
+          'relationships',
+          'dependencies',
+          'governance',
           'history',
-          'related',
+          'tags',
         ],
         description: 'Type of query to execute',
-      },
-      targetId: {
-        type: 'string',
-        description: 'Target entity ID for the query',
-      },
-      filters: {
-        type: 'object',
-        description: 'Query filters and parameters',
-      },
-      limit: {
-        type: 'string',
-        description: 'Maximum number of results',
-      },
-      offset: {
-        type: 'string',
-        description: 'Number of results to skip',
       },
       clientProjectRoot: {
         type: 'string',
@@ -51,8 +35,67 @@ export const queryTool: McpTool = {
         type: 'string',
         description: 'Git branch name',
       },
+      // Type-specific parameters
+      latest: {
+        type: 'boolean',
+        description: 'Get latest context entries only',
+      },
+      limit: {
+        type: 'number',
+        description: 'Maximum number of results',
+      },
+      label: {
+        type: 'string',
+        description: 'Entity label for entities query',
+      },
+      offset: {
+        type: 'number',
+        description: 'Number of results to skip',
+      },
+      startItemId: {
+        type: 'string',
+        description: 'Start item ID for relationships query',
+      },
+      depth: {
+        type: 'number',
+        description: 'Depth for relationships query',
+      },
+      relationshipFilter: {
+        type: 'string',
+        description: 'Relationship type filter',
+      },
+      targetNodeTypeFilter: {
+        type: 'string',
+        description: 'Target node type filter',
+      },
+      componentId: {
+        type: 'string',
+        description: 'Component ID for dependencies/governance queries',
+      },
+      direction: {
+        type: 'string',
+        enum: ['dependencies', 'dependents'],
+        description: 'Direction for dependencies query',
+      },
+      itemId: {
+        type: 'string',
+        description: 'Item ID for history query',
+      },
+      itemType: {
+        type: 'string',
+        enum: ['Component', 'Decision', 'Rule'],
+        description: 'Item type for history query',
+      },
+      tagId: {
+        type: 'string',
+        description: 'Tag ID for tags query',
+      },
+      entityType: {
+        type: 'string',
+        description: 'Entity type filter for tags query',
+      },
     },
-    required: ['type', 'clientProjectRoot', 'repository'],
+    required: ['type', 'repository'],
   },
   returns: {
     type: 'object',
@@ -66,7 +109,7 @@ export const queryTool: McpTool = {
         description: 'Query results',
       },
       totalCount: {
-        type: 'string',
+        type: 'number',
         description: 'Total number of matching results',
       },
       message: {

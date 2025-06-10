@@ -89,7 +89,7 @@ function mapDataToEntity(entityType: string, id: string, data: any): EntityData 
 export const entityHandler: SdkToolHandler = async (params, context, memoryService) => {
   // 1. Validate and extract parameters
   const validatedParams = params as EntityParams;
-  
+
   // Basic validation
   if (!validatedParams.operation) {
     throw new Error('operation parameter is required');
@@ -100,7 +100,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
   if (!validatedParams.repository) {
     throw new Error('repository parameter is required');
   }
-  
+
   const { operation, entityType, repository, branch = 'main', id, data } = validatedParams;
 
   // Additional validation for operations that require an id
@@ -165,8 +165,8 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
               context,
               clientProjectRoot,
               repository,
-              branch,
               entityData as Rule,
+              branch,
             );
             break;
           case 'file':
@@ -206,7 +206,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
       case 'get': {
         // id is guaranteed to be defined due to validation above
         const entityId = id!;
-        
+
         await context.sendProgress({
           status: 'in_progress',
           message: `Retrieving ${entityType}: ${entityId}`,
@@ -214,7 +214,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
         });
 
         let entity: any = null;
-        
+
         // Call appropriate MemoryService get method based on entity type
         switch (entityType) {
           case 'component':
@@ -289,7 +289,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
       case 'update': {
         // id is guaranteed to be defined due to validation above
         const entityId = id!;
-        
+
         await context.sendProgress({
           status: 'in_progress',
           message: `Updating ${entityType}: ${entityId}`,
@@ -379,7 +379,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
       case 'delete': {
         // id is guaranteed to be defined due to validation above
         const entityId = id!;
-        
+
         await context.sendProgress({
           status: 'in_progress',
           message: `Deleting ${entityType}: ${entityId}`,
@@ -387,7 +387,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
         });
 
         let deleted = false;
-        
+
         // Call appropriate MemoryService delete method based on entity type
         switch (entityType) {
           case 'component':

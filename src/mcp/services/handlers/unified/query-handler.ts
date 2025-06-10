@@ -2,7 +2,14 @@ import { SdkToolHandler } from '../../../tool-handlers';
 
 // TypeScript interfaces for query parameters
 interface QueryParams {
-  type: 'context' | 'entities' | 'relationships' | 'dependencies' | 'governance' | 'history' | 'tags';
+  type:
+    | 'context'
+    | 'entities'
+    | 'relationships'
+    | 'dependencies'
+    | 'governance'
+    | 'history'
+    | 'tags';
   repository: string;
   branch?: string;
   limit?: number;
@@ -27,7 +34,7 @@ interface QueryParams {
 export const queryHandler: SdkToolHandler = async (params, context, memoryService) => {
   // 1. Validate and extract parameters
   const validatedParams = params as QueryParams;
-  
+
   // Basic validation
   if (!validatedParams.type) {
     throw new Error('type parameter is required');
@@ -35,7 +42,7 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
   if (!validatedParams.repository) {
     throw new Error('repository parameter is required');
   }
-  
+
   const { type, repository, branch = 'main' } = validatedParams;
 
   // 2. Get clientProjectRoot from session
@@ -281,7 +288,7 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
           repository,
           branch,
           validatedParams.itemId!,
-          validatedParams.itemType!,
+          validatedParams.itemType! as 'Component' | 'Decision' | 'Rule',
         );
 
         await context.sendProgress({

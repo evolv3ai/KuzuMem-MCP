@@ -244,32 +244,32 @@ export const QueryInputSchema = z.object({
   clientProjectRoot: z.string().optional(), // From session
   repository: z.string(),
   branch: z.string().default('main'),
-  
+
   // Type-specific parameters
   // For context query
   latest: z.boolean().optional(),
   limit: z.number().int().positive().optional(),
-  
+
   // For entities query
   label: z.string().optional(),
   offset: z.number().int().nonnegative().optional(),
-  
+
   // For relationships query
   startItemId: z.string().optional(),
   depth: z.number().int().positive().optional(),
   relationshipFilter: z.string().optional(),
   targetNodeTypeFilter: z.string().optional(),
-  
+
   // For dependencies query
   componentId: z.string().optional(),
   direction: z.enum(['dependencies', 'dependents']).optional(),
-  
+
   // For governance query (uses componentId)
-  
+
   // For history query
   itemId: z.string().optional(),
   itemType: z.enum(['Component', 'Decision', 'Rule']).optional(),
-  
+
   // For tags query
   tagId: z.string().optional(),
   entityType: z.string().optional(),
@@ -278,17 +278,19 @@ export const QueryInputSchema = z.object({
 // Different output schemas for each query type
 export const ContextQueryOutputSchema = z.object({
   type: z.literal('context'),
-  contexts: z.array(z.object({
-    id: z.string(),
-    iso_date: z.string(),
-    agent: z.string().nullable(),
-    summary: z.string().nullable(),
-    observation: z.string().nullable(),
-    repository: z.string(),
-    branch: z.string(),
-    created_at: z.string().nullable(),
-    updated_at: z.string().nullable(),
-  })),
+  contexts: z.array(
+    z.object({
+      id: z.string(),
+      iso_date: z.string(),
+      agent: z.string().nullable(),
+      summary: z.string().nullable(),
+      observation: z.string().nullable(),
+      repository: z.string(),
+      branch: z.string(),
+      created_at: z.string().nullable(),
+      updated_at: z.string().nullable(),
+    }),
+  ),
 });
 
 export const EntitiesQueryOutputSchema = z.object({
@@ -303,10 +305,14 @@ export const EntitiesQueryOutputSchema = z.object({
 export const RelationshipsQueryOutputSchema = z.object({
   type: z.literal('relationships'),
   startItemId: z.string(),
-  relatedItems: z.array(z.object({
-    id: z.string(),
-    type: z.string(),
-  }).catchall(z.any())),
+  relatedItems: z.array(
+    z
+      .object({
+        id: z.string(),
+        type: z.string(),
+      })
+      .catchall(z.any()),
+  ),
   relationshipFilter: z.string().optional(),
   depth: z.number().optional(),
 });
@@ -315,16 +321,18 @@ export const DependenciesQueryOutputSchema = z.object({
   type: z.literal('dependencies'),
   componentId: z.string(),
   direction: z.string(),
-  components: z.array(z.object({
-    id: z.string(),
-    name: z.string(),
-    type: z.string(),
-    kind: z.string().optional(),
-    status: z.string().optional(),
-    depends_on: z.array(z.string()).optional(),
-    repository: z.string(),
-    branch: z.string(),
-  })),
+  components: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      type: z.string(),
+      kind: z.string().optional(),
+      status: z.string().optional(),
+      depends_on: z.array(z.string()).optional(),
+      repository: z.string(),
+      branch: z.string(),
+    }),
+  ),
 });
 
 export const GovernanceQueryOutputSchema = z.object({
@@ -344,10 +352,14 @@ export const HistoryQueryOutputSchema = z.object({
 export const TagsQueryOutputSchema = z.object({
   type: z.literal('tags'),
   tagId: z.string(),
-  items: z.array(z.object({
-    id: z.string(),
-    type: z.string(),
-  }).catchall(z.any())),
+  items: z.array(
+    z
+      .object({
+        id: z.string(),
+        type: z.string(),
+      })
+      .catchall(z.any()),
+  ),
 });
 
 // Union of all query outputs
@@ -370,11 +382,11 @@ export const AssociateInputSchema = z.object({
   clientProjectRoot: z.string().optional(), // From session
   repository: z.string(),
   branch: z.string().default('main'),
-  
+
   // For file-component association
   fileId: z.string().optional(),
   componentId: z.string().optional(),
-  
+
   // For tag-item association
   itemId: z.string().optional(),
   tagId: z.string().optional(),
@@ -400,28 +412,34 @@ export const AnalyzeInputSchema = z.object({
   clientProjectRoot: z.string().optional(), // From session
   repository: z.string(),
   branch: z.string().default('main'),
-  
+
   // Common graph projection parameters
   projectedGraphName: z.string(),
   nodeTableNames: z.array(z.string()),
   relationshipTableNames: z.array(z.string()),
-  
+
   // PageRank specific
   damping: z.number().optional(),
   maxIterations: z.number().optional(),
-  
+
   // K-Core specific
   k: z.number().int().positive().optional(),
+
+  // Shortest path specific (if needed for future use)
+  startNodeId: z.string().optional(),
+  endNodeId: z.string().optional(),
 });
 
 // Different output schemas for each analysis type
 export const PageRankOutputSchema = z.object({
   type: z.literal('pagerank'),
   status: z.string(),
-  nodes: z.array(z.object({
-    id: z.string(),
-    pagerank: z.number(),
-  })),
+  nodes: z.array(
+    z.object({
+      id: z.string(),
+      pagerank: z.number(),
+    }),
+  ),
   projectedGraphName: z.string(),
   message: z.string().optional(),
 });
@@ -438,10 +456,12 @@ export const ShortestPathOutputSchema = z.object({
 export const KCoreOutputSchema = z.object({
   type: z.literal('k-core'),
   status: z.string(),
-  nodes: z.array(z.object({
-    id: z.string(),
-    coreNumber: z.number(),
-  })),
+  nodes: z.array(
+    z.object({
+      id: z.string(),
+      coreNumber: z.number(),
+    }),
+  ),
   projectedGraphName: z.string(),
   message: z.string().optional(),
 });
@@ -449,10 +469,12 @@ export const KCoreOutputSchema = z.object({
 export const LouvainOutputSchema = z.object({
   type: z.literal('louvain'),
   status: z.string(),
-  nodes: z.array(z.object({
-    id: z.string(),
-    communityId: z.number(),
-  })),
+  nodes: z.array(
+    z.object({
+      id: z.string(),
+      communityId: z.number(),
+    }),
+  ),
   projectedGraphName: z.string(),
   message: z.string().optional(),
 });
@@ -469,28 +491,32 @@ export const AnalyzeOutputSchema = z.union([
 // ============================================
 
 export const DetectInputSchema = z.object({
-  type: z.enum(['cycles', 'islands', 'path']),
+  type: z.enum(['cycles', 'islands', 'path', 'strongly-connected', 'weakly-connected']),
   clientProjectRoot: z.string().optional(), // From session
   repository: z.string(),
   branch: z.string().default('main'),
-  
+
   // Graph projection parameters
   projectedGraphName: z.string(),
   nodeTableNames: z.array(z.string()),
   relationshipTableNames: z.array(z.string()),
-  
+
   // Path-specific parameters
   startNodeId: z.string().optional(),
   endNodeId: z.string().optional(),
 });
 
 export const DetectOutputSchema = z.object({
-  type: z.enum(['cycles', 'islands', 'path']),
+  type: z.enum(['cycles', 'islands', 'path', 'strongly-connected', 'weakly-connected']),
   status: z.string(),
-  components: z.array(z.object({
-    componentId: z.number(),
-    nodes: z.array(z.string()),
-  })).optional(),
+  components: z
+    .array(
+      z.object({
+        componentId: z.number(),
+        nodes: z.array(z.string()),
+      }),
+    )
+    .optional(),
   totalComponents: z.number().optional(),
   projectedGraphName: z.string(),
   message: z.string().optional(),
@@ -509,32 +535,44 @@ export const BulkImportInputSchema = z.object({
   clientProjectRoot: z.string().optional(), // From session
   repository: z.string(),
   branch: z.string().default('main'),
-  
+
   // Type-specific data arrays
-  components: z.array(z.object({
-    id: z.string(),
-    name: z.string(),
-    kind: z.string().optional(),
-    status: z.enum(['active', 'deprecated', 'planned']).optional(),
-    depends_on: z.array(z.string()).optional(),
-  })).optional(),
-  
-  decisions: z.array(z.object({
-    id: z.string(),
-    name: z.string(),
-    date: z.string(),
-    context: z.string().optional(),
-  })).optional(),
-  
-  rules: z.array(z.object({
-    id: z.string(),
-    name: z.string(),
-    created: z.string(),
-    content: z.string(),
-    triggers: z.array(z.string()).optional(),
-    status: z.enum(['active', 'deprecated']).optional(),
-  })).optional(),
-  
+  components: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        kind: z.string().optional(),
+        status: z.enum(['active', 'deprecated', 'planned']).optional(),
+        depends_on: z.array(z.string()).optional(),
+      }),
+    )
+    .optional(),
+
+  decisions: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        date: z.string(),
+        context: z.string().optional(),
+      }),
+    )
+    .optional(),
+
+  rules: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        created: z.string(),
+        content: z.string(),
+        triggers: z.array(z.string()).optional(),
+        status: z.enum(['active', 'deprecated']).optional(),
+      }),
+    )
+    .optional(),
+
   // Options
   overwrite: z.boolean().default(false),
 });
@@ -545,10 +583,14 @@ export const BulkImportOutputSchema = z.object({
   imported: z.number(),
   failed: z.number(),
   skipped: z.number(),
-  errors: z.array(z.object({
-    id: z.string(),
-    error: z.string(),
-  })).optional(),
+  errors: z
+    .array(
+      z.object({
+        id: z.string(),
+        error: z.string(),
+      }),
+    )
+    .optional(),
   message: z.string().optional(),
 });
 
@@ -561,7 +603,7 @@ export const SemanticSearchInputSchema = z.object({
   clientProjectRoot: z.string().optional(), // From session
   repository: z.string(),
   branch: z.string().default('main'),
-  
+
   // Search options
   entityTypes: z.array(z.enum(['components', 'decisions', 'rules', 'context'])).optional(),
   limit: z.number().min(1).max(50).default(10),
@@ -570,14 +612,16 @@ export const SemanticSearchInputSchema = z.object({
 
 export const SemanticSearchOutputSchema = z.object({
   status: z.string(),
-  results: z.array(z.object({
-    id: z.string(),
-    type: z.enum(['component', 'decision', 'rule', 'context']),
-    name: z.string(),
-    score: z.number(),
-    snippet: z.string().optional(),
-    metadata: z.record(z.any()).optional(),
-  })),
+  results: z.array(
+    z.object({
+      id: z.string(),
+      type: z.enum(['component', 'decision', 'rule', 'context']),
+      name: z.string(),
+      score: z.number(),
+      snippet: z.string().optional(),
+      metadata: z.record(z.any()).optional(),
+    }),
+  ),
   totalResults: z.number(),
   query: z.string(),
   message: z.string().optional(),

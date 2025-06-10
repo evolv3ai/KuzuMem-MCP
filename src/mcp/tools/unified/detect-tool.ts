@@ -10,36 +10,10 @@ export const detectTool: McpTool = {
   parameters: {
     type: 'object',
     properties: {
-      pattern: {
+      type: {
         type: 'string',
-        enum: ['cycles', 'islands', 'path'],
+        enum: ['cycles', 'islands', 'path', 'strongly-connected', 'weakly-connected'],
         description: 'Pattern to detect',
-      },
-      startNodeId: {
-        type: 'string',
-        description: 'Starting node ID for path detection',
-      },
-      endNodeId: {
-        type: 'string',
-        description: 'Ending node ID for path detection',
-      },
-      graphName: {
-        type: 'string',
-        description: 'Name for the projected graph',
-      },
-      nodeTypes: {
-        type: 'array',
-        items: {
-          type: 'string',
-        },
-        description: 'Node types to include',
-      },
-      relationshipTypes: {
-        type: 'array',
-        items: {
-          type: 'string',
-        },
-        description: 'Relationship types to include',
       },
       clientProjectRoot: {
         type: 'string',
@@ -53,8 +27,40 @@ export const detectTool: McpTool = {
         type: 'string',
         description: 'Git branch name',
       },
+      projectedGraphName: {
+        type: 'string',
+        description: 'Name for the projected graph',
+      },
+      nodeTableNames: {
+        type: 'array',
+        items: {
+          type: 'string',
+        },
+        description: 'Node table names to include',
+      },
+      relationshipTableNames: {
+        type: 'array',
+        items: {
+          type: 'string',
+        },
+        description: 'Relationship table names to include',
+      },
+      startNodeId: {
+        type: 'string',
+        description: 'Starting node ID for path detection',
+      },
+      endNodeId: {
+        type: 'string',
+        description: 'Ending node ID for path detection',
+      },
     },
-    required: ['pattern', 'clientProjectRoot', 'repository'],
+    required: [
+      'type',
+      'repository',
+      'projectedGraphName',
+      'nodeTableNames',
+      'relationshipTableNames',
+    ],
   },
   returns: {
     type: 'object',

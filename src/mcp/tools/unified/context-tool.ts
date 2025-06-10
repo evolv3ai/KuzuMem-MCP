@@ -10,6 +10,11 @@ export const contextTool: McpTool = {
   parameters: {
     type: 'object',
     properties: {
+      operation: {
+        type: 'string',
+        enum: ['update'],
+        description: 'Context operation (currently only update is supported)',
+      },
       agent: {
         type: 'string',
         description: 'Agent identifier',
@@ -35,7 +40,7 @@ export const contextTool: McpTool = {
         description: 'Git branch name',
       },
     },
-    required: ['agent', 'summary', 'clientProjectRoot', 'repository'],
+    required: ['operation', 'agent', 'summary', 'repository'],
   },
   returns: {
     type: 'object',
