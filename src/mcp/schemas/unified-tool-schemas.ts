@@ -501,7 +501,53 @@ export const DetectOutputSchema = z.object({
 // Bulk Import Tool Schemas
 // ============================================
 
-// TODO: Add bulk import tool schemas
+export const BulkImportInputSchema = z.object({
+  type: z.enum(['components', 'decisions', 'rules']),
+  clientProjectRoot: z.string().optional(), // From session
+  repository: z.string(),
+  branch: z.string().default('main'),
+  
+  // Type-specific data arrays
+  components: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    kind: z.string().optional(),
+    status: z.enum(['active', 'deprecated', 'planned']).optional(),
+    depends_on: z.array(z.string()).optional(),
+  })).optional(),
+  
+  decisions: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    date: z.string(),
+    context: z.string().optional(),
+  })).optional(),
+  
+  rules: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    created: z.string(),
+    content: z.string(),
+    triggers: z.array(z.string()).optional(),
+    status: z.enum(['active', 'deprecated']).optional(),
+  })).optional(),
+  
+  // Options
+  overwrite: z.boolean().default(false),
+});
+
+export const BulkImportOutputSchema = z.object({
+  type: z.enum(['components', 'decisions', 'rules']),
+  status: z.string(),
+  imported: z.number(),
+  failed: z.number(),
+  skipped: z.number(),
+  errors: z.array(z.object({
+    id: z.string(),
+    error: z.string(),
+  })).optional(),
+  message: z.string().optional(),
+});
 
 // ============================================
 // Semantic Search Tool Schemas (Future)
