@@ -550,7 +550,32 @@ export const BulkImportOutputSchema = z.object({
 });
 
 // ============================================
-// Semantic Search Tool Schemas (Future)
+// SemanticSearch Tool Schemas
 // ============================================
 
-// TODO: Add semantic search tool schemas
+export const SemanticSearchInputSchema = z.object({
+  query: z.string(),
+  clientProjectRoot: z.string().optional(), // From session
+  repository: z.string(),
+  branch: z.string().default('main'),
+  
+  // Search options
+  entityTypes: z.array(z.enum(['components', 'decisions', 'rules', 'context'])).optional(),
+  limit: z.number().min(1).max(50).default(10),
+  threshold: z.number().min(0).max(1).default(0.7), // Similarity threshold
+});
+
+export const SemanticSearchOutputSchema = z.object({
+  status: z.string(),
+  results: z.array(z.object({
+    id: z.string(),
+    type: z.enum(['component', 'decision', 'rule', 'context']),
+    name: z.string(),
+    score: z.number(),
+    snippet: z.string().optional(),
+    metadata: z.record(z.any()).optional(),
+  })),
+  totalResults: z.number(),
+  query: z.string(),
+  message: z.string().optional(),
+});
