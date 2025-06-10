@@ -1,12 +1,14 @@
 import { SdkToolHandler } from '../../../tool-handlers';
-import {
-  EntityInputSchema,
-  EntityOutputSchema,
-  EntityGetOutputSchema,
-  EntityUpdateOutputSchema,
-  EntityDeleteOutputSchema,
-} from '../../../schemas/unified-tool-schemas';
-import { z } from 'zod';
+
+// TypeScript interfaces for entity input parameters
+interface EntityParams {
+  operation: 'create' | 'update' | 'get' | 'delete';
+  entityType: 'component' | 'decision' | 'rule' | 'file' | 'tag';
+  repository: string;
+  branch?: string;
+  id?: string;
+  data?: any;
+}
 
 // Type aliases for clarity
 type Component = any;
@@ -85,9 +87,26 @@ function mapDataToEntity(entityType: string, id: string, data: any): EntityData 
  * Unified handler for all entity CRUD operations
  */
 export const entityHandler: SdkToolHandler = async (params, context, memoryService) => {
-  // 1. Parse and validate parameters
-  const validatedParams = EntityInputSchema.parse(params);
+  // 1. Validate and extract parameters
+  const validatedParams = params as EntityParams;
+  
+  // Basic validation
+  if (!validatedParams.operation) {
+    throw new Error('operation parameter is required');
+  }
+  if (!validatedParams.entityType) {
+    throw new Error('entityType parameter is required');
+  }
+  if (!validatedParams.repository) {
+    throw new Error('repository parameter is required');
+  }
+  
   const { operation, entityType, repository, branch = 'main', id, data } = validatedParams;
+
+  // Additional validation for operations that require an id
+  if (['get', 'update', 'delete'].includes(operation) && !id) {
+    throw new Error(`id parameter is required for ${operation} operation`);
+  }
 
   // 2. Get clientProjectRoot from session
   const clientProjectRoot = context.session.clientProjectRoot as string | undefined;
@@ -108,11 +127,18 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
       case 'create': {
         await context.sendProgress({
           status: 'in_progress',
-          message: `Creating ${entityType}: ${id}`,
+          message: `Creating ${entityType}: ${id || 'new'}`,
           percent: 50,
         });
 
-        const entityData = mapDataToEntity(entityType, id, data || {});
+        const entityId = id || (data && data.id);
+        if (!entityId) {
+          throw new Error(
+            'id is required for create operation (either as id parameter or data.id)',
+          );
+        }
+
+        const entityData = mapDataToEntity(entityType, entityId, data || {});
 
         // Call appropriate MemoryService method based on entity type
         switch (entityType) {
@@ -139,8 +165,8 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
               context,
               clientProjectRoot,
               repository,
-              entityData as Rule,
               branch,
+              entityData as Rule,
             );
             break;
           case 'file':
@@ -165,22 +191,25 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
 
         await context.sendProgress({
           status: 'complete',
-          message: `${entityType} ${id} created successfully`,
+          message: `${entityType} ${entityId} created successfully`,
           percent: 100,
           isFinal: true,
         });
 
         return {
           success: true,
-          message: `${entityType} ${id} created successfully`,
+          message: `${entityType} ${entityId} created successfully`,
           entity: entityData,
         };
       }
 
       case 'get': {
+        // id is guaranteed to be defined due to validation above
+        const entityId = id!;
+        
         await context.sendProgress({
           status: 'in_progress',
-          message: `Retrieving ${entityType}: ${id}`,
+          message: `Retrieving ${entityType}: ${entityId}`,
           percent: 50,
         });
 
@@ -194,7 +223,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
               clientProjectRoot,
               repository,
               branch,
-              id,
+              entityId,
             );
             break;
           case 'decision':
@@ -203,7 +232,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
               clientProjectRoot,
               repository,
               branch,
-              id,
+              entityId,
             );
             break;
           case 'rule':
@@ -212,7 +241,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
               clientProjectRoot,
               repository,
               branch,
-              id,
+              entityId,
             );
             break;
           case 'file':
@@ -221,19 +250,25 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
               clientProjectRoot,
               repository,
               branch,
-              id,
+              entityId,
             );
             break;
           case 'tag':
-            entity = await memoryService.getTag(context, clientProjectRoot, repository, branch, id);
+            entity = await memoryService.getTag(
+              context,
+              clientProjectRoot,
+              repository,
+              branch,
+              entityId,
+            );
             break;
         }
 
         await context.sendProgress({
           status: 'complete',
           message: entity
-            ? `${entityType} ${id} retrieved successfully`
-            : `${entityType} ${id} not found`,
+            ? `${entityType} ${entityId} retrieved successfully`
+            : `${entityType} ${entityId} not found`,
           percent: 100,
           isFinal: true,
         });
@@ -241,7 +276,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
         if (!entity) {
           return {
             success: false,
-            message: `${entityType} with ID ${id} not found`,
+            message: `${entityType} with ID ${entityId} not found`,
           };
         }
 
@@ -252,13 +287,16 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
       }
 
       case 'update': {
+        // id is guaranteed to be defined due to validation above
+        const entityId = id!;
+        
         await context.sendProgress({
           status: 'in_progress',
-          message: `Updating ${entityType}: ${id}`,
+          message: `Updating ${entityType}: ${entityId}`,
           percent: 50,
         });
 
-        const entityData = mapDataToEntity(entityType, id, data || {});
+        const entityData = mapDataToEntity(entityType, entityId, data || {});
         let updatedEntity: any = null;
 
         // Call appropriate MemoryService update method based on entity type
@@ -269,7 +307,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
               clientProjectRoot,
               repository,
               branch,
-              id,
+              entityId,
               entityData as Partial<Component>,
             );
             break;
@@ -279,7 +317,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
               clientProjectRoot,
               repository,
               branch,
-              id,
+              entityId,
               entityData as Partial<Decision>,
             );
             break;
@@ -289,7 +327,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
               clientProjectRoot,
               repository,
               branch,
-              id,
+              entityId,
               entityData as Partial<Rule>,
             );
             break;
@@ -299,7 +337,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
               clientProjectRoot,
               repository,
               branch,
-              id,
+              entityId,
               entityData as Partial<FileRecord>,
             );
             break;
@@ -309,7 +347,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
               clientProjectRoot,
               repository,
               branch,
-              id,
+              entityId,
               entityData as Partial<Tag>,
             );
             break;
@@ -318,8 +356,8 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
         await context.sendProgress({
           status: 'complete',
           message: updatedEntity
-            ? `${entityType} ${id} updated successfully`
-            : `${entityType} ${id} not found`,
+            ? `${entityType} ${entityId} updated successfully`
+            : `${entityType} ${entityId} not found`,
           percent: 100,
           isFinal: true,
         });
@@ -327,21 +365,24 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
         if (!updatedEntity) {
           return {
             success: false,
-            message: `${entityType} with ID ${id} not found for update`,
+            message: `${entityType} with ID ${entityId} not found for update`,
           };
         }
 
         return {
           success: true,
-          message: `${entityType} ${id} updated successfully`,
+          message: `${entityType} ${entityId} updated successfully`,
           entity: updatedEntity,
         };
       }
 
       case 'delete': {
+        // id is guaranteed to be defined due to validation above
+        const entityId = id!;
+        
         await context.sendProgress({
           status: 'in_progress',
-          message: `Deleting ${entityType}: ${id}`,
+          message: `Deleting ${entityType}: ${entityId}`,
           percent: 50,
         });
 
@@ -355,7 +396,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
               clientProjectRoot,
               repository,
               branch,
-              id,
+              entityId,
             );
             break;
           case 'decision':
@@ -364,7 +405,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
               clientProjectRoot,
               repository,
               branch,
-              id,
+              entityId,
             );
             break;
           case 'rule':
@@ -373,7 +414,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
               clientProjectRoot,
               repository,
               branch,
-              id,
+              entityId,
             );
             break;
           case 'file':
@@ -382,7 +423,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
               clientProjectRoot,
               repository,
               branch,
-              id,
+              entityId,
             );
             break;
           case 'tag':
@@ -391,7 +432,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
               clientProjectRoot,
               repository,
               branch,
-              id,
+              entityId,
             );
             break;
         }
@@ -399,8 +440,8 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
         await context.sendProgress({
           status: 'complete',
           message: deleted
-            ? `${entityType} ${id} deleted successfully`
-            : `${entityType} ${id} not found`,
+            ? `${entityType} ${entityId} deleted successfully`
+            : `${entityType} ${entityId} not found`,
           percent: 100,
           isFinal: true,
         });
@@ -408,8 +449,8 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
         return {
           success: deleted,
           message: deleted
-            ? `${entityType} ${id} deleted successfully`
-            : `${entityType} with ID ${id} not found`,
+            ? `${entityType} ${entityId} deleted successfully`
+            : `${entityType} with ID ${entityId} not found`,
         };
       }
 

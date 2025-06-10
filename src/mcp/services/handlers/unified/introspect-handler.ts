@@ -1,20 +1,64 @@
 import { SdkToolHandler } from '../../../tool-handlers';
-import {
-  IntrospectInputSchema,
-  LabelsOutputSchema,
-  CountOutputSchema,
-  PropertiesOutputSchema,
-  IndexesOutputSchema,
-} from '../../../schemas/unified-tool-schemas';
-import { z } from 'zod';
+
+// TypeScript interfaces for introspect parameters
+interface IntrospectParams {
+  query: 'labels' | 'count' | 'properties' | 'indexes';
+  repository: string;
+  branch?: string;
+  target?: string;
+}
+
+// Output interfaces
+interface LabelsOutput {
+  labels: string[];
+  status: 'complete' | 'error';
+  message: string;
+}
+
+interface CountOutput {
+  label: string;
+  count: number;
+  message?: string;
+}
+
+interface PropertyInfo {
+  name: string;
+  type: string;
+}
+
+interface PropertiesOutput {
+  label: string;
+  properties: PropertyInfo[];
+}
+
+interface IndexInfo {
+  name: string;
+  tableName: string;
+  propertyName: string;
+  isPrimaryKey: boolean;
+  indexType: string;
+}
+
+interface IndexesOutput {
+  indexes: IndexInfo[];
+}
 
 /**
  * Introspect Handler
  * Handles all graph schema and metadata introspection operations
  */
 export const introspectHandler: SdkToolHandler = async (params, context, memoryService) => {
-  // 1. Parse and validate parameters
-  const validatedParams = IntrospectInputSchema.parse(params);
+  // 1. Validate and extract parameters
+  const validatedParams = params as IntrospectParams;
+  
+  // Basic validation
+  if (!validatedParams.query) {
+    throw new Error('query parameter is required');
+  }
+  if (!validatedParams.repository) {
+    throw new Error('repository parameter is required');
+  }
+  
   const { query, repository, branch = 'main', target } = validatedParams;
 
   // 2. Get clientProjectRoot from session
@@ -64,7 +108,7 @@ export const introspectHandler: SdkToolHandler = async (params, context, memoryS
           labels: result.labels,
           status: 'complete' as const,
           message: result.message || `Found ${result.labels.length} node labels`,
-        } satisfies z.infer<typeof LabelsOutputSchema>;
+        } as LabelsOutput;
       }
 
       case 'count': {
@@ -89,7 +133,7 @@ export const introspectHandler: SdkToolHandler = async (params, context, memoryS
           isFinal: true,
         });
 
-        return result satisfies z.infer<typeof CountOutputSchema>;
+        return result as CountOutput;
       }
 
       case 'properties': {
@@ -114,7 +158,7 @@ export const introspectHandler: SdkToolHandler = async (params, context, memoryS
           isFinal: true,
         });
 
-        return result satisfies z.infer<typeof PropertiesOutputSchema>;
+        return result as PropertiesOutput;
       }
 
       case 'indexes': {
@@ -150,7 +194,7 @@ export const introspectHandler: SdkToolHandler = async (params, context, memoryS
 
         return {
           indexes: normalizedIndexes,
-        } satisfies z.infer<typeof IndexesOutputSchema>;
+        } as IndexesOutput;
       }
 
       default:
@@ -177,22 +221,22 @@ export const introspectHandler: SdkToolHandler = async (params, context, memoryS
         labels: [],
         status: 'error' as const,
         message: errorMessage,
-      } satisfies z.infer<typeof LabelsOutputSchema>;
+      } as LabelsOutput;
     } else if (query === 'count') {
       return {
         label: target || '',
         count: 0,
         message: errorMessage,
-      } satisfies z.infer<typeof CountOutputSchema>;
+      } as CountOutput;
     } else if (query === 'properties') {
       return {
         label: target || '',
         properties: [],
-      } satisfies z.infer<typeof PropertiesOutputSchema>;
+      } as PropertiesOutput;
     } else {
       return {
         indexes: [],
-      } satisfies z.infer<typeof IndexesOutputSchema>;
+      } as IndexesOutput;
     }
   }
 };

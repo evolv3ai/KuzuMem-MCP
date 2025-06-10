@@ -2,12 +2,15 @@ import path from 'path';
 import { SdkToolHandler } from '../../../tool-handlers';
 import { EnrichedRequestHandlerExtra } from '../../../types/sdk-custom';
 import { MemoryService } from '../../../../services/memory.service';
-import {
-  MemoryBankInputSchema,
-  InitMemoryBankOutputSchema,
-  GetMetadataOutputSchema,
-  UpdateMetadataOutputSchema,
-} from '../../../schemas/unified-tool-schemas';
+
+// TypeScript interfaces for memory bank parameters
+interface MemoryBankParams {
+  operation: 'init' | 'get-metadata' | 'update-metadata';
+  clientProjectRoot?: string;
+  repository: string;
+  branch?: string;
+  metadata?: any;
+}
 
 /**
  * Ensures that the clientProjectRoot is available in the session context.
@@ -213,8 +216,16 @@ export const memoryBankHandler: SdkToolHandler = async (
   context: EnrichedRequestHandlerExtra,
   memoryService: MemoryService,
 ): Promise<unknown> => {
-  // 1. Parse and validate parameters
-  const validatedParams = MemoryBankInputSchema.parse(params);
+  // 1. Validate and extract parameters
+  const validatedParams = params as MemoryBankParams;
+  
+  // Basic validation
+  if (!validatedParams.operation) {
+    throw new Error('operation parameter is required');
+  }
+  if (!validatedParams.repository) {
+    throw new Error('repository parameter is required');
+  }
 
   // 2. Get clientProjectRoot from session (except for init)
   const clientProjectRoot = ensureValidSessionContext(validatedParams, context, 'memory-bank');
