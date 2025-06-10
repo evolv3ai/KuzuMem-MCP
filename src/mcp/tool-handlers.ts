@@ -34,6 +34,7 @@ import { EnrichedRequestHandlerExtra } from './types/sdk-custom';
 
 // Import unified tool handlers
 import { memoryBankHandler } from './services/handlers/unified/memory-bank-handler';
+import { entityHandler } from './services/handlers/unified/entity-handler';
 
 // Import Operation Classes - these will be refactored or their logic moved/simplified
 // For now, keep them to avoid breaking streaming tool stubs immediately.
@@ -1729,4 +1730,5 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
 
   // Unified tool handlers
   'memory-bank': memoryBankHandler,
+  'entity': entityHandler,
 };
