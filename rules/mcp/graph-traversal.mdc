@@ -1,0 +1,275 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: KuzuMem-MCP Graph Traversal guides
+globs: 
+alwaysApply: true
+---
+# KuzuMem-MCP Graph Traversal
+
+## Dependency Analysis
+
+### 1. Component Dependencies
+Find what a component depends on (its requirements):
+
+```json
+{
+  "tool": {
+    "name": "get-component-dependencies",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main",
+      "componentId": "comp-OrderService"
+    }
+  }
+}
+```
+
+**Returns:** Components that OrderService needs to function
+**Use case:** Understanding prerequisites before modifying a component
+
+### 2. Component Dependents 
+Find what depends on a component (its consumers):
+
+```json
+{
+  "tool": {
+    "name": "get-component-dependents",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project", 
+      "repository": "my-app",
+      "branch": "main",
+      "componentId": "comp-PaymentService"
+    }
+  }
+}
+```
+
+**Returns:** Components that rely on PaymentService
+**Use case:** Impact analysis before changing or removing a component
+
+## Governance Queries
+
+### 1. Component Rules & Decisions
+Find rules and decisions that govern a component:
+
+```json
+{
+  "tool": {
+    "name": "get-governing-items-for-component",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app", 
+      "branch": "main",
+      "componentId": "comp-APIGateway"
+    }
+  }
+}
+```
+
+**Returns:** 
+- Rules that apply to APIGateway
+- Decisions that affect APIGateway 
+- Context history for APIGateway
+
+**Use case:** Ensuring compliance before making changes
+
+## Historical Analysis
+
+### 1. Item Evolution
+Track how an entity has evolved over time:
+
+```json
+{
+  "tool": {
+    "name": "get-item-contextual-history",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main", 
+      "itemId": "comp-UserService",
+      "itemType": "Component"
+    }
+  }
+}
+```
+
+**Item types:** `Component`, `Decision`, `Rule`
+**Use case:** Understanding why changes were made to a component
+
+### 2. Decision History
+Track decision evolution:
+
+```json
+{
+  "tool": {
+    "name": "get-item-contextual-history",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main",
+      "itemId": "dec-20241209-database-choice", 
+      "itemType": "Decision"
+    }
+  }
+}
+```
+
+## Relationship Exploration
+
+### 1. Related Items
+Explore component neighborhoods and relationships:
+
+```json
+{
+  "tool": {
+    "name": "get-related-items",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main",
+      "startItemId": "comp-AuthService",
+      "depth": 2,
+      "relationshipFilter": "DEPENDS_ON",
+      "targetNodeTypeFilter": "Component"
+    }
+  }
+}
+```
+
+**Parameters:**
+- `depth`: How many relationship hops (1-3 recommended)
+- `relationshipFilter`: `DEPENDS_ON`, `GOVERNED_BY`, or `ALL`
+- `targetNodeTypeFilter`: `Component`, `Decision`, `Rule`, or `ALL`
+
+### 2. Multi-Hop Dependencies
+Find indirect dependencies (dependencies of dependencies):
+
+```json
+{
+  "tool": {
+    "name": "get-related-items",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app", 
+      "branch": "main",
+      "startItemId": "comp-OrderService",
+      "depth": 3,
+      "relationshipFilter": "DEPENDS_ON",
+      "targetNodeTypeFilter": "Component"
+    }
+  }
+}
+```
+
+**Use case:** Full impact analysis for major component changes
+
+## Query Patterns
+
+### 1. Impact Analysis Workflow
+Before modifying a critical component:
+
+```json
+// 1. Find direct dependents
+{
+  "tool": {
+    "name": "get-component-dependents",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main", 
+      "componentId": "comp-DatabaseConnection"
+    }
+  }
+}
+
+// 2. Find governing rules
+{
+  "tool": {
+    "name": "get-governing-items-for-component", 
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main",
+      "componentId": "comp-DatabaseConnection"
+    }
+  }
+}
+
+// 3. Check broader impact
+{
+  "tool": {
+    "name": "get-related-items",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main",
+      "startItemId": "comp-DatabaseConnection",
+      "depth": 2,
+      "relationshipFilter": "ALL",
+      "targetNodeTypeFilter": "ALL"  
+    }
+  }
+}
+```
+
+### 2. Architecture Exploration
+Understanding system structure:
+
+```json
+// 1. Find high-level components
+{
+  "tool": {
+    "name": "get-related-items",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main",
+      "startItemId": "comp-APIGateway", 
+      "depth": 1,
+      "relationshipFilter": "DEPENDS_ON",
+      "targetNodeTypeFilter": "Component"
+    }
+  }
+}
+
+// 2. Check architectural decisions
+{
+  "tool": {
+    "name": "get-governing-items-for-component",
+    "arguments": {
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app", 
+      "branch": "main",
+      "componentId": "comp-APIGateway"
+    }
+  }
+}
+```
+
+## Best Practices
+
+### 1. Depth Limits
+- **Depth 1:** Direct relationships only
+- **Depth 2:** Include one level of indirection (recommended)
+- **Depth 3+:** Use sparingly, can return very large result sets
+
+### 2. Filter Usage
+- Use `relationshipFilter` to focus on specific relationship types
+- Use `targetNodeTypeFilter` to limit result types
+- Combine filters to get precise results
+
+### 3. Performance Considerations
+- Start with narrow queries (low depth, specific filters)
+- Expand scope only if needed for complete analysis
+- Cache results during a session to avoid repeated queries
+
+### 4. Common Use Cases
+- **Before refactoring:** Check dependents and governing rules
+- **During code review:** Verify compliance with governing items
+- **Architecture analysis:** Use related items with depth 2-3
+- **Debugging:** Check item contextual history for changes
