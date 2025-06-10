@@ -18,12 +18,14 @@ Find what a component depends on (its requirements):
 ```json
 {
   "tool": {
-    "name": "get-component-dependencies",
+    "name": "query",
     "arguments": {
+      "type": "dependencies",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app",
       "branch": "main",
-      "componentId": "comp-OrderService"
+      "componentId": "comp-OrderService",
+      "direction": "dependencies"
     }
   }
 }
@@ -38,12 +40,14 @@ Find what depends on a component (its consumers):
 ```json
 {
   "tool": {
-    "name": "get-component-dependents",
+    "name": "query",
     "arguments": {
+      "type": "dependencies",
       "clientProjectRoot": "/workspace/project", 
       "repository": "my-app",
       "branch": "main",
-      "componentId": "comp-PaymentService"
+      "componentId": "comp-PaymentService",
+      "direction": "dependents"
     }
   }
 }
@@ -60,8 +64,9 @@ Find rules and decisions that govern a component:
 ```json
 {
   "tool": {
-    "name": "get-governing-items-for-component",
+    "name": "query",
     "arguments": {
+      "type": "governance",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app", 
       "branch": "main",
@@ -74,7 +79,6 @@ Find rules and decisions that govern a component:
 **Returns:** 
 - Rules that apply to APIGateway
 - Decisions that affect APIGateway 
-- Context history for APIGateway
 
 **Use case:** Ensuring compliance before making changes
 
@@ -86,8 +90,9 @@ Track how an entity has evolved over time:
 ```json
 {
   "tool": {
-    "name": "get-item-contextual-history",
+    "name": "query",
     "arguments": {
+      "type": "history",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app",
       "branch": "main", 
@@ -107,12 +112,13 @@ Track decision evolution:
 ```json
 {
   "tool": {
-    "name": "get-item-contextual-history",
+    "name": "query",
     "arguments": {
+      "type": "history",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app",
       "branch": "main",
-      "itemId": "dec-20241209-database-choice", 
+      "itemId": "dec-20241210-database-choice", 
       "itemType": "Decision"
     }
   }
@@ -127,8 +133,9 @@ Explore component neighborhoods and relationships:
 ```json
 {
   "tool": {
-    "name": "get-related-items",
+    "name": "query",
     "arguments": {
+      "type": "relationships",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app",
       "branch": "main",
@@ -143,8 +150,8 @@ Explore component neighborhoods and relationships:
 
 **Parameters:**
 - `depth`: How many relationship hops (1-3 recommended)
-- `relationshipFilter`: `DEPENDS_ON`, `GOVERNED_BY`, or `ALL`
-- `targetNodeTypeFilter`: `Component`, `Decision`, `Rule`, or `ALL`
+- `relationshipFilter`: Filter by relationship type
+- `targetNodeTypeFilter`: Filter by target node type
 
 ### 2. Multi-Hop Dependencies
 Find indirect dependencies (dependencies of dependencies):
@@ -152,8 +159,9 @@ Find indirect dependencies (dependencies of dependencies):
 ```json
 {
   "tool": {
-    "name": "get-related-items",
+    "name": "query",
     "arguments": {
+      "type": "relationships",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app", 
       "branch": "main",
@@ -168,6 +176,52 @@ Find indirect dependencies (dependencies of dependencies):
 
 **Use case:** Full impact analysis for major component changes
 
+## Tag-Based Queries
+
+### 1. Find Items by Tag
+Retrieve all entities with a specific tag:
+
+```json
+{
+  "tool": {
+    "name": "query",
+    "arguments": {
+      "type": "tags",
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main",
+      "tagId": "tag-security-critical",
+      "entityType": "Component"
+    }
+  }
+}
+```
+
+**Use case:** Find all security-critical components for review
+
+## Context Queries
+
+### 1. Latest Context
+Get recent work context:
+
+```json
+{
+  "tool": {
+    "name": "query",
+    "arguments": {
+      "type": "context",
+      "clientProjectRoot": "/workspace/project",
+      "repository": "my-app",
+      "branch": "main",
+      "latest": true,
+      "limit": 5
+    }
+  }
+}
+```
+
+**Use case:** Understanding recent work before continuing
+
 ## Query Patterns
 
 ### 1. Impact Analysis Workflow
@@ -177,12 +231,14 @@ Before modifying a critical component:
 // 1. Find direct dependents
 {
   "tool": {
-    "name": "get-component-dependents",
+    "name": "query",
     "arguments": {
+      "type": "dependencies",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app",
       "branch": "main", 
-      "componentId": "comp-DatabaseConnection"
+      "componentId": "comp-DatabaseConnection",
+      "direction": "dependents"
     }
   }
 }
@@ -190,8 +246,9 @@ Before modifying a critical component:
 // 2. Find governing rules
 {
   "tool": {
-    "name": "get-governing-items-for-component", 
+    "name": "query", 
     "arguments": {
+      "type": "governance",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app",
       "branch": "main",
@@ -203,8 +260,9 @@ Before modifying a critical component:
 // 3. Check broader impact
 {
   "tool": {
-    "name": "get-related-items",
+    "name": "query",
     "arguments": {
+      "type": "relationships",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app",
       "branch": "main",
@@ -224,8 +282,9 @@ Understanding system structure:
 // 1. Find high-level components
 {
   "tool": {
-    "name": "get-related-items",
+    "name": "query",
     "arguments": {
+      "type": "relationships",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app",
       "branch": "main",
@@ -240,8 +299,9 @@ Understanding system structure:
 // 2. Check architectural decisions
 {
   "tool": {
-    "name": "get-governing-items-for-component",
+    "name": "query",
     "arguments": {
+      "type": "governance",
       "clientProjectRoot": "/workspace/project",
       "repository": "my-app", 
       "branch": "main",
@@ -273,3 +333,17 @@ Understanding system structure:
 - **During code review:** Verify compliance with governing items
 - **Architecture analysis:** Use related items with depth 2-3
 - **Debugging:** Check item contextual history for changes
+
+# Graph Query Cheatsheet
+
+## 1. Impact Analysis
+Use `query` with `type: "dependencies"` and `direction: "dependents"` to list what breaks if you touch a component. Chain with `type: "governance"` to reveal blocking rules/decisions.
+
+## 2. Architecture Health
+Run `analyze` with `type: "pagerank"` to spot critical services, `type: "k-core"` for tightly-coupled clusters, `detect` with `type: "strongly-connected"` for cycles, `type: "weakly-connected"` for isolated orphans.
+
+## 3. Relationship Discovery
+`query` with `type: "relationships"` (depth 2, relationshipFilter ALL) gives the neighbourhood of any item. `analyze` with `type: "shortest-path"` shows how two nodes connect.
+
+## 4. Tag & Context Insights
+`query` with `type: "tags"` fetches all tagged items. `query` with `type: "context"` retrieves work history and insights.

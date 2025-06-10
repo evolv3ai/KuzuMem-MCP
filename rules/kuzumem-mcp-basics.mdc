@@ -13,7 +13,7 @@ alwaysApply: true
 
 ## Overview
 
-You are working with a **KuzuMem-MCP Server** that provides persistent, graph-based memory storage for AI coding assistants. The server uses the **official MCP TypeScript SDK** with full protocol compliance.
+You are working with a **KuzuMem-MCP Server** that provides persistent, graph-based memory storage for AI coding assistants. The server uses the **official MCP TypeScript SDK** with full protocol compliance. The system now provides **11 unified tools** (consolidated from 29) with consistent parameter patterns.
 
 ## Essential Parameters
 
@@ -40,63 +40,108 @@ Use this exact JSON structure for tool calls:
 }
 ```
 
-## Core Tool Categories
+## The 11 Unified Tools
 
-### 1. Memory Bank Management
-- `init-memory-bank` - Initialize new memory bank
-- `get-metadata` / `update-metadata` - Repository-level information
-- `get-context` / `update-context` - Session and work context
+### 1. **memory-bank** - Initialize and manage memory bank metadata
+- Operations: `init`, `get-metadata`, `update-metadata`
 
-### 2. Entity Management  
-- `add-component` - Add/update system components
-- `add-decision` - Record architectural decisions
-- `add-rule` - Define coding/architectural rules
+### 2. **entity** - Create, update, delete, and retrieve all entity types
+- Operations: `create`, `get`, `update`, `delete`
+- Entity types: `component`, `decision`, `rule`, `file`, `tag`
 
-### 3. Graph Queries
-- `get-component-dependencies` - Find what component depends on
-- `get-component-dependents` - Find what depends on component  
-- `get-governing-items-for-component` - Get rules/decisions affecting component
+### 3. **introspect** - Explore graph schema and metadata
+- Query types: `labels`, `count`, `properties`, `indexes`
 
-### 4. Graph Algorithms
-- `pagerank` - Identify critical components
-- `shortest-path` - Find relationships between components
-- `louvain-community-detection` - Discover system modules
+### 4. **context** - Manage work session context
+- Operations: `update` (get is via `query` tool)
+
+### 5. **query** - Unified search across all query types
+- Types: `context`, `entities`, `relationships`, `dependencies`, `governance`, `history`, `tags`
+
+### 6. **associate** - Create relationships between entities
+- Types: `file-component`, `tag-item`
+
+### 7. **analyze** - Run graph algorithms
+- Types: `pagerank`, `shortest-path`, `k-core`, `louvain`
+
+### 8. **detect** - Detect patterns in the graph
+- Types: `strongly-connected`, `weakly-connected`
+
+### 9. **bulk-import** - Efficient bulk entity import
+- Types: `components`, `decisions`, `rules`
+
+### 10. **search** - Standard search capabilities
+
+### 11. **semantic-search** - Semantic search (placeholder)
 
 ## Basic Workflow
 
-1. **Initialize** (if needed): Use `init-memory-bank` for new repositories
-2. **Query Context**: Use `get-metadata` and `get-context` to understand current state  
+1. **Initialize** (if needed): Use `memory-bank` with `operation: "init"`
+2. **Query Context**: Use `query` with `type: "context"` to understand current state  
 3. **Perform Work**: Use appropriate tools based on the task
-4. **Update Memory**: Use `update-context`, `add-component`, etc. to persist new knowledge
+4. **Update Memory**: Use `context` for updates, `entity` for creating/updating entities
 
 ## ID Naming Conventions
 
 - **Components**: `comp-{Name}` (e.g., `comp-AuthService`)
-- **Decisions**: `dec-{YYYYMMDD}-{slug}` (e.g., `dec-20250609-api-versioning`)  
+- **Decisions**: `dec-{YYYYMMDD}-{slug}` (e.g., `dec-20241210-api-versioning`)  
 - **Rules**: `rule-{category}-{description}` (e.g., `rule-security-authentication`)
+- **Files**: `file-{path-slug}-v{version}` (e.g., `file-src-auth-service-ts-v1`)
+- **Tags**: `tag-{category}-{name}` (e.g., `tag-security-critical`)
 
 ## Response Formats
 
 The server returns results in MCP-compliant format:
-- Success: `{"result": {"content": [{"type": "text", "text": "JSON_RESULT"}]}}`
+- Success: Tool-specific response schemas
 - Error: `{"error": {"code": -32603, "message": "Error description"}}`
 
-Always parse the `content[0].text` field to get the actual tool result.
+All unified tools return structured responses specific to their operation.
 
-## Example: Basic Component Query
+## Example: Creating a Component
 
 ```json
 {
   "tool": {
-    "name": "get-component-dependencies", 
+    "name": "entity",
     "arguments": {
+      "operation": "create",
+      "entityType": "component",
       "clientProjectRoot": "/workspace/my-project",
       "repository": "ecommerce-api",
-      "branch": "feature/checkout", 
-      "componentId": "comp-PaymentService"
+      "branch": "feature/checkout",
+      "data": {
+        "id": "comp-PaymentService",
+        "name": "Payment Service",
+        "kind": "service",
+        "depends_on": ["comp-OrderService", "comp-UserService"],
+        "status": "active"
+      }
     }
   }
 }
 ```
 
-This returns components that PaymentService depends on, helping understand impact before changes.
+## Example: Querying Dependencies
+
+```json
+{
+  "tool": {
+    "name": "query",
+    "arguments": {
+      "type": "dependencies",
+      "clientProjectRoot": "/workspace/my-project",
+      "repository": "ecommerce-api",
+      "branch": "feature/checkout",
+      "componentId": "comp-PaymentService",
+      "direction": "dependencies"
+    }
+  }
+}
+```
+
+## Tool Consolidation Benefits
+
+- **Simplified Integration**: 11 tools instead of 29
+- **Consistent Parameters**: All tools follow similar patterns
+- **Better Maintainability**: Reduced complexity
+- **Type Safety**: Full TypeScript support with no compilation errors
