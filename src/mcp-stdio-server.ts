@@ -22,6 +22,7 @@ import { ToolExecutionService } from './mcp/services/tool-execution.service';
 import { createProgressHandler } from './mcp/streaming/progress-handler';
 import { StdioProgressTransport } from './mcp/streaming/stdio-transport';
 import { toolHandlers } from './mcp/tool-handlers';
+import { MemoryService } from './services/memory.service';
 
 console.error('[MCP-DEBUG] Starting KuzuMem-MCP-Stdio server');
 console.error('[MCP-DEBUG] Node version:', process.version);
@@ -262,7 +263,11 @@ async function startServer() {
 
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
+  debugLog(1, 'SIGINT received, shutting down gracefully');
   try {
+    // Get MemoryService instance and shut it down
+    const memoryService = await MemoryService.getInstance();
+    await memoryService.shutdown();
     await server.close();
   } catch (error) {
     console.error('Error during server shutdown:', error);
@@ -271,7 +276,11 @@ process.on('SIGINT', async () => {
 });
 
 process.on('SIGTERM', async () => {
+  debugLog(1, 'SIGTERM received, shutting down gracefully');
   try {
+    // Get MemoryService instance and shut it down
+    const memoryService = await MemoryService.getInstance();
+    await memoryService.shutdown();
     await server.close();
   } catch (error) {
     console.error('Error during server shutdown:', error);

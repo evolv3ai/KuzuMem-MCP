@@ -21,6 +21,8 @@ import path from 'path';
 import { ToolExecutionService } from './mcp/services/tool-execution.service';
 import { toolHandlers } from './mcp/tool-handlers';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
+import { createProgressHandler } from './mcp/streaming/progress-handler';
+import { MemoryService } from './services/memory.service';
 
 // Load environment variables
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
@@ -440,6 +442,14 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', async () => {
   debugLog(1, 'SIGINT received, shutting down gracefully');
+
+  // Get MemoryService instance and shut it down
+  try {
+    const memoryService = await MemoryService.getInstance();
+    await memoryService.shutdown();
+  } catch (error) {
+    debugLog(0, 'Error shutting down MemoryService:', error);
+  }
 
   // Close all sessions
   for (const [sessionId, session] of sessions.entries()) {
