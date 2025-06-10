@@ -473,7 +473,29 @@ export const AnalyzeOutputSchema = z.union([
 // Detect Tool Schemas
 // ============================================
 
-// TODO: Add detect tool schemas
+export const DetectInputSchema = z.object({
+  type: z.enum(['strongly-connected', 'weakly-connected']),
+  clientProjectRoot: z.string().optional(), // From session
+  repository: z.string(),
+  branch: z.string().default('main'),
+  
+  // Graph projection parameters
+  projectedGraphName: z.string(),
+  nodeTableNames: z.array(z.string()),
+  relationshipTableNames: z.array(z.string()),
+});
+
+export const DetectOutputSchema = z.object({
+  type: z.enum(['strongly-connected', 'weakly-connected']),
+  status: z.string(),
+  components: z.array(z.object({
+    componentId: z.number(),
+    nodes: z.array(z.string()),
+  })),
+  totalComponents: z.number(),
+  projectedGraphName: z.string(),
+  message: z.string().optional(),
+});
 
 // ============================================
 // Bulk Import Tool Schemas
