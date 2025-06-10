@@ -1,12 +1,19 @@
 import { SdkToolHandler } from '../../../tool-handlers';
-import { Component, Decision, Rule, FileRecord, Tag } from '../../../../types/memory-types';
 import {
   EntityInputSchema,
-  EntityCreateOutputSchema,
+  EntityOutputSchema,
   EntityGetOutputSchema,
   EntityUpdateOutputSchema,
   EntityDeleteOutputSchema,
 } from '../../../schemas/unified-tool-schemas';
+import { z } from 'zod';
+
+// Type aliases for clarity
+type Component = any;
+type Decision = any;
+type Rule = any;
+type FileRecord = any;
+type Tag = any;
 
 // Union type for all entity data structures
 type EntityData = Component | Decision | Rule | FileRecord | Tag;

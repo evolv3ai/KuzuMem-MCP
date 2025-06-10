@@ -23,6 +23,14 @@ import * as graphOps from './memory-operations/graph.ops';
 import * as metadataOps from './memory-operations/metadata.ops';
 import * as ruleOps from './memory-operations/rule.ops';
 
+// Import specialized operations
+// import * as fileOps from './memory-operations/file.ops';
+// import * as tagOps from './memory-operations/tag.ops';
+
+// Type definitions (temporary until proper types are created)
+type FileRecord = any;
+type Tag = any;
+
 /**
  * Service for memory bank operations
  * Implements the singleton pattern as per best practices
@@ -51,7 +59,9 @@ export class MemoryService {
     
     // Use logger if available, otherwise console for this early init log
     const logger = initialMcpContext?.logger || console;
-    logger.info('MemoryService: Initialized with RepositoryProvider - database access deferred until needed');
+    logger.info(
+      'MemoryService: Initialized with RepositoryProvider - database access deferred until needed',
+    );
   }
 
   /**
@@ -1843,20 +1853,44 @@ export class MemoryService {
       const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
       const fileRepo = this.repositoryProvider.getFileRepository(clientProjectRoot);
 
-      // Import the file operation
-      const fileOps = await import('./memory-operations/file.ops');
-      
-      // Call the file operation
-      const result = await fileOps.addFileOp(
-        mcpContext,
-        repositoryName,
-        branch,
-        fileData,
-        repositoryRepo,
-        fileRepo,
-      );
+      // Get repository to ensure it exists
+      const repository = await repositoryRepo.findByName(repositoryName, branch);
+      if (!repository || !repository.id) {
+        logger.warn(`[MemoryService.addFile] Repository ${repositoryName}:${branch} not found.`);
+        return {
+          success: false,
+          message: `Repository ${repositoryName}:${branch} not found.`,
+        };
+      }
 
-      return result;
+      // Create the file
+      const graphUniqueId = `${repositoryName}:${branch}:${fileData.id}`;
+      const fileToCreate = {
+        id: fileData.id,
+        name: fileData.name,
+        path: fileData.path,
+        graph_unique_id: graphUniqueId,
+        language: fileData.language,
+        metrics: fileData.metrics,
+        content_hash: fileData.content_hash,
+        mime_type: fileData.mime_type,
+        size_bytes: fileData.size_bytes,
+      };
+
+      const createdFile = await fileRepo.createFileNode(repository.id, branch, fileToCreate);
+      
+      if (!createdFile) {
+        return {
+          success: false,
+          message: `Failed to create file ${fileData.name}.`,
+        };
+      }
+      
+      return {
+        success: true,
+        message: `File ${fileData.name} added successfully.`,
+        file: createdFile as any,
+      };
     } catch (error: any) {
       logger.error(`[MemoryService.addFile] Error adding file: ${error.message}`, { error });
       return {
@@ -1903,20 +1937,38 @@ export class MemoryService {
       const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
       const tagRepo = this.repositoryProvider.getTagRepository(clientProjectRoot);
 
-      // Import the tag operation
-      const tagOps = await import('./memory-operations/tag.ops');
-      
-      // Call the tag operation
-      const result = await tagOps.addTagOp(
-        mcpContext,
-        repositoryName,
-        branch,
-        tagData,
-        repositoryRepo,
-        tagRepo,
-      );
+      // Tags are global, but we still want to ensure the repository exists
+      const repository = await repositoryRepo.findByName(repositoryName, branch);
+      if (!repository || !repository.id) {
+        logger.warn(`[MemoryService.addTag] Repository ${repositoryName}:${branch} not found.`);
+        return {
+          success: false,
+          message: `Repository ${repositoryName}:${branch} not found.`,
+        };
+      }
 
-      return result;
+      // Create the tag
+      const tagToCreate = {
+        id: tagData.id,
+        name: tagData.name,
+        color: tagData.color,
+        description: tagData.description,
+      };
+
+      const createdTag = await tagRepo.upsertTagNode(tagToCreate as any);
+      
+      if (!createdTag) {
+        return {
+          success: false,
+          message: `Failed to create tag ${tagData.name}.`,
+        };
+      }
+      
+      return {
+        success: true,
+        message: `Tag ${tagData.name} added successfully.`,
+        tag: createdTag as any,
+      };
     } catch (error: any) {
       logger.error(`[MemoryService.addTag] Error adding tag: ${error.message}`, { error });
       return {
@@ -2381,7 +2433,7 @@ export class MemoryService {
         size_bytes: updates.size_bytes ?? existing.size_bytes,
       };
 
-      const result = await this.addFile(mcpContext, clientProjectRoot, repositoryName, branch, updatedData);
+      const result = await this.addFile(mcpContext, clientProjectRoot, repositoryName, branch, updatedData as any);
       return result.success && result.file ? result.file as FileRecord : null;
     } catch (error: any) {
       logger.error(`[MemoryService.updateFile] Error updating file ${fileId}:`, error);
@@ -2419,7 +2471,7 @@ export class MemoryService {
         description: updates.description ?? existing.description,
       };
 
-      const result = await this.addTag(mcpContext, clientProjectRoot, repositoryName, branch, updatedData);
+      const result = await this.addTag(mcpContext, clientProjectRoot, repositoryName, branch, updatedData as any);
       return result.success && result.tag ? result.tag as Tag : null;
     } catch (error: any) {
       logger.error(`[MemoryService.updateTag] Error updating tag ${tagId}:`, error);
