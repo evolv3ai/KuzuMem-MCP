@@ -6,35 +6,137 @@ import {
 } from '../../repositories';
 import { Component, Context, Decision, Rule } from '../../types'; // Added Context and Decision imports
 import { KuzuDBClient } from '../../db/kuzu'; // Import KuzuDBClient
-import { z } from 'zod'; // Import z for using z.infer with schema types
-import {
-  PageRankInputSchema,
-  PageRankOutputSchema,
-  // ... import other Algo Zod Input/Output Schemas as they are refactored
-  KCoreDecompositionInputSchema,
-  KCoreDecompositionOutputSchema, // Example for next one
-  LouvainCommunityDetectionInputSchema,
-  LouvainCommunityDetectionOutputSchema,
-  StronglyConnectedComponentsInputSchema,
-  StronglyConnectedComponentsOutputSchema,
-  WeaklyConnectedComponentsInputSchema,
-  WeaklyConnectedComponentsOutputSchema,
-  ShortestPathInputSchema,
-  ShortestPathOutputSchema,
-  // Traversal Output Schemas might also be relevant if their structure is complex
-  // GetComponentDependenciesOutputSchema, // etc.
-  GetItemContextualHistoryInputSchema,
-  ContextSchema,
-  ComponentSchema, // For getGoverningItemsForComponentOp, getRelatedItemsOp that might return components
-  DecisionSchema, // For getGoverningItemsForComponentOp
-  RuleSchema, // For getGoverningItemsForComponentOp
-  GetGoverningItemsForComponentInputSchema, // Corrected: Was GetGoverningItemsForComponentOutputSchema
-  GetGoverningItemsForComponentOutputSchema,
-  GetRelatedItemsInputSchema, // Corrected: Was GetRelatedItemsOutputSchema
-  GetRelatedItemsOutputSchema,
-  RelatedItemBaseSchema,
-} from '../../mcp/schemas/tool-schemas';
 import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom'; // Added
+
+// TypeScript interfaces for graph operations
+
+// Common types
+interface GraphOperationParams {
+  clientProjectRoot: string;
+  repository: string;
+  branch: string;
+}
+
+// Contextual History
+interface GetItemContextualHistoryParams extends GraphOperationParams {
+  itemId: string;
+  itemType: 'Component' | 'Decision' | 'Rule';
+}
+
+interface ContextResult {
+  id: string;
+  name: string | null;
+  summary: string | null;
+  iso_date: string;
+  created_at: string | null;
+  updated_at: string | null;
+  agent: string | null;
+  issue: string | null;
+  decision_ids: string[];
+  observation_ids: string[];
+  repository: string;
+  branch: string;
+}
+
+// Governing Items
+interface GetGoverningItemsParams extends GraphOperationParams {
+  componentId: string;
+}
+
+interface GoverningItemsResult {
+  status: 'complete' | 'error';
+  decisions: Decision[];
+  rules: Rule[];
+  message: string;
+}
+
+// Related Items
+interface GetRelatedItemsParams extends GraphOperationParams {
+  startItemId: string;
+  depth?: number;
+  relationshipFilter?: string;
+  targetNodeTypeFilter?: string;
+}
+
+interface RelatedItem {
+  id: string;
+  name: string;
+  type: string;
+  distance: number;
+  repository: string;
+  branch: string;
+}
+
+interface RelatedItemsResult {
+  status: 'complete' | 'error';
+  relatedItems: RelatedItem[];
+  message: string;
+}
+
+// Algorithm common types
+interface ProjectedGraphParams extends GraphOperationParams {
+  projectedGraphName: string;
+  nodeTableNames: string[];
+  relationshipTableNames: string[];
+}
+
+// PageRank
+interface PageRankParams extends ProjectedGraphParams {
+  dampingFactor?: number;
+  maxIterations?: number;
+}
+
+interface PageRankResult {
+  ranks: Array<{
+    nodeId: string;
+    score: number;
+  }>;
+}
+
+// K-Core Decomposition
+interface KCoreParams extends ProjectedGraphParams {
+  k: number;
+}
+
+interface KCoreResult {
+  k: number;
+  components: Array<{
+    nodeId: string;
+    coreness: number;
+  }>;
+}
+
+// Community Detection
+interface LouvainParams extends ProjectedGraphParams {}
+
+interface LouvainResult {
+  communities: Array<{
+    nodeId: string;
+    communityId: number;
+  }>;
+}
+
+// Connected Components
+interface ConnectedComponentsParams extends ProjectedGraphParams {}
+
+interface ConnectedComponentsResult {
+  components: Array<{
+    nodeId: string;
+    componentId: number;
+  }>;
+}
+
+// Shortest Path
+interface ShortestPathParams extends ProjectedGraphParams {
+  startNodeId: string;
+  endNodeId: string;
+}
+
+interface ShortestPathResult {
+  exists: boolean;
+  path?: string[];
+  distance?: number;
+}
 
 // This file is a placeholder for graph-related operations.
 // Implementations will depend on the capabilities of the underlying repositories
@@ -65,9 +167,9 @@ function parseTimestamp(value: any): string | null {
 export async function getItemContextualHistoryOp(
   mcpContext: EnrichedRequestHandlerExtra,
   kuzuClient: KuzuDBClient,
-  params: z.infer<typeof GetItemContextualHistoryInputSchema>,
-  repositoryRepo?: RepositoryRepository, // Optional, for validation if needed
-): Promise<z.infer<typeof ContextSchema>[]> {
+  params: GetItemContextualHistoryParams,
+  repositoryRepo?: RepositoryRepository,
+): Promise<ContextResult[]> {
   const logger = mcpContext.logger;
   const { repository, branch, itemId, itemType } = params;
   const repoId = `${repository}:${branch}`;
@@ -95,7 +197,6 @@ export async function getItemContextualHistoryOp(
       relMatchClause = `(ctx:Context)-[:CONTEXT_OF_RULE]->(item:\`${itemNodeLabel}\` {id: $itemId})`;
       break;
     default:
-      // This case should be caught by Zod validation on itemType in the handler
       const exhaustiveCheck: never = itemType;
       logger.error(
         `[graph.ops] Invalid itemType provided to getItemContextualHistoryOp: ${exhaustiveCheck}`,
@@ -161,7 +262,7 @@ export async function getItemContextualHistoryOp(
         observation_ids: observationIds,
         repository: repoId,
         branch: branch,
-      } as z.infer<typeof ContextSchema>;
+      } as ContextResult;
     });
   } catch (error: any) {
     logger.error(
@@ -180,8 +281,8 @@ export async function getItemContextualHistoryOp(
 export async function getGoverningItemsForComponentOp(
   mcpContext: EnrichedRequestHandlerExtra,
   kuzuClient: KuzuDBClient,
-  params: z.infer<typeof GetGoverningItemsForComponentInputSchema>,
-): Promise<z.infer<typeof GetGoverningItemsForComponentOutputSchema>> {
+  params: GetGoverningItemsParams,
+): Promise<GoverningItemsResult> {
   const logger = mcpContext.logger;
   const { repository, branch, componentId } = params;
   const repoId = `${repository}:${branch}`;
@@ -220,34 +321,33 @@ export async function getGoverningItemsForComponentOp(
 
     // Transform decision results
     const decisions = decisionResults
-      .filter((row: any) => row.d) // Filter out null results from OPTIONAL MATCH
+      .filter((row: any) => row.d)
       .map((row: any) => {
         const decisionData = row.d.properties || row.d;
-        const createdAt = parseTimestamp(decisionData.created_at);
-        const updatedAt = parseTimestamp(decisionData.updated_at);
-
+        const createdAtStr = parseTimestamp(decisionData.created_at);
+        const updatedAtStr = parseTimestamp(decisionData.updated_at);
+        
         return {
           id: decisionData.id?.toString() || `generated-dec-${Math.random()}`,
           name: decisionData.name || '',
-          date: decisionData.date || '1970-01-01', // Fallback date
-          status: decisionData.status || 'pending',
+          date: decisionData.date || '1970-01-01',
           context: decisionData.context || null,
-          created_at: createdAt,
-          updated_at: updatedAt,
-          repository: repoId,
+          status: decisionData.status,
+          repository: repository,
           branch: branch,
-        } as z.infer<typeof DecisionSchema>;
+          created_at: createdAtStr ? new Date(createdAtStr) : undefined,
+          updated_at: updatedAtStr ? new Date(updatedAtStr) : undefined,
+        } as Decision;
       });
 
     // Transform rule results
     const rules = ruleResults
-      .filter((row: any) => row.r) // Filter out null results from OPTIONAL MATCH
+      .filter((row: any) => row.r)
       .map((row: any) => {
         const ruleData = row.r.properties || row.r;
-        const createdAt = parseTimestamp(ruleData.created_at);
-        const updatedAt = parseTimestamp(ruleData.updated_at);
-
-        // Handle triggers array
+        const createdAtStr = parseTimestamp(ruleData.created_at);
+        const updatedAtStr = parseTimestamp(ruleData.updated_at);
+        
         let triggers: string[] = [];
         if (ruleData.triggers) {
           triggers = Array.isArray(ruleData.triggers)
@@ -258,15 +358,15 @@ export async function getGoverningItemsForComponentOp(
         return {
           id: ruleData.id?.toString() || `generated-rule-${Math.random()}`,
           name: ruleData.name || '',
-          created: ruleData.created || '1970-01-01', // Fallback date
-          content: ruleData.content || '',
-          status: ruleData.status || 'active',
-          triggers: triggers,
-          created_at: createdAt,
-          updated_at: updatedAt,
-          repository: repoId,
+          created: ruleData.created || '1970-01-01',
+          content: ruleData.content || null,
+          status: ruleData.status,
+          triggers: triggers.length > 0 ? triggers : null,
+          repository: repository,
           branch: branch,
-        } as z.infer<typeof RuleSchema>;
+          created_at: createdAtStr ? new Date(createdAtStr) : undefined,
+          updated_at: updatedAtStr ? new Date(updatedAtStr) : undefined,
+        } as Rule;
       });
 
     logger.info(
@@ -300,8 +400,8 @@ export async function getGoverningItemsForComponentOp(
 export async function getRelatedItemsOp(
   mcpContext: EnrichedRequestHandlerExtra,
   kuzuClient: KuzuDBClient,
-  params: z.infer<typeof GetRelatedItemsInputSchema>,
-): Promise<z.infer<typeof GetRelatedItemsOutputSchema>> {
+  params: GetRelatedItemsParams,
+): Promise<RelatedItemsResult> {
   const logger = mcpContext.logger;
   const { repository, branch, startItemId, depth, relationshipFilter, targetNodeTypeFilter } =
     params;
@@ -364,7 +464,7 @@ export async function getRelatedItemsOp(
         distance: pathLength,
         repository: repoId,
         branch: branch,
-      } as z.infer<typeof RelatedItemBaseSchema>;
+      } as RelatedItem;
     });
 
     logger.info(
@@ -396,8 +496,8 @@ export async function getRelatedItemsOp(
 export async function kCoreDecompositionOp(
   mcpContext: EnrichedRequestHandlerExtra,
   kuzuClient: KuzuDBClient,
-  params: z.infer<typeof KCoreDecompositionInputSchema>,
-): Promise<z.infer<typeof KCoreDecompositionOutputSchema>['results']> {
+  params: KCoreParams,
+): Promise<KCoreResult> {
   const logger = mcpContext.logger;
   logger.info(
     `[graph.ops] Executing K-Core Decomposition on G: ${params.projectedGraphName}, k: ${params.k}, R: ${params.repository}, B: ${params.branch}`,
@@ -423,7 +523,7 @@ export async function kCoreDecompositionOp(
   );
 }
 
-// ... (withProjectedGraph helper remains the same, ensure logger and error handling are correct) ...
+// Helper function for projected graph operations
 async function withProjectedGraph(
   mcpContext: EnrichedRequestHandlerExtra,
   kuzuClient: KuzuDBClient,
@@ -466,8 +566,8 @@ async function withProjectedGraph(
 export async function pageRankOp(
   mcpContext: EnrichedRequestHandlerExtra,
   kuzuClient: KuzuDBClient,
-  params: z.infer<typeof PageRankInputSchema>,
-): Promise<z.infer<typeof PageRankOutputSchema>['results']> {
+  params: PageRankParams,
+): Promise<PageRankResult> {
   const logger = mcpContext.logger;
   logger.info(
     `[graph.ops] Executing PageRank on G: ${params.projectedGraphName}, R: ${params.repository}, B: ${params.branch}`,
@@ -508,13 +608,13 @@ export async function pageRankOp(
 export async function louvainCommunityDetectionOp(
   mcpContext: EnrichedRequestHandlerExtra,
   kuzuClient: KuzuDBClient,
-  params: z.infer<typeof LouvainCommunityDetectionInputSchema>,
-): Promise<z.infer<typeof LouvainCommunityDetectionOutputSchema>['results']> {
+  params: LouvainParams,
+): Promise<LouvainResult> {
   const logger = mcpContext.logger;
   logger.info(
-    `[graph.ops] Executing Louvain on G: ${params.projectedGraphName}, R: ${params.repository}, B: ${params.branch}`,
-  ); // Added info log
-  // logger.warn('[graph.ops] louvainCommunityDetectionOp not fully implemented with new signature.', { params }); // Kept warn if further work needed
+    `[graph.ops] Executing Louvain Community Detection on G: ${params.projectedGraphName}, R: ${params.repository}, B: ${params.branch}`,
+  );
+
   return await withProjectedGraph(
     mcpContext,
     kuzuClient,
@@ -522,15 +622,15 @@ export async function louvainCommunityDetectionOp(
     params.nodeTableNames,
     params.relationshipTableNames,
     async () => {
-      const query = `CALL louvain('${params.projectedGraphName.replace(/'/g, "''")}') RETURN node.id AS nodeId, louvain_id AS communityId;`;
-      logger.debug(`[graph.ops] Louvain Cypher: ${query}`); // Added debug log
-      const kuzuResults = await kuzuClient.executeQuery(query, {}); // Corrected: executeQuery
-      const communities = kuzuResults.map((r: any) => ({
-        nodeId: r.nodeId?.toString(),
-        communityId: Number(r.communityId),
+      const query = `CALL louvain('${params.projectedGraphName.replace(/'/g, "''")}') RETURN node.id AS nodeId, community_id;`;
+      logger.debug(`[graph.ops] Louvain Cypher: ${query}`);
+      const kuzuResults = await kuzuClient.executeQuery(query, {});
+
+      const communities = kuzuResults.map((row: any) => ({
+        nodeId: row.nodeId?.toString(),
+        communityId: Number(row.community_id),
       }));
-      // TODO: Check if Kuzu's Louvain returns modularity or if it needs separate calculation/query
-      return { communities, modularity: undefined };
+      return { communities };
     },
   );
 }
@@ -541,13 +641,13 @@ export async function louvainCommunityDetectionOp(
 export async function stronglyConnectedComponentsOp(
   mcpContext: EnrichedRequestHandlerExtra,
   kuzuClient: KuzuDBClient,
-  params: z.infer<typeof StronglyConnectedComponentsInputSchema>,
-): Promise<z.infer<typeof StronglyConnectedComponentsOutputSchema>['results']> {
+  params: ConnectedComponentsParams,
+): Promise<ConnectedComponentsResult> {
   const logger = mcpContext.logger;
   logger.info(
-    `[graph.ops] Executing SCC on G: ${params.projectedGraphName}, R: ${params.repository}, B: ${params.branch}`,
-  ); // Added info log
-  // logger.warn('[graph.ops] stronglyConnectedComponentsOp not fully implemented with new signature.', { params });
+    `[graph.ops] Executing Strongly Connected Components on G: ${params.projectedGraphName}, R: ${params.repository}, B: ${params.branch}`,
+  );
+
   return await withProjectedGraph(
     mcpContext,
     kuzuClient,
@@ -555,24 +655,13 @@ export async function stronglyConnectedComponentsOp(
     params.nodeTableNames,
     params.relationshipTableNames,
     async () => {
-      const query = `CALL strongly_connected_components('${params.projectedGraphName.replace(/'/g, "''")}') RETURN node.id AS nodeId, group_id;`;
-      logger.debug(`[graph.ops] SCC Cypher: ${query}`); // Added debug log
-      const kuzuResults = await kuzuClient.executeQuery(query, {}); // Corrected: executeQuery
+      const query = `CALL strongly_connected_components('${params.projectedGraphName.replace(/'/g, "''")}') RETURN node.id AS nodeId, component_id;`;
+      logger.debug(`[graph.ops] Strongly Connected Components Cypher: ${query}`);
+      const kuzuResults = await kuzuClient.executeQuery(query, {});
 
-      // Group the results by group_id since we're not using GROUP BY in the query anymore
-      const componentMap = new Map<number, string[]>();
-      kuzuResults.forEach((r: any) => {
-        const componentId = Number(r.group_id);
-        const nodeId = String(r.nodeId);
-        if (!componentMap.has(componentId)) {
-          componentMap.set(componentId, []);
-        }
-        componentMap.get(componentId)!.push(nodeId);
-      });
-
-      const components = Array.from(componentMap.entries()).map(([component_id, nodes]) => ({
-        component_id,
-        nodes,
+      const components = kuzuResults.map((row: any) => ({
+        nodeId: row.nodeId?.toString(),
+        componentId: Number(row.component_id),
       }));
       return { components };
     },
@@ -585,13 +674,13 @@ export async function stronglyConnectedComponentsOp(
 export async function weaklyConnectedComponentsOp(
   mcpContext: EnrichedRequestHandlerExtra,
   kuzuClient: KuzuDBClient,
-  params: z.infer<typeof WeaklyConnectedComponentsInputSchema>,
-): Promise<z.infer<typeof WeaklyConnectedComponentsOutputSchema>['results']> {
+  params: ConnectedComponentsParams,
+): Promise<ConnectedComponentsResult> {
   const logger = mcpContext.logger;
   logger.info(
-    `[graph.ops] Executing WCC on G: ${params.projectedGraphName}, R: ${params.repository}, B: ${params.branch}`,
-  ); // Added info log
-  // logger.warn('[graph.ops] weaklyConnectedComponentsOp not fully implemented with new signature.', { params });
+    `[graph.ops] Executing Weakly Connected Components on G: ${params.projectedGraphName}, R: ${params.repository}, B: ${params.branch}`,
+  );
+
   return await withProjectedGraph(
     mcpContext,
     kuzuClient,
@@ -599,24 +688,13 @@ export async function weaklyConnectedComponentsOp(
     params.nodeTableNames,
     params.relationshipTableNames,
     async () => {
-      const query = `CALL weakly_connected_components('${params.projectedGraphName.replace(/'/g, "''")}') RETURN node.id AS nodeId, group_id;`;
-      logger.debug(`[graph.ops] WCC Cypher: ${query}`); // Added debug log
-      const kuzuResults = await kuzuClient.executeQuery(query, {}); // Corrected: executeQuery
+      const query = `CALL weakly_connected_components('${params.projectedGraphName.replace(/'/g, "''")}') RETURN node.id AS nodeId, component_id;`;
+      logger.debug(`[graph.ops] Weakly Connected Components Cypher: ${query}`);
+      const kuzuResults = await kuzuClient.executeQuery(query, {});
 
-      // Group the results by group_id since we're not using GROUP BY in the query anymore
-      const componentMap = new Map<number, string[]>();
-      kuzuResults.forEach((r: any) => {
-        const componentId = Number(r.group_id);
-        const nodeId = String(r.nodeId);
-        if (!componentMap.has(componentId)) {
-          componentMap.set(componentId, []);
-        }
-        componentMap.get(componentId)!.push(nodeId);
-      });
-
-      const components = Array.from(componentMap.entries()).map(([component_id, nodes]) => ({
-        component_id,
-        nodes,
+      const components = kuzuResults.map((row: any) => ({
+        nodeId: row.nodeId?.toString(),
+        componentId: Number(row.component_id),
       }));
       return { components };
     },
@@ -624,18 +702,22 @@ export async function weaklyConnectedComponentsOp(
 }
 
 /**
- * Finds the shortest path between two nodes.
+ * Executes Shortest Path algorithm.
  */
 export async function shortestPathOp(
   mcpContext: EnrichedRequestHandlerExtra,
   kuzuClient: KuzuDBClient,
-  params: z.infer<typeof ShortestPathInputSchema>,
-): Promise<z.infer<typeof ShortestPathOutputSchema>['results']> {
+  params: ShortestPathParams,
+): Promise<ShortestPathResult> {
   const logger = mcpContext.logger;
+  const { repository, branch, startNodeId, endNodeId } = params;
+  const repoId = `${repository}:${branch}`;
+
   logger.info(
-    `[graph.ops] Executing Shortest Path on G: ${params.projectedGraphName}, R: ${params.repository}, B: ${params.branch}, From: ${params.startNodeId}, To: ${params.endNodeId}`,
-  ); // Added info log
-  // logger.warn('[graph.ops] shortestPathOp not fully implemented with new signature.', { params });
+    `[graph.ops] Finding shortest path from ${startNodeId} to ${endNodeId} in ${repoId}`,
+    { params },
+  );
+
   return await withProjectedGraph(
     mcpContext,
     kuzuClient,
@@ -643,31 +725,29 @@ export async function shortestPathOp(
     params.nodeTableNames,
     params.relationshipTableNames,
     async () => {
-      // KuzuDB doesn't support standard Cypher MATCH syntax for graph traversal
-      // For now, implement a simple stub that assumes direct connection exists
-      // TODO: Investigate KuzuDB's native graph query syntax
-      logger.warn(
-        `[graph.ops] ShortestPath temporarily stubbed - KuzuDB MATCH syntax not supported. Assuming direct path from ${params.startNodeId} to ${params.endNodeId}`,
-      );
+      const query = `CALL shortest_path('${params.projectedGraphName.replace(/'/g, "''")}', '${startNodeId.replace(/'/g, "''")}', '${endNodeId.replace(/'/g, "''")}') RETURN path, path_length;`;
+      logger.debug(`[graph.ops] Shortest Path Cypher: ${query}`);
 
-      // Handle reflexive case (same start and end node)
-      if (params.startNodeId === params.endNodeId) {
-        return {
-          pathFound: true,
-          path: [{ id: params.startNodeId, _label: 'Component' }],
-          length: 1,
-        };
+      try {
+        const kuzuResults = await kuzuClient.executeQuery(query, {});
+
+        if (kuzuResults && kuzuResults.length > 0) {
+          const pathData = kuzuResults[0];
+          const path = pathData.path || [];
+          const distance = pathData.path_length || 0;
+
+          return {
+            exists: true,
+            path: Array.isArray(path) ? path.map(String) : [String(path)],
+            distance: Number(distance),
+          };
+        }
+
+        return { exists: false };
+      } catch (error: any) {
+        logger.warn(`[graph.ops] No path found from ${startNodeId} to ${endNodeId}`);
+        return { exists: false };
       }
-
-      // Handle normal case (different start and end nodes)
-      return {
-        pathFound: true,
-        path: [
-          { id: params.startNodeId, _label: 'Component' },
-          { id: params.endNodeId, _label: 'Component' },
-        ],
-        length: 2,
-      };
     },
   );
 }

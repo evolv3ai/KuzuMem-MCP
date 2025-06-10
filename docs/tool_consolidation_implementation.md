@@ -880,7 +880,24 @@ export const semanticSearchTool: McpTool = {
 
 ## Phase 2: Memory Operations Refactoring
 
-Remove all Zod schema dependencies from memory operations and use TypeScript types directly.
+Refactor memory operations to use TypeScript types instead of Zod schemas:
+
+1. ✅ **component.ops.ts** - Refactored to use TypeScript types
+2. ✅ **context.ops.ts** - Refactored to use TypeScript types
+3. ✅ **decision.ops.ts** - Refactored to use TypeScript types
+4. ✅ **file.ops.ts** - Refactored to use TypeScript types
+5. ✅ **metadata.ops.ts** - Refactored to use TypeScript types
+6. ✅ **rule.ops.ts** - Refactored to use TypeScript types
+7. ✅ **tag.ops.ts** - Refactored to use TypeScript types
+8. ✅ **graph.ops.ts** - Refactored to use TypeScript types
+
+Key refactorings completed:
+- Removed all Zod schema imports
+- Replaced `z.infer<typeof ...>` with TypeScript interfaces
+- Created new types for graph algorithm inputs/outputs
+- Updated method signatures to use direct types
+- Fixed date/timestamp handling to return Date objects where expected
+- Aligned with repository method signatures
 
 ### Updated Type Definitions
 - [x] Extended existing TypeScript interfaces in `src/types/index.ts` ✅
@@ -925,10 +942,10 @@ Remove all Zod schema dependencies from memory operations and use TypeScript typ
 - [x] Fix RepositoryRepository.create call ✅
 
 #### 6. Graph Operations (`src/services/memory-operations/graph.ops.ts`)
-- [ ] Remove Zod schema imports ⏳
-- [ ] Update function signatures to use TypeScript types ⏳
-- [ ] Update all algorithm operations ⏳
-- [ ] Simplify return types ⏳
+- [x] Remove Zod schema imports ✅
+- [x] Update function signatures to use TypeScript types ✅
+- [x] Update all algorithm operations ✅
+- [x] Simplify return types ✅
 
 #### 7. File Operations (`src/services/memory-operations/file.ops.ts`)
 - [x] Remove Zod schema imports ✅
@@ -991,28 +1008,19 @@ This requires careful refactoring to:
 1. Complete graph.ops.ts refactoring (high priority - blocking full cleanup)
 2. Remove legacy-compatibility.ts
 3. Full build and test validation
-4. Update any documentation that references old tool names
+4. Update any documentation that references old tool names, README.md, README2.md, .cursor rules, etc.
 
 ---
 
 ## Phase 4: Testing and Validation
 
 ### End-to-End Testing
-- [ ] Update all e2e tests in `src/tests/e2e/`
-- [ ] Create migration test suite
-- [ ] Test all old functionality works with new tools
-- [ ] Performance benchmarks
-
-### Integration Testing
-- [ ] Test tool interactions
-- [ ] Test error handling across tools
-- [ ] Test parameter validation
-- [ ] Test with real KuzuDB instance
+- [ ] Create new e2e tests `src/tests/e2e/` for all server types - they must initialize the memory bank, populate memory bank with test data, test each tool completely end-to-end, and clean up the memory bank after e2e test completes. This should also take care of integration testing.
 
 ### Documentation Updates
 - [ ] Update README.md with new tool descriptions
 - [ ] Update docs/README2.md
-- [ ] Create migration guide
+- [ ] Update .cursor rules
 - [ ] Update API documentation
 
 ---
@@ -1135,16 +1143,10 @@ describe('Unified <ToolName> Tool', () => {
 
 ### E2E Test Migration
 1. Identify all tests using old tools
-2. Create mapping of old → new tool calls
+2. Update to using new tools
 3. Update test fixtures
 4. Verify same functionality preserved
 5. Add new tests for bulk-import
-
-### Performance Testing
-- [ ] Benchmark old vs new implementation
-- [ ] Test bulk operations efficiency
-- [ ] Measure memory usage
-- [ ] Profile database query performance
 
 ---
 

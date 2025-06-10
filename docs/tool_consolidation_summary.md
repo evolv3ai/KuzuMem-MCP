@@ -294,32 +294,51 @@ Applications using the legacy tools must update to use unified tools:
 
 ## Phase 2 Addendum: Memory Operations Refactoring
 
-### Objectives
-- Remove all Zod schema dependencies from memory operations
-- Use TypeScript types directly for better performance and type safety
-- Simplify transformation logic between internal types and tool interfaces
+After completing Phase 1 and removing legacy tools, it was identified that memory operations still used Zod schemas. A systematic refactoring was performed:
 
-### Implementation Status
+### Completed Memory Operations (8/8):
 
-#### Completed Files (7/8):
-1. **component.ops.ts** - Simplified to use Component type directly, removed complex transformations
-2. **context.ops.ts** - Fixed repository method names, uses Context type natively
-3. **decision.ops.ts** - Updated to use Decision type, fixed repository method calls
-4. **rule.ops.ts** - Refactored to use Rule type, removed date parsing logic
-5. **metadata.ops.ts** - Simplified to transform Repository to Metadata type
-6. **file.ops.ts** - Uses File and FileInput types, removed unavailable methods
-7. **tag.ops.ts** - Updated to use Tag type with proper type constraints
+1. **component.ops.ts** ✅
+   - Removed `z.infer<typeof ComponentSchema>` usage
+   - Uses `Component` and `ComponentInput` types directly
+   - Added `normalizeComponent` helper for consistent data formatting
 
-#### Remaining Work:
-1. **graph.ops.ts** (674 lines) - Complex file with extensive Zod usage for:
-   - Graph algorithms (PageRank, K-Core, Community Detection)
-   - Traversal operations
-   - Complex result types
-   - Requires careful TypeScript interface definitions
+2. **context.ops.ts** ✅
+   - Fixed repository method names (`getLatestContexts`, `upsertContext`)
+   - Uses `Context` and `ContextInput` types
+   - Removed complex timestamp parsing logic
 
-### Key Changes Made
+3. **decision.ops.ts** ✅
+   - Uses `Decision` and `DecisionInput` types
+   - Fixed `upsertDecision` call signature
+   - Changed to `getAllDecisions` repository method
 
-#### Type System Updates
+4. **rule.ops.ts** ✅
+   - Uses `Rule` and `RuleInput` types
+   - Removed date validation logic
+   - Simplified with `normalizeRule` helper
+
+5. **metadata.ops.ts** ✅
+   - Transforms `Repository` to `Metadata` type correctly
+   - Added `initializeRepositoryOp` function
+   - Fixed `RepositoryRepository.create` method parameters
+
+6. **file.ops.ts** ✅
+   - Uses `File` and `FileInput` types
+   - Note: `getFilesOp` was removed as method is not available in FileRepository
+
+7. **tag.ops.ts** ✅
+   - Updated to use correct repository methods (`upsertTagNode`, `addItemTag`)
+   - Fixed `itemType` parameter to be constrained to valid node types
+   - Uses `Tag` and `TagInput` types
+
+8. **graph.ops.ts** ✅
+   - Created TypeScript interfaces for all algorithm inputs/outputs
+   - Replaced all `z.infer<typeof ...>` with proper types
+   - Fixed date handling to return Date objects for Decision/Rule types
+   - Simplified algorithm result structures
+
+### Type System Enhancements:
 - Extended TypeScript interfaces in `src/types/index.ts`
 - Added input types: `ContextInput`, `DecisionInput`, `RuleInput`, `FileInput`, `TagInput`
 - Made optional fields properly nullable with `| null`
