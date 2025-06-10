@@ -746,6 +746,7 @@ export async function initializeKuzuDBSchema(connection: any): Promise<void> {
       name STRING,
       kind STRING,
       status STRING,
+      repository STRING,
       branch STRING,
       created_at TIMESTAMP,
       updated_at TIMESTAMP,
@@ -758,6 +759,7 @@ export async function initializeKuzuDBSchema(connection: any): Promise<void> {
       name STRING,
       context STRING,
       date DATE,
+      repository STRING,
       branch STRING,
       created_at TIMESTAMP,
       updated_at TIMESTAMP,
@@ -772,6 +774,7 @@ export async function initializeKuzuDBSchema(connection: any): Promise<void> {
       triggers STRING[],
       content STRING,
       status STRING,
+      repository STRING,
       branch STRING,
       created_at TIMESTAMP,
       updated_at TIMESTAMP,
@@ -802,6 +805,8 @@ export async function initializeKuzuDBSchema(connection: any): Promise<void> {
       name STRING, 
       color STRING, 
       description STRING, 
+      repository STRING,
+      branch STRING,
       created_at TIMESTAMP, 
       PRIMARY KEY (id)
     )`);
@@ -822,6 +827,7 @@ export async function initializeKuzuDBSchema(connection: any): Promise<void> {
 
     // --- New Relationship Tables for Files and Tags ---
     await execute(`CREATE REL TABLE IF NOT EXISTS HAS_FILE(FROM Repository TO File)`);
+    await execute(`CREATE REL TABLE IF NOT EXISTS IMPLEMENTS(FROM File TO Component)`);
     await execute(
       `CREATE REL TABLE IF NOT EXISTS COMPONENT_IMPLEMENTS_FILE(FROM Component TO File)`,
     );
@@ -829,6 +835,10 @@ export async function initializeKuzuDBSchema(connection: any): Promise<void> {
     await execute(`CREATE REL TABLE IF NOT EXISTS TAGGED_RULE(FROM Rule TO Tag)`);
     await execute(`CREATE REL TABLE IF NOT EXISTS TAGGED_CONTEXT(FROM Context TO Tag)`);
     await execute(`CREATE REL TABLE IF NOT EXISTS TAGGED_FILE(FROM File TO Tag)`);
+    await execute(`CREATE REL TABLE IF NOT EXISTS TAGGED_WITH(FROM Component TO Tag)`);
+    await execute(`CREATE REL TABLE IF NOT EXISTS TAGGED_WITH(FROM Decision TO Tag)`);
+    await execute(`CREATE REL TABLE IF NOT EXISTS TAGGED_WITH(FROM Rule TO Tag)`);
+    await execute(`CREATE REL TABLE IF NOT EXISTS TAGGED_WITH(FROM File TO Tag)`);
 
     // --- Optional Algo Extension ---
     try {

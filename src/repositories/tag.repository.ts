@@ -20,8 +20,12 @@ export class TagRepository {
    * @returns The upserted Tag object or null on failure.
    */
   async upsertTagNode(
-    // Internal Tag type might not have created_at if DB handles it, but Omit is safer.
-    tagData: Omit<Tag, 'created_at'> & { id: string; name: string },
+    tagData: Omit<Tag, 'created_at'> & {
+      id: string;
+      name: string;
+      repository?: string;
+      branch?: string;
+    },
   ): Promise<Tag | null> {
     const now = new Date();
     const tagNodeProps = {
@@ -30,6 +34,8 @@ export class TagRepository {
       name: tagData.name,
       color: tagData.color || null,
       description: tagData.description || null,
+      repository: tagData.repository || null,
+      branch: tagData.branch || 'main',
       created_at: now, // Set created_at on initial creation
       // updated_at: now, // Kuzu MERGE ON MATCH can handle updates if needed
     };
@@ -38,7 +44,7 @@ export class TagRepository {
     // KuzuDB doesn't support setting properties from a map parameter, so we set them individually
     const query = `
       MERGE (t:Tag {id: $id})
-      ON CREATE SET t.id = $id, t.name = $name, t.color = $color, t.description = $description, t.created_at = $created_at
+      ON CREATE SET t.id = $id, t.name = $name, t.color = $color, t.description = $description, t.repository = $repository, t.branch = $branch, t.created_at = $created_at
       ON MATCH SET t.name = $name, t.color = $color, t.description = $description
       RETURN t
     `;
@@ -49,6 +55,8 @@ export class TagRepository {
         name: tagNodeProps.name,
         color: tagNodeProps.color,
         description: tagNodeProps.description,
+        repository: tagNodeProps.repository,
+        branch: tagNodeProps.branch,
         created_at: tagNodeProps.created_at,
       });
       if (result && result.length > 0) {

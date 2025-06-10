@@ -2,11 +2,25 @@ import { McpTool } from '../../types';
 
 /**
  * Unified Query Tool
- * Handles various query operations: dependencies, governance, context, metadata, etc.
+ * Executes queries against the memory bank
  */
 export const queryTool: McpTool = {
   name: 'query',
-  description: 'Execute queries against the memory bank',
+  description: `Execute queries against the memory bank to retrieve information.
+Available query types:
+- context: Get session context and work history (what's been done recently)
+- entities: List entities by type with filtering and pagination
+- relationships: Explore entity relationships with depth control
+- dependencies: Get component dependencies (what it needs) or dependents (what needs it)
+- governance: Find rules and decisions that govern a specific component
+- history: Track evolution and changes to an entity over time
+- tags: Find entities by tag or get all tags
+
+Common use cases:
+- Before starting work: Use 'context' to understand recent changes
+- Impact analysis: Use 'dependencies' to see what breaks if you change something
+- Code review: Use 'governance' to check compliance with rules/decisions
+- Architecture exploration: Use 'relationships' with depth 2-3`,
   parameters: {
     type: 'object',
     properties: {
@@ -23,10 +37,6 @@ export const queryTool: McpTool = {
         ],
         description: 'Type of query to execute',
       },
-      clientProjectRoot: {
-        type: 'string',
-        description: 'Absolute path to the client project root',
-      },
       repository: {
         type: 'string',
         description: 'Repository name',
@@ -35,7 +45,11 @@ export const queryTool: McpTool = {
         type: 'string',
         description: 'Git branch name',
       },
-      // Type-specific parameters
+      clientProjectRoot: {
+        type: 'string',
+        description: 'Absolute path to the client project root',
+      },
+      // Query-specific parameters
       latest: {
         type: 'boolean',
         description: 'Get latest context entries only',
@@ -44,13 +58,13 @@ export const queryTool: McpTool = {
         type: 'number',
         description: 'Maximum number of results',
       },
-      label: {
-        type: 'string',
-        description: 'Entity label for entities query',
-      },
       offset: {
         type: 'number',
         description: 'Number of results to skip',
+      },
+      label: {
+        type: 'string',
+        description: 'Entity label for entities query',
       },
       startItemId: {
         type: 'string',
@@ -104,22 +118,18 @@ export const queryTool: McpTool = {
         type: 'boolean',
         description: 'Whether the query succeeded',
       },
-      data: {
-        type: 'object',
-        description: 'Query results',
-      },
-      totalCount: {
-        type: 'number',
-        description: 'Total number of matching results',
-      },
       message: {
         type: 'string',
         description: 'Result message',
       },
+      data: {
+        type: 'object',
+        description: 'Query results',
+      },
     },
   },
   annotations: {
-    title: 'Query Operations',
+    title: 'Query Execution',
     readOnlyHint: true,
     destructiveHint: false,
     idempotentHint: true,

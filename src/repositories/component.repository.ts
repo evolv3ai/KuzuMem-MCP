@@ -313,6 +313,7 @@ export class ComponentRepository {
           c.kind = $componentKind,
           c.status = $componentStatus,
           c.branch = $componentBranch,
+          c.repository = $repositoryNodeId,
           c.created_at = $createdAt,
           c.updated_at = $updatedAt
         ON MATCH SET 
@@ -393,6 +394,7 @@ export class ComponentRepository {
                 dep.kind = $depKind,
                 dep.status = $depStatus,
                 dep.branch = $depBranch,
+                dep.repository = $repositoryNodeId,
                 dep.created_at = $depCreatedAt,
                 dep.updated_at = $depUpdatedAt
               MERGE (repoDep)-[:HAS_COMPONENT]->(dep)
@@ -1342,12 +1344,22 @@ export class ComponentRepository {
         const escapedDepGraphUniqueId = this.escapeStr(depGraphUniqueId);
 
         const ensureDepNodeQuery = `
-            MATCH (repo:Repository {id: '${this.escapeStr(repositoryNodeId)}'}) 
-            MERGE (dep:Component {graph_unique_id: '${escapedDepGraphUniqueId}'})
-            ON CREATE SET dep.id = '${this.escapeStr(depId)}', dep.branch = '${this.escapeStr(componentBranch)}', dep.name = 'Placeholder for ${this.escapeStr(depId)}', dep.kind='Unknown', dep.status='planned', dep.created_at=timestamp('${kuzuTimestamp}'), dep.updated_at=timestamp('${kuzuTimestamp}')
-            MERGE (repo)-[:HAS_COMPONENT]->(dep)`;
+            MATCH (repoDep:Repository {id: $repositoryNodeId})
+            MERGE (dep:Component {graph_unique_id: $depGraphUniqueId})
+            ON CREATE SET dep.id = $depId, dep.branch = $depBranch, dep.name = $depName, dep.kind = $depKind, dep.status = $depStatus, dep.repository = $repositoryNodeId, dep.created_at = $depCreatedAt, dep.updated_at = $depUpdatedAt
+            MERGE (repoDep)-[:HAS_COMPONENT]->(dep)`;
 
-        await this.kuzuClient.executeQuery(ensureDepNodeQuery);
+        await this.kuzuClient.executeQuery(ensureDepNodeQuery, {
+          repositoryNodeId,
+          depGraphUniqueId,
+          depId,
+          depBranch: componentBranch,
+          depName: `Placeholder for ${depId}`,
+          depKind: 'Unknown',
+          depStatus: 'planned',
+          depCreatedAt: nowIso,
+          depUpdatedAt: nowIso,
+        });
         console.error(
           `DEBUG: upsertCompWithRel - Ensured/Created dependency node: ${escapedDepGraphUniqueId}`,
         );

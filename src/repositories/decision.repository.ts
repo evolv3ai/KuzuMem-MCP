@@ -1,5 +1,5 @@
-import { Decision } from '../types';
 import { KuzuDBClient } from '../db/kuzu';
+import { Decision } from '../types';
 import { formatGraphUniqueId } from '../utils/id.utils';
 import { RepositoryRepository } from './repository.repository';
 
@@ -161,6 +161,7 @@ export class DecisionRepository {
         d.name = $propsOnCreateParam.name,
         d.context = $decisionContextParamForCreate,
         d.date = date($propsOnCreateParam.date),
+        d.repository = $repositoryNodeIdParam,
         d.created_at = CASE 
           WHEN $propsOnCreateParam.created_at IS NOT NULL THEN timestamp($propsOnCreateParam.created_at) 
           ELSE current_timestamp() 

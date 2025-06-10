@@ -182,7 +182,7 @@ export class MemoryService {
       `[DEBUG] MemoryService.initMemoryBank checking repositoryProvider: ${!!this.repositoryProvider}`,
     );
     if (!this.repositoryProvider) {
-      console.log(
+      console.error(
         `[DEBUG] MemoryService.initMemoryBank CRITICAL: RepositoryProvider is NOT INITIALIZED`,
       );
       logger.error(
@@ -193,7 +193,7 @@ export class MemoryService {
         message: 'Critical error: RepositoryProvider not initialized in MemoryService',
       };
     }
-    console.log(
+    console.error(
       `[DEBUG] MemoryService.initMemoryBank RepositoryProvider appears to be initialized. Proceeding.`,
     );
     logger.info(
