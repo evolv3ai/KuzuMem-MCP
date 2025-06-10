@@ -1,0 +1,321 @@
+import { associateHandler } from '../../../mcp/services/handlers/unified/associate-handler';
+import { MemoryService } from '../../../services/memory.service';
+import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+
+describe('Associate Tool Tests', () => {
+  let mockMemoryService: jest.Mocked<MemoryService>;
+  let mockContext: jest.Mocked<EnrichedRequestHandlerExtra>;
+
+  beforeEach(() => {
+    mockMemoryService = {
+      associateFileWithComponent: jest.fn(),
+      tagItem: jest.fn(),
+    } as any;
+
+    // Mock context with session
+    mockContext = {
+      logger: {
+        info: jest.fn(),
+        error: jest.fn(),
+        warn: jest.fn(),
+        debug: jest.fn(),
+      },
+      session: {
+        clientProjectRoot: '/test/project',
+      },
+      sendProgress: jest.fn(),
+      request: {} as any,
+      meta: {} as any,
+      signal: {} as any,
+    } as any;
+  });
+
+  describe('File-Component Association', () => {
+    it('should create file-component association', async () => {
+      const mockResult = {
+        success: true,
+        message: 'Association created',
+      };
+      mockMemoryService.associateFileWithComponent.mockResolvedValue(mockResult);
+
+      const result = await associateHandler(
+        {
+          type: 'file-component',
+          repository: 'test-repo',
+          branch: 'main',
+          fileId: 'file-auth-ts',
+          componentId: 'comp-AuthService',
+        },
+        mockContext,
+        mockMemoryService,
+      );
+
+      expect(result.type).toBe('file-component');
+      expect(result.success).toBe(true);
+      expect(result.association.from).toBe('file-auth-ts');
+      expect(result.association.to).toBe('comp-AuthService');
+      expect(result.association.relationship).toBe('IMPLEMENTS');
+      expect(mockMemoryService.associateFileWithComponent).toHaveBeenCalledWith(
+        mockContext,
+        '/test/project',
+        'test-repo',
+        'main',
+        'comp-AuthService',
+        'file-auth-ts',
+      );
+    });
+
+    it('should throw error if fileId is missing', async () => {
+      await expect(
+        associateHandler(
+          {
+            type: 'file-component',
+            repository: 'test-repo',
+            componentId: 'comp-AuthService',
+          },
+          mockContext,
+          mockMemoryService,
+        ),
+      ).rejects.toThrow('fileId and componentId are required for file-component association');
+    });
+
+    it('should throw error if componentId is missing', async () => {
+      await expect(
+        associateHandler(
+          {
+            type: 'file-component',
+            repository: 'test-repo',
+            fileId: 'file-auth-ts',
+          },
+          mockContext,
+          mockMemoryService,
+        ),
+      ).rejects.toThrow('fileId and componentId are required for file-component association');
+    });
+  });
+
+  describe('Tag-Item Association', () => {
+    it('should create tag-item association', async () => {
+      const mockResult = {
+        success: true,
+        message: 'Item tagged',
+      };
+      mockMemoryService.tagItem.mockResolvedValue(mockResult);
+
+      const result = await associateHandler(
+        {
+          type: 'tag-item',
+          repository: 'test-repo',
+          branch: 'main',
+          itemId: 'comp-AuthService',
+          tagId: 'tag-security',
+        },
+        mockContext,
+        mockMemoryService,
+      );
+
+      expect(result.type).toBe('tag-item');
+      expect(result.success).toBe(true);
+      expect(result.association.from).toBe('comp-AuthService');
+      expect(result.association.to).toBe('tag-security');
+      expect(result.association.relationship).toBe('TAGGED_WITH');
+      expect(mockMemoryService.tagItem).toHaveBeenCalledWith(
+        mockContext,
+        '/test/project',
+        'test-repo',
+        'main',
+        'comp-AuthService',
+        'Component', // Default item type
+        'tag-security',
+      );
+    });
+
+    it('should throw error if itemId is missing', async () => {
+      await expect(
+        associateHandler(
+          {
+            type: 'tag-item',
+            repository: 'test-repo',
+            tagId: 'tag-security',
+          },
+          mockContext,
+          mockMemoryService,
+        ),
+      ).rejects.toThrow('itemId and tagId are required for tag-item association');
+    });
+
+    it('should throw error if tagId is missing', async () => {
+      await expect(
+        associateHandler(
+          {
+            type: 'tag-item',
+            repository: 'test-repo',
+            itemId: 'comp-AuthService',
+          },
+          mockContext,
+          mockMemoryService,
+        ),
+      ).rejects.toThrow('itemId and tagId are required for tag-item association');
+    });
+  });
+
+  describe('Session Validation', () => {
+    it('should throw error if no active session', async () => {
+      const contextNoSession = {
+        logger: {
+          info: jest.fn(),
+          error: jest.fn(),
+          warn: jest.fn(),
+          debug: jest.fn(),
+        },
+        session: {},
+        sendProgress: jest.fn(),
+        request: {} as any,
+        meta: {} as any,
+        signal: {} as any,
+      } as any;
+
+      await expect(
+        associateHandler(
+          {
+            type: 'file-component',
+            repository: 'test-repo',
+            fileId: 'file-1',
+            componentId: 'comp-1',
+          },
+          contextNoSession,
+          mockMemoryService,
+        ),
+      ).rejects.toThrow('No active session');
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should handle and rethrow service errors for file-component', async () => {
+      const error = new Error('Service error');
+      mockMemoryService.associateFileWithComponent.mockRejectedValue(error);
+
+      await expect(
+        associateHandler(
+          {
+            type: 'file-component',
+            repository: 'test-repo',
+            fileId: 'file-1',
+            componentId: 'comp-1',
+          },
+          mockContext,
+          mockMemoryService,
+        ),
+      ).rejects.toThrow('Service error');
+
+      expect(mockContext.sendProgress).toHaveBeenCalledWith({
+        status: 'error',
+        message: 'Failed to create file-component association: Service error',
+        percent: 100,
+        isFinal: true,
+      });
+    });
+
+    it('should handle and rethrow service errors for tag-item', async () => {
+      const error = new Error('Tag service error');
+      mockMemoryService.tagItem.mockRejectedValue(error);
+
+      await expect(
+        associateHandler(
+          {
+            type: 'tag-item',
+            repository: 'test-repo',
+            itemId: 'comp-1',
+            tagId: 'tag-1',
+          },
+          mockContext,
+          mockMemoryService,
+        ),
+      ).rejects.toThrow('Tag service error');
+
+      expect(mockContext.sendProgress).toHaveBeenCalledWith({
+        status: 'error',
+        message: 'Failed to create tag-item association: Tag service error',
+        percent: 100,
+        isFinal: true,
+      });
+    });
+
+    it('should throw error for unknown association type', async () => {
+      await expect(
+        associateHandler(
+          {
+            type: 'unknown' as any,
+            repository: 'test-repo',
+          },
+          mockContext,
+          mockMemoryService,
+        ),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('Progress Reporting', () => {
+    it('should report progress for file-component association', async () => {
+      mockMemoryService.associateFileWithComponent.mockResolvedValue({
+        success: true,
+        message: 'Associated',
+      });
+
+      await associateHandler(
+        {
+          type: 'file-component',
+          repository: 'test-repo',
+          fileId: 'file-1',
+          componentId: 'comp-1',
+        },
+        mockContext,
+        mockMemoryService,
+      );
+
+      expect(mockContext.sendProgress).toHaveBeenCalledWith({
+        status: 'in_progress',
+        message: 'Associating file file-1 with component comp-1...',
+        percent: 50,
+      });
+
+      expect(mockContext.sendProgress).toHaveBeenCalledWith({
+        status: 'complete',
+        message: 'File-component association created successfully',
+        percent: 100,
+        isFinal: true,
+      });
+    });
+
+    it('should report progress for tag-item association', async () => {
+      mockMemoryService.tagItem.mockResolvedValue({
+        success: true,
+        message: 'Tagged',
+      });
+
+      await associateHandler(
+        {
+          type: 'tag-item',
+          repository: 'test-repo',
+          itemId: 'comp-1',
+          tagId: 'tag-1',
+        },
+        mockContext,
+        mockMemoryService,
+      );
+
+      expect(mockContext.sendProgress).toHaveBeenCalledWith({
+        status: 'in_progress',
+        message: 'Tagging item comp-1 with tag tag-1...',
+        percent: 50,
+      });
+
+      expect(mockContext.sendProgress).toHaveBeenCalledWith({
+        status: 'complete',
+        message: 'Tag-item association created successfully',
+        percent: 100,
+        isFinal: true,
+      });
+    });
+  });
+});

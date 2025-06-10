@@ -365,7 +365,31 @@ export const QueryOutputSchema = z.union([
 // Associate Tool Schemas
 // ============================================
 
-// TODO: Add associate tool schemas
+export const AssociateInputSchema = z.object({
+  type: z.enum(['file-component', 'tag-item']),
+  clientProjectRoot: z.string().optional(), // From session
+  repository: z.string(),
+  branch: z.string().default('main'),
+  
+  // For file-component association
+  fileId: z.string().optional(),
+  componentId: z.string().optional(),
+  
+  // For tag-item association
+  itemId: z.string().optional(),
+  tagId: z.string().optional(),
+});
+
+export const AssociateOutputSchema = z.object({
+  type: z.enum(['file-component', 'tag-item']),
+  success: z.boolean(),
+  message: z.string(),
+  association: z.object({
+    from: z.string(),
+    to: z.string(),
+    relationship: z.string(),
+  }),
+});
 
 // ============================================
 // Analyze Tool Schemas
