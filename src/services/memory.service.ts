@@ -179,7 +179,7 @@ export class MemoryService {
       );
       // Update last used time
       this.connectionLastUsed.set(clientProjectRoot, new Date());
-      
+
       // The client will validate its own connection during initialize()
       try {
         await cachedClient.initialize(mcpContext);
