@@ -12,12 +12,12 @@ export const memoryBankTool: McpTool = {
     properties: {
       operation: {
         type: 'string',
-        enum: ['init', 'status', 'health'],
+        enum: ['init', 'get-metadata', 'update-metadata'],
         description: 'Memory bank operation to perform',
       },
       clientProjectRoot: {
         type: 'string',
-        description: 'Absolute path to the client project root',
+        description: 'Absolute path to the client project root (required for init)',
       },
       repository: {
         type: 'string',
@@ -27,8 +27,12 @@ export const memoryBankTool: McpTool = {
         type: 'string',
         description: 'Git branch name',
       },
+      metadata: {
+        type: 'object',
+        description: 'Repository metadata to update (for update-metadata operation)',
+      },
     },
-    required: ['operation', 'clientProjectRoot', 'repository'],
+    required: ['operation', 'repository'],
   },
   returns: {
     type: 'object',

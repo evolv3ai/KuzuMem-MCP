@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { MemoryService } from '../services/memory.service';
 import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
+import { MemoryService } from '../services/memory.service';
 
 describe('MemoryService end-to-end write/read flow', () => {
   const repository = 'test-repo';
@@ -69,7 +69,7 @@ describe('MemoryService end-to-end write/read flow', () => {
       10,
       0,
     );
-    const ids = list.nodes.map((n: any) => n.id || n.properties?.id);
+    const ids = list.entities.map((n: any) => n.id || n.properties?.id);
     expect(ids).toContain(compInput.id);
   }, 30000);
 

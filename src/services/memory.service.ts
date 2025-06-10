@@ -1,29 +1,28 @@
 import * as path from 'path';
 import { z } from 'zod';
-import { RepositoryProvider } from '../db/repository-provider';
 import { KuzuDBClient } from '../db/kuzu';
+import { RepositoryProvider } from '../db/repository-provider';
 import * as toolSchemas from '../mcp/schemas/unified-tool-schemas';
 import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
 import {
-    Component,
-    ComponentStatus,
-    Context,
-    Decision,
-    Metadata,
-    Repository,
-    Rule
+  Component,
+  ComponentStatus,
+  Context,
+  Decision,
+  Metadata,
+  Repository,
+  Rule,
 } from '../types';
 import { Mutex } from '../utils/mutex';
-import { Config } from '../config';
 
 // Import operation modules
 import * as componentOps from './memory-operations/component.ops';
 import * as contextOps from './memory-operations/context.ops';
 import * as decisionOps from './memory-operations/decision.ops';
+import * as fileOps from './memory-operations/file.ops';
 import * as graphOps from './memory-operations/graph.ops';
 import * as metadataOps from './memory-operations/metadata.ops';
 import * as ruleOps from './memory-operations/rule.ops';
-import * as fileOps from './memory-operations/file.ops';
 import * as tagOps from './memory-operations/tag.ops';
 
 // Type definitions (temporary until proper types are created)
@@ -55,7 +54,7 @@ export class MemoryService {
     // This will make the MemoryService lightweight during creation
     // The real database work will be done on-demand when specific methods are called with valid clientProjectRoot
     this.repositoryProvider = await RepositoryProvider.getInstance();
-    
+
     // Use logger if available, otherwise console for this early init log
     const logger = initialMcpContext?.logger || console;
     logger.info(
@@ -78,47 +77,61 @@ export class MemoryService {
       `[STDOUT-DEBUG] MemoryService.getKuzuClient ENTERED with CPR: ${clientProjectRoot}\n`,
     );
     const logger = mcpContext.logger || console; // Fallback for safety, though context should always have logger
-    
+
     // Validate clientProjectRoot - this is critical for correct operation
     if (!clientProjectRoot) {
       const error = new Error('clientProjectRoot is required but was undefined or empty');
-      logger.error('[MemoryService.getKuzuClient] CRITICAL ERROR: clientProjectRoot is missing', error);
+      logger.error(
+        '[MemoryService.getKuzuClient] CRITICAL ERROR: clientProjectRoot is missing',
+        error,
+      );
       throw error;
     }
-    
+
     // Ensure path is absolute
     clientProjectRoot = this.ensureAbsoluteRoot(clientProjectRoot);
-    logger.info(`[MemoryService.getKuzuClient] Using absolute clientProjectRoot: ${clientProjectRoot}`);
-    
+    logger.info(
+      `[MemoryService.getKuzuClient] Using absolute clientProjectRoot: ${clientProjectRoot}`,
+    );
+
     // Check repository provider
     if (!this.repositoryProvider) {
       logger.error('[MemoryService.getKuzuClient] RepositoryProvider not initialized');
       throw new Error('RepositoryProvider not initialized');
     }
-    
+
     // Return cached client if available
     if (this.kuzuClients.has(clientProjectRoot)) {
-      logger.info(`[MemoryService.getKuzuClient] Found cached KuzuDBClient for: ${clientProjectRoot}`);
+      logger.info(
+        `[MemoryService.getKuzuClient] Found cached KuzuDBClient for: ${clientProjectRoot}`,
+      );
       const cachedClient = this.kuzuClients.get(clientProjectRoot)!;
       return cachedClient;
     }
-    
+
     // Create new client if needed
     logger.info(
       `[MemoryService.getKuzuClient] Creating new KuzuDBClient for: ${clientProjectRoot}`,
     );
-    
+
     try {
       const newClient = new KuzuDBClient(clientProjectRoot); // KuzuDBClient constructor handles path joining for db file
       // Pass the mcpContext to allow for progress notifications during initialization
       await newClient.initialize(mcpContext); // This now also handles schema init
       this.kuzuClients.set(clientProjectRoot, newClient);
       await this.repositoryProvider.initializeRepositories(clientProjectRoot, newClient);
-      logger.info(`[MemoryService.getKuzuClient] KuzuDBClient and repositories initialized for: ${clientProjectRoot}`);
+      logger.info(
+        `[MemoryService.getKuzuClient] KuzuDBClient and repositories initialized for: ${clientProjectRoot}`,
+      );
       return newClient;
     } catch (error) {
-      logger.error(`[MemoryService.getKuzuClient] Failed to initialize KuzuDBClient for ${clientProjectRoot}:`, error);
-      throw new Error(`Failed to initialize database for project root ${clientProjectRoot}: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error(
+        `[MemoryService.getKuzuClient] Failed to initialize KuzuDBClient for ${clientProjectRoot}:`,
+        error,
+      );
+      throw new Error(
+        `Failed to initialize database for project root ${clientProjectRoot}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -192,14 +205,14 @@ export class MemoryService {
       logger.info(
         `[MemoryService.initMemoryBank] Attempting to call this.getKuzuClient for CPR: ${clientProjectRoot}`,
       );
-      
+
       // Send progress update for database client initialization
       await mcpContext.sendProgress({
         status: 'in_progress',
         message: `Creating Kuzu database client for ${repositoryName}:${branch}...`,
         percent: 45,
       });
-      
+
       console.error(`[DEBUG] MemoryService.initMemoryBank ABOUT TO CALL getKuzuClient`);
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
       console.error(`[DEBUG] MemoryService.initMemoryBank getKuzuClient RETURNED:`, !!kuzuClient);
@@ -244,14 +257,14 @@ export class MemoryService {
         };
       }
       logger.info(`Repository node ID for ${repositoryName}:${branch} is ${repository.id}`);
-      
+
       // Send progress update for metadata initialization
       await mcpContext.sendProgress({
         status: 'in_progress',
         message: `Looking for existing metadata for ${repositoryName}:${branch}...`,
         percent: 80,
       });
-      
+
       const existingMetadata = await metadataRepo.findMetadata(
         mcpContext,
         repositoryName,
@@ -264,7 +277,7 @@ export class MemoryService {
           message: `Creating initial metadata for ${repositoryName}:${branch}...`,
           percent: 85,
         });
-        
+
         logger.info(`No existing metadata for ${repositoryName}:${branch}, creating stub...`);
         const today = new Date().toISOString().split('T')[0];
         const metadataToCreate = {
@@ -288,18 +301,18 @@ export class MemoryService {
       } else {
         logger.info(`Existing metadata found for ${repositoryName}:${branch}`);
       }
-      
+
       // Send progress update for completion
       await mcpContext.sendProgress({
         status: 'in_progress',
         message: `Finalizing memory bank initialization for ${repositoryName}:${branch}...`,
         percent: 90,
       });
-      
+
       return {
         success: true,
         message: `Memory bank initialized for ${repositoryName} (branch: ${branch})`,
-        path: clientProjectRoot,  // Changed from dbPath to path
+        path: clientProjectRoot, // Changed from dbPath to path
       };
     } catch (error: any) {
       console.error(`[DEBUG] MemoryService.initMemoryBank CAUGHT EXCEPTION:`, error);
@@ -307,7 +320,7 @@ export class MemoryService {
         error: error.toString(),
         stack: error.stack,
       });
-      
+
       // Send error progress notification
       try {
         await mcpContext.sendProgress({
@@ -321,7 +334,7 @@ export class MemoryService {
       } catch (progressError: any) {
         logger.error(`Failed to send error progress: ${String(progressError)}`);
       }
-      
+
       return { success: false, message: error.message || 'Failed to initialize memory bank' };
     }
   }
@@ -400,9 +413,7 @@ export class MemoryService {
         architecture: metadataContent.content?.architecture || '',
         memory_spec_version: metadataContent.content?.memory_spec_version || '1.0',
       };
-      logger.info(
-        `[MemoryService.getMetadata] Metadata retrieved for ${repositoryName}:${branch}`,
-      );
+      logger.info(`[MemoryService.getMetadata] Metadata retrieved for ${repositoryName}:${branch}`);
       return metadataResult;
     } catch (error: any) {
       logger.error(`Error in getMetadata for ${repositoryName}:${branch}: ${error.message}`, {
@@ -652,7 +663,7 @@ export class MemoryService {
         mcpContext,
         repositoryName,
         branch,
-        limit || 10,  // Provide default value
+        limit || 10, // Provide default value
         repositoryRepo,
         contextRepo,
       );
@@ -923,14 +934,14 @@ export class MemoryService {
     try {
       const fileRepo = this.repositoryProvider.getFileRepository(clientProjectRoot);
       const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
-      
+
       // Get repository node ID
       const repository = await repositoryRepo.findByName(repositoryName, branch);
       if (!repository || !repository.id) {
         logger.warn(`[MemoryService.getFile] Repository ${repositoryName}:${branch} not found.`);
         return null;
       }
-      
+
       const file = await fileRepo.findFileById(repository.id, branch, fileId);
       return file as FileRecord | null;
     } catch (error: any) {
@@ -974,9 +985,7 @@ export class MemoryService {
   ): Promise<{ componentId: string; dependencies: Component[] }> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
-      logger.error(
-        '[MemoryService.getComponentDependencies] RepositoryProvider not initialized',
-      );
+      logger.error('[MemoryService.getComponentDependencies] RepositoryProvider not initialized');
       throw new Error('RepositoryProvider not initialized');
     }
     try {
@@ -1093,9 +1102,7 @@ export class MemoryService {
   ): Promise<{ itemId: string; itemType: string; contextHistory: any[] }> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
-      logger.error(
-        '[MemoryService.getItemContextualHistory] RepositoryProvider not initialized',
-      );
+      logger.error('[MemoryService.getItemContextualHistory] RepositoryProvider not initialized');
       throw new Error('RepositoryProvider not initialized');
     }
     try {
@@ -1239,7 +1246,7 @@ export class MemoryService {
     if (!this.repositoryProvider) {
       logger.error('[MemoryService.kCoreDecomposition] RepositoryProvider not initialized');
       return {
-        type: 'k-core' as const,  // Fix type literal
+        type: 'k-core' as const, // Fix type literal
         status: 'error',
         nodes: [],
         projectedGraphName: params.projectedGraphName,
@@ -1262,21 +1269,28 @@ export class MemoryService {
         projectedGraphName: params.projectedGraphName,
         nodeTableNames: params.nodeTableNames,
         relationshipTableNames: params.relationshipTableNames,
-        k: params.k || 2,  // Provide default value
+        k: params.k || 2, // Provide default value
       };
 
-      logger.debug('[MemoryService.kCoreDecomposition] Calling graphOps.kCoreDecompositionOp with params:', {
-        graphOpsParams,
-      });
+      logger.debug(
+        '[MemoryService.kCoreDecomposition] Calling graphOps.kCoreDecompositionOp with params:',
+        {
+          graphOpsParams,
+        },
+      );
 
-      const algorithmResults = await graphOps.kCoreDecompositionOp(mcpContext, kuzuClient, graphOpsParams);
+      const algorithmResults = await graphOps.kCoreDecompositionOp(
+        mcpContext,
+        kuzuClient,
+        graphOpsParams,
+      );
 
       logger.info('[MemoryService.kCoreDecomposition] Algorithm completed successfully');
       return {
-        type: 'k-core' as const,  // Fix type literal
+        type: 'k-core' as const, // Fix type literal
         status: 'complete',
         projectedGraphName: params.projectedGraphName,
-        nodes: algorithmResults.components.map(c => ({ id: c.nodeId, coreNumber: c.coreness })),
+        nodes: algorithmResults.components.map((c) => ({ id: c.nodeId, coreNumber: c.coreness })),
         message: 'K-Core decomposition completed successfully',
       };
     } catch (error: any) {
@@ -1285,7 +1299,7 @@ export class MemoryService {
         stack: error.stack,
       });
       return {
-        type: 'k-core' as const,  // Fix type literal
+        type: 'k-core' as const, // Fix type literal
         status: 'error',
         nodes: [],
         projectedGraphName: params.projectedGraphName,
@@ -1338,7 +1352,10 @@ export class MemoryService {
         type: 'louvain' as const,
         status: 'complete',
         projectedGraphName: params.projectedGraphName,
-        nodes: algorithmResults.communities.map(c => ({ id: c.nodeId, communityId: c.communityId })),
+        nodes: algorithmResults.communities.map((c) => ({
+          id: c.nodeId,
+          communityId: c.communityId,
+        })),
         message: 'Louvain community detection completed successfully',
       };
     } catch (error: any) {
@@ -1397,7 +1414,7 @@ export class MemoryService {
         type: 'pagerank',
         status: 'complete',
         projectedGraphName: params.projectedGraphName,
-        nodes: algorithmResults.ranks.map(r => ({ id: r.nodeId, pagerank: r.score })),
+        nodes: algorithmResults.ranks.map((r) => ({ id: r.nodeId, pagerank: r.score })),
         message: 'PageRank algorithm completed successfully',
       };
     } catch (error: any) {
@@ -1426,7 +1443,7 @@ export class MemoryService {
         '[MemoryService.getStronglyConnectedComponents] RepositoryProvider not initialized',
       );
       return {
-        type: 'strongly-connected' as const,  // Fix type literal
+        type: 'strongly-connected' as const, // Fix type literal
         status: 'error',
         components: [],
         projectedGraphName: params.projectedGraphName,
@@ -1457,14 +1474,16 @@ export class MemoryService {
         graphOpsParams,
       );
 
-      logger.info('[MemoryService.getStronglyConnectedComponents] Algorithm completed successfully');
+      logger.info(
+        '[MemoryService.getStronglyConnectedComponents] Algorithm completed successfully',
+      );
       return {
-        type: 'strongly-connected' as const,  // Fix type literal
+        type: 'strongly-connected' as const, // Fix type literal
         status: 'complete',
         projectedGraphName: params.projectedGraphName,
-        components: algorithmResults.components.map(c => ({ 
-          componentId: c.componentId, 
-          nodes: [] // TODO: populate nodes array
+        components: algorithmResults.components.map((c) => ({
+          componentId: c.componentId,
+          nodes: [], // TODO: populate nodes array
         })),
         totalComponents: algorithmResults.components.length,
         message: 'Strongly Connected Components found successfully',
@@ -1475,7 +1494,7 @@ export class MemoryService {
         stack: error.stack,
       });
       return {
-        type: 'strongly-connected' as const,  // Fix type literal
+        type: 'strongly-connected' as const, // Fix type literal
         status: 'error',
         components: [],
         projectedGraphName: params.projectedGraphName,
@@ -1496,7 +1515,7 @@ export class MemoryService {
         '[MemoryService.getWeaklyConnectedComponents] RepositoryProvider not initialized',
       );
       return {
-        type: 'weakly-connected' as const,  // Fix type literal
+        type: 'weakly-connected' as const, // Fix type literal
         status: 'error',
         components: [],
         projectedGraphName: params.projectedGraphName,
@@ -1529,12 +1548,12 @@ export class MemoryService {
 
       logger.info('[MemoryService.getWeaklyConnectedComponents] Algorithm completed successfully');
       return {
-        type: 'weakly-connected' as const,  // Fix type literal
+        type: 'weakly-connected' as const, // Fix type literal
         status: 'complete',
         projectedGraphName: params.projectedGraphName,
-        components: algorithmResults.components.map(c => ({ 
-          componentId: c.componentId, 
-          nodes: [] // TODO: populate nodes array
+        components: algorithmResults.components.map((c) => ({
+          componentId: c.componentId,
+          nodes: [], // TODO: populate nodes array
         })),
         totalComponents: algorithmResults.components.length,
         message: 'Weakly Connected Components found successfully',
@@ -1545,7 +1564,7 @@ export class MemoryService {
         stack: error.stack,
       });
       return {
-        type: 'weakly-connected' as const,  // Fix type literal
+        type: 'weakly-connected' as const, // Fix type literal
         status: 'error',
         components: [],
         projectedGraphName: params.projectedGraphName,
@@ -1588,7 +1607,11 @@ export class MemoryService {
         graphOpsParams,
       });
 
-      const algorithmResults = await graphOps.shortestPathOp(mcpContext, kuzuClient, graphOpsParams);
+      const algorithmResults = await graphOps.shortestPathOp(
+        mcpContext,
+        kuzuClient,
+        graphOpsParams,
+      );
 
       logger.info('[MemoryService.shortestPath] Algorithm completed successfully');
       return {
@@ -1630,7 +1653,7 @@ export class MemoryService {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
       const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
       const decisionRepo = this.repositoryProvider.getDecisionRepository(clientProjectRoot);
-      
+
       // Get all decisions and filter by date range
       const allDecisions = await decisionOps.getActiveDecisionsOp(
         mcpContext,
@@ -1641,8 +1664,10 @@ export class MemoryService {
       );
 
       // Filter by date range
-      const decisions = allDecisions.filter(d => {
-        if (!d.date) return false;
+      const decisions = allDecisions.filter((d) => {
+        if (!d.date) {
+          return false;
+        }
         const decisionDate = new Date(d.date);
         const start = new Date(startDate);
         const end = new Date(endDate);
@@ -1770,8 +1795,8 @@ export class MemoryService {
         WHERE n.repository = $repoId AND n.branch = $branch
         RETURN n
         ORDER BY n.name, n.id
+        SKIP $offset
         LIMIT $limit
-        OFFSET $offset
       `;
 
       const results = await kuzuClient.executeQuery(query, { repoId, branch, limit, offset });
@@ -1877,10 +1902,9 @@ export class MemoryService {
         indexes: [],
       };
     } catch (error: any) {
-      logger.error(
-        `[MemoryService.listAllIndexes] Error listing indexes: ${error.message}`,
-        { error: error.toString() },
-      );
+      logger.error(`[MemoryService.listAllIndexes] Error listing indexes: ${error.message}`, {
+        error: error.toString(),
+      });
       return { indexes: [] };
     }
   }
@@ -1894,7 +1918,7 @@ export class MemoryService {
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
-    fileData: any,  // Remove schema reference
+    fileData: any, // Remove schema reference
   ): Promise<z.infer<typeof toolSchemas.EntityCreateOutputSchema>> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
@@ -1967,7 +1991,9 @@ export class MemoryService {
     );
 
     if (!success || !success.success) {
-      logger.warn(`[MemoryService.associateFileWithComponent] Failed to associate ${fileId} with ${componentId}`);
+      logger.warn(
+        `[MemoryService.associateFileWithComponent] Failed to associate ${fileId} with ${componentId}`,
+      );
       return {
         type: 'file-component',
         success: false,
@@ -1980,7 +2006,9 @@ export class MemoryService {
       };
     }
 
-    logger.info(`[MemoryService.associateFileWithComponent] Associated ${fileId} with ${componentId}`);
+    logger.info(
+      `[MemoryService.associateFileWithComponent] Associated ${fileId} with ${componentId}`,
+    );
     return {
       type: 'file-component',
       success: true,
@@ -1998,7 +2026,7 @@ export class MemoryService {
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
-    tagData: any,  // Remove schema reference
+    tagData: any, // Remove schema reference
   ): Promise<z.infer<typeof toolSchemas.EntityCreateOutputSchema>> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
@@ -2037,7 +2065,7 @@ export class MemoryService {
     logger.info(`[MemoryService.addTag] Tag ${createdTag.tag.id} added successfully`);
     return {
       success: true,
-      message: 'Tag added successfully', 
+      message: 'Tag added successfully',
       entity: createdTag.tag,
     };
   }
@@ -2127,7 +2155,9 @@ export class MemoryService {
       itemTypeFilter as any,
     );
 
-    logger.info(`[MemoryService.findItemsByTag] Found ${items.items?.length || 0} items with tag ${tagId}`);
+    logger.info(
+      `[MemoryService.findItemsByTag] Found ${items.items?.length || 0} items with tag ${tagId}`,
+    );
     return { type: 'tags', tagId, items: items.items || [] };
   }
 
@@ -2147,23 +2177,18 @@ export class MemoryService {
 
       // Get node table names from Kuzu
       const result = await kuzuClient.executeQuery('CALL show_tables() RETURN *');
-      const labels = result
-        .filter((row: any) => row.type === 'NODE')
-        .map((row: any) => row.name);
+      const labels = result.filter((row: any) => row.type === 'NODE').map((row: any) => row.name);
 
-      logger.info(
-        `[MemoryService.listAllNodeLabels] Found ${labels.length} node labels`,
-      );
+      logger.info(`[MemoryService.listAllNodeLabels] Found ${labels.length} node labels`);
       return {
         labels,
         status: 'complete',
         message: `Found ${labels.length} node labels`,
       };
     } catch (error: any) {
-      logger.error(
-        `[MemoryService.listAllNodeLabels] Error: ${error.message}`,
-        { error: error.toString() },
-      );
+      logger.error(`[MemoryService.listAllNodeLabels] Error: ${error.message}`, {
+        error: error.toString(),
+      });
       return {
         labels: [],
         status: 'error',
@@ -2196,17 +2221,19 @@ export class MemoryService {
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
       const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
-      
+
       // Get repository to ensure it exists
       const repository = await repositoryRepo.findByName(repositoryName, branch);
       if (!repository || !repository.id) {
-        logger.warn(`[MemoryService.deleteComponent] Repository ${repositoryName}:${branch} not found.`);
+        logger.warn(
+          `[MemoryService.deleteComponent] Repository ${repositoryName}:${branch} not found.`,
+        );
         return false;
       }
 
       // Format the graph unique ID
       const graphUniqueId = `${repositoryName}:${branch}:${componentId}`;
-      
+
       // Delete all relationships and the component node
       const deleteQuery = `
         MATCH (c:Component {graph_unique_id: $graphUniqueId})
@@ -2214,14 +2241,19 @@ export class MemoryService {
         DELETE r, c
         RETURN count(c) as deletedCount
       `;
-      
+
       const result = await kuzuClient.executeQuery(deleteQuery, { graphUniqueId });
       const deletedCount = result[0]?.deletedCount || 0;
-      
-      logger.info(`[MemoryService.deleteComponent] Deleted ${deletedCount} component(s) with ID ${componentId}`);
+
+      logger.info(
+        `[MemoryService.deleteComponent] Deleted ${deletedCount} component(s) with ID ${componentId}`,
+      );
       return deletedCount > 0;
     } catch (error: any) {
-      logger.error(`[MemoryService.deleteComponent] Error deleting component ${componentId}:`, error);
+      logger.error(
+        `[MemoryService.deleteComponent] Error deleting component ${componentId}:`,
+        error,
+      );
       throw error;
     }
   }
@@ -2242,17 +2274,19 @@ export class MemoryService {
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
       const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
-      
+
       // Get repository to ensure it exists
       const repository = await repositoryRepo.findByName(repositoryName, branch);
       if (!repository || !repository.id) {
-        logger.warn(`[MemoryService.deleteDecision] Repository ${repositoryName}:${branch} not found.`);
+        logger.warn(
+          `[MemoryService.deleteDecision] Repository ${repositoryName}:${branch} not found.`,
+        );
         return false;
       }
 
       // Format the graph unique ID
       const graphUniqueId = `${repositoryName}:${branch}:${decisionId}`;
-      
+
       // Delete all relationships and the decision node
       const deleteQuery = `
         MATCH (d:Decision {graph_unique_id: $graphUniqueId})
@@ -2260,11 +2294,13 @@ export class MemoryService {
         DELETE r, d
         RETURN count(d) as deletedCount
       `;
-      
+
       const result = await kuzuClient.executeQuery(deleteQuery, { graphUniqueId });
       const deletedCount = result[0]?.deletedCount || 0;
-      
-      logger.info(`[MemoryService.deleteDecision] Deleted ${deletedCount} decision(s) with ID ${decisionId}`);
+
+      logger.info(
+        `[MemoryService.deleteDecision] Deleted ${deletedCount} decision(s) with ID ${decisionId}`,
+      );
       return deletedCount > 0;
     } catch (error: any) {
       logger.error(`[MemoryService.deleteDecision] Error deleting decision ${decisionId}:`, error);
@@ -2288,7 +2324,7 @@ export class MemoryService {
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
       const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
-      
+
       // Get repository to ensure it exists
       const repository = await repositoryRepo.findByName(repositoryName, branch);
       if (!repository || !repository.id) {
@@ -2298,7 +2334,7 @@ export class MemoryService {
 
       // Format the graph unique ID
       const graphUniqueId = `${repositoryName}:${branch}:${ruleId}`;
-      
+
       // Delete all relationships and the rule node
       const deleteQuery = `
         MATCH (r:Rule {graph_unique_id: $graphUniqueId})
@@ -2306,10 +2342,10 @@ export class MemoryService {
         DELETE rel, r
         RETURN count(r) as deletedCount
       `;
-      
+
       const result = await kuzuClient.executeQuery(deleteQuery, { graphUniqueId });
       const deletedCount = result[0]?.deletedCount || 0;
-      
+
       logger.info(`[MemoryService.deleteRule] Deleted ${deletedCount} rule(s) with ID ${ruleId}`);
       return deletedCount > 0;
     } catch (error: any) {
@@ -2334,7 +2370,7 @@ export class MemoryService {
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
       const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
-      
+
       // Get repository to ensure it exists
       const repository = await repositoryRepo.findByName(repositoryName, branch);
       if (!repository || !repository.id) {
@@ -2344,7 +2380,7 @@ export class MemoryService {
 
       // Format the graph unique ID
       const graphUniqueId = `${repositoryName}:${branch}:${fileId}`;
-      
+
       // Delete all relationships and the file node
       const deleteQuery = `
         MATCH (f:File {graph_unique_id: $graphUniqueId})
@@ -2352,10 +2388,10 @@ export class MemoryService {
         DELETE r, f
         RETURN count(f) as deletedCount
       `;
-      
+
       const result = await kuzuClient.executeQuery(deleteQuery, { graphUniqueId });
       const deletedCount = result[0]?.deletedCount || 0;
-      
+
       logger.info(`[MemoryService.deleteFile] Deleted ${deletedCount} file(s) with ID ${fileId}`);
       return deletedCount > 0;
     } catch (error: any) {
@@ -2379,7 +2415,7 @@ export class MemoryService {
 
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-      
+
       // Tags are global and not scoped to repository/branch, so we just need the ID
       // Delete all relationships and the tag node
       const deleteQuery = `
@@ -2388,10 +2424,10 @@ export class MemoryService {
         DELETE r, t
         RETURN count(t) as deletedCount
       `;
-      
+
       const result = await kuzuClient.executeQuery(deleteQuery, { tagId });
       const deletedCount = result[0]?.deletedCount || 0;
-      
+
       logger.info(`[MemoryService.deleteTag] Deleted ${deletedCount} tag(s) with ID ${tagId}`);
       return deletedCount > 0;
     } catch (error: any) {
@@ -2417,7 +2453,13 @@ export class MemoryService {
 
     try {
       // First check if component exists
-      const existing = await this.getComponent(mcpContext, clientProjectRoot, repositoryName, branch, componentId);
+      const existing = await this.getComponent(
+        mcpContext,
+        clientProjectRoot,
+        repositoryName,
+        branch,
+        componentId,
+      );
       if (!existing) {
         logger.warn(`[MemoryService.updateComponent] Component ${componentId} not found`);
         return null;
@@ -2427,20 +2469,44 @@ export class MemoryService {
       const updatedData = {
         id: componentId,
         name: existing.name,
-        kind: updates.kind !== undefined ? 
-          (updates.kind === null ? undefined : updates.kind) : 
-          (existing.kind === null ? undefined : existing.kind),
-        depends_on: updates.depends_on !== undefined ? 
-          (updates.depends_on === null ? undefined : updates.depends_on) : 
-          (existing.depends_on === null ? undefined : existing.depends_on),
-        status: updates.status !== undefined ? 
-          (updates.status === null ? undefined : updates.status) : 
-          (existing.status === null ? undefined : existing.status),
+        kind:
+          updates.kind !== undefined
+            ? updates.kind === null
+              ? undefined
+              : updates.kind
+            : existing.kind === null
+              ? undefined
+              : existing.kind,
+        depends_on:
+          updates.depends_on !== undefined
+            ? updates.depends_on === null
+              ? undefined
+              : updates.depends_on
+            : existing.depends_on === null
+              ? undefined
+              : existing.depends_on,
+        status:
+          updates.status !== undefined
+            ? updates.status === null
+              ? undefined
+              : updates.status
+            : existing.status === null
+              ? undefined
+              : existing.status,
       };
 
-      return await this.upsertComponent(mcpContext, clientProjectRoot, repositoryName, branch, updatedData);
+      return await this.upsertComponent(
+        mcpContext,
+        clientProjectRoot,
+        repositoryName,
+        branch,
+        updatedData,
+      );
     } catch (error: any) {
-      logger.error(`[MemoryService.updateComponent] Error updating component ${componentId}:`, error);
+      logger.error(
+        `[MemoryService.updateComponent] Error updating component ${componentId}:`,
+        error,
+      );
       throw error;
     }
   }
@@ -2461,7 +2527,13 @@ export class MemoryService {
 
     try {
       // First check if decision exists
-      const existing = await this.getDecision(mcpContext, clientProjectRoot, repositoryName, branch, decisionId);
+      const existing = await this.getDecision(
+        mcpContext,
+        clientProjectRoot,
+        repositoryName,
+        branch,
+        decisionId,
+      );
       if (!existing) {
         logger.warn(`[MemoryService.updateDecision] Decision ${decisionId} not found`);
         return null;
@@ -2476,7 +2548,13 @@ export class MemoryService {
       };
 
       // Use upsert method to update
-      return await this.upsertDecision(mcpContext, clientProjectRoot, repositoryName, branch, updatedData);
+      return await this.upsertDecision(
+        mcpContext,
+        clientProjectRoot,
+        repositoryName,
+        branch,
+        updatedData,
+      );
     } catch (error: any) {
       logger.error(`[MemoryService.updateDecision] Error updating decision ${decisionId}:`, error);
       throw error;
@@ -2499,7 +2577,13 @@ export class MemoryService {
 
     try {
       // First check if rule exists
-      const existing = await this.getRule(mcpContext, clientProjectRoot, repositoryName, branch, ruleId);
+      const existing = await this.getRule(
+        mcpContext,
+        clientProjectRoot,
+        repositoryName,
+        branch,
+        ruleId,
+      );
       if (!existing) {
         logger.warn(`[MemoryService.updateRule] Rule ${ruleId} not found`);
         return null;
@@ -2515,7 +2599,13 @@ export class MemoryService {
       };
 
       // Use upsert method to update
-      return await this.upsertRule(mcpContext, clientProjectRoot, repositoryName, updatedData, branch);
+      return await this.upsertRule(
+        mcpContext,
+        clientProjectRoot,
+        repositoryName,
+        updatedData,
+        branch,
+      );
     } catch (error: any) {
       logger.error(`[MemoryService.updateRule] Error updating rule ${ruleId}:`, error);
       throw error;
@@ -2537,25 +2627,37 @@ export class MemoryService {
     }
 
     try {
-      const existing = await this.getFile(mcpContext, clientProjectRoot, repositoryName, branch, fileId);
+      const existing = await this.getFile(
+        mcpContext,
+        clientProjectRoot,
+        repositoryName,
+        branch,
+        fileId,
+      );
       if (!existing) {
         logger.warn(`[MemoryService.updateFile] File ${fileId} not found`);
         return null;
       }
-      
+
       // For now, we'll just use addFile to update since it acts as upsert
       const updatedData = {
         ...existing,
         ...updates,
       };
 
-      const result = await this.addFile(mcpContext, clientProjectRoot, repositoryName, branch, updatedData);
-      
+      const result = await this.addFile(
+        mcpContext,
+        clientProjectRoot,
+        repositoryName,
+        branch,
+        updatedData,
+      );
+
       // Return the file entity from the result
       if (result.success && result.entity) {
         return result.entity as FileRecord;
       }
-      
+
       return null;
     } catch (error: any) {
       logger.error(`[MemoryService.updateFile] Error updating file ${fileId}:`, error);
@@ -2578,12 +2680,18 @@ export class MemoryService {
     }
 
     try {
-      const existing = await this.getTag(mcpContext, clientProjectRoot, repositoryName, branch, tagId);
+      const existing = await this.getTag(
+        mcpContext,
+        clientProjectRoot,
+        repositoryName,
+        branch,
+        tagId,
+      );
       if (!existing) {
         logger.warn(`[MemoryService.updateTag] Tag ${tagId} not found`);
         return null;
       }
-      
+
       // For now, we'll just use addTag to update since it acts as upsert
       const updatedData = {
         ...existing,
@@ -2592,16 +2700,56 @@ export class MemoryService {
         description: updates.description === null ? undefined : updates.description,
       };
 
-      const result = await this.addTag(mcpContext, clientProjectRoot, repositoryName, branch, updatedData as any);
-      
+      const result = await this.addTag(
+        mcpContext,
+        clientProjectRoot,
+        repositoryName,
+        branch,
+        updatedData as any,
+      );
+
       // Return the tag entity from the result
       if (result.success && result.entity) {
         return result.entity as Tag;
       }
-      
+
       return null;
     } catch (error: any) {
       logger.error(`[MemoryService.updateTag] Error updating tag ${tagId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Shutdown method to close all KuzuDB connections
+   */
+  async shutdown(): Promise<void> {
+    const logger = console;
+    logger.info('[MemoryService.shutdown] Starting shutdown process');
+
+    try {
+      // Close all KuzuDB clients
+      for (const [clientProjectRoot, client] of this.kuzuClients.entries()) {
+        try {
+          await client.close();
+          logger.info(`[MemoryService.shutdown] Closed KuzuDB client for ${clientProjectRoot}`);
+        } catch (error: any) {
+          logger.error(
+            `[MemoryService.shutdown] Error closing KuzuDB client for ${clientProjectRoot}:`,
+            error,
+          );
+        }
+      }
+
+      // Clear the clients map
+      this.kuzuClients.clear();
+
+      // Reset repository provider
+      this.repositoryProvider = null;
+
+      logger.info('[MemoryService.shutdown] Shutdown completed successfully');
+    } catch (error: any) {
+      logger.error('[MemoryService.shutdown] Error during shutdown:', error);
       throw error;
     }
   }

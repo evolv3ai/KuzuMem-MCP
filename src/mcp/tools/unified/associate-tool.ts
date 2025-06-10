@@ -10,18 +10,10 @@ export const associateTool: McpTool = {
   parameters: {
     type: 'object',
     properties: {
-      operation: {
+      type: {
         type: 'string',
         enum: ['file-component', 'tag-item'],
         description: 'Type of association to create',
-      },
-      sourceId: {
-        type: 'string',
-        description: 'Source entity ID',
-      },
-      targetId: {
-        type: 'string',
-        description: 'Target entity ID',
       },
       clientProjectRoot: {
         type: 'string',
@@ -35,8 +27,24 @@ export const associateTool: McpTool = {
         type: 'string',
         description: 'Git branch name',
       },
+      fileId: {
+        type: 'string',
+        description: 'File ID (for file-component association)',
+      },
+      componentId: {
+        type: 'string',
+        description: 'Component ID (for file-component association)',
+      },
+      itemId: {
+        type: 'string',
+        description: 'Item ID (for tag-item association)',
+      },
+      tagId: {
+        type: 'string',
+        description: 'Tag ID (for tag-item association)',
+      },
     },
-    required: ['operation', 'sourceId', 'targetId', 'clientProjectRoot', 'repository'],
+    required: ['type', 'repository'],
   },
   returns: {
     type: 'object',

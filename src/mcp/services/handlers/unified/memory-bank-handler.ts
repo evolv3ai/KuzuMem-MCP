@@ -1,7 +1,7 @@
 import path from 'path';
+import { MemoryService } from '../../../../services/memory.service';
 import { SdkToolHandler } from '../../../tool-handlers';
 import { EnrichedRequestHandlerExtra } from '../../../types/sdk-custom';
-import { MemoryService } from '../../../../services/memory.service';
 
 // TypeScript interfaces for memory bank parameters
 interface MemoryBankParams {
@@ -218,7 +218,7 @@ export const memoryBankHandler: SdkToolHandler = async (
 ): Promise<unknown> => {
   // 1. Validate and extract parameters
   const validatedParams = params as MemoryBankParams;
-  
+
   // Basic validation
   if (!validatedParams.operation) {
     throw new Error('operation parameter is required');

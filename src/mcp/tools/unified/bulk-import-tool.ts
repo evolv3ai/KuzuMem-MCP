@@ -10,19 +10,10 @@ export const bulkImportTool: McpTool = {
   parameters: {
     type: 'object',
     properties: {
-      entities: {
-        type: 'array',
-        items: {
-          type: 'object',
-        },
-        description: 'Array of entities to import',
-      },
-      relationships: {
-        type: 'array',
-        items: {
-          type: 'object',
-        },
-        description: 'Array of relationships to create',
+      type: {
+        type: 'string',
+        enum: ['components', 'decisions', 'rules'],
+        description: 'Type of entities to bulk import',
       },
       clientProjectRoot: {
         type: 'string',
@@ -36,23 +27,32 @@ export const bulkImportTool: McpTool = {
         type: 'string',
         description: 'Git branch name',
       },
+      // Type-specific arrays are handled dynamically by the schema
+      overwrite: {
+        type: 'boolean',
+        description: 'Whether to overwrite existing entities',
+      },
     },
-    required: ['clientProjectRoot', 'repository'],
+    required: ['type', 'repository'],
   },
   returns: {
     type: 'object',
     properties: {
-      success: {
-        type: 'boolean',
-        description: 'Whether the import succeeded',
-      },
-      entitiesCreated: {
+      status: {
         type: 'string',
-        description: 'Number of entities created',
+        description: 'Import status',
       },
-      relationshipsCreated: {
-        type: 'string',
-        description: 'Number of relationships created',
+      imported: {
+        type: 'number',
+        description: 'Number of entities imported',
+      },
+      failed: {
+        type: 'number',
+        description: 'Number of entities failed',
+      },
+      skipped: {
+        type: 'number',
+        description: 'Number of entities skipped',
       },
       message: {
         type: 'string',
