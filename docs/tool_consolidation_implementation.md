@@ -1238,18 +1238,13 @@ After all tools are implemented:
    - Make sure all old tool references are deleted
    - Make sure all old tool tests are deleted
 
-2. **Security Review**
-   - Verify parameter validation
-   - Check for injection vulnerabilities
-   - Review error messages for info leaks
-
-3. **Documentation**
+2. **Documentation**
    - Update API reference
    - Update .cursor rules
    - Update README.md and README2.md
    - Record lessons learned
   
-4. **Testing**
+3. **Testing**
    - Run full test suite
    - Verify all e2e tests pass
    - Verify no regressions in functionality

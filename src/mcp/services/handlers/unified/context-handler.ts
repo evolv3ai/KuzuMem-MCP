@@ -36,6 +36,7 @@ export const contextHandler: SdkToolHandler = async (params, context, memoryServ
 
         // Call MemoryService updateContext method
         const result = await memoryService.updateContext(context, clientProjectRoot, {
+          operation: 'update',
           repository,
           branch,
           agent,

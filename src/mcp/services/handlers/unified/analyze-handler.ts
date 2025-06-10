@@ -55,29 +55,24 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
         });
 
         const result = await memoryService.pageRank(context, clientProjectRoot, {
+          type: 'pagerank',
           repository,
           branch,
           projectedGraphName: validatedParams.projectedGraphName,
           nodeTableNames: validatedParams.nodeTableNames,
           relationshipTableNames: validatedParams.relationshipTableNames,
-          dampingFactor: validatedParams.damping,
+          damping: validatedParams.damping,
           maxIterations: validatedParams.maxIterations,
         });
 
         await context.sendProgress({
           status: 'complete',
-          message: `PageRank analysis complete. Found ${result.results?.ranks?.length || 0} nodes`,
+          message: `PageRank analysis complete. Found ${result.nodes?.length || 0} nodes`,
           percent: 100,
           isFinal: true,
         });
 
-        return {
-          type: 'pagerank' as const,
-          status: result.status,
-          nodes: result.results?.ranks?.map((r: any) => ({ id: r.nodeId, pagerank: r.score })) || [],
-          projectedGraphName: validatedParams.projectedGraphName,
-          message: result.message,
-        } satisfies z.infer<typeof PageRankOutputSchema>;
+        return result;
       }
 
       case 'shortest-path': {
@@ -88,6 +83,7 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
         });
 
         const result = await memoryService.shortestPath(context, clientProjectRoot, {
+          type: 'shortest-path',
           repository,
           branch,
           projectedGraphName: validatedParams.projectedGraphName,
@@ -99,21 +95,14 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
 
         await context.sendProgress({
           status: 'complete',
-          message: result.results?.pathFound
-            ? `Path found with length ${result.results?.path?.length || 0}`
+          message: result.pathFound
+            ? `Path found with length ${result.pathLength || 0}`
             : 'No path found between nodes',
           percent: 100,
           isFinal: true,
         });
 
-        return {
-          type: 'shortest-path' as const,
-          status: result.status,
-          pathFound: result.results?.pathFound || false,
-          path: result.results?.path?.map((p: any) => p.id) || [],
-          pathLength: result.results?.path?.length,
-          message: result.message,
-        } satisfies z.infer<typeof ShortestPathOutputSchema>;
+        return result;
       }
 
       case 'k-core': {
@@ -124,6 +113,7 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
         });
 
         const result = await memoryService.kCoreDecomposition(context, clientProjectRoot, {
+          type: 'k-core',
           repository,
           branch,
           projectedGraphName: validatedParams.projectedGraphName,
@@ -134,22 +124,12 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
 
         await context.sendProgress({
           status: 'complete',
-          message: `K-core analysis complete. Found ${result.results?.components?.length || 0} nodes`,
+          message: `K-core analysis complete. Found ${result.nodes?.length || 0} nodes`,
           percent: 100,
           isFinal: true,
         });
 
-        return {
-          type: 'k-core' as const,
-          status: result.status,
-          nodes:
-            result.results?.components?.map((n: any) => ({
-              id: n.nodeId,
-              coreNumber: n.coreness,
-            })) || [],
-          projectedGraphName: validatedParams.projectedGraphName,
-          message: result.message,
-        } satisfies z.infer<typeof KCoreOutputSchema>;
+        return result;
       }
 
       case 'louvain': {
@@ -160,6 +140,7 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
         });
 
         const result = await memoryService.louvainCommunityDetection(context, clientProjectRoot, {
+          type: 'louvain',
           repository,
           branch,
           projectedGraphName: validatedParams.projectedGraphName,
@@ -169,22 +150,12 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
 
         await context.sendProgress({
           status: 'complete',
-          message: `Community detection complete. Found ${result.results?.communities?.length || 0} nodes`,
+          message: `Community detection complete. Found ${result.nodes?.length || 0} nodes`,
           percent: 100,
           isFinal: true,
         });
 
-        return {
-          type: 'louvain' as const,
-          status: result.status,
-          nodes:
-            result.results?.communities?.map((c: any) => ({
-              id: c.nodeId,
-              communityId: c.communityId,
-            })) || [],
-          projectedGraphName: validatedParams.projectedGraphName,
-          message: result.message,
-        } satisfies z.infer<typeof LouvainOutputSchema>;
+        return result;
       }
 
       default:

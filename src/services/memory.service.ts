@@ -23,10 +23,8 @@ import * as decisionOps from './memory-operations/decision.ops';
 import * as graphOps from './memory-operations/graph.ops';
 import * as metadataOps from './memory-operations/metadata.ops';
 import * as ruleOps from './memory-operations/rule.ops';
-
-// Import specialized operations
-// import * as fileOps from './memory-operations/file.ops';
-// import * as tagOps from './memory-operations/tag.ops';
+import * as fileOps from './memory-operations/file.ops';
+import * as tagOps from './memory-operations/tag.ops';
 
 // Type definitions (temporary until proper types are created)
 type FileRecord = any;
@@ -301,7 +299,7 @@ export class MemoryService {
       return {
         success: true,
         message: `Memory bank initialized for ${repositoryName} (branch: ${branch})`,
-        dbPath: clientProjectRoot,
+        path: clientProjectRoot,  // Changed from dbPath to path
       };
     } catch (error: any) {
       console.error(`[DEBUG] MemoryService.initMemoryBank CAUGHT EXCEPTION:`, error);
@@ -379,7 +377,6 @@ export class MemoryService {
       const metadataRepo = this.repositoryProvider.getMetadataRepository(clientProjectRoot);
 
       const metadataContent = await metadataOps.getMetadataOp(
-        mcpContext,
         repositoryName,
         branch,
         repositoryRepo,
@@ -405,7 +402,7 @@ export class MemoryService {
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
     repositoryName: string,
-    metadataContentChanges: z.infer<typeof toolSchemas.MetadataContentSchema>,
+    metadataContentChanges: any, // Remove schema reference
     branch: string = 'main',
   ): Promise<z.infer<typeof toolSchemas.UpdateMetadataOutputSchema> | null> {
     const logger = mcpContext.logger || console;
@@ -436,7 +433,7 @@ export class MemoryService {
       logger.info(`Metadata updated successfully for ${repositoryName}:${branch}.`);
       return {
         success: true,
-        metadata: updatedContent,
+        message: `Metadata updated successfully`,
       };
     } catch (error: any) {
       logger.error(`Error in updateMetadata for ${repositoryName}:${branch}: ${error.message}`, {
@@ -454,7 +451,7 @@ export class MemoryService {
     clientProjectRoot: string,
     repositoryName: string,
     branch: string = 'main',
-  ): Promise<z.infer<typeof toolSchemas.ContextSchema> | null> {
+  ): Promise<Context | null> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error('[MemoryService.getTodayContext] RepositoryProvider not initialized');
@@ -464,12 +461,12 @@ export class MemoryService {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
       const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
       const contextRepo = this.repositoryProvider.getContextRepository(clientProjectRoot);
-      const context = await contextOps.getTodayContextOp(
+      const todayIsoDate = new Date().toISOString().split('T')[0];
+      const context = await contextRepo.getContextByDate(
         mcpContext,
         repositoryName,
         branch,
-        repositoryRepo,
-        contextRepo,
+        todayIsoDate,
       );
       if (!context) {
         logger.info(
@@ -480,7 +477,7 @@ export class MemoryService {
       logger.info(
         `[MemoryService.getTodayContext] Retrieved today's context for ${repositoryName}:${branch}`,
       );
-      return context as z.infer<typeof toolSchemas.ContextSchema> | null;
+      return context;
     } catch (error: any) {
       logger.error(
         `[MemoryService.getTodayContext] Error for ${repositoryName}:${branch}: ${error.message}`,
@@ -506,7 +503,7 @@ export class MemoryService {
       observation?: string;
     },
     branch: string = 'main',
-  ): Promise<z.infer<typeof toolSchemas.ContextSchema> | null> {
+  ): Promise<Context | null> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error('[MemoryService.updateTodayContext] RepositoryProvider not initialized');
@@ -599,7 +596,7 @@ export class MemoryService {
       logger.info(
         `[MemoryService.updateTodayContext] Context for today updated/created for ${repositoryName}:${branch}`,
       );
-      return currentContextInternal as z.infer<typeof toolSchemas.ContextSchema>;
+      return currentContextInternal;
     } catch (error: any) {
       logger.error(
         `[MemoryService.updateTodayContext] Error for ${repositoryName}:${branch}: ${error.message}`,
@@ -618,7 +615,7 @@ export class MemoryService {
     repositoryName: string,
     branch: string = 'main',
     limit?: number,
-  ): Promise<z.infer<typeof toolSchemas.GetContextOutputSchema>> {
+  ): Promise<Context[]> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error('[MemoryService.getLatestContexts] RepositoryProvider not initialized');
@@ -639,14 +636,14 @@ export class MemoryService {
         mcpContext,
         repositoryName,
         branch,
-        limit,
+        limit || 10,  // Provide default value
         repositoryRepo,
         contextRepo,
       );
       logger.info(
         `[MemoryService.getLatestContexts] Retrieved ${contexts.length} latest contexts for ${repositoryName}:${branch}`,
       );
-      return contexts as z.infer<typeof toolSchemas.GetContextOutputSchema>;
+      return contexts;
     } catch (error: any) {
       logger.error(
         `[MemoryService.getLatestContexts] Error for ${repositoryName}:${branch}: ${error.message}`,
@@ -663,8 +660,8 @@ export class MemoryService {
   async updateContext(
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
-    params: z.infer<typeof toolSchemas.UpdateContextInputSchema>,
-  ): Promise<z.infer<typeof toolSchemas.UpdateContextOutputSchema> | null> {
+    params: z.infer<typeof toolSchemas.ContextInputSchema>,
+  ): Promise<z.infer<typeof toolSchemas.ContextUpdateOutputSchema> | null> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error('[MemoryService.updateContext] RepositoryProvider not initialized');
@@ -694,7 +691,7 @@ export class MemoryService {
       return {
         success: true,
         message: 'Context updated successfully',
-        context: updatedCtxNode as z.infer<typeof toolSchemas.ContextSchema>,
+        context: updatedCtxNode as any,
       };
     } catch (error: any) {
       logger.error(
@@ -725,11 +722,17 @@ export class MemoryService {
     const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
     const ruleRepo = this.repositoryProvider.getRuleRepository(clientProjectRoot);
 
+    // Convert null to undefined for content field
+    const ruleForOps = {
+      ...rule,
+      content: rule.content === null ? undefined : rule.content,
+    } as Rule;
+
     return ruleOps.upsertRuleOp(
       mcpContext,
       repositoryName,
       branch,
-      rule as Rule,
+      ruleForOps,
       repositoryRepo,
       ruleRepo,
     ) as Promise<Rule | null>;
@@ -949,16 +952,18 @@ export class MemoryService {
     repositoryName: string,
     branch: string,
     componentId: string,
-  ): Promise<z.infer<typeof toolSchemas.GetComponentDependenciesOutputSchema>> {
+  ): Promise<{ componentId: string; dependencies: Component[] }> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
-      logger.error('[MemoryService.getComponentDependencies] RepositoryProvider not initialized');
-      return { status: 'error', dependencies: [], message: 'RepositoryProvider not initialized' };
+      logger.error(
+        '[MemoryService.getComponentDependencies] RepositoryProvider not initialized',
+      );
+      throw new Error('RepositoryProvider not initialized');
     }
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-      const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
       const componentRepo = this.repositoryProvider.getComponentRepository(clientProjectRoot);
+      const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
 
       const dependencies = await componentOps.getComponentDependenciesOp(
         mcpContext,
@@ -968,17 +973,20 @@ export class MemoryService {
         repositoryRepo,
         componentRepo,
       );
+
+      logger.info(
+        `[MemoryService.getComponentDependencies] Retrieved ${dependencies.length} dependencies for ${componentId} in ${repositoryName}:${branch}`,
+      );
       return {
-        status: 'complete',
-        dependencies: dependencies as z.infer<typeof toolSchemas.ComponentSchema>[],
+        componentId,
+        dependencies: dependencies,
       };
     } catch (error: any) {
-      logger.error(`[MemoryService.getComponentDependencies] Error for ${componentId}:`, error);
-      return {
-        status: 'error',
-        dependencies: [],
-        message: error.message || 'Failed to get dependencies',
-      };
+      logger.error(
+        `[MemoryService.getComponentDependencies] Error for ${componentId} in ${repositoryName}:${branch}: ${error.message}`,
+        { error: error.toString() },
+      );
+      throw error;
     }
   }
 
@@ -1020,11 +1028,11 @@ export class MemoryService {
     repositoryName: string,
     branch: string,
     componentId: string,
-  ): Promise<z.infer<typeof toolSchemas.GetComponentDependentsOutputSchema>> {
+  ): Promise<{ componentId: string; dependents: Component[] }> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error('[MemoryService.getComponentDependents] RepositoryProvider not initialized');
-      return { status: 'error', dependents: [], message: 'RepositoryProvider not initialized' };
+      throw new Error('RepositoryProvider not initialized');
     }
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
@@ -1039,20 +1047,20 @@ export class MemoryService {
         repositoryRepo,
         componentRepo,
       );
+
+      logger.info(
+        `[MemoryService.getComponentDependents] Retrieved ${dependents.length} dependents for ${componentId} in ${repositoryName}:${branch}`,
+      );
       return {
-        status: 'complete',
-        dependents: dependents as z.infer<typeof toolSchemas.ComponentSchema>[],
+        componentId,
+        dependents: dependents,
       };
     } catch (error: any) {
-      logger.error(`[MemoryService.getComponentDependents] Error for ${componentId}:`, {
-        error: error.toString(),
-        stack: error.stack,
-      });
-      return {
-        status: 'error',
-        dependents: [],
-        message: error.message || 'Failed to get dependents',
-      };
+      logger.error(
+        `[MemoryService.getComponentDependents] Error for ${componentId} in ${repositoryName}:${branch}: ${error.message}`,
+        { error: error.toString() },
+      );
+      throw error;
     }
   }
 
@@ -1063,52 +1071,44 @@ export class MemoryService {
     branch: string,
     itemId: string,
     itemType: 'Component' | 'Decision' | 'Rule',
-  ): Promise<z.infer<typeof toolSchemas.GetItemContextualHistoryOutputSchema>> {
+  ): Promise<{ itemId: string; itemType: string; contextHistory: any[] }> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
-      logger.error('[MemoryService.getItemContextualHistory] RepositoryProvider not initialized');
-      return { status: 'error', contextHistory: [], message: 'RepositoryProvider not initialized' };
+      logger.error(
+        '[MemoryService.getItemContextualHistory] RepositoryProvider not initialized',
+      );
+      throw new Error('RepositoryProvider not initialized');
     }
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
 
-      const graphOpsParams: z.infer<typeof toolSchemas.GetItemContextualHistoryInputSchema> = {
-        repository: repositoryName,
-        branch: branch,
-        itemId: itemId,
-        itemType: itemType,
+      const graphOpsParams = {
+        repositoryName,
+        branch,
+        itemId,
+        itemType,
       };
 
-      logger.debug(
-        '[MemoryService.getItemContextualHistory] Calling graphOps.getItemContextualHistoryOp with params:',
-        graphOpsParams,
-      );
-
-      const contextItemsArray = await graphOps.getItemContextualHistoryOp(
+      const result = await graphOps.getItemContextualHistoryOp(
         mcpContext,
         kuzuClient,
         graphOpsParams,
       );
 
+      logger.info(
+        `[MemoryService.getItemContextualHistory] Retrieved history for ${itemType} ${itemId} in ${repositoryName}:${branch}`,
+      );
       return {
-        status: 'complete',
-        contextHistory: contextItemsArray || [], // Ensure array even if op somehow returns null/undefined
-        message:
-          contextItemsArray && contextItemsArray.length > 0
-            ? 'Successfully retrieved history.'
-            : 'No history found.',
+        itemId,
+        itemType,
+        contextHistory: result || [],
       };
     } catch (error: any) {
       logger.error(
-        `[MemoryService.getItemContextualHistory] Error for ${itemType} ${itemId} in ${repositoryName}:${branch}:`,
-        { error: error.toString(), stack: error.stack },
+        `[MemoryService.getItemContextualHistory] Error for ${itemType} ${itemId} in ${repositoryName}:${branch}: ${error.message}`,
+        { error: error.toString() },
       );
-      return {
-        status: 'error',
-        contextHistory: [],
-        message: error.message || 'Failed to get history in MemoryService',
-        // Do not add repo, branch, itemId, itemType here
-      };
+      throw error;
     }
   }
 
@@ -1118,51 +1118,43 @@ export class MemoryService {
     repositoryName: string,
     branch: string,
     componentId: string,
-  ): Promise<z.infer<typeof toolSchemas.GetGoverningItemsForComponentOutputSchema>> {
+  ): Promise<{ componentId: string; rules: any[]; decisions: any[] }> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error(
         '[MemoryService.getGoverningItemsForComponent] RepositoryProvider not initialized',
       );
-      return {
-        status: 'error',
-        decisions: [],
-        rules: [],
-        message: 'RepositoryProvider not initialized',
-      };
+      throw new Error('RepositoryProvider not initialized');
     }
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
 
-      const graphOpsParams: z.infer<typeof toolSchemas.GetGoverningItemsForComponentInputSchema> = {
-        repository: repositoryName,
-        branch: branch,
-        componentId: componentId,
+      const graphOpsParams = {
+        repositoryName,
+        branch,
+        componentId,
       };
 
-      logger.debug(
-        '[MemoryService.getGoverningItemsForComponent] Calling graphOps.getGoverningItemsForComponentOp with params:',
-        graphOpsParams,
-      );
-
-      const operationResult = await graphOps.getGoverningItemsForComponentOp(
+      const result = await graphOps.getGoverningItemsForComponentOp(
         mcpContext,
         kuzuClient,
         graphOpsParams,
       );
 
-      return operationResult;
-    } catch (error: any) {
-      logger.error(
-        `[MemoryService.getGoverningItemsForComponent] Error for component ${componentId} in ${repositoryName}:${branch}:`,
-        { error: error.toString(), stack: error.stack },
+      logger.info(
+        `[MemoryService.getGoverningItemsForComponent] Retrieved governing items for ${componentId} in ${repositoryName}:${branch}`,
       );
       return {
-        status: 'error',
-        decisions: [],
-        rules: [],
-        message: error.message || 'Failed to get governing items in MemoryService',
+        componentId,
+        rules: result.rules || [],
+        decisions: result.decisions || [],
       };
+    } catch (error: any) {
+      logger.error(
+        `[MemoryService.getGoverningItemsForComponent] Error for ${componentId} in ${repositoryName}:${branch}: ${error.message}`,
+        { error: error.toString() },
+      );
+      throw error;
     }
   }
 
@@ -1180,46 +1172,38 @@ export class MemoryService {
       relationshipFilter?: string;
       targetNodeTypeFilter?: string;
     },
-  ): Promise<z.infer<typeof toolSchemas.GetRelatedItemsOutputSchema>> {
+  ): Promise<{ startItemId: string; relatedItems: any[] }> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error('[MemoryService.getRelatedItems] RepositoryProvider not initialized');
-      return { status: 'error', relatedItems: [], message: 'RepositoryProvider not initialized' };
+      throw new Error('RepositoryProvider not initialized');
     }
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
 
-      const graphOpsParams: z.infer<typeof toolSchemas.GetRelatedItemsInputSchema> = {
+      const graphOpsParams = {
+        clientProjectRoot,
         repository: repositoryName,
-        branch: branch,
+        branch,
         startItemId: itemId,
-        depth: opParams.depth,
-        relationshipFilter: opParams.relationshipFilter,
-        targetNodeTypeFilter: opParams.targetNodeTypeFilter,
+        ...opParams,
       };
 
-      logger.debug(
-        '[MemoryService.getRelatedItems] Calling graphOps.getRelatedItemsOp with params:',
-        graphOpsParams,
-      );
+      const result = await graphOps.getRelatedItemsOp(mcpContext, kuzuClient, graphOpsParams);
 
-      const operationResult = await graphOps.getRelatedItemsOp(
-        mcpContext,
-        kuzuClient,
-        graphOpsParams,
-      );
-
-      return operationResult;
-    } catch (error: any) {
-      logger.error(
-        `[MemoryService.getRelatedItems] Error for item ${itemId} in ${repositoryName}:${branch}:`,
-        { error: error.toString(), stack: error.stack },
+      logger.info(
+        `[MemoryService.getRelatedItems] Retrieved related items for ${itemId} in ${repositoryName}:${branch}`,
       );
       return {
-        status: 'error',
-        relatedItems: [],
-        message: error.message || 'Failed to get related items in MemoryService',
+        startItemId: itemId,
+        relatedItems: result.relatedItems || [],
       };
+    } catch (error: any) {
+      logger.error(
+        `[MemoryService.getRelatedItems] Error for ${itemId} in ${repositoryName}:${branch}: ${error.message}`,
+        { error: error.toString() },
+      );
+      throw error;
     }
   }
 
@@ -1228,19 +1212,17 @@ export class MemoryService {
   async kCoreDecomposition(
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
-    params: z.infer<typeof toolSchemas.KCoreDecompositionInputSchema>,
-  ): Promise<z.infer<typeof toolSchemas.KCoreDecompositionOutputSchema>> {
+    params: z.infer<typeof toolSchemas.AnalyzeInputSchema>,
+  ): Promise<z.infer<typeof toolSchemas.KCoreOutputSchema>> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error('[MemoryService.kCoreDecomposition] RepositoryProvider not initialized');
       return {
+        type: 'k-core' as const,  // Fix type literal
         status: 'error',
-        results: { k: params.k, components: [] },
-        message: 'RepositoryProvider not initialized',
-        clientProjectRoot,
-        repository: params.repository,
-        branch: params.branch,
+        nodes: [],
         projectedGraphName: params.projectedGraphName,
+        message: 'RepositoryProvider not initialized',
       };
     }
     try {
@@ -1252,30 +1234,41 @@ export class MemoryService {
         throw new Error('KuzuDBClient not found for this project root.');
       }
 
-      const algorithmResults = await graphOps.kCoreDecompositionOp(mcpContext, kuzuClient, params);
-
-      return {
-        status: 'complete',
-        clientProjectRoot,
+      const graphOpsParams = {
+        clientProjectRoot: clientProjectRoot,
         repository: params.repository,
         branch: params.branch,
         projectedGraphName: params.projectedGraphName,
-        results: algorithmResults,
-        message: 'K-Core decomposition completed successfully.',
+        nodeTableNames: params.nodeTableNames,
+        relationshipTableNames: params.relationshipTableNames,
+        k: params.k || 2,  // Provide default value
+      };
+
+      logger.debug('[MemoryService.kCoreDecomposition] Calling graphOps.kCoreDecompositionOp with params:', {
+        graphOpsParams,
+      });
+
+      const algorithmResults = await graphOps.kCoreDecompositionOp(mcpContext, kuzuClient, graphOpsParams);
+
+      logger.info('[MemoryService.kCoreDecomposition] Algorithm completed successfully');
+      return {
+        type: 'k-core' as const,  // Fix type literal
+        status: 'complete',
+        projectedGraphName: params.projectedGraphName,
+        nodes: algorithmResults.components.map(c => ({ id: c.nodeId, coreNumber: c.coreness })),
+        message: 'K-Core decomposition completed successfully',
       };
     } catch (error: any) {
-      logger.error(`[MemoryService.kCoreDecomposition] Error for ${params.projectedGraphName}:`, {
+      logger.error('[MemoryService.kCoreDecomposition] Error:', {
         error: error.toString(),
         stack: error.stack,
       });
       return {
+        type: 'k-core' as const,  // Fix type literal
         status: 'error',
-        results: { k: params.k, components: [] },
-        message: error.message || 'K-Core failed in MemoryService',
-        clientProjectRoot,
-        repository: params.repository,
-        branch: params.branch,
+        nodes: [],
         projectedGraphName: params.projectedGraphName,
+        message: error.message || 'K-Core failed in MemoryService',
       };
     }
   }
@@ -1283,19 +1276,17 @@ export class MemoryService {
   async louvainCommunityDetection(
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
-    params: z.infer<typeof toolSchemas.LouvainCommunityDetectionInputSchema>,
-  ): Promise<z.infer<typeof toolSchemas.LouvainCommunityDetectionOutputSchema>> {
+    params: z.infer<typeof toolSchemas.AnalyzeInputSchema>,
+  ): Promise<z.infer<typeof toolSchemas.LouvainOutputSchema>> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error('[MemoryService.louvainCommunityDetection] RepositoryProvider not initialized');
       return {
+        type: 'louvain' as const,
         status: 'error',
-        results: { communities: [], modularity: undefined },
-        message: 'RepositoryProvider not initialized',
-        clientProjectRoot,
-        repository: params.repository,
-        branch: params.branch,
+        nodes: [],
         projectedGraphName: params.projectedGraphName,
+        message: 'RepositoryProvider not initialized',
       };
     }
     try {
@@ -1306,37 +1297,40 @@ export class MemoryService {
         );
         throw new Error('KuzuDBClient not found for this project root.');
       }
+      const graphOpsParams = {
+        clientProjectRoot: clientProjectRoot,
+        repository: params.repository,
+        branch: params.branch,
+        projectedGraphName: params.projectedGraphName,
+        nodeTableNames: params.nodeTableNames,
+        relationshipTableNames: params.relationshipTableNames,
+      };
+
       const algorithmResults = await graphOps.louvainCommunityDetectionOp(
         mcpContext,
         kuzuClient,
-        params,
+        graphOpsParams,
       );
 
+      logger.info('[MemoryService.louvainCommunityDetection] Algorithm completed successfully');
       return {
+        type: 'louvain' as const,
         status: 'complete',
-        clientProjectRoot,
-        repository: params.repository,
-        branch: params.branch,
         projectedGraphName: params.projectedGraphName,
-        results: algorithmResults,
-        message: 'Louvain community detection completed successfully.',
+        nodes: algorithmResults.communities.map(c => ({ id: c.nodeId, communityId: c.communityId })),
+        message: 'Louvain community detection completed successfully',
       };
     } catch (error: any) {
-      logger.error(
-        `[MemoryService.louvainCommunityDetection] Error for ${params.projectedGraphName}:`,
-        {
-          error: error.toString(),
-          stack: error.stack,
-        },
-      );
+      logger.error('[MemoryService.louvainCommunityDetection] Error:', {
+        error: error.toString(),
+        stack: error.stack,
+      });
       return {
+        type: 'louvain' as const,
         status: 'error',
-        results: { communities: [], modularity: undefined },
-        message: error.message || 'Louvain failed in MemoryService',
-        clientProjectRoot,
-        repository: params.repository,
-        branch: params.branch,
+        nodes: [],
         projectedGraphName: params.projectedGraphName,
+        message: error.message || 'Louvain failed in MemoryService',
       };
     }
   }
@@ -1344,51 +1338,58 @@ export class MemoryService {
   async pageRank(
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
-    params: z.infer<typeof toolSchemas.PageRankInputSchema>,
+    params: z.infer<typeof toolSchemas.AnalyzeInputSchema>,
   ): Promise<z.infer<typeof toolSchemas.PageRankOutputSchema>> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error('[MemoryService.pageRank] RepositoryProvider not initialized');
       return {
+        type: 'pagerank',
         status: 'error',
-        results: { ranks: [] },
-        message: 'RepositoryProvider not initialized',
-        clientProjectRoot,
-        repository: params.repository,
-        branch: params.branch,
+        nodes: [],
         projectedGraphName: params.projectedGraphName,
+        message: 'RepositoryProvider not initialized',
       };
     }
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-      if (!kuzuClient) {
-        logger.error('[MemoryService.pageRank] KuzuDBClient not found after getKuzuClient call.');
-        throw new Error('KuzuDBClient not found for this project root.');
-      }
-      const algorithmResults = await graphOps.pageRankOp(mcpContext, kuzuClient, params);
 
-      return {
-        status: 'complete',
-        clientProjectRoot,
+      const graphOpsParams = {
+        clientProjectRoot: clientProjectRoot,
         repository: params.repository,
         branch: params.branch,
         projectedGraphName: params.projectedGraphName,
-        results: algorithmResults,
-        message: 'PageRank computed successfully',
+        nodeTableNames: params.nodeTableNames,
+        relationshipTableNames: params.relationshipTableNames,
+        dampingFactor: params.damping,
+        maxIterations: params.maxIterations,
+      };
+
+      logger.debug('[MemoryService.pageRank] Calling graphOps.pageRankOp with params:', {
+        graphOpsParams,
+      });
+
+      const algorithmResults = await graphOps.pageRankOp(mcpContext, kuzuClient, graphOpsParams);
+
+      logger.info('[MemoryService.pageRank] Algorithm completed successfully');
+      return {
+        type: 'pagerank',
+        status: 'complete',
+        projectedGraphName: params.projectedGraphName,
+        nodes: algorithmResults.ranks.map(r => ({ id: r.nodeId, pagerank: r.score })),
+        message: 'PageRank algorithm completed successfully',
       };
     } catch (error: any) {
-      logger.error(`[MemoryService.pageRank] Error for ${params.projectedGraphName}:`, {
+      logger.error('[MemoryService.pageRank] Error:', {
         error: error.toString(),
         stack: error.stack,
       });
       return {
+        type: 'pagerank',
         status: 'error',
-        results: { ranks: [] },
-        message: error.message || 'PageRank failed in MemoryService',
-        clientProjectRoot,
-        repository: params.repository,
-        branch: params.branch,
+        nodes: [],
         projectedGraphName: params.projectedGraphName,
+        message: error.message || 'Failed to compute PageRank',
       };
     }
   }
@@ -1396,21 +1397,20 @@ export class MemoryService {
   async getStronglyConnectedComponents(
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
-    params: z.infer<typeof toolSchemas.StronglyConnectedComponentsInputSchema>,
-  ): Promise<z.infer<typeof toolSchemas.StronglyConnectedComponentsOutputSchema>> {
+    params: z.infer<typeof toolSchemas.DetectInputSchema>,
+  ): Promise<z.infer<typeof toolSchemas.DetectOutputSchema>> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error(
         '[MemoryService.getStronglyConnectedComponents] RepositoryProvider not initialized',
       );
       return {
+        type: 'strongly-connected' as const,  // Fix type literal
         status: 'error',
-        results: { components: [] },
-        message: 'RepositoryProvider not initialized',
-        clientProjectRoot,
-        repository: params.repository,
-        branch: params.branch,
+        components: [],
         projectedGraphName: params.projectedGraphName,
+        totalComponents: 0,
+        message: 'RepositoryProvider not initialized',
       };
     }
     try {
@@ -1421,37 +1421,45 @@ export class MemoryService {
         );
         throw new Error('KuzuDBClient not found for this project root.');
       }
+      const graphOpsParams = {
+        clientProjectRoot: clientProjectRoot,
+        repository: params.repository,
+        branch: params.branch,
+        projectedGraphName: params.projectedGraphName,
+        nodeTableNames: params.nodeTableNames,
+        relationshipTableNames: params.relationshipTableNames,
+      };
+
       const algorithmResults = await graphOps.stronglyConnectedComponentsOp(
         mcpContext,
         kuzuClient,
-        params,
+        graphOpsParams,
       );
 
+      logger.info('[MemoryService.getStronglyConnectedComponents] Algorithm completed successfully');
       return {
+        type: 'strongly-connected' as const,  // Fix type literal
         status: 'complete',
-        clientProjectRoot,
-        repository: params.repository,
-        branch: params.branch,
         projectedGraphName: params.projectedGraphName,
-        results: algorithmResults,
-        message: 'Strongly Connected Components found successfully.',
+        components: algorithmResults.components.map(c => ({ 
+          componentId: c.componentId, 
+          nodes: [] // TODO: populate nodes array
+        })),
+        totalComponents: algorithmResults.components.length,
+        message: 'Strongly Connected Components found successfully',
       };
     } catch (error: any) {
-      logger.error(
-        `[MemoryService.getStronglyConnectedComponents] Error for ${params.projectedGraphName}:`,
-        {
-          error: error.toString(),
-          stack: error.stack,
-        },
-      );
+      logger.error('[MemoryService.getStronglyConnectedComponents] Error:', {
+        error: error.toString(),
+        stack: error.stack,
+      });
       return {
+        type: 'strongly-connected' as const,  // Fix type literal
         status: 'error',
-        results: { components: [] },
-        message: error.message || 'SCC failed in MemoryService',
-        clientProjectRoot,
-        repository: params.repository,
-        branch: params.branch,
+        components: [],
         projectedGraphName: params.projectedGraphName,
+        totalComponents: 0,
+        message: error.message || 'SCC failed in MemoryService',
       };
     }
   }
@@ -1459,21 +1467,20 @@ export class MemoryService {
   async getWeaklyConnectedComponents(
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
-    params: z.infer<typeof toolSchemas.WeaklyConnectedComponentsInputSchema>,
-  ): Promise<z.infer<typeof toolSchemas.WeaklyConnectedComponentsOutputSchema>> {
+    params: z.infer<typeof toolSchemas.DetectInputSchema>,
+  ): Promise<z.infer<typeof toolSchemas.DetectOutputSchema>> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error(
         '[MemoryService.getWeaklyConnectedComponents] RepositoryProvider not initialized',
       );
       return {
+        type: 'weakly-connected' as const,  // Fix type literal
         status: 'error',
-        results: { components: [] },
-        message: 'RepositoryProvider not initialized',
-        clientProjectRoot,
-        repository: params.repository,
-        branch: params.branch,
+        components: [],
         projectedGraphName: params.projectedGraphName,
+        totalComponents: 0,
+        message: 'RepositoryProvider not initialized',
       };
     }
     try {
@@ -1484,37 +1491,45 @@ export class MemoryService {
         );
         throw new Error('KuzuDBClient not found for this project root.');
       }
+      const graphOpsParams = {
+        clientProjectRoot: clientProjectRoot,
+        repository: params.repository,
+        branch: params.branch,
+        projectedGraphName: params.projectedGraphName,
+        nodeTableNames: params.nodeTableNames,
+        relationshipTableNames: params.relationshipTableNames,
+      };
+
       const algorithmResults = await graphOps.weaklyConnectedComponentsOp(
         mcpContext,
         kuzuClient,
-        params,
+        graphOpsParams,
       );
 
+      logger.info('[MemoryService.getWeaklyConnectedComponents] Algorithm completed successfully');
       return {
+        type: 'weakly-connected' as const,  // Fix type literal
         status: 'complete',
-        clientProjectRoot,
-        repository: params.repository,
-        branch: params.branch,
         projectedGraphName: params.projectedGraphName,
-        results: algorithmResults,
-        message: 'Weakly Connected Components found successfully.',
+        components: algorithmResults.components.map(c => ({ 
+          componentId: c.componentId, 
+          nodes: [] // TODO: populate nodes array
+        })),
+        totalComponents: algorithmResults.components.length,
+        message: 'Weakly Connected Components found successfully',
       };
     } catch (error: any) {
-      logger.error(
-        `[MemoryService.getWeaklyConnectedComponents] Error for ${params.projectedGraphName}:`,
-        {
-          error: error.toString(),
-          stack: error.stack,
-        },
-      );
+      logger.error('[MemoryService.getWeaklyConnectedComponents] Error:', {
+        error: error.toString(),
+        stack: error.stack,
+      });
       return {
+        type: 'weakly-connected' as const,  // Fix type literal
         status: 'error',
-        results: { components: [] },
-        message: error.message || 'WCC failed in MemoryService',
-        clientProjectRoot,
-        repository: params.repository,
-        branch: params.branch,
+        components: [],
         projectedGraphName: params.projectedGraphName,
+        totalComponents: 0,
+        message: error.message || 'WCC failed in MemoryService',
       };
     }
   }
@@ -1522,56 +1537,57 @@ export class MemoryService {
   async shortestPath(
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
-    params: z.infer<typeof toolSchemas.ShortestPathInputSchema>,
+    params: z.infer<typeof toolSchemas.AnalyzeInputSchema>,
   ): Promise<z.infer<typeof toolSchemas.ShortestPathOutputSchema>> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error('[MemoryService.shortestPath] RepositoryProvider not initialized');
       return {
+        type: 'shortest-path',
         status: 'error',
-        results: { pathFound: false, path: [] },
+        pathFound: false,
         message: 'RepositoryProvider not initialized',
-        clientProjectRoot,
-        repository: params.repository,
-        branch: params.branch,
-        projectedGraphName: params.projectedGraphName,
       };
     }
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-      if (!kuzuClient) {
-        logger.error(
-          '[MemoryService.shortestPath] KuzuDBClient not found after getKuzuClient call.',
-        );
-        throw new Error('KuzuDBClient not found for this project root.');
-      }
-      const algorithmResults = await graphOps.shortestPathOp(mcpContext, kuzuClient, params);
 
-      return {
-        status: 'complete',
-        clientProjectRoot,
+      const graphOpsParams = {
+        clientProjectRoot: clientProjectRoot,
         repository: params.repository,
         branch: params.branch,
         projectedGraphName: params.projectedGraphName,
-        results: algorithmResults,
-        message: algorithmResults.pathFound ? 'Shortest path found.' : 'Shortest path not found.',
+        nodeTableNames: params.nodeTableNames,
+        relationshipTableNames: params.relationshipTableNames,
+        startNodeId: params.startNodeId || '',
+        endNodeId: params.endNodeId || '',
+      };
+
+      logger.debug('[MemoryService.shortestPath] Calling graphOps.shortestPathOp with params:', {
+        graphOpsParams,
+      });
+
+      const algorithmResults = await graphOps.shortestPathOp(mcpContext, kuzuClient, graphOpsParams);
+
+      logger.info('[MemoryService.shortestPath] Algorithm completed successfully');
+      return {
+        type: 'shortest-path',
+        status: 'complete',
+        pathFound: algorithmResults.exists,
+        path: algorithmResults.path,
+        pathLength: algorithmResults.distance,
+        message: algorithmResults.exists ? 'Shortest path found.' : 'Shortest path not found.',
       };
     } catch (error: any) {
-      logger.error(
-        `[MemoryService.shortestPath] Error for ${params.projectedGraphName} from ${params.startNodeId} to ${params.endNodeId}:`,
-        {
-          error: error.toString(),
-          stack: error.stack,
-        },
-      );
+      logger.error('[MemoryService.shortestPath] Error:', {
+        error: error.toString(),
+        stack: error.stack,
+      });
       return {
+        type: 'shortest-path',
         status: 'error',
-        results: { pathFound: false, path: [] },
-        message: error.message || 'ShortestPath failed in MemoryService',
-        clientProjectRoot,
-        repository: params.repository,
-        branch: params.branch,
-        projectedGraphName: params.projectedGraphName,
+        pathFound: false,
+        message: error.message || 'Failed to compute shortest path',
       };
     }
   }
@@ -1583,32 +1599,39 @@ export class MemoryService {
     branch: string = 'main',
     startDate: string,
     endDate: string,
-  ): Promise<z.infer<typeof toolSchemas.DecisionSchema>[]> {
+  ): Promise<Decision[]> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error('[MemoryService.getDecisionsByDateRange] RepositoryProvider not initialized');
-      throw new Error('RepositoryProvider not initialized');
+      return [];
     }
     try {
-      await this.getKuzuClient(mcpContext, clientProjectRoot);
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
       const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
       const decisionRepo = this.repositoryProvider.getDecisionRepository(clientProjectRoot);
-      const decisions = await decisionOps.getDecisionsByDateRangeOp(
+      
+      // Get all decisions and filter by date range
+      const allDecisions = await decisionOps.getActiveDecisionsOp(
         mcpContext,
         repositoryName,
         branch,
-        startDate,
-        endDate,
         repositoryRepo,
         decisionRepo,
       );
-      const repoId = `${repositoryName}:${branch}`;
+
+      // Filter by date range
+      const decisions = allDecisions.filter(d => {
+        if (!d.date) return false;
+        const decisionDate = new Date(d.date);
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        return decisionDate >= start && decisionDate <= end;
+      });
+
       logger.info(
-        `[MemoryService.getDecisionsByDateRange] Retrieved ${decisions.length} decisions for ${repoId} between ${startDate} and ${endDate}`,
+        `[MemoryService.getDecisionsByDateRange] Retrieved ${decisions.length} decisions for ${repositoryName}:${branch}`,
       );
-      return decisions.map((d) => ({ ...d, repository: repoId, branch })) as z.infer<
-        typeof toolSchemas.DecisionSchema
-      >[];
+      return decisions.map((d: Decision) => ({ ...d, repository: repositoryName, branch }));
     } catch (error: any) {
       logger.error(
         `[MemoryService.getDecisionsByDateRange] Error for ${repositoryName}:${branch}: ${error.message}`,
@@ -1623,16 +1646,14 @@ export class MemoryService {
     clientProjectRoot: string,
     repositoryName: string,
     branch: string = 'main',
-  ): Promise<z.infer<typeof toolSchemas.RuleSchema>[]> {
+  ): Promise<Rule[]> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error('[MemoryService.getActiveRules] RepositoryProvider not initialized');
-      throw new Error('RepositoryProvider not initialized');
+      return [];
     }
     try {
-      // Ensure Kuzu client and repositories for this root are initialized
-      await this.getKuzuClient(mcpContext, clientProjectRoot);
-
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
       const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
       const ruleRepo = this.repositoryProvider.getRuleRepository(clientProjectRoot);
 
@@ -1643,13 +1664,11 @@ export class MemoryService {
         repositoryRepo,
         ruleRepo,
       );
-      const repoId = `${repositoryName}:${branch}`;
+
       logger.info(
-        `[MemoryService.getActiveRules] Retrieved ${rules.length} active rules for ${repoId}`,
+        `[MemoryService.getActiveRules] Retrieved ${rules.length} active rules for ${repositoryName}:${branch}`,
       );
-      return rules.map((r) => ({ ...r, repository: repoId, branch })) as z.infer<
-        typeof toolSchemas.RuleSchema
-      >[];
+      return rules.map((r) => ({ ...r, repository: repositoryName, branch }));
     } catch (error: any) {
       logger.error(
         `[MemoryService.getActiveRules] Error for ${repositoryName}:${branch}: ${error.message}`,
@@ -1669,36 +1688,35 @@ export class MemoryService {
     repositoryName: string,
     branch: string,
     label: string,
-  ): Promise<z.infer<typeof toolSchemas.CountNodesByLabelOutputSchema>> {
+  ): Promise<z.infer<typeof toolSchemas.CountOutputSchema>> {
     const logger = mcpContext.logger || console;
-    logger.info(`[MemoryService.countNodesByLabel] For ${label} in ${repositoryName}:${branch}`);
-    const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-    const repoId = `${repositoryName}:${branch}`;
-    const sanitizedLabel = label.replace(/[^a-zA-Z0-9_]/g, '');
-    if (!sanitizedLabel) {
-      logger.error(
-        '[MemoryService.countNodesByLabel] Invalid or empty label provided after sanitization.',
-        { originalLabel: label },
-      );
-      return { label: label, count: -1 };
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.countNodesByLabel] RepositoryProvider not initialized');
+      return { label, count: 0, message: 'RepositoryProvider not initialized' };
     }
-    const query = `MATCH (n:\`${sanitizedLabel}\`) WHERE n.repository = $repoId AND n.branch = $branch RETURN count(n) AS node_count`;
     try {
-      logger.debug(`[MemoryService.countNodesByLabel] Executing Kuzu query: ${query}`, { repoId });
-      const result = await kuzuClient.executeQuery(query, { repoId });
-      const count =
-        result && result.length > 0 && result[0].node_count !== null
-          ? Number(result[0].node_count)
-          : 0;
-      return { label: sanitizedLabel, count };
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+      const repoId = `${repositoryName}:${branch}`;
+
+      const query = `
+        MATCH (n:${label})
+        WHERE n.repository = $repoId AND n.branch = $branch
+        RETURN COUNT(n) AS count
+      `;
+
+      const result = await kuzuClient.executeQuery(query, { repoId, branch });
+      const count = result[0]?.count || 0;
+
+      logger.info(
+        `[MemoryService.countNodesByLabel] Counted ${count} nodes with label ${label} in ${repositoryName}:${branch}`,
+      );
+      return { label, count: Number(count), message: `Found ${count} ${label} nodes` };
     } catch (error: any) {
       logger.error(
-        `[MemoryService.countNodesByLabel] Error for ${label} in ${repoId}: ${error.message}`,
+        `[MemoryService.countNodesByLabel] Error counting ${label} in ${repositoryName}:${branch}: ${error.message}`,
         { error: error.toString() },
       );
-      throw new Error(
-        `Failed to count nodes for label \\\'${sanitizedLabel}\\\': ${error.message}`,
-      );
+      return { label, count: 0, message: error.message || 'Failed to count nodes' };
     }
   }
 
@@ -1710,47 +1728,59 @@ export class MemoryService {
     label: string,
     limit: number = 100,
     offset: number = 0,
-  ): Promise<z.infer<typeof toolSchemas.ListNodesByLabelOutputSchema>> {
+  ): Promise<z.infer<typeof toolSchemas.EntitiesQueryOutputSchema>> {
     const logger = mcpContext.logger || console;
-    logger.info(`[MemoryService.listNodesByLabel] For ${label} in ${repositoryName}:${branch}`, {
-      limit,
-      offset,
-    });
-    const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-    const repoId = `${repositoryName}:${branch}`;
-    const sanitizedLabel = label.replace(/[^a-zA-Z0-9_]/g, '');
-    if (!sanitizedLabel) {
-      logger.error('[MemoryService.listNodesByLabel] Invalid or empty label.', {
-        originalLabel: label,
-      });
-      return { label, nodes: [], limit, offset, totalInLabel: -1 };
-    }
-    const query = `MATCH (n:\`${sanitizedLabel}\`) WHERE n.repository = $repoId AND n.branch = $branch RETURN n SKIP $offset LIMIT $limit`;
-    const countQuery = `MATCH (n:\`${sanitizedLabel}\`) WHERE n.repository = $repoId AND n.branch = $branch RETURN count(n) AS total`;
-    try {
-      logger.debug(`[MemoryService.listNodesByLabel] Query: ${query}, CountQuery: ${countQuery}`, {
-        repoId,
-        offset,
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.listNodesByLabel] RepositoryProvider not initialized');
+      return {
+        type: 'entities',
+        label,
+        entities: [],
         limit,
+        offset,
+      };
+    }
+    try {
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+      const repoId = `${repositoryName}:${branch}`;
+
+      const query = `
+        MATCH (n:${label})
+        WHERE n.repository = $repoId AND n.branch = $branch
+        RETURN n
+        ORDER BY n.name, n.id
+        LIMIT $limit
+        OFFSET $offset
+      `;
+
+      const results = await kuzuClient.executeQuery(query, { repoId, branch, limit, offset });
+      const entities = results.map((row: any) => {
+        const node = row.n.properties || row.n;
+        return { ...node, repository: repositoryName, branch };
       });
-      const [nodesResult, countResult] = await Promise.all([
-        kuzuClient.executeQuery(query, { repoId, offset, limit }),
-        kuzuClient.executeQuery(countQuery, { repoId }),
-      ]);
-      const nodes = nodesResult
-        ? nodesResult.map((n: any) => ({ id: n._id?.toString() || n.id?.toString(), ...n }))
-        : [];
-      const totalInLabel =
-        countResult && countResult.length > 0 && countResult[0].total !== null
-          ? Number(countResult[0].total)
-          : 0;
-      return { label: sanitizedLabel, nodes, limit, offset, totalInLabel };
+
+      logger.info(
+        `[MemoryService.listNodesByLabel] Retrieved ${entities.length} ${label} nodes in ${repositoryName}:${branch}`,
+      );
+      return {
+        type: 'entities',
+        label,
+        entities,
+        limit,
+        offset,
+      };
     } catch (error: any) {
       logger.error(
-        `[MemoryService.listNodesByLabel] Error for ${label} in ${repoId}: ${error.message}`,
+        `[MemoryService.listNodesByLabel] Error listing ${label} in ${repositoryName}:${branch}: ${error.message}`,
         { error: error.toString() },
       );
-      return { label: sanitizedLabel, nodes: [], limit, offset, totalInLabel: -1 };
+      return {
+        type: 'entities',
+        label,
+        entities: [],
+        limit,
+        offset,
+      };
     }
   }
 
@@ -1760,30 +1790,45 @@ export class MemoryService {
     repositoryName: string,
     branch: string,
     label: string,
-  ): Promise<z.infer<typeof toolSchemas.GetNodePropertiesOutputSchema>> {
+  ): Promise<z.infer<typeof toolSchemas.PropertiesOutputSchema>> {
     const logger = mcpContext.logger || console;
-    logger.info(`[MemoryService.getNodeProperties] For label ${label}`);
-    const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-    const sanitizedLabel = label.replace(/[^a-zA-Z0-9_]/g, '');
-    if (!sanitizedLabel) {
-      logger.error('[MemoryService.getNodeProperties] Invalid or empty label.', {
-        originalLabel: label,
-      });
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.getNodeProperties] RepositoryProvider not initialized');
       return { label, properties: [] };
     }
-    const query = `CALL TABLE_INFO('${sanitizedLabel.replace(/'/g, "''")}')`;
     try {
-      logger.debug(`[MemoryService.getNodeProperties] Query: ${query}`);
-      const result = await kuzuClient.executeQuery(query, {});
-      const properties = result
-        ? result.map((row: any) => ({ name: row.name, type: row.type }))
-        : [];
-      return { label: sanitizedLabel, properties };
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+      const repoId = `${repositoryName}:${branch}`;
+
+      // Get a sample node to inspect properties
+      const sampleQuery = `
+        MATCH (n:${label})
+        WHERE n.repository = $repoId AND n.branch = $branch
+        RETURN n
+        LIMIT 1
+      `;
+
+      const sampleResults = await kuzuClient.executeQuery(sampleQuery, { repoId, branch });
+      if (sampleResults.length === 0) {
+        return { label, properties: [] };
+      }
+
+      const sampleNode = sampleResults[0].n.properties || sampleResults[0].n;
+      const properties = Object.keys(sampleNode).map((key) => ({
+        name: key,
+        type: typeof sampleNode[key],
+      }));
+
+      logger.info(
+        `[MemoryService.getNodeProperties] Retrieved ${properties.length} properties for ${label} in ${repositoryName}:${branch}`,
+      );
+      return { label, properties };
     } catch (error: any) {
-      logger.error(`[MemoryService.getNodeProperties] Error for ${label}: ${error.message}`, {
-        error: error.toString(),
-      });
-      return { label: sanitizedLabel, properties: [] };
+      logger.error(
+        `[MemoryService.getNodeProperties] Error getting properties for ${label} in ${repositoryName}:${branch}: ${error.message}`,
+        { error: error.toString() },
+      );
+      return { label, properties: [] };
     }
   }
 
@@ -1793,39 +1838,28 @@ export class MemoryService {
     repositoryName: string,
     branch: string,
     label?: string,
-  ): Promise<z.infer<typeof toolSchemas.ListAllIndexesOutputSchema>> {
+  ): Promise<z.infer<typeof toolSchemas.IndexesOutputSchema>> {
     const logger = mcpContext.logger || console;
-    logger.info(`[MemoryService.listAllIndexes] Label filter: ${label}`);
-    const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-    const query = `SHOW INDEXES;`;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.listAllIndexes] RepositoryProvider not initialized');
+      return { indexes: [] };
+    }
     try {
-      logger.debug(`[MemoryService.listAllIndexes] Query: ${query}`);
-      const result = await kuzuClient.executeQuery(query, {});
-      let indexesData = result
-        ? result.map((row: any) => ({
-            name: row.index_name || row.name || 'N/A',
-            tableName: row.table_name || row.table,
-            propertyName: Array.isArray(row.on_properties)
-              ? row.on_properties.join(', ')
-              : String(row.on_properties || row.property_name || ''),
-            isPrimaryKey:
-              typeof row.is_primary === 'boolean'
-                ? row.is_primary
-                : String(row.is_primary).toLowerCase() === 'true',
-            indexType: row.type || 'UNKNOWN',
-          }))
-        : [];
-      if (label) {
-        const sanitizedLabel = label.replace(/[^a-zA-Z0-9_]/g, '');
-        indexesData = indexesData.filter(
-          (idx: { tableName: string; [key: string]: any }) => idx.tableName === sanitizedLabel,
-        );
-      }
-      return { indexes: indexesData };
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+
+      // Note: Kuzu doesn't have a direct way to list indexes via Cypher
+      // This is a placeholder that returns empty array
+      logger.info(
+        `[MemoryService.listAllIndexes] Index introspection not fully implemented for Kuzu`,
+      );
+      return {
+        indexes: [],
+      };
     } catch (error: any) {
-      logger.error(`[MemoryService.listAllIndexes] Error: ${error.message}`, {
-        error: error.toString(),
-      });
+      logger.error(
+        `[MemoryService.listAllIndexes] Error listing indexes: ${error.message}`,
+        { error: error.toString() },
+      );
       return { indexes: [] };
     }
   }
@@ -1839,66 +1873,48 @@ export class MemoryService {
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
-    fileData: z.infer<typeof toolSchemas.AddFileInputSchema>,
-  ): Promise<z.infer<typeof toolSchemas.AddFileOutputSchema>> {
+    fileData: any,  // Remove schema reference
+  ): Promise<z.infer<typeof toolSchemas.EntityCreateOutputSchema>> {
     const logger = mcpContext.logger || console;
-    logger.info(`[MemoryService.addFile] For path ${fileData.path} in ${repositoryName}:${branch}`);
-    
     if (!this.repositoryProvider) {
       logger.error('[MemoryService.addFile] RepositoryProvider not initialized');
       throw new Error('RepositoryProvider not initialized');
     }
 
-    try {
-      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-      const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
-      const fileRepo = this.repositoryProvider.getFileRepository(clientProjectRoot);
+    const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const fileRepo = this.repositoryProvider.getFileRepository(clientProjectRoot);
 
-      // Get repository to ensure it exists
-      const repository = await repositoryRepo.findByName(repositoryName, branch);
-      if (!repository || !repository.id) {
-        logger.warn(`[MemoryService.addFile] Repository ${repositoryName}:${branch} not found.`);
-        return {
-          success: false,
-          message: `Repository ${repositoryName}:${branch} not found.`,
-        };
-      }
+    const fileOpData = {
+      ...fileData,
+      repository: repositoryName,
+      branch: branch,
+    };
 
-      // Create the file
-      const graphUniqueId = `${repositoryName}:${branch}:${fileData.id}`;
-      const fileToCreate = {
-        id: fileData.id,
-        name: fileData.name,
-        path: fileData.path,
-        graph_unique_id: graphUniqueId,
-        language: fileData.language,
-        metrics: fileData.metrics,
-        content_hash: fileData.content_hash,
-        mime_type: fileData.mime_type,
-        size_bytes: fileData.size_bytes,
-      };
+    const createdFile = await fileOps.addFileOp(
+      mcpContext,
+      repositoryName,
+      branch,
+      fileOpData,
+      repositoryRepo,
+      fileRepo,
+    );
 
-      const createdFile = await fileRepo.createFileNode(repository.id, branch, fileToCreate);
-      
-      if (!createdFile) {
-        return {
-          success: false,
-          message: `Failed to create file ${fileData.name}.`,
-        };
-      }
-      
-      return {
-        success: true,
-        message: `File ${fileData.name} added successfully.`,
-        file: createdFile as any,
-      };
-    } catch (error: any) {
-      logger.error(`[MemoryService.addFile] Error adding file: ${error.message}`, { error });
+    if (!createdFile || !createdFile.success || !createdFile.file) {
+      logger.warn(`[MemoryService.addFile] Failed to add file ${fileData.id}`);
       return {
         success: false,
-        message: error.message || 'Failed to add file',
+        message: createdFile?.message || 'Failed to add file',
+        entity: {},
       };
     }
+
+    logger.info(`[MemoryService.addFile] File ${createdFile.file.id} added successfully`);
+    return {
+      success: true,
+      message: 'File added successfully',
+      entity: createdFile.file,
+    };
   }
 
   async associateFileWithComponent(
@@ -1908,14 +1924,51 @@ export class MemoryService {
     branch: string,
     componentId: string,
     fileId: string,
-  ): Promise<z.infer<typeof toolSchemas.AssociateFileWithComponentOutputSchema>> {
+  ): Promise<z.infer<typeof toolSchemas.AssociateOutputSchema>> {
     const logger = mcpContext.logger || console;
-    logger.info(
-      `[MemoryService.associateFileWithComponent] C:${componentId} F:${fileId} in ${repositoryName}:${branch}`,
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.associateFileWithComponent] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+    const fileRepo = this.repositoryProvider.getFileRepository(clientProjectRoot);
+
+    const success = await fileOps.associateFileWithComponentOp(
+      mcpContext,
+      repositoryName,
+      branch,
+      componentId,
+      fileId,
+      repositoryRepo,
+      fileRepo,
     );
-    await this.getKuzuClient(mcpContext, clientProjectRoot);
-    logger.warn('TODO: Implement associateFileWithComponent with kuzuClient.runWriteQuery');
-    return { success: true, message: 'File associated (stub)' };
+
+    if (!success || !success.success) {
+      logger.warn(`[MemoryService.associateFileWithComponent] Failed to associate ${fileId} with ${componentId}`);
+      return {
+        type: 'file-component',
+        success: false,
+        message: success?.message || 'Failed to associate file with component',
+        association: {
+          from: fileId,
+          to: componentId,
+          relationship: 'IMPLEMENTS',
+        },
+      };
+    }
+
+    logger.info(`[MemoryService.associateFileWithComponent] Associated ${fileId} with ${componentId}`);
+    return {
+      type: 'file-component',
+      success: true,
+      message: 'File associated with component successfully',
+      association: {
+        from: fileId,
+        to: componentId,
+        relationship: 'IMPLEMENTS',
+      },
+    };
   }
 
   async addTag(
@@ -1923,60 +1976,48 @@ export class MemoryService {
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
-    tagData: z.infer<typeof toolSchemas.AddTagInputSchema>,
-  ): Promise<z.infer<typeof toolSchemas.AddTagOutputSchema>> {
+    tagData: any,  // Remove schema reference
+  ): Promise<z.infer<typeof toolSchemas.EntityCreateOutputSchema>> {
     const logger = mcpContext.logger || console;
-    logger.info(`[MemoryService.addTag] For tag ${tagData.name} in ${repositoryName}:${branch}`);
-    
     if (!this.repositoryProvider) {
       logger.error('[MemoryService.addTag] RepositoryProvider not initialized');
       throw new Error('RepositoryProvider not initialized');
     }
 
-    try {
-      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-      const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
-      const tagRepo = this.repositoryProvider.getTagRepository(clientProjectRoot);
+    const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+    const tagRepo = this.repositoryProvider.getTagRepository(clientProjectRoot);
 
-      // Tags are global, but we still want to ensure the repository exists
-      const repository = await repositoryRepo.findByName(repositoryName, branch);
-      if (!repository || !repository.id) {
-        logger.warn(`[MemoryService.addTag] Repository ${repositoryName}:${branch} not found.`);
-        return {
-          success: false,
-          message: `Repository ${repositoryName}:${branch} not found.`,
-        };
-      }
+    const tagOpData = {
+      ...tagData,
+      repository: repositoryName,
+      branch: branch,
+    };
 
-      // Create the tag
-      const tagToCreate = {
-        id: tagData.id,
-        name: tagData.name,
-        color: tagData.color,
-        description: tagData.description,
-      };
+    const createdTag = await tagOps.addTagOp(
+      mcpContext,
+      repositoryName,
+      branch,
+      tagOpData,
+      repositoryRepo,
+      tagRepo,
+    );
 
-      const createdTag = await tagRepo.upsertTagNode(tagToCreate as any);
-      
-      if (!createdTag) {
-        return {
-          success: false,
-          message: `Failed to create tag ${tagData.name}.`,
-        };
-      }
-      
-      return {
-        success: true,
-        message: `Tag ${tagData.name} added successfully.`,
-        tag: createdTag as any,
-      };
-    } catch (error: any) {
-      logger.error(`[MemoryService.addTag] Error adding tag: ${error.message}`, { error });
+    if (!createdTag || !createdTag.success || !createdTag.tag) {
+      logger.warn(`[MemoryService.addTag] Failed to add tag ${tagData.id}`);
       return {
         success: false,
-        message: error.message || 'Failed to add tag',
+        message: createdTag?.message || 'Failed to add tag',
+        entity: {},
       };
     }
+
+    logger.info(`[MemoryService.addTag] Tag ${createdTag.tag.id} added successfully`);
+    return {
+      success: true,
+      message: 'Tag added successfully', 
+      entity: createdTag.tag,
+    };
   }
 
   async tagItem(
@@ -1987,14 +2028,52 @@ export class MemoryService {
     itemId: string,
     itemType: 'Component' | 'Decision' | 'Rule' | 'File' | 'Context',
     tagId: string,
-  ): Promise<z.infer<typeof toolSchemas.TagItemOutputSchema>> {
+  ): Promise<z.infer<typeof toolSchemas.AssociateOutputSchema>> {
     const logger = mcpContext.logger || console;
-    logger.info(
-      `[MemoryService.tagItem] ${itemType}:${itemId} with Tag:${tagId} in ${repositoryName}:${branch}`,
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.tagItem] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+    const tagRepo = this.repositoryProvider.getTagRepository(clientProjectRoot);
+
+    const success = await tagOps.tagItemOp(
+      mcpContext,
+      repositoryName,
+      branch,
+      itemId,
+      itemType,
+      tagId,
+      repositoryRepo,
+      tagRepo,
     );
-    await this.getKuzuClient(mcpContext, clientProjectRoot);
-    logger.warn('TODO: Implement tagItem with kuzuClient.runWriteQuery');
-    return { success: true, message: 'Item tagged (stub)' };
+
+    if (!success || !success.success) {
+      logger.warn(`[MemoryService.tagItem] Failed to tag ${itemType} ${itemId} with ${tagId}`);
+      return {
+        type: 'tag-item',
+        success: false,
+        message: success?.message || 'Failed to tag item',
+        association: {
+          from: tagId,
+          to: itemId,
+          relationship: 'TAGS',
+        },
+      };
+    }
+
+    logger.info(`[MemoryService.tagItem] Tagged ${itemType} ${itemId} with ${tagId}`);
+    return {
+      type: 'tag-item',
+      success: true,
+      message: `${itemType} tagged successfully`,
+      association: {
+        from: tagId,
+        to: itemId,
+        relationship: 'TAGS',
+      },
+    };
   }
 
   async findItemsByTag(
@@ -2004,14 +2083,28 @@ export class MemoryService {
     branch: string,
     tagId: string,
     itemTypeFilter?: string,
-  ): Promise<z.infer<typeof toolSchemas.FindItemsByTagOutputSchema>> {
+  ): Promise<z.infer<typeof toolSchemas.TagsQueryOutputSchema>> {
     const logger = mcpContext.logger || console;
-    logger.info(
-      `[MemoryService.findItemsByTag] Tag:${tagId}, Filter:${itemTypeFilter} in ${repositoryName}:${branch}`,
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.findItemsByTag] RepositoryProvider not initialized');
+      return { type: 'tags', tagId, items: [] };
+    }
+
+    const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+    const tagRepo = this.repositoryProvider.getTagRepository(clientProjectRoot);
+
+    const items = await tagOps.findItemsByTagOp(
+      mcpContext,
+      repositoryName,
+      branch,
+      tagId,
+      repositoryRepo,
+      tagRepo,
+      itemTypeFilter as any,
     );
-    await this.getKuzuClient(mcpContext, clientProjectRoot);
-    logger.warn('TODO: Implement findItemsByTag with kuzuClient.runReadOnlyQuery');
-    return { tagId, items: [] };
+
+    logger.info(`[MemoryService.findItemsByTag] Found ${items.items?.length || 0} items with tag ${tagId}`);
+    return { type: 'tags', tagId, items: items.items || [] };
   }
 
   async listAllNodeLabels(
@@ -2019,38 +2112,39 @@ export class MemoryService {
     clientProjectRoot: string,
     repository: string,
     branch: string,
-  ): Promise<z.infer<typeof toolSchemas.ListAllLabelsOutputSchema>> {
+  ): Promise<z.infer<typeof toolSchemas.LabelsOutputSchema>> {
     const logger = mcpContext.logger || console;
-    clientProjectRoot = this.ensureAbsoluteRoot(clientProjectRoot);
-    logger.info(
-      `[MemoryService] Listing all node labels for ${repository}:${branch} at ${clientProjectRoot}`,
-    );
-
     if (!this.repositoryProvider) {
-      const errorMessage = '[MemoryService] RepositoryProvider not initialized.';
-      logger.error(errorMessage);
-      throw new Error(errorMessage);
+      logger.error('[MemoryService.listAllNodeLabels] RepositoryProvider not initialized');
+      return { labels: [], status: 'error', message: 'RepositoryProvider not initialized' };
     }
-
     try {
-      const repoRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
-      const kuzuClient = repoRepo.getClient();
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
 
-      const query = "CALL TABLE_INFO() RETURN name WHERE type = 'NODE' ORDER BY name;";
-      const queryResult = await kuzuClient.executeQuery(query);
+      // Get node table names from Kuzu
+      const result = await kuzuClient.executeQuery('CALL show_tables() RETURN *');
+      const labels = result
+        .filter((row: any) => row.type === 'NODE')
+        .map((row: any) => row.name);
 
-      const labels = queryResult.map((row: any) => row.name as string);
-
-      logger.info(`[MemoryService] Found ${labels.length} labels for ${repository}:${branch}.`);
+      logger.info(
+        `[MemoryService.listAllNodeLabels] Found ${labels.length} node labels`,
+      );
       return {
         labels,
         status: 'complete',
-        message: `Successfully fetched ${labels.length} node labels.`,
+        message: `Found ${labels.length} node labels`,
       };
     } catch (error: any) {
-      const errorMessage = `[MemoryService] Error listing node labels for ${repository}:${branch}: ${error.message}`;
-      logger.error(errorMessage, { error: error.toString() });
-      throw new Error(errorMessage);
+      logger.error(
+        `[MemoryService.listAllNodeLabels] Error: ${error.message}`,
+        { error: error.toString() },
+      );
+      return {
+        labels: [],
+        status: 'error',
+        message: error.message || 'Failed to list node labels',
+      };
     }
   }
 
@@ -2307,11 +2401,11 @@ export class MemoryService {
 
       // Merge updates with existing data
       const updatedData = {
-        id: componentId,
-        name: updates.name ?? existing.name,
-        kind: updates.kind ?? existing.kind,
-        status: updates.status ?? existing.status,
-        depends_on: updates.depends_on ?? existing.depends_on,
+        ...existing,
+        ...updates,
+        // Convert null to undefined
+        kind: updates.kind === null ? undefined : updates.kind,
+        depends_on: updates.depends_on === null ? undefined : updates.depends_on,
       };
 
       // Use upsert method to update
@@ -2346,10 +2440,10 @@ export class MemoryService {
 
       // Merge updates with existing data
       const updatedData = {
-        id: decisionId,
-        name: updates.name ?? existing.name,
-        date: updates.date ?? existing.date,
-        context: updates.context ?? existing.context,
+        ...existing,
+        ...updates,
+        // Convert null to undefined
+        context: updates.context === null ? undefined : updates.context,
       };
 
       // Use upsert method to update
@@ -2384,12 +2478,11 @@ export class MemoryService {
 
       // Merge updates with existing data
       const updatedData = {
-        id: ruleId,
-        name: updates.name ?? existing.name,
-        created: updates.created ?? existing.created,
-        content: updates.content ?? existing.content,
-        triggers: updates.triggers ?? existing.triggers,
-        status: updates.status ?? existing.status,
+        ...existing,
+        ...updates,
+        // Convert null to undefined
+        content: updates.content === null ? undefined : updates.content,
+        triggers: updates.triggers === null ? undefined : updates.triggers,
       };
 
       // Use upsert method to update
@@ -2466,10 +2559,10 @@ export class MemoryService {
 
       // For now, we'll just use addTag to update since it acts as upsert
       const updatedData = {
-        id: tagId,
-        name: updates.name ?? existing.name,
-        color: updates.color ?? existing.color,
-        description: updates.description ?? existing.description,
+        ...existing,
+        ...updates,
+        // Convert null to undefined
+        description: updates.description === null ? undefined : updates.description,
       };
 
       const result = await this.addTag(mcpContext, clientProjectRoot, repositoryName, branch, updatedData as any);

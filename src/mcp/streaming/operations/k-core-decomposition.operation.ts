@@ -58,6 +58,7 @@ export class KCoreDecompositionOperation {
 
       // Call the MemoryService's kCoreDecomposition method with the correct signature
       const kCoreOutput = await memoryService.kCoreDecomposition(createMockContext(), clientProjectRoot, {
+        type: 'k-core',
         repository: repositoryName,
         branch: branch,
         projectedGraphName: projectedGraphName,
@@ -66,8 +67,8 @@ export class KCoreDecompositionOperation {
         k: k,
       });
 
-      // Ensure kCoreOutput and kCoreOutput.results are defined before accessing components
-      const components = kCoreOutput?.results?.components || [];
+      // The new format returns nodes directly, not in a results property
+      const nodes = kCoreOutput?.nodes || [];
       const resultStatus = kCoreOutput?.status || 'error'; // Default to error if status is not present
 
       const resultPayload = {
@@ -78,7 +79,7 @@ export class KCoreDecompositionOperation {
         projectedGraphName,
         results: {
           k: k, // k is passed in, so it's known
-          components: components,
+          components: nodes.map((n) => ({ nodeId: n.id, coreness: n.coreNumber })),
         },
         message: kCoreOutput?.message, // Include message from output if available
       };
@@ -86,8 +87,8 @@ export class KCoreDecompositionOperation {
       if (progressHandler) {
         progressHandler.progress({
           status: 'in_progress',
-          message: `K-Core Decomposition processing for ${repositoryName}/${branch}. Components found: ${components.length}.`,
-          componentsCount: components.length,
+          message: `K-Core Decomposition processing for ${repositoryName}/${branch}. Components found: ${nodes.length}.`,
+          componentsCount: nodes.length,
         });
 
         // Send final progress event
