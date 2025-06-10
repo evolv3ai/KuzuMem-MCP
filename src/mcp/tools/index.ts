@@ -34,6 +34,7 @@ export { contextTool } from './unified/context-tool';
 export { queryTool } from './unified/query-tool';
 export { associateTool } from './unified/associate-tool';
 export { analyzeTool } from './unified/analyze-tool';
+export { detectTool } from './unified/detect-tool';
 
 // Import all tools for the combined array
 import { initMemoryBankTool } from './init-memory';
