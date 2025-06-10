@@ -145,12 +145,13 @@ describe('Query Tool Tests', () => {
   describe('Relationships Query', () => {
     it('should find related items', async () => {
       const mockResult = {
+        status: 'complete',
         relatedItems: [
           { id: 'comp-2', type: 'Component' },
           { id: 'rule-1', type: 'Rule' },
         ],
       };
-      mockMemoryService.getRelatedItems.mockResolvedValue(mockResult);
+      mockMemoryService.getRelatedItems.mockResolvedValue(mockResult as any);
 
       const result = await queryHandler(
         {
@@ -199,9 +200,10 @@ describe('Query Tool Tests', () => {
   describe('Dependencies Query', () => {
     it('should get component dependencies', async () => {
       const mockResult = {
+        status: 'complete',
         dependencies: [{ id: 'comp-2', name: 'Component 2', type: 'Component' }],
       };
-      mockMemoryService.getComponentDependencies.mockResolvedValue(mockResult);
+      mockMemoryService.getComponentDependencies.mockResolvedValue(mockResult as any);
 
       const result = await queryHandler(
         {
@@ -223,9 +225,10 @@ describe('Query Tool Tests', () => {
 
     it('should get component dependents', async () => {
       const mockResult = {
+        status: 'complete',
         dependents: [{ id: 'comp-3', name: 'Component 3', type: 'Component' }],
       };
-      mockMemoryService.getComponentDependents.mockResolvedValue(mockResult);
+      mockMemoryService.getComponentDependents.mockResolvedValue(mockResult as any);
 
       const result = await queryHandler(
         {
@@ -262,10 +265,11 @@ describe('Query Tool Tests', () => {
   describe('Governance Query', () => {
     it('should get governing items for component', async () => {
       const mockResult = {
+        status: 'complete',
         decisions: [{ id: 'dec-1', name: 'Decision 1' }],
         rules: [{ id: 'rule-1', name: 'Rule 1' }],
       };
-      mockMemoryService.getGoverningItemsForComponent.mockResolvedValue(mockResult);
+      mockMemoryService.getGoverningItemsForComponent.mockResolvedValue(mockResult as any);
 
       const result = await queryHandler(
         {
@@ -300,12 +304,13 @@ describe('Query Tool Tests', () => {
   describe('History Query', () => {
     it('should get item contextual history', async () => {
       const mockResult = {
+        status: 'complete',
         contextHistory: [
           { id: 'ctx-1', summary: 'Created component' },
           { id: 'ctx-2', summary: 'Updated component' },
         ],
       };
-      mockMemoryService.getItemContextualHistory.mockResolvedValue(mockResult);
+      mockMemoryService.getItemContextualHistory.mockResolvedValue(mockResult as any);
 
       const result = await queryHandler(
         {

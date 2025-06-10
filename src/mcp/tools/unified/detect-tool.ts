@@ -69,20 +69,6 @@ export const detectTool: McpTool = {
       components: {
         type: 'array',
         description: 'Detected components with their nodes',
-        items: {
-          type: 'object',
-          properties: {
-            componentId: {
-              type: 'integer',
-              description: 'Component identifier',
-            },
-            nodes: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Node IDs in this component',
-            },
-          },
-        },
       },
       totalComponents: {
         type: 'integer',

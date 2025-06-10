@@ -48,8 +48,15 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
 
     switch (type) {
       case 'components': {
-        for (let i = 0; i < data.length; i++) {
-          const component = data[i];
+        const componentData = data as Array<{
+          id: string;
+          name: string;
+          kind?: string;
+          status?: 'active' | 'deprecated' | 'planned';
+          depends_on?: string[];
+        }>;
+        for (let i = 0; i < componentData.length; i++) {
+          const component = componentData[i];
           try {
             // Check if exists
             if (!overwrite) {
@@ -101,8 +108,14 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
       }
 
       case 'decisions': {
-        for (let i = 0; i < data.length; i++) {
-          const decision = data[i];
+        const decisionData = data as Array<{
+          id: string;
+          name: string;
+          date: string;
+          context?: string;
+        }>;
+        for (let i = 0; i < decisionData.length; i++) {
+          const decision = decisionData[i];
           try {
             // Check if exists
             if (!overwrite) {
@@ -153,8 +166,16 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
       }
 
       case 'rules': {
-        for (let i = 0; i < data.length; i++) {
-          const rule = data[i];
+        const ruleData = data as Array<{
+          id: string;
+          name: string;
+          created: string;
+          content: string;
+          triggers?: string[];
+          status?: 'active' | 'deprecated';
+        }>;
+        for (let i = 0; i < ruleData.length; i++) {
+          const rule = ruleData[i];
           try {
             // Check if exists
             if (!overwrite) {
@@ -182,7 +203,7 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
                 created: rule.created,
                 content: rule.content,
                 triggers: rule.triggers,
-                status: rule.status,
+                status: rule.status || 'active',
               },
               branch,
             );
