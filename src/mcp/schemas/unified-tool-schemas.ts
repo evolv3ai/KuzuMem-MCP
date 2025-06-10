@@ -141,6 +141,61 @@ export const EntityOutputSchema = z.union([
 ]);
 
 // ============================================
+// Introspect Tool Schemas
+// ============================================
+
+export const IntrospectInputSchema = z.object({
+  query: z.enum(['labels', 'count', 'properties', 'indexes']),
+  clientProjectRoot: z.string().optional(), // From session
+  repository: z.string(),
+  branch: z.string().default('main'),
+  target: z.string().optional(), // Required for count and properties queries
+});
+
+// Different output schemas for each query type
+export const LabelsOutputSchema = z.object({
+  labels: z.array(z.string()),
+  status: z.enum(['complete', 'error']),
+  message: z.string(),
+});
+
+export const CountOutputSchema = z.object({
+  label: z.string(),
+  count: z.number(),
+  message: z.string().optional(),
+});
+
+export const PropertiesOutputSchema = z.object({
+  label: z.string(),
+  properties: z.array(
+    z.object({
+      name: z.string(),
+      type: z.string(),
+    }),
+  ),
+});
+
+export const IndexesOutputSchema = z.object({
+  indexes: z.array(
+    z.object({
+      name: z.string(),
+      tableName: z.string(),
+      propertyName: z.string(),
+      isPrimaryKey: z.boolean(),
+      indexType: z.string(),
+    }),
+  ),
+});
+
+// Union of all introspect outputs
+export const IntrospectOutputSchema = z.union([
+  LabelsOutputSchema,
+  CountOutputSchema,
+  PropertiesOutputSchema,
+  IndexesOutputSchema,
+]);
+
+// ============================================
 // Context Tool Schemas
 // ============================================
 
@@ -151,12 +206,6 @@ export const EntityOutputSchema = z.union([
 // ============================================
 
 // TODO: Add query tool schemas
-
-// ============================================
-// Introspect Tool Schemas
-// ============================================
-
-// TODO: Add introspect tool schemas
 
 // ============================================
 // Associate Tool Schemas

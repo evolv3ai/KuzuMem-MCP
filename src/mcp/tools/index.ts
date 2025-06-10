@@ -29,6 +29,7 @@ export { shortestPathTool } from './shortest-path-tool';
 // Unified Tools (New Consolidated Tools)
 export { memoryBankTool } from './unified/memory-bank-tool';
 export { entityTool } from './unified/entity-tool';
+export { introspectTool } from './unified/introspect-tool';
 
 // Import all tools for the combined array
 import { initMemoryBankTool } from './init-memory';
