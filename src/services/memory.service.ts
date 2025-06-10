@@ -1567,7 +1567,9 @@ export class MemoryService {
     const query =
       sanitizedLabel === 'Repository'
         ? `MATCH (n:Repository {id: $repoId, branch: $branch}) RETURN count(n) AS node_count`
-        : `MATCH (n:\`${sanitizedLabel}\`) WHERE n.repository = $repoId AND n.branch = $branch RETURN count(n) AS node_count`;
+        : sanitizedLabel === 'File'
+          ? `MATCH (n:\`${sanitizedLabel}\`) WHERE n.repository = $repoId AND n.branch = $branch RETURN count(n) AS node_count`
+          : `MATCH (n:\`${sanitizedLabel}\`) WHERE n.branch = $branch RETURN count(n) AS node_count`;
     try {
       logger.debug(`[MemoryService.countNodesByLabel] Executing Kuzu query: ${query}`, {
         repoId,
@@ -1616,12 +1618,16 @@ export class MemoryService {
     const query =
       sanitizedLabel === 'Repository'
         ? `MATCH (n:Repository {id: $repoId, branch: $branch}) RETURN n SKIP $offset LIMIT $limit`
-        : `MATCH (n:\`${sanitizedLabel}\`) WHERE n.repository = $repoId AND n.branch = $branch RETURN n SKIP $offset LIMIT $limit`;
+        : sanitizedLabel === 'File'
+          ? `MATCH (n:\`${sanitizedLabel}\`) WHERE n.repository = $repoId AND n.branch = $branch RETURN n SKIP $offset LIMIT $limit`
+          : `MATCH (n:\`${sanitizedLabel}\`) WHERE n.branch = $branch RETURN n SKIP $offset LIMIT $limit`;
 
     const countQuery =
       sanitizedLabel === 'Repository'
         ? `MATCH (n:Repository {id: $repoId, branch: $branch}) RETURN count(n) AS total`
-        : `MATCH (n:\`${sanitizedLabel}\`) WHERE n.repository = $repoId AND n.branch = $branch RETURN count(n) AS total`;
+        : sanitizedLabel === 'File'
+          ? `MATCH (n:\`${sanitizedLabel}\`) WHERE n.repository = $repoId AND n.branch = $branch RETURN count(n) AS total`
+          : `MATCH (n:\`${sanitizedLabel}\`) WHERE n.branch = $branch RETURN count(n) AS total`;
     try {
       logger.debug(`[MemoryService.listNodesByLabel] Query: ${query}, CountQuery: ${countQuery}`, {
         repoId,

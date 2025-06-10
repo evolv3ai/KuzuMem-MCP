@@ -323,7 +323,7 @@ export class KuzuDBClient {
         );
       }
 
-      // Check if schema needs initialization by verifying a key table's existence
+      // Check if schema needs initialization by verifying database file structure
       let schemaNeedsInit = true;
 
       await timeOperation(
@@ -332,32 +332,96 @@ export class KuzuDBClient {
         reportProgress,
         async () => {
           if (!KuzuDBClient.initializationPromises.has(this.dbPath)) {
-            // First check in-memory flag for current process
+            // Check if database files already exist with some content
             try {
-              // Try to query a known table. If this fails or returns empty, schema might not be there.
-              // show_tables() is a Kuzu system function that lists tables.
-              console.log(
-                `[DEBUG] KuzuDBClient: Checking for existing tables in ${this.dbPath}...`,
-              );
-              const tables = await this.executeQuery('CALL show_tables() RETURN *;');
-              console.log(`[DEBUG] KuzuDBClient: show_tables() returned:`, tables);
-              const repositoryTableExists = tables.some((t: any) => t.name === 'Repository');
-              console.log(
-                `[DEBUG] KuzuDBClient: Repository table exists? ${repositoryTableExists}`,
-              );
+              const dbDir = path.dirname(this.dbPath);
+              const dbFiles = fs
+                .readdirSync(dbDir)
+                .filter((f) => f.startsWith(path.basename(this.dbPath)));
 
-              if (repositoryTableExists) {
+              if (dbFiles.length > 1) {
+                // Multiple files suggest database has been initialized
                 console.log(
-                  `KuzuDBClient: Schema (Repository table) already exists in ${this.dbPath}. Skipping DDL.`,
+                  `KuzuDBClient: Database files exist (${dbFiles.length} files), attempting schema validation...`,
                 );
-                schemaNeedsInit = false;
+
+                // Try to validate schema with a simple query without parameters
+                try {
+                  const conn = this.getConnection();
+                  const simpleResult = await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(
+                      () => reject(new Error('Schema check timeout')),
+                      5000,
+                    );
+
+                    try {
+                      // Use a very simple query
+                      const progressCallback = function () {
+                        /* no-op */
+                      };
+                      const queryPromise = conn.query(
+                        'CALL show_tables() RETURN *;',
+                        progressCallback,
+                      );
+
+                      if (queryPromise && typeof queryPromise.then === 'function') {
+                        queryPromise
+                          .then((result: any) => {
+                            clearTimeout(timeout);
+                            if (result && typeof result.getAll === 'function') {
+                              result.getAll().then(resolve).catch(reject);
+                            } else {
+                              resolve(result);
+                            }
+                          })
+                          .catch(reject);
+                      } else {
+                        clearTimeout(timeout);
+                        if (queryPromise && typeof queryPromise.getAll === 'function') {
+                          queryPromise.getAll().then(resolve).catch(reject);
+                        } else {
+                          resolve(queryPromise);
+                        }
+                      }
+                    } catch (syncError) {
+                      clearTimeout(timeout);
+                      reject(syncError);
+                    }
+                  });
+
+                  const tables = simpleResult as any[];
+                  const repositoryTableExists =
+                    tables && tables.some((t: any) => t.name === 'Repository');
+
+                  if (repositoryTableExists) {
+                    console.log(
+                      `KuzuDBClient: Schema validation passed - Repository table exists. Skipping DDL.`,
+                    );
+                    schemaNeedsInit = false;
+                  } else {
+                    console.log(
+                      `KuzuDBClient: Schema validation failed - Repository table not found. Will reinitialize.`,
+                    );
+                    schemaNeedsInit = true;
+                  }
+                } catch (validationError) {
+                  console.warn(
+                    `KuzuDBClient: Schema validation failed, will reinitialize schema:`,
+                    validationError,
+                  );
+                  schemaNeedsInit = true;
+                }
+              } else {
+                console.log(
+                  `KuzuDBClient: New database (${dbFiles.length} files), will initialize schema.`,
+                );
+                schemaNeedsInit = true;
               }
             } catch (e) {
               console.warn(
-                `KuzuDBClient: Error checking for existing tables in ${this.dbPath}, assuming schema needs init.`,
+                `KuzuDBClient: Error checking database files in ${this.dbPath}, assuming schema needs init.`,
                 e,
               );
-              // If querying tables fails, assume schema needs to be initialized.
               schemaNeedsInit = true;
             }
           } else {
@@ -434,37 +498,46 @@ export class KuzuDBClient {
     const conn = this.getConnection();
 
     try {
-      let result;
+      // Create a timeout promise
+      const timeoutMs = 30000; // 30 seconds timeout
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error(`Query timeout after ${timeoutMs}ms`)), timeoutMs);
+      });
 
-      if (params && Object.keys(params).length > 0) {
-        // If we have parameters, prepare the statement first then execute it
-        const preparedStatement = await conn.prepare(query);
-        if (!preparedStatement.isSuccess()) {
-          throw new Error(preparedStatement.getErrorMessage());
+      const executePromise = (async () => {
+        if (params && Object.keys(params).length > 0) {
+          // If we have parameters, prepare the statement first then execute it
+          const preparedStatement = await conn.prepare(query);
+          if (!preparedStatement.isSuccess()) {
+            throw new Error(preparedStatement.getErrorMessage());
+          }
+
+          // Pass progressCallback as optional third parameter to execute
+          const progressCallback = function (
+            pipelineProgress: number,
+            numPipelinesFinished: number,
+            numPipelines: number,
+          ) {
+            // Simple no-op callback with proper signature for execute method
+            // Do nothing but maintain proper function signature expected by Kuzu
+          };
+          return await conn.execute(preparedStatement, params, progressCallback);
+        } else {
+          // For queries without parameters, use query method directly
+          const progressCallback = function (
+            pipelineProgress: number,
+            numPipelinesFinished: number,
+            numPipelines: number,
+          ) {
+            // Simple no-op callback with proper signature for query method
+            // Do nothing but maintain proper function signature expected by Kuzu
+          };
+          return await conn.query(query, progressCallback);
         }
+      })();
 
-        // Pass progressCallback as optional third parameter to execute
-        const progressCallback = function (
-          pipelineProgress: number,
-          numPipelinesFinished: number,
-          numPipelines: number,
-        ) {
-          // Simple no-op callback with proper signature for execute method
-          // Do nothing but maintain proper function signature expected by Kuzu
-        };
-        result = await conn.execute(preparedStatement, params, progressCallback);
-      } else {
-        // For queries without parameters, use query method directly
-        const progressCallback = function (
-          pipelineProgress: number,
-          numPipelinesFinished: number,
-          numPipelines: number,
-        ) {
-          // Simple no-op callback with proper signature for query method
-          // Do nothing but maintain proper function signature expected by Kuzu
-        };
-        result = await conn.query(query, progressCallback);
-      }
+      // Race between the query execution and timeout
+      const result = await Promise.race([executePromise, timeoutPromise]);
 
       // Process result: if it has getAll (like a QueryResult from a SELECT/RETURN),
       // then call it. Otherwise, return the result directly (might be info for DML).
