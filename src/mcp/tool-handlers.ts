@@ -38,6 +38,7 @@ import { entityHandler } from './services/handlers/unified/entity-handler';
 import { introspectHandler } from './services/handlers/unified/introspect-handler';
 import { contextHandler } from './services/handlers/unified/context-handler';
 import { queryHandler } from './services/handlers/unified/query-handler';
+import { associateHandler } from './services/handlers/unified/associate-handler';
 
 // Import Operation Classes - these will be refactored or their logic moved/simplified
 // For now, keep them to avoid breaking streaming tool stubs immediately.
@@ -1737,6 +1738,7 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
   'introspect': introspectHandler,
   'context': contextHandler,
   'query': queryHandler,
+  'associate': associateHandler,
 
   // Legacy tool handlers
 };
