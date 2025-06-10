@@ -2,7 +2,7 @@
 
 > **Enhance AI coding assistants with persistent, graph-based knowledge**
 
-The KuzuMem-MCP server provides a structured approach to storing and retrieving repository knowledge, enabling AI coding assistants to maintain context across sessions and branches.
+The KuzuMem-MCP server provides a structured approach to storing and retrieving repository knowledge, enabling AI coding assistants to maintain context across sessions and branches. Recently consolidated from 29 individual tools to 11 unified tools for improved maintainability and user experience.
 
 ## 🎯 Purpose & Goals
 
@@ -14,6 +14,7 @@ This project addresses several key challenges in AI-assisted development:
 - **Provide graph-based memory storage** for enhanced context retrieval
 - **Enable AI tools** to understand project architecture
 - **Client isolation** for supporting multiple client projects with dedicated memory banks
+- **Unified tool interface** for simplified integration and usage
 
 ## ✨ Key Benefits
 
@@ -41,13 +42,14 @@ The implementation supports branch-based workflows:
 - Branch-specific development knowledge
 - Clean context switching when changing branches
 
-### 🧰 Graph Traversal & Analysis
+### 🧰 Unified Tool Architecture
 
-MCP tools include capabilities for:
+The recent consolidation provides:
 
-- Component dependency analysis
-- Component relationship mapping
-- Structural importance identification
+- Reduced complexity from 29 to 11 tools
+- Consistent parameter patterns across all tools
+- Simplified learning curve for new users
+- Better maintainability and testing
 
 ### 🏢 Client Project Isolation
 
@@ -66,22 +68,26 @@ The graph-based architecture enables powerful queries that would be difficult or
 
 ```bash
 # Find all components that would be affected by changing the Authentication service
-$ curl -X POST http://localhost:3000/tools/get-component-dependents \
+$ curl -X POST http://localhost:3000/tools/query \
   -H "Content-Type: application/json" \
   -d '{
+    "type": "dependencies",
     "clientProjectRoot": "/path/to/project", 
     "repository": "my-app", 
     "branch": "main", 
-    "componentId": "comp-AuthService"
+    "componentId": "comp-AuthService",
+    "direction": "dependents"
   }'
 
 # Result shows not just direct users of the Auth service, but the entire dependency chain
 {
-  "dependents": [
-    {"id": "comp-AdminPanel", "name": "Admin Panel", "path": ["comp-AuthService", "comp-AdminAPI", "comp-AdminPanel"]},
-    {"id": "comp-UserProfile", "name": "User Profile", "path": ["comp-AuthService", "comp-UserProfile"]},
-    {"id": "comp-PaymentService", "name": "Payment Service", "path": ["comp-AuthService", "comp-PaymentService"]},
-    // ... additional dependent components with their dependency paths
+  "type": "dependencies",
+  "componentId": "comp-AuthService",
+  "direction": "dependents",
+  "components": [
+    {"id": "comp-AdminPanel", "name": "Admin Panel", "depends_on": ["comp-AdminAPI"]},
+    {"id": "comp-UserProfile", "name": "User Profile", "depends_on": ["comp-AuthService"]},
+    {"id": "comp-PaymentService", "name": "Payment Service", "depends_on": ["comp-AuthService"]}
   ]
 }
 ```
@@ -90,9 +96,10 @@ $ curl -X POST http://localhost:3000/tools/get-component-dependents \
 
 ```bash
 # Find all decisions and rules affecting the UserProfile component
-$ curl -X POST http://localhost:3000/tools/get-governing-items-for-component \
+$ curl -X POST http://localhost:3000/tools/query \
   -H "Content-Type: application/json" \
   -d '{
+    "type": "governance",
     "clientProjectRoot": "/path/to/project",
     "repository": "my-app", 
     "branch": "main", 
@@ -101,6 +108,8 @@ $ curl -X POST http://localhost:3000/tools/get-governing-items-for-component \
 
 # Results include decisions, rules and when/why they were made
 {
+  "type": "governance",
+  "componentId": "comp-UserProfile",
   "decisions": [
     {"id": "dec-20250315-GDPR", "name": "GDPR Compliance Strategy", "date": "2025-03-15", "context": "EU regulations required ..."},
     {"id": "dec-20250401-Caching", "name": "Profile Data Caching Policy", "date": "2025-04-01", "context": "Performance issues in production..."}
@@ -108,10 +117,6 @@ $ curl -X POST http://localhost:3000/tools/get-governing-items-for-component \
   "rules": [
     {"id": "rule-security-pii", "name": "PII Data Handling", "content": "All personally identifiable information must be..."},
     {"id": "rule-frontend-state", "name": "Frontend State Management", "content": "User state should be managed using..."}
-  ],
-  "contextHistory": [
-    {"date": "2025-02-10", "summary": "Initial implementation", "agent": "dev-alice"},
-    {"date": "2025-03-15", "summary": "Updated for GDPR compliance", "agent": "dev-bob"}
   ]
 }
 ```
@@ -120,21 +125,26 @@ $ curl -X POST http://localhost:3000/tools/get-governing-items-for-component \
 
 ```bash
 # Find the shortest relationship path between two components
-$ curl -X POST http://localhost:3000/tools/shortest-path \
+$ curl -X POST http://localhost:3000/tools/analyze \
   -H "Content-Type: application/json" \
-  -d '{"repository": "my-app", "branch": "main", "startNodeId": "comp-AdminPanel", "endNodeId": "comp-DataStore"}'
+  -d '{
+    "type": "shortest-path",
+    "repository": "my-app", 
+    "branch": "main", 
+    "projectedGraphName": "component-paths",
+    "nodeTableNames": ["Component"],
+    "relationshipTableNames": ["DEPENDS_ON"],
+    "startNodeId": "comp-AdminPanel", 
+    "endNodeId": "comp-DataStore"
+  }'
 
 # Results show how components are connected through the system
 {
-  "path": [
-    {"id": "comp-AdminPanel", "name": "Admin Panel", "relationshipType": "DEPENDS_ON"},
-    {"id": "comp-AdminAPI", "name": "Admin API", "relationshipType": "DEPENDS_ON"},
-    {"id": "comp-DataAccess", "name": "Data Access Layer", "relationshipType": "DEPENDS_ON"},
-    {"id": "comp-DataStore", "name": "Data Store"}
-  ],
-  "contextualDecisions": [
-    {"id": "dec-20250220-DataAccess", "name": "Data Access Pattern Selection", "affects": ["comp-DataAccess", "comp-DataStore"]}
-  ]
+  "type": "shortest-path",
+  "status": "complete",
+  "pathFound": true,
+  "path": ["comp-AdminPanel", "comp-AdminAPI", "comp-DataAccess", "comp-DataStore"],
+  "pathLength": 4
 }
 ```
 
@@ -142,17 +152,25 @@ $ curl -X POST http://localhost:3000/tools/shortest-path \
 
 ```bash
 # Identify critical components using PageRank algorithm
-$ curl -X POST http://localhost:3000/tools/pagerank \
+$ curl -X POST http://localhost:3000/tools/analyze \
   -H "Content-Type: application/json" \
-  -d '{"repository": "my-app", "branch": "main"}'
+  -d '{
+    "type": "pagerank",
+    "repository": "my-app", 
+    "branch": "main",
+    "projectedGraphName": "component-importance",
+    "nodeTableNames": ["Component"],
+    "relationshipTableNames": ["DEPENDS_ON"]
+  }'
 
 # Results highlight components that are most fundamental to the system
 {
-  "rankedComponents": [
-    {"id": "comp-DataStore", "name": "Data Store", "rank": 0.89, "dependentCount": 12},
-    {"id": "comp-AuthService", "name": "Auth Service", "rank": 0.76, "dependentCount": 8},
-    {"id": "comp-APIGateway", "name": "API Gateway", "rank": 0.73, "dependentCount": 7},
-    // ... more components ranked by centrality
+  "type": "pagerank",
+  "status": "complete",
+  "nodes": [
+    {"id": "comp-DataStore", "pagerank": 0.89},
+    {"id": "comp-AuthService", "pagerank": 0.76},
+    {"id": "comp-APIGateway", "pagerank": 0.73}
   ]
 }
 ```
@@ -161,28 +179,29 @@ $ curl -X POST http://localhost:3000/tools/pagerank \
 
 ```bash
 # Detect natural system boundaries using community detection
-$ curl -X POST http://localhost:3000/tools/louvain-community-detection \
+$ curl -X POST http://localhost:3000/tools/analyze \
   -H "Content-Type: application/json" \
-  -d '{"repository": "my-app", "branch": "main"}'
+  -d '{
+    "type": "louvain",
+    "repository": "my-app", 
+    "branch": "main",
+    "projectedGraphName": "system-modules",
+    "nodeTableNames": ["Component"],
+    "relationshipTableNames": ["DEPENDS_ON"]
+  }'
 
 # Results group components into natural subsystems
 {
-  "communities": [
-    {
-      "id": 0,
-      "name": "Authentication and User Management",
-      "components": ["comp-AuthService", "comp-UserProfile", "comp-PermissionManager"],
-      "cohesion": 0.92
-    },
-    {
-      "id": 1,
-      "name": "Data and Storage",
-      "components": ["comp-DataStore", "comp-DataAccess", "comp-CacheLayer"],
-      "cohesion": 0.87
-    },
-    // ... more communities representing logical subsystems
-  ],
-  "modularity": 0.78
+  "type": "louvain",
+  "status": "complete",
+  "nodes": [
+    {"id": "comp-AuthService", "communityId": 0},
+    {"id": "comp-UserProfile", "communityId": 0},
+    {"id": "comp-PermissionManager", "communityId": 0},
+    {"id": "comp-DataStore", "communityId": 1},
+    {"id": "comp-DataAccess", "communityId": 1},
+    {"id": "comp-CacheLayer", "communityId": 1}
+  ]
 }
 ```
 
@@ -190,20 +209,28 @@ $ curl -X POST http://localhost:3000/tools/louvain-community-detection \
 
 ```bash
 # Find circular dependencies that may indicate design problems
-$ curl -X POST http://localhost:3000/tools/strongly-connected-components \
+$ curl -X POST http://localhost:3000/tools/detect \
   -H "Content-Type: application/json" \
-  -d '{"repository": "my-app", "branch": "main"}'
+  -d '{
+    "type": "strongly-connected",
+    "repository": "my-app", 
+    "branch": "main",
+    "projectedGraphName": "circular-deps",
+    "nodeTableNames": ["Component"],
+    "relationshipTableNames": ["DEPENDS_ON"]
+  }'
 
 # Results show components with circular dependencies
 {
-  "cyclicDependencyGroups": [
+  "type": "strongly-connected",
+  "status": "complete",
+  "components": [
     {
-      "components": ["comp-UserService", "comp-NotificationService", "comp-UserPreferences"],
-      "cycle": "UserService → NotificationService → UserPreferences → UserService",
-      "suggestedRefactoring": "Extract notification preferences to a separate component"
-    },
-    // ... other circular dependency groups
-  ]
+      "componentId": 0,
+      "nodes": ["comp-UserService", "comp-NotificationService", "comp-UserPreferences"]
+    }
+  ],
+  "totalComponents": 1
 }
 ```
 
@@ -237,6 +264,7 @@ This graph structure enables the system to answer complex questions that would b
 This server implements Model Context Protocol standards:
 
 - **Full tool schema definitions** for IDE auto-discovery
+- **Unified tool interface** with consistent parameter patterns
 - **Multiple transport protocols** (HTTP, HTTP Streaming, stdio)
 - **Progressive result streaming** for long-running operations
 - **Error handling and status reporting**
@@ -254,6 +282,7 @@ This server implements Model Context Protocol standards:
 - **🔄 JSON-RPC Communication** - Standard protocol support
 - **🗺️ Graph Traversal Tools** - Path finding and dependency analysis
 - **🔐 Client Project Isolation** - Each client project gets its own memory bank
+- **🎯 Unified Tool Architecture** - 11 consolidated tools from original 29
 
 ## 📅 Feature Timeline
 
@@ -271,6 +300,15 @@ This server implements Model Context Protocol standards:
 - ✅ **Lazy Database Initialization** - Databases only created when explicitly requested
 - ✅ **Improved Error Handling** - Better error messages for database path issues
 
+### Fall 2025 - Tool Consolidation
+
+- ✅ **Tool Consolidation** - Reduced from 29 individual tools to 11 unified tools
+- ✅ **Unified Parameter Patterns** - Consistent interface across all tools
+- ✅ **Memory Operations Refactoring** - Removed Zod dependencies from core operations
+- ✅ **E2E Testing Infrastructure** - Comprehensive tests for stdio and HTTP streaming
+- ✅ **TypeScript Compilation** - All compilation errors resolved
+- ✅ **Documentation Updates** - Basic documentation for unified tools
+
 ## 💡 Use Cases
 
 - **Project Knowledge Continuity** - Maintain context across development sessions
@@ -279,6 +317,7 @@ This server implements Model Context Protocol standards:
 - **Impact Assessment** - Identify affected components when making changes
 - **Onboarding** - Help new team members understand system structure
 - **Multi-Project Support** - Maintain separate memory banks for different projects
+- **Code Review Assistance** - Use governance queries to ensure compliance with rules
 
 ## 🔧 Installation & Usage
 
@@ -317,7 +356,7 @@ DEBUG=1
 
 ### MCP Tools
 
-The server provides tools for repository operations, memory management, and graph traversal. See [README.md](../README.md) for the complete tool list.
+The server provides 11 unified tools for repository operations, memory management, and graph traversal. See [README.md](../README.md) for the complete tool list.
 
 ## 🏗️ Architecture
 
@@ -335,13 +374,15 @@ This project follows a multi-layer architecture:
 - **Memory Operations Layer:**
   - Business logic for memory operations
   - Client project root validation
+  - Refactored to use TypeScript types instead of Zod schemas
 
 - **Service Layer:**
   - Core orchestration through MemoryService
   - Client project awareness for database operations
 
 - **MCP Layer:**
-  - Tool definitions, handlers, and server implementations
+  - Unified tool definitions, handlers, and server implementations
+  - Consistent parameter patterns across all tools
   - Client project root propagation
 
 - **CLI Layer:**
