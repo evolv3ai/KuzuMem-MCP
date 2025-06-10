@@ -408,12 +408,15 @@ export const introspectTool: McpTool = {
 
 ---
 
-## Tool 4: context
-- [ ] Create schemas: `ContextInputSchema`, `ContextUpdateOutputSchema`
-- [ ] Create tool: `src/mcp/tools/unified/context-tool.ts`
-- [ ] Create handler: `src/mcp/services/handlers/unified/context-handler.ts`
-- [ ] Create tests: `src/__tests__/tools/unified/context-tool.test.ts`
-- [ ] Update exports
+## Tool 4: context ✅
+**Status**: COMPLETE
+- Created: `src/mcp/tools/unified/context-tool.ts`
+- Created: `src/mcp/services/handlers/unified/context-handler.ts`
+- Created: `src/__tests__/tools/unified/context-tool.test.ts`
+- Updated: `src/mcp/schemas/unified-tool-schemas.ts`
+- Updated: exports and registrations
+- Tests: 8/8 passing
+- Notes: Only update operation implemented; get-context moved to query tool
 
 ### Files to Create
 - `src/mcp/tools/unified/context-tool.ts`
@@ -924,18 +927,18 @@ rm src/__tests__/tools/*-tool.test.ts # (old ones)
 
 ## 10. Progress Tracker
 
-### Overall Progress: 27% (3/11 tools)
+### Overall Progress: 36% (4/11 tools)
 
 #### Phase 1: Setup ✅
 - [x] Created directories
 - [x] Created schema file
 - [x] Studied patterns
 
-#### Phase 2: Tool Implementation (3/11 complete)
+#### Phase 2: Tool Implementation (4/11 complete)
 - [x] Tool 1: memory-bank (init, get-metadata, update-metadata)
 - [x] Tool 2: entity (add-component, add-decision, add-rule, add-file, add-tag)
 - [x] Tool 3: introspect (list-all-labels, count-nodes-by-label, get-node-properties, list-all-indexes)
-- [ ] Tool 4: context
+- [x] Tool 4: context (update-context)
 - [ ] Tool 5: query
 - [ ] Tool 6: associate
 - [ ] Tool 7: analyze
@@ -1122,6 +1125,6 @@ After all tools are implemented:
 ---
 
 _Last Updated: 2024-12-10_
-_Current Phase: Tool Implementation - Tool 3 Complete ✅_
+_Current Phase: Tool Implementation - Tool 4 Complete ✅_
 _Blockers: None_
-_Next Action: Start implementing Tool 4: context_
+_Next Action: Start implementing Tool 5: query (Most Complex)_
