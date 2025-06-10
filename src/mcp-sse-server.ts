@@ -21,6 +21,7 @@ import path from 'path';
 import { ToolExecutionService } from './mcp/services/tool-execution.service';
 import { toolHandlers } from './mcp/tool-handlers';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
+import { MemoryService } from './services/memory.service';
 
 // Load environment variables
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
@@ -266,6 +267,30 @@ app.get('/tools/list', async (req: Request, res: Response) => {
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
+// Add graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down gracefully');
+
+  // Get MemoryService instance and shut it down
+  try {
+    const memoryService = await MemoryService.getInstance();
+    await memoryService.shutdown();
+  } catch (error) {
+    console.error('Error shutting down MemoryService:', error);
+  }
+
+  // Close all transports
+  for (const transport of Object.values(transports)) {
+    try {
+      transport.close();
+    } catch (error) {
+      console.error('Error closing transport:', error);
+    }
+  }
+
+  process.exit(0);
 });
 
 // Start the server
