@@ -1,478 +1,285 @@
 /**
- * MCP HTTP Streaming Server (New Implementation)
- * Implements the Model Context Protocol using modern HTTP streaming patterns
- * Based on the official TypeScript SDK v1.12+ patterns with proper session management
+ * MCP HTTP Streaming Server
+ * Official MCP TypeScript SDK implementation using McpServer and StreamableHTTPServerTransport
+ * Based on: https://github.com/modelcontextprotocol/typescript-sdk
  */
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import {
-  CallToolRequestSchema,
-  ListPromptsRequestSchema,
-  ListResourcesRequestSchema,
-  ListToolsRequestSchema,
-  isInitializeRequest,
-} from '@modelcontextprotocol/sdk/types.js';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import express, { Request, Response } from 'express';
+import { createServer, type Server } from 'node:http';
+import { AddressInfo } from 'node:net';
 import { randomUUID } from 'node:crypto';
-import path from 'path';
-import { ToolExecutionService } from './mcp/services/tool-execution.service';
-import { toolHandlers } from './mcp/tool-handlers';
-import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
-import { createProgressHandler } from './mcp/streaming/progress-handler';
+import dotenv from 'dotenv';
+import { z } from 'zod';
+
+// Official MCP SDK imports
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+
+// Our tool handlers and services
+import { toolHandlers as sdkToolHandlers } from './mcp/tool-handlers';
 import { MemoryService } from './services/memory.service';
+import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
 
 // Load environment variables
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config();
 
-// Configuration
-const PORT = process.env.PORT || 3001;
-const DEBUG_LEVEL = parseInt(process.env.DEBUG_LEVEL || '0', 10);
-const SESSION_TIMEOUT = parseInt(process.env.SESSION_TIMEOUT || '1800000', 10); // 30 minutes
-const CORS_ORIGINS = process.env.CORS_ORIGINS?.split(',') || [
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://127.0.0.1:3000',
-  'http://127.0.0.1:3001',
-];
+// Server configuration
+const port = parseInt(process.env.HTTP_STREAM_PORT || '3001', 10);
+const host = process.env.HOST || 'localhost';
 
-// Logging utility
-function debugLog(level: number, message: string, ...args: any[]): void {
+// Debug logging
+const DEBUG_LEVEL = parseInt(process.env.DEBUG || '0', 10);
+
+function debugLog(level: number, message: string, data?: any): void {
   if (DEBUG_LEVEL >= level) {
     const timestamp = new Date().toISOString();
-    const logMessage = args.length > 0 ? `${message} ${JSON.stringify(args)}` : message;
-    console.error(`[HTTP-STREAM-${level}] ${timestamp} ${logMessage}`);
+    const logEntry = {
+      timestamp,
+      level: level === 0 ? 'ERROR' : level === 1 ? 'WARN' : level === 2 ? 'INFO' : 'DEBUG',
+      message,
+      component: 'mcp-httpstream-server',
+      data: DEBUG_LEVEL >= 3 ? data : undefined,
+    };
+    console.log(JSON.stringify(logEntry));
   }
 }
 
-// Session management interface
-interface SessionState {
-  sessionId: string;
-  server: Server;
-  transport: StreamableHTTPServerTransport;
-  clientProjectRoot?: string;
-  repository?: string;
-  branch?: string;
-  createdAt: Date;
-  lastActivity: Date;
-}
+// Map to store clientProjectRoot for each repository and branch
+const repositoryRootMap = new Map<string, string>();
 
-// Session store
-const sessions = new Map<string, SessionState>();
-
-// Adapter to convert SdkToolHandler to ToolHandler format (same as stdio server)
-function adaptSdkToolHandler(
-  sdkHandler: (params: any, context: any, memoryService: any) => Promise<any>,
-): (
-  toolArgs: any,
-  memoryService: any,
-  progressHandler?: any,
-  clientProjectRoot?: string,
-) => Promise<any> {
-  return async (toolArgs, memoryService, progressHandler, clientProjectRoot) => {
-    // Create a mock context that matches EnrichedRequestHandlerExtra
-    const context = {
-      logger: {
-        debug: (msg: string, ...logArgs: any[]) =>
-          debugLog(3, logArgs.length > 0 ? `${msg} ${JSON.stringify(logArgs)}` : msg),
-        info: (msg: string, ...logArgs: any[]) =>
-          debugLog(2, logArgs.length > 0 ? `${msg} ${JSON.stringify(logArgs)}` : msg),
-        warn: (msg: string, ...logArgs: any[]) =>
-          debugLog(1, logArgs.length > 0 ? `${msg} ${JSON.stringify(logArgs)}` : msg),
-        error: (msg: string, ...logArgs: any[]) =>
-          debugLog(0, logArgs.length > 0 ? `${msg} ${JSON.stringify(logArgs)}` : msg),
-      },
-      session: {
-        clientProjectRoot,
-        repository: toolArgs.repository,
-        branch: toolArgs.branch,
-      },
-      sendProgress: async (progress: any) => {
-        if (progressHandler) {
-          progressHandler.progress(progress);
-        }
-      },
-      memoryService,
-    };
-
-    // Call the SDK handler with adapted parameters
-    return sdkHandler(toolArgs, context, memoryService);
-  };
-}
-
-// Adapt all tool handlers
-const adaptedToolHandlers: Record<string, any> = {};
-for (const [toolName, handler] of Object.entries(toolHandlers)) {
-  adaptedToolHandlers[toolName] = adaptSdkToolHandler(handler);
-}
-
-// Cleanup inactive sessions
-setInterval(
-  () => {
-    const now = new Date();
-    for (const [sessionId, session] of sessions.entries()) {
-      if (now.getTime() - session.lastActivity.getTime() > SESSION_TIMEOUT) {
-        debugLog(1, `Cleaning up inactive session: ${sessionId}`);
-        try {
-          session.transport.close();
-          session.server.close();
-        } catch (error) {
-          debugLog(0, `Error cleaning up session ${sessionId}:`, error);
-        }
-        sessions.delete(sessionId);
-      }
-    }
-  },
-  10 * 60 * 1000,
-); // Check every 10 minutes
-
-// Create a new MCP server instance
-function createMcpServer(): Server {
-  const server = new Server(
-    {
-      name: 'KuzuMem-MCP-HTTPStream',
-      version: '3.0.0',
-    },
-    {
-      capabilities: {
-        tools: {},
-        resources: {},
-        prompts: {},
-      },
-    },
-  );
-
-  // Set up the list tools handler
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    debugLog(1, `Returning tools/list with ${MEMORY_BANK_MCP_TOOLS.length} tools`);
-
-    const tools = MEMORY_BANK_MCP_TOOLS.map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: tool.parameters || { type: 'object', properties: {}, required: [] },
-    }));
-
-    return { tools };
-  });
-
-  // Set up the call tool handler
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name: toolName, arguments: toolArgs = {} } = request.params;
-    const requestId = 'id' in request ? String(request.id) : randomUUID();
-
-    debugLog(1, `Executing tool: ${toolName} with args:`, toolArgs);
-
-    // Extract clientProjectRoot from tool arguments
-    const effectiveClientProjectRoot = toolArgs.clientProjectRoot as string;
-
-    if (!effectiveClientProjectRoot) {
-      throw new Error(
-        toolName === 'init-memory-bank'
-          ? `Tool '${toolName}' requires clientProjectRoot argument.`
-          : `Server error: clientProjectRoot context not established for tool '${toolName}'. Provide clientProjectRoot in tool arguments.`,
-      );
-    }
-
-    try {
-      // For HTTP transport, we execute tools without progress handlers as they don't support streaming
-      const toolExecutionService = await ToolExecutionService.getInstance();
-
-      const toolResult = await toolExecutionService.executeTool(
-        toolName,
-        toolArgs,
-        adaptedToolHandlers,
-        effectiveClientProjectRoot,
-        undefined, // No progress handler for HTTP transport initially
-        debugLog,
-      );
-
-      if (toolResult !== null) {
-        return {
-          content: [{ type: 'text', text: JSON.stringify(toolResult, null, 2) }],
-          isError: !!toolResult?.error,
-        };
-      } else {
-        return {
-          content: [{ type: 'text', text: 'Tool executed successfully' }],
-        };
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      debugLog(1, `Tool execution error: ${errorMessage}`);
-      return {
-        content: [{ type: 'text', text: `Error: ${errorMessage}` }],
-        isError: true,
-      };
-    }
-  });
-
-  // Set up other request handlers
-  server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    return { resources: [] };
-  });
-
-  server.setRequestHandler(ListPromptsRequestSchema, async () => {
-    return { prompts: [] };
-  });
-
-  return server;
-}
-
-// Create Express app
-const app = express();
-
-// Middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(
-  cors({
-    origin: CORS_ORIGINS,
-    credentials: true,
-    methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Mcp-Session-Id'],
-  }),
+// Create the official MCP server
+const mcpServer = new McpServer(
+  { name: 'KuzuMem-MCP-HTTPStream', version: '1.0.0' },
+  { capabilities: { tools: { list: true, call: true } } },
 );
 
-// Request logging middleware
-app.use((req, res, next) => {
-  const sessionId = req.headers['mcp-session-id'] as string;
-  debugLog(2, `${req.method} ${req.path}`, {
-    sessionId: sessionId ? `${sessionId.substring(0, 8)}...` : 'none',
-    body: req.method === 'POST' ? 'present' : 'none',
-  });
-  next();
-});
+// Create tool schema helper
+function createZodSchema(tool: any) {
+  const shape: Record<string, z.ZodTypeAny> = {};
 
-// Main MCP endpoint - handles POST, GET, and DELETE
-app.all('/mcp', async (req: Request, res: Response) => {
-  const sessionId = req.headers['mcp-session-id'] as string | undefined;
+  if (tool.parameters && tool.parameters.properties) {
+    for (const [propName, propDef] of Object.entries(tool.parameters.properties)) {
+      const prop = propDef as any;
+      let zodType: z.ZodTypeAny = z.string(); // Default to string
 
-  try {
-    if (req.method === 'POST') {
-      await handlePostRequest(req, res, sessionId);
-    } else if (req.method === 'GET') {
-      await handleGetRequest(req, res, sessionId);
-    } else if (req.method === 'DELETE') {
-      await handleDeleteRequest(req, res, sessionId);
-    } else {
-      res.status(405).json({
-        jsonrpc: '2.0',
-        error: {
-          code: -32000,
-          message: `Method ${req.method} not allowed`,
-        },
-        id: null,
-      });
-    }
-  } catch (error) {
-    debugLog(0, 'Error handling MCP request:', error);
-
-    if (!res.headersSent) {
-      res.status(500).json({
-        jsonrpc: '2.0',
-        error: {
-          code: -32603,
-          message: 'Internal server error',
-        },
-        id: null,
-      });
-    }
-  }
-});
-
-// Handle POST requests (client-to-server communication)
-async function handlePostRequest(req: Request, res: Response, sessionId?: string): Promise<void> {
-  let session: SessionState | undefined;
-
-  // Check for existing session
-  if (sessionId && sessions.has(sessionId)) {
-    session = sessions.get(sessionId)!;
-    session.lastActivity = new Date();
-  }
-  // Handle new initialization request
-  else if (!sessionId && isInitializeRequest(req.body)) {
-    const newSessionId = randomUUID();
-
-    // Create new transport with session management
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => newSessionId,
-      onsessioninitialized: (id) => {
-        debugLog(1, `New MCP session initialized: ${id}`);
-      },
-    });
-
-    // Create new server instance
-    const server = createMcpServer();
-
-    // Clean up when transport closes
-    transport.onclose = () => {
-      debugLog(1, `Cleaning up MCP session: ${newSessionId}`);
-      sessions.delete(newSessionId);
-      try {
-        server.close();
-      } catch (error) {
-        debugLog(0, `Error closing server for session ${newSessionId}:`, error);
+      if (prop.type === 'string') {
+        zodType = z.string();
+      } else if (prop.type === 'number') {
+        zodType = z.number();
+      } else if (prop.type === 'boolean') {
+        zodType = z.boolean();
+      } else if (prop.type === 'array') {
+        zodType = z.array(z.string()); // Assume string array
+      } else if (prop.type === 'object') {
+        zodType = z.object({}).passthrough(); // Allow any object
       }
-    };
 
-    // Connect server to transport
-    await server.connect(transport);
+      if (prop.description) {
+        zodType = zodType.describe(prop.description);
+      }
 
-    // Store session
-    session = {
-      sessionId: newSessionId,
-      server,
-      transport,
-      createdAt: new Date(),
-      lastActivity: new Date(),
-    };
-    sessions.set(newSessionId, session);
+      // Handle optional fields
+      if (!tool.parameters.required?.includes(propName)) {
+        zodType = zodType.optional();
+      }
 
-    debugLog(1, `Created new session: ${newSessionId}`);
+      shape[propName] = zodType;
+    }
   }
-  // Invalid request
-  else {
-    res.status(400).json({
-      jsonrpc: '2.0',
-      error: {
-        code: -32000,
-        message: 'Bad Request: No valid session ID provided or not an initialization request',
+
+  return shape;
+}
+
+// Register all our tools with the MCP server
+function registerTools() {
+  debugLog(2, 'Registering MCP tools...');
+
+  // Add the initialize method handler (this is handled automatically by McpServer)
+  // Just logging for debugging
+  debugLog(2, 'MCP server will handle initialization automatically');
+
+  for (const tool of MEMORY_BANK_MCP_TOOLS) {
+    debugLog(3, `Registering tool: ${tool.name}`);
+
+    const schema = createZodSchema(tool);
+
+    mcpServer.tool(
+      tool.name,
+      tool.description,
+      schema as any, // Type assertion to bypass complex inference
+      async (args, context): Promise<CallToolResult> => {
+        debugLog(3, `Executing tool: ${tool.name}`, args);
+
+        // Handle clientProjectRoot storage for memory-bank init operations
+        if (tool.name === 'memory-bank' && args.operation === 'init') {
+          const repoBranchKey = `${args.repository}:${args.branch}`;
+          repositoryRootMap.set(repoBranchKey, args.clientProjectRoot);
+          debugLog(3, `Stored clientProjectRoot for ${repoBranchKey}: ${args.clientProjectRoot}`);
+        }
+
+        // Get clientProjectRoot from stored map or args
+        let effectiveClientProjectRoot = args.clientProjectRoot;
+        if (!effectiveClientProjectRoot && args.repository && args.branch) {
+          const repoBranchKey = `${args.repository}:${args.branch}`;
+          effectiveClientProjectRoot = repositoryRootMap.get(repoBranchKey);
+        }
+
+        if (!effectiveClientProjectRoot) {
+          throw new Error(
+            `ClientProjectRoot not established for tool '${tool.name}'. Initialize memory bank first.`,
+          );
+        }
+
+        // Get the SDK handler
+        const handler = sdkToolHandlers[tool.name];
+        if (!handler) {
+          throw new Error(`Tool handler not found: ${tool.name}`);
+        }
+
+        // Create enriched context
+        const memoryService = await MemoryService.getInstance();
+        const enrichedContext = {
+          ...context,
+          logger: {
+            debug: (msg: string, data?: any) => debugLog(3, `[${tool.name}] ${msg}`, data),
+            info: (msg: string, data?: any) => debugLog(2, `[${tool.name}] ${msg}`, data),
+            warn: (msg: string, data?: any) => debugLog(1, `[${tool.name}] ${msg}`, data),
+            error: (msg: string, data?: any) => debugLog(0, `[${tool.name}] ${msg}`, data),
+          },
+          session: {
+            clientProjectRoot: effectiveClientProjectRoot,
+            repository: args.repository,
+            branch: args.branch,
+          },
+          sendProgress: async (progressData: any) => {
+            // Send progress notifications through MCP
+            await context.sendNotification({
+              method: 'notifications/progress',
+              params: {
+                progressToken: context.requestId || randomUUID(),
+                ...progressData,
+              },
+            });
+          },
+          memoryService,
+        };
+
+        // Add clientProjectRoot to args
+        const enhancedArgs = { ...args, clientProjectRoot: effectiveClientProjectRoot };
+
+        const result = await handler(enhancedArgs, enrichedContext, memoryService);
+        debugLog(3, `Tool ${tool.name} completed`, { success: !!result });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result),
+            },
+          ],
+        };
       },
-      id: null,
-    });
-    return;
+    );
   }
 
-  // Handle the request through the transport
-  await session.transport.handleRequest(req, res, req.body);
+  debugLog(2, `Registered ${MEMORY_BANK_MCP_TOOLS.length} tools`);
 }
 
-// Handle GET requests (server-to-client notifications via SSE)
-async function handleGetRequest(req: Request, res: Response, sessionId?: string): Promise<void> {
-  if (!sessionId || !sessions.has(sessionId)) {
-    res.status(400).send('Invalid or missing session ID');
-    return;
-  }
+// Server variables
+let server: Server;
+let transport: StreamableHTTPServerTransport;
 
-  const session = sessions.get(sessionId)!;
-  session.lastActivity = new Date();
+async function startServer(): Promise<void> {
+  debugLog(2, 'Starting MCP HTTP Stream server...');
 
-  // Handle the GET request through the transport
-  await session.transport.handleRequest(req, res);
-}
+  // Register all tools
+  registerTools();
 
-// Handle DELETE requests (session termination)
-async function handleDeleteRequest(req: Request, res: Response, sessionId?: string): Promise<void> {
-  if (!sessionId || !sessions.has(sessionId)) {
-    res.status(400).send('Invalid or missing session ID');
-    return;
-  }
-
-  const session = sessions.get(sessionId)!;
-
-  try {
-    // Close the transport and server
-    session.transport.close();
-    session.server.close();
-
-    // Remove from sessions
-    sessions.delete(sessionId);
-
-    debugLog(1, `Session terminated by client: ${sessionId}`);
-    res.status(200).send('Session terminated');
-  } catch (error) {
-    debugLog(0, `Error terminating session ${sessionId}:`, error);
-    res.status(500).send('Error terminating session');
-  }
-}
-
-// Health check endpoint
-app.get('/health', (req: Request, res: Response) => {
-  res.json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    sessions: sessions.size,
-    version: '3.0.0',
-    transport: 'streamable-http',
-    uptime: process.uptime(),
+  // Create the streamable HTTP transport
+  transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => randomUUID(),
+    enableJsonResponse: false, // Use SSE by default
   });
-});
 
-// Legacy compatibility endpoint (list tools)
-app.get('/tools/list', async (req: Request, res: Response) => {
-  const tools = MEMORY_BANK_MCP_TOOLS.map((tool) => ({
-    name: tool.name,
-    description: tool.description,
-    inputSchema: tool.parameters || { type: 'object', properties: {}, required: [] },
-  }));
+  // Connect the transport to the MCP server
+  await mcpServer.connect(transport);
+  debugLog(3, 'MCP server connected to transport');
 
-  res.json({ tools });
-});
+  // Create simple HTTP server - delegate everything to the transport
+  server = createServer(async (req, res) => {
+    try {
+      debugLog(3, `HTTP ${req.method} ${req.url}`, {
+        headers: req.headers,
+        method: req.method,
+        url: req.url,
+      });
 
-// Error handling middleware
-app.use((error: Error, req: Request, res: Response, next: any) => {
-  debugLog(0, 'Unhandled error:', error);
+      // Let the official transport handle all requests
+      await transport.handleRequest(req, res);
+    } catch (error) {
+      debugLog(0, 'Error handling HTTP request', {
+        error: error instanceof Error ? error.message : String(error),
+        method: req.method,
+        url: req.url,
+      });
 
-  if (!res.headersSent) {
-    res.status(500).json({
-      error: 'Internal server error',
-      message: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong',
-    });
-  }
-});
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            error: {
+              code: -32603,
+              message: 'Internal error',
+            },
+          }),
+        );
+      }
+    }
+  });
+
+  // Start listening
+  server.listen(port, host, () => {
+    debugLog(2, `MCP HTTP Streaming Server running at http://${host}:${port}`);
+    console.log(`MCP HTTP Streaming Server running at http://${host}:${port}`);
+  });
+
+  // Handle server errors
+  server.on('error', (err: Error) => {
+    debugLog(0, `HTTP server error: ${err.message}`, { stack: err.stack });
+    process.exit(1);
+  });
+}
 
 // Graceful shutdown
-process.on('SIGTERM', async () => {
-  debugLog(1, 'SIGTERM received, shutting down gracefully');
+function gracefulShutdown(signal: string): void {
+  debugLog(2, `Received ${signal}, starting graceful shutdown`);
 
-  // Close all sessions
-  for (const [sessionId, session] of sessions.entries()) {
-    try {
-      session.transport.close();
-      session.server.close();
-    } catch (error) {
-      debugLog(0, `Error closing session ${sessionId} during shutdown:`, error);
-    }
+  if (server) {
+    server.close(() => {
+      debugLog(2, 'HTTP server closed');
+      process.exit(0);
+    });
+
+    setTimeout(() => {
+      debugLog(0, 'Graceful shutdown timed out, forcing exit');
+      process.exit(1);
+    }, 30000);
+  } else {
+    process.exit(0);
   }
+}
 
-  sessions.clear();
-  process.exit(0);
-});
+// Main execution
+if (require.main === module) {
+  // Handle shutdown signals
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-process.on('SIGINT', async () => {
-  debugLog(1, 'SIGINT received, shutting down gracefully');
+  // Start the server
+  startServer().catch((error) => {
+    debugLog(0, `Failed to start server: ${error.message}`, { stack: error.stack });
+    process.exit(1);
+  });
+}
 
-  // Get MemoryService instance and shut it down
-  try {
-    const memoryService = await MemoryService.getInstance();
-    await memoryService.shutdown();
-  } catch (error) {
-    debugLog(0, 'Error shutting down MemoryService:', error);
-  }
-
-  // Close all sessions
-  for (const [sessionId, session] of sessions.entries()) {
-    try {
-      session.transport.close();
-      session.server.close();
-    } catch (error) {
-      debugLog(0, `Error closing session ${sessionId} during shutdown:`, error);
-    }
-  }
-
-  sessions.clear();
-  process.exit(0);
-});
-
-// Start the server
-app.listen(PORT, () => {
-  console.error(`MCP HTTP Streaming Server (v3.0.0) running at http://localhost:${PORT}`);
-  console.error(`Transport: Streamable HTTP`);
-  console.error(`Debug level: ${DEBUG_LEVEL}`);
-  console.error(`Session timeout: ${SESSION_TIMEOUT}ms`);
-  console.error(`CORS origins: ${CORS_ORIGINS.join(', ')}`);
-  debugLog(1, 'Server started successfully');
-});
-
-export default app;
+export { mcpServer, transport };

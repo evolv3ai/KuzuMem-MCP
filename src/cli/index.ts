@@ -86,6 +86,7 @@ program
     const branch = options.branch;
     const clientProjectRoot = getEffectiveProjectRoot();
     const contextParams = {
+      operation: 'update' as const,
       repository: repositoryName,
       branch,
       agent: options.agent,

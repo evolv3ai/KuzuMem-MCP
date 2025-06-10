@@ -1,33 +1,33 @@
-import { z } from 'zod';
-import {
-  AddFileInputSchema,
-  AddFileOutputSchema,
-  AssociateFileWithComponentOutputSchema,
-  FileNodeSchema,
-} from '../../mcp/schemas/tool-schemas';
-import { FileRepository, RepositoryRepository } from '../../repositories';
-import { File } from '../../types'; // Internal File type
+import { RepositoryRepository, FileRepository, ComponentRepository } from '../../repositories';
+import { File, FileInput } from '../../types';
+import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
 
-// Simple context type to avoid SDK import issues
-type McpContext = {
-  logger?: any;
-};
+// Result types for operations
+interface FileOperationResult {
+  success: boolean;
+  message: string;
+  file?: File;
+}
+
+interface AssociationResult {
+  success: boolean;
+  message: string;
+}
 
 /**
  * Operation to add a new file node.
  */
 export async function addFileOp(
-  mcpContext: McpContext,
+  mcpContext: EnrichedRequestHandlerExtra,
   repositoryName: string,
   branch: string,
-  fileDataFromTool: z.infer<typeof AddFileInputSchema>,
+  fileData: FileInput,
   repositoryRepo: RepositoryRepository,
   fileRepo: FileRepository,
-): Promise<z.infer<typeof AddFileOutputSchema>> {
-  // Output matches Zod schema for the tool
-  const logger = mcpContext.logger || console;
+): Promise<FileOperationResult> {
+  const logger = mcpContext.logger;
   const repoIdForLog = `${repositoryName}:${branch}`;
-  logger.info(`[file.ops] addFileOp called for path ${fileDataFromTool.path} in ${repoIdForLog}`);
+  logger.info(`[file.ops] addFileOp called for path ${fileData.path} in ${repoIdForLog}`);
 
   try {
     const repoNode = await repositoryRepo.findByName(repositoryName, branch);
@@ -36,55 +36,41 @@ export async function addFileOp(
       return { success: false, message: `Repository ${repoIdForLog} not found.` };
     }
 
-    // Transform Zod input to internal File type fields expected by FileRepository.createFileNode
-    // Omit repository, branch, created_at, updated_at as repo method handles them
-    const fileRepoInput: Omit<File, 'repository' | 'branch' | 'created_at' | 'updated_at'> & {
-      id: string;
-    } = {
-      id: fileDataFromTool.id,
-      name: fileDataFromTool.name,
-      path: fileDataFromTool.path,
-      size: fileDataFromTool.size_bytes || undefined, // Map size_bytes to size
-      mime_type: fileDataFromTool.mime_type,
+    // Transform input to internal File type
+    const fileRepoInput: Omit<File, 'created_at' | 'updated_at'> = {
+      id: fileData.id,
+      repository: repoNode.id,
+      branch: branch,
+      name: fileData.name,
+      path: fileData.path,
+      content: fileData.content || null,
+      metrics: fileData.metrics || null,
     };
 
     const createdFileNode = await fileRepo.createFileNode(repoNode.id, branch, fileRepoInput);
 
     if (!createdFileNode) {
-      logger.error(
-        `[file.ops] FileRepository.createFileNode returned null for ${fileDataFromTool.path}`,
-      );
+      logger.error(`[file.ops] FileRepository.createFileNode returned null for ${fileData.path}`);
       return { success: false, message: 'Failed to create file node in repository.' };
     }
 
-    const zodFileNode: z.infer<typeof FileNodeSchema> = {
+    // Normalize the file to ensure consistent structure
+    const normalizedFile: File = {
       ...createdFileNode,
-      // Map File interface properties to schema expectations
-      language: null, // Not in File interface
-      metrics: null, // Not in File interface
-      content_hash: null, // Not in File interface
-      mime_type: createdFileNode.mime_type || null,
-      size_bytes: createdFileNode.size || null, // Map size to size_bytes
-      created_at: createdFileNode.created_at
-        ? createdFileNode.created_at instanceof Date
-          ? createdFileNode.created_at.toISOString()
-          : String(createdFileNode.created_at)
-        : null,
-      updated_at: createdFileNode.updated_at
-        ? createdFileNode.updated_at instanceof Date
-          ? createdFileNode.updated_at.toISOString()
-          : String(createdFileNode.updated_at)
-        : null,
-      repository: repoIdForLog,
+      repository: repositoryName,
       branch: branch,
     };
 
     logger.info(
       `[file.ops] File node ${createdFileNode.id} created successfully in ${repoIdForLog}`,
     );
-    return { success: true, message: 'File added successfully.', file: zodFileNode };
+    return {
+      success: true,
+      message: 'File added successfully.',
+      file: normalizedFile,
+    };
   } catch (error: any) {
-    logger.error(`[file.ops] Error in addFileOp for ${fileDataFromTool.path}: ${error.message}`, {
+    logger.error(`[file.ops] Error in addFileOp for ${fileData.path}: ${error.message}`, {
       error: error.toString(),
       stack: error.stack,
     });
@@ -99,16 +85,15 @@ export async function addFileOp(
  * Operation to associate a file with a component.
  */
 export async function associateFileWithComponentOp(
-  mcpContext: McpContext,
+  mcpContext: EnrichedRequestHandlerExtra,
   repositoryName: string,
   branch: string,
   componentId: string,
   fileId: string,
   repositoryRepo: RepositoryRepository,
   fileRepo: FileRepository,
-  // componentRepo: ComponentRepository // May not be needed if FileRepo handles the link
-): Promise<z.infer<typeof AssociateFileWithComponentOutputSchema>> {
-  const logger = mcpContext.logger || console;
+): Promise<AssociationResult> {
+  const logger = mcpContext.logger;
   const repoIdForLog = `${repositoryName}:${branch}`;
   logger.info(
     `[file.ops] associateFileWithComponentOp: C:${componentId} F:${fileId} in ${repoIdForLog}`,
@@ -123,8 +108,8 @@ export async function associateFileWithComponentOp(
       return { success: false, message: `Repository ${repoIdForLog} not found.` };
     }
 
-    // Use schema-defined relationship type
-    const relationshipType = 'COMPONENT_IMPLEMENTS_FILE';
+    // Use a consistent relationship type
+    const relationshipType = 'IMPLEMENTS';
 
     const success = await fileRepo.linkComponentToFile(
       repoNode.id,
@@ -153,3 +138,6 @@ export async function associateFileWithComponentOp(
     return { success: false, message: error.message || 'An unexpected error occurred.' };
   }
 }
+
+// Note: getFilesOp removed as FileRepository doesn't have a getAllFiles method.
+// File queries can be done through component associations using findFilesByComponent.

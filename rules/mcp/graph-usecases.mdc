@@ -1,0 +1,26 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: KuzuMem-MCP Graph Query Usecases
+globs: 
+alwaysApply: true
+---
+# Graph Query Cheatsheet
+
+## 1. Impact Analysis
+Use `query` with `type: "dependencies"` and `direction: "dependents"` to list what breaks if you touch a component. Chain with `query` using `type: "governance"` to reveal blocking rules/decisions.
+
+## 2. Architecture Health
+Run `analyze` with `type: "pagerank"` to spot critical services, `type: "k-core"` for tightly-coupled clusters. Use `detect` with `type: "strongly-connected"` for cycles, `type: "weakly-connected"` for isolated orphans.
+
+## 3. Relationship Discovery
+Use `query` with `type: "relationships"` (depth 2, relationshipFilter ALL) to explore the neighbourhood of any item (Component/Rule/Decision). Use `analyze` with `type: "shortest-path"` to show how two nodes connect.
+
+## 4. Tag & File Insights
+Use `query` with `type: "tags"` to fetch all tagged items. Combine `entity` (create file) with `associate` (type: "file-component") for code-to-architecture traceability. Use `query` with `type: "entities"` and `label: "File"` for tech-debt dashboards.
+
+## 5. Unified Tool Advantages
+The 11 unified tools replace 29 legacy tools, providing consistent parameter patterns, better error handling, and streamlined maintenance. All tools follow the same authentication pattern with clientProjectRoot, repository, and branch parameters.

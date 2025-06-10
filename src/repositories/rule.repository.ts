@@ -2,8 +2,6 @@ import { Rule } from '../types';
 import { KuzuDBClient } from '../db/kuzu';
 import { formatGraphUniqueId } from '../utils/id.utils';
 import { RepositoryRepository } from './repository.repository';
-import { z } from 'zod';
-import { RuleStatusSchema } from '../mcp/schemas/tool-schemas';
 
 /**
  * Repository for Rule, using KuzuDB and Cypher queries.

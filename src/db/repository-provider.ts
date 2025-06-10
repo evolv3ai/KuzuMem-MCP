@@ -249,7 +249,7 @@ export class RepositoryProvider {
 
     if (!this.fileRepositories.has(clientProjectRoot)) {
       throw new Error(
-        `FileRepository not initialized for client project: ${clientProjectRoot}. Call initializeRepositories first.`,
+        `File repository not initialized for client project: ${clientProjectRoot}. Call initializeRepositories first.`,
       );
     }
 
@@ -264,13 +264,14 @@ export class RepositoryProvider {
    * @returns TagRepository instance
    */
   public getTagRepository(clientProjectRoot: string): TagRepository {
+    // Ensure path is absolute
     if (!path.isAbsolute(clientProjectRoot)) {
       clientProjectRoot = path.resolve(clientProjectRoot);
     }
 
     if (!this.tagRepositories.has(clientProjectRoot)) {
       throw new Error(
-        `TagRepository not initialized for client project: ${clientProjectRoot}. Call initializeRepositories first.`,
+        `Tag repository not initialized for client project: ${clientProjectRoot}. Call initializeRepositories first.`,
       );
     }
 
