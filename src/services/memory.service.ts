@@ -39,10 +39,14 @@ export class MemoryService {
   private kuzuClients: Map<string, KuzuDBClient> = new Map();
 
   // Repository provider for managing repository instances
-  private repositoryProvider: RepositoryProvider | null = null;
+  private repositoryProvider!: RepositoryProvider;
+
+  private connectionLastUsed: Map<string, Date> = new Map();
+  private connectionCleanupInterval: NodeJS.Timeout | null = null;
 
   private constructor() {
-    // No initialization here - will be done in initialize()
+    // Start periodic cleanup of stale connections
+    this.startConnectionCleanup();
   }
 
   private async initialize(initialMcpContext?: EnrichedRequestHandlerExtra): Promise<void> {
@@ -56,6 +60,77 @@ export class MemoryService {
     logger.info(
       'MemoryService: Initialized with RepositoryProvider - database access deferred until needed',
     );
+  }
+
+  /**
+   * Start periodic cleanup of stale connections
+   */
+  private startConnectionCleanup(): void {
+    // Clean up stale connections every 5 minutes
+    this.connectionCleanupInterval = setInterval(
+      () => {
+        this.cleanupStaleConnections();
+      },
+      5 * 60 * 1000,
+    );
+  }
+
+  /**
+   * Clean up connections that haven't been used recently
+   */
+  private async cleanupStaleConnections(): Promise<void> {
+    const now = new Date();
+    const staleThreshold = 15 * 60 * 1000; // 15 minutes
+
+    for (const [clientProjectRoot, lastUsed] of this.connectionLastUsed.entries()) {
+      if (now.getTime() - lastUsed.getTime() > staleThreshold) {
+        console.log(`[MemoryService] Cleaning up stale connection for: ${clientProjectRoot}`);
+        await this.closeConnection(clientProjectRoot);
+      }
+    }
+  }
+
+  /**
+   * Close a specific connection and remove it from cache
+   */
+  private async closeConnection(clientProjectRoot: string): Promise<void> {
+    const client = this.kuzuClients.get(clientProjectRoot);
+    if (client) {
+      try {
+        await client.close();
+      } catch (error) {
+        console.error(`[MemoryService] Error closing connection for ${clientProjectRoot}:`, error);
+      }
+      this.kuzuClients.delete(clientProjectRoot);
+      this.connectionLastUsed.delete(clientProjectRoot);
+    }
+  }
+
+  /**
+   * Clean up all connections on shutdown
+   */
+  public async shutdown(): Promise<void> {
+    console.log('[MemoryService] Shutting down, closing all connections...');
+
+    // Stop cleanup interval
+    if (this.connectionCleanupInterval) {
+      clearInterval(this.connectionCleanupInterval);
+      this.connectionCleanupInterval = null;
+    }
+
+    // Close all connections
+    const closePromises: Promise<void>[] = [];
+    for (const clientProjectRoot of this.kuzuClients.keys()) {
+      closePromises.push(this.closeConnection(clientProjectRoot));
+    }
+
+    await Promise.all(closePromises);
+    console.log('[MemoryService] All connections closed');
+  }
+
+  // Called by KuzuMem to inject the repository provider
+  public setRepositoryProvider(provider: RepositoryProvider): void {
+    this.repositoryProvider = provider;
   }
 
   /**
@@ -96,13 +171,28 @@ export class MemoryService {
       throw new Error('RepositoryProvider not initialized');
     }
 
-    // Return cached client if available
-    if (this.kuzuClients.has(clientProjectRoot)) {
+    // Check if we have a cached client
+    const cachedClient = this.kuzuClients.get(clientProjectRoot);
+    if (cachedClient) {
       logger.info(
         `[MemoryService.getKuzuClient] Found cached KuzuDBClient for: ${clientProjectRoot}`,
       );
-      const cachedClient = this.kuzuClients.get(clientProjectRoot)!;
-      return cachedClient;
+      // Update last used time
+      this.connectionLastUsed.set(clientProjectRoot, new Date());
+      
+      // The client will validate its own connection during initialize()
+      try {
+        await cachedClient.initialize(mcpContext);
+        return cachedClient;
+      } catch (error) {
+        logger.error(
+          `[MemoryService.getKuzuClient] Cached client failed to initialize, creating new one:`,
+          error,
+        );
+        // Remove failed client from cache
+        await this.closeConnection(clientProjectRoot);
+        // Fall through to create new client
+      }
     }
 
     // Create new client if needed
@@ -115,6 +205,7 @@ export class MemoryService {
       // Pass the mcpContext to allow for progress notifications during initialization
       await newClient.initialize(mcpContext); // This now also handles schema init
       this.kuzuClients.set(clientProjectRoot, newClient);
+      this.connectionLastUsed.set(clientProjectRoot, new Date());
       await this.repositoryProvider.initializeRepositories(clientProjectRoot, newClient);
       logger.info(
         `[MemoryService.getKuzuClient] KuzuDBClient and repositories initialized for: ${clientProjectRoot}`,

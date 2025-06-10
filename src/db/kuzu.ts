@@ -5,6 +5,11 @@ import path from 'path';
 import { Mutex } from '../utils/mutex'; // For ensuring atomic initialization of a KuzuDBClient instance
 import config from './config'; // Now imports DB_RELATIVE_DIR and DB_FILENAME
 
+// Add connection validation interval (5 minutes)
+const CONNECTION_VALIDATION_INTERVAL = 5 * 60 * 1000;
+const SCHEMA_CHECK_TIMEOUT = 5000; // 5 seconds timeout for schema check
+const MAX_CONNECTION_AGE = 30 * 60 * 1000; // 30 minutes max connection age
+
 /**
  * Helper function to track, log, and report progress for operation timing
  * @param operation Name of the operation being timed
@@ -49,6 +54,11 @@ export class KuzuDBClient {
   private static initializationLock = new Mutex(); // Lock for initializing a specific dbPath
   // Use a map to store promise for initialization to prevent concurrent init for the same dbPath
   private static initializationPromises = new Map<string, Promise<void>>();
+  
+  // Connection health tracking
+  private connectionCreatedAt: Date | null = null;
+  private lastValidationTime: Date | null = null;
+  private isConnectionValid: boolean = false;
 
   /**
    * Creates an instance of KuzuDBClient.
@@ -132,21 +142,118 @@ export class KuzuDBClient {
   }
 
   /**
-   * Helper method to check for database lock files
+   * Check for stale lock files
    * @private
    */
-  private checkForStaleLockFile(dbPath: string): { exists: boolean; path?: string } {
-    const lockFilePath = `${dbPath}.lock`;
-    if (fs.existsSync(lockFilePath)) {
+  private checkForStaleLockFile(dbPath: string): { exists: boolean; path?: string; age?: number } {
+    const dbDir = path.dirname(dbPath);
+    const dbName = path.basename(dbPath);
+    const lockFileName = `${dbName}.lock`;
+    const lockFilePath = path.join(dbDir, lockFileName);
+    
+    try {
+      const stats = fs.statSync(lockFilePath);
+      const age = Date.now() - stats.mtimeMs;
+      return { exists: true, path: lockFilePath, age };
+    } catch (e) {
+      return { exists: false };
+    }
+  }
+
+  /**
+   * Attempt to clean up stale lock files
+   * @private
+   */
+  private async cleanupStaleLock(lockFilePath: string, age: number): Promise<boolean> {
+    // Only clean up locks older than 5 minutes
+    const STALE_LOCK_THRESHOLD = 5 * 60 * 1000;
+    
+    if (age > STALE_LOCK_THRESHOLD) {
       try {
-        const lockFileContents = fs.readFileSync(lockFilePath, 'utf8');
-        return { exists: true, path: lockFilePath };
+        await fs.promises.unlink(lockFilePath);
+        console.log(
+          `KuzuDBClient: Removed stale lock file (age: ${Math.round(age / 1000)}s): ${lockFilePath}`,
+        );
+        return true;
       } catch (e) {
-        // Can't read lock file, but it exists
-        return { exists: true, path: lockFilePath };
+        console.error(`KuzuDBClient: Failed to remove stale lock file: ${lockFilePath}`, e);
+        return false;
       }
     }
-    return { exists: false };
+    return false;
+  }
+
+  /**
+   * Validate the current connection is still healthy
+   * @private
+   */
+  private async validateConnection(): Promise<boolean> {
+    if (!this.connection || !this.database) {
+      return false;
+    }
+
+    // Check connection age
+    if (this.connectionCreatedAt) {
+      const age = Date.now() - this.connectionCreatedAt.getTime();
+      if (age > MAX_CONNECTION_AGE) {
+        console.log(
+          `KuzuDBClient: Connection too old (${Math.round(age / 1000)}s), marking as invalid`,
+        );
+        return false;
+      }
+    }
+
+    // Skip validation if recently validated
+    if (this.lastValidationTime) {
+      const timeSinceLastValidation = Date.now() - this.lastValidationTime.getTime();
+      if (timeSinceLastValidation < CONNECTION_VALIDATION_INTERVAL) {
+        return this.isConnectionValid;
+      }
+    }
+
+    try {
+      // Simple validation query with timeout
+      const validationPromise = this.connection.query('RETURN 1 AS test;');
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Connection validation timeout')), 1000),
+      );
+
+      await Promise.race([validationPromise, timeoutPromise]);
+
+      this.lastValidationTime = new Date();
+      this.isConnectionValid = true;
+      return true;
+    } catch (e) {
+      console.error(`KuzuDBClient: Connection validation failed:`, e);
+      this.isConnectionValid = false;
+      return false;
+    }
+  }
+
+  /**
+   * Reset the connection, forcing a fresh connection on next use
+   * @private
+   */
+  private async resetConnection(): Promise<void> {
+    console.log(`KuzuDBClient: Resetting connection for ${this.dbPath}`);
+
+    // Clear existing connection
+    if (this.connection) {
+      this.connection = null;
+    }
+    if (this.database) {
+      this.database = null;
+    }
+
+    // Clear tracking
+    this.connectionCreatedAt = null;
+    this.lastValidationTime = null;
+    this.isConnectionValid = false;
+
+    // Remove from initialization promises to allow re-init
+    if (KuzuDBClient.initializationPromises.has(this.dbPath)) {
+      KuzuDBClient.initializationPromises.delete(this.dbPath);
+    }
   }
 
   /**
@@ -176,6 +283,18 @@ export class KuzuDBClient {
       }
     };
 
+    // Validate existing connection first
+    if (this.database && this.connection) {
+      const isValid = await this.validateConnection();
+      if (isValid) {
+        console.log(`KuzuDBClient: Using existing valid connection for ${this.dbPath}`);
+        return;
+      } else {
+        console.log(`KuzuDBClient: Existing connection invalid, resetting...`);
+        await this.resetConnection();
+      }
+    }
+
     const release = await timeOperation(
       'Acquiring initialization lock',
       this.dbPath,
@@ -184,228 +303,266 @@ export class KuzuDBClient {
     );
 
     try {
-      const dbDir = path.dirname(this.dbPath);
-      let permissionCheckFailed = false;
-
-      // Check for stale lock files before proceeding
-      const lockFileCheck = this.checkForStaleLockFile(this.dbPath);
-      if (lockFileCheck.exists) {
-        console.warn(
-          `[${new Date().toISOString()}] KuzuDBClient: Lock file detected at ${lockFileCheck.path}. This might indicate a stale lock from a previous session.`,
+      // Check if already initializing for this path
+      if (KuzuDBClient.initializationPromises.has(this.dbPath)) {
+        console.log(
+          `KuzuDBClient: Already initializing for ${this.dbPath}, waiting for completion...`,
         );
-        await reportProgress(
-          `Lock file detected at ${lockFileCheck.path}. This might indicate a stale lock.`,
-        );
+        await KuzuDBClient.initializationPromises.get(this.dbPath);
+        return;
       }
 
-      // Try to create the directory if it doesn't exist
-      if (!fs.existsSync(dbDir)) {
-        await timeOperation('Creating database directory', dbDir, reportProgress, async () => {
-          try {
-            fs.mkdirSync(dbDir, { recursive: true });
-            console.log(`KuzuDBClient: Created database directory: ${dbDir}`);
-          } catch (dirError: any) {
-            if (this.isPermissionError(dirError)) {
-              permissionCheckFailed = true;
-              const userMessage = `KuzuDBClient: PERMISSION ERROR - Cannot create database directory at '${dbDir}'. The IDE or MCP server process does not have permission to create directories in this location. Please ensure the user running the IDE has full read/write access to this location, or use a different location.`;
-              console.error(userMessage);
-              await reportProgress(
-                `PERMISSION ERROR - Cannot create database directory at '${dbDir}'`,
-              );
-              throw new Error(userMessage);
-            } else {
-              console.error(`KuzuDBClient: Error creating directory ${dbDir}:`, dirError);
-              await reportProgress(`Error creating database directory: ${dirError.message}`);
-              throw new Error(
-                `KuzuDBClient: Error creating directory ${dbDir}: ${dirError.message}`,
-              );
-            }
-          }
-        });
-      }
+      // Set up the initialization promise
+      const initPromise = this._performInitialization(reportProgress);
+      KuzuDBClient.initializationPromises.set(this.dbPath, initPromise);
 
-      // Verify the directory is writable even if it already exists
-      if (!permissionCheckFailed) {
-        await timeOperation('Checking directory is writable', dbDir, reportProgress, async () => {
-          const isWritable = await this.isDirectoryWritable(dbDir);
-          if (!isWritable) {
-            const userMessage = `KuzuDBClient: PERMISSION ERROR - The database directory '${dbDir}' exists but is not writable. The IDE or MCP server process does not have sufficient permissions. Please ensure the user running the IDE has full read/write access to this location.`;
-            console.error(userMessage);
-            await reportProgress(
-              `PERMISSION ERROR - The database directory exists but is not writable`,
-            );
-            throw new Error(userMessage);
-          }
-        });
-      }
-
-      if (!this.database) {
-        await timeOperation(
-          'Instantiating kuzu.Database',
-          this.dbPath,
-          reportProgress,
-          async () => {
-            try {
-              console.log(
-                `KuzuDBClient: Attempting to instantiate kuzu.Database with path: ${this.dbPath}`,
-              );
-              await reportProgress(`Creating database instance at ${this.dbPath}`);
-              this.database = new kuzu.Database(this.dbPath);
-              console.log(
-                `KuzuDBClient: Database object successfully initialized for ${this.dbPath} (using Kuzu default system config).`,
-              );
-            } catch (dbError: any) {
-              if (this.isPermissionError(dbError)) {
-                const userMessage = `KuzuDBClient: PERMISSION ERROR - Cannot create or access database files at '${this.dbPath}'. The IDE or MCP server process does not have sufficient permissions. Please ensure the user running the IDE has full read/write access to this location and all files within it.`;
-                console.error(userMessage, dbError);
-                throw new Error(userMessage);
-              } else if (
-                dbError.message &&
-                (dbError.message.includes('lock') || dbError.message.includes('Lock'))
-              ) {
-                // Check if there's an actual lock file that can be inspected
-                const lockFileCheck = this.checkForStaleLockFile(this.dbPath);
-                let additionalInfo = '';
-                if (lockFileCheck.exists) {
-                  additionalInfo = ` Found lock file at '${lockFileCheck.path}'.`;
-                }
-
-                const userMessage = `KuzuDBClient: DATABASE LOCK ERROR - Cannot access database at '${this.dbPath}' because it appears to be locked by another process.${additionalInfo} This could be caused by another instance of the IDE or MCP server using this database, or a previous process that did not shut down cleanly. If no other process is using this database, try removing the '.lock' file or restarting your IDE.`;
-                console.error(userMessage, dbError);
-                throw new Error(userMessage);
-              } else {
-                console.error(
-                  `KuzuDBClient: CRITICAL ERROR instantiating kuzu.Database for ${this.dbPath}:`,
-                  dbError,
-                );
-                const message = `KuzuDBClient: CRITICAL ERROR instantiating kuzu.Database for ${this.dbPath}: ${dbError?.message || dbError}`;
-                console.error(message, dbError);
-                throw new Error(message);
-              }
-            }
-          },
-        );
-      }
-
-      if (!this.connection) {
-        await timeOperation(
-          'Establishing database connection',
-          this.dbPath,
-          reportProgress,
-          async () => {
-            try {
-              console.log(
-                `KuzuDBClient: Attempting to instantiate kuzu.Connection with database object for: ${this.dbPath}`,
-              );
-              await reportProgress(`Establishing connection to database`);
-              this.connection = new kuzu.Connection(this.database);
-              console.log(`KuzuDBClient: Connection successfully established to ${this.dbPath}`);
-            } catch (connError: any) {
-              if (this.isPermissionError(connError)) {
-                const userMessage = `KuzuDBClient: PERMISSION ERROR - Cannot establish connection to database at '${this.dbPath}'. The IDE or MCP server process does not have sufficient permissions to access the database files. Please ensure the user running the IDE has full read/write access to this location and all files within it.`;
-                console.error(userMessage, connError);
-                throw new Error(userMessage);
-              } else if (connError.message && connError.message.includes('lock')) {
-                const userMessage = `KuzuDBClient: DATABASE LOCK ERROR - Cannot establish connection to database at '${this.dbPath}' because it appears to be locked by another process. This could be caused by another process accessing the same database, or a previous process that did not shut down cleanly. Try restarting your IDE.`;
-                console.error(userMessage, connError);
-                throw new Error(userMessage);
-              } else {
-                console.error(
-                  `KuzuDBClient: CRITICAL ERROR instantiating kuzu.Connection for ${this.dbPath}:`,
-                  connError,
-                );
-                const message = `KuzuDBClient: CRITICAL ERROR obtaining connection for ${this.dbPath}: ${connError?.message || connError}`;
-                console.error(message, connError);
-                throw new Error(message);
-              }
-            }
-          },
-        );
-      }
-
-      // Check if schema needs initialization by verifying a key table's existence
-      let schemaNeedsInit = true;
-
-      await timeOperation(
-        'Checking schema initialization status',
-        this.dbPath,
-        reportProgress,
-        async () => {
-          if (!KuzuDBClient.initializationPromises.has(this.dbPath)) {
-            // First check in-memory flag for current process
-            try {
-              // Try to query a known table. If this fails or returns empty, schema might not be there.
-              // show_tables() is a Kuzu system function that lists tables.
-              console.log(
-                `[DEBUG] KuzuDBClient: Checking for existing tables in ${this.dbPath}...`,
-              );
-              const tables = await this.executeQuery('CALL show_tables() RETURN *;');
-              console.log(`[DEBUG] KuzuDBClient: show_tables() returned:`, tables);
-              const repositoryTableExists = tables.some((t: any) => t.name === 'Repository');
-              console.log(
-                `[DEBUG] KuzuDBClient: Repository table exists? ${repositoryTableExists}`,
-              );
-
-              if (repositoryTableExists) {
-                console.log(
-                  `KuzuDBClient: Schema (Repository table) already exists in ${this.dbPath}. Skipping DDL.`,
-                );
-                schemaNeedsInit = false;
-              }
-            } catch (e) {
-              console.warn(
-                `KuzuDBClient: Error checking for existing tables in ${this.dbPath}, assuming schema needs init.`,
-                e,
-              );
-              // If querying tables fails, assume schema needs to be initialized.
-              schemaNeedsInit = true;
-            }
-          } else {
-            // Already marked as initialized in this process run
-            schemaNeedsInit = false;
-            console.log(
-              `KuzuDBClient: Schema already marked as initialized for ${this.dbPath} in this session, skipping DDL check.`,
-            );
-          }
-        },
-      );
-
-      if (schemaNeedsInit) {
-        await timeOperation(
-          'Initializing database schema (DDL)',
-          this.dbPath,
-          reportProgress,
-          async () => {
-            console.log(
-              `KuzuDBClient: Schema needs initialization for ${this.dbPath}. Running DDL...`,
-            );
-            await reportProgress(`Creating database schema tables and relationships`);
-            await initializeKuzuDBSchema(this.connection);
-            console.log(`KuzuDBClient: Schema DDL executed for ${this.dbPath}`);
-          },
-        );
-      }
+      // Execute initialization
+      await initPromise;
     } catch (error) {
       console.error(`KuzuDBClient: Error initializing for ${this.dbPath}:`, error);
-      throw error; // Re-throw to allow calling code to handle
+      // Clean up on error
+      KuzuDBClient.initializationPromises.delete(this.dbPath);
+      await this.resetConnection();
+      throw error;
     } finally {
-      // Ensure lock is released and promise is removed if an error occurred before resolution
-      // or if the logic completes (even if successful, to allow re-evaluation if needed by specific app logic,
-      // though typically init is once).
-      // However, for init-once-per-path, we'd leave it in the map after success.
-      // If an error occurs, we should remove it so a subsequent call can retry.
-      if (KuzuDBClient.initializationPromises.has(this.dbPath)) {
-        // If the promise resolved (successfully or not), its fate is sealed.
-        // If it errored, it should have been deleted by the catch block of the promise executor.
-      }
       release();
-
-      // Log total initialization time
       const totalTime = Date.now() - initStartTime;
       console.log(
         `[${new Date().toISOString()}] KuzuDBClient: Total initialization time for ${this.dbPath}: ${totalTime}ms`,
       );
     }
+  }
+
+  /**
+   * Perform the actual initialization
+   * @private
+   */
+  private async _performInitialization(
+    reportProgress: (message: string, percent?: number) => Promise<void>
+  ): Promise<void> {
+    let permissionCheckFailed = false;
+    const dbDir = path.dirname(this.dbPath);
+
+    // Check for and handle stale lock files
+    const lockFileCheck = this.checkForStaleLockFile(this.dbPath);
+    if (lockFileCheck.exists && lockFileCheck.path && lockFileCheck.age) {
+      console.warn(
+        `Lock file detected at ${lockFileCheck.path} (age: ${Math.round(lockFileCheck.age / 1000)}s)`,
+      );
+      await reportProgress(`Checking for stale database locks...`, 15);
+      
+      const cleaned = await this.cleanupStaleLock(lockFileCheck.path, lockFileCheck.age);
+      if (cleaned) {
+        await reportProgress(`Cleaned up stale lock file`, 20);
+      }
+    }
+
+    // Try to create the directory if it doesn't exist
+    if (!fs.existsSync(dbDir)) {
+      await timeOperation('Creating database directory', dbDir, reportProgress, async () => {
+        try {
+          fs.mkdirSync(dbDir, { recursive: true });
+          console.log(`KuzuDBClient: Created database directory: ${dbDir}`);
+        } catch (dirError: any) {
+          if (this.isPermissionError(dirError)) {
+            permissionCheckFailed = true;
+            const userMessage = `KuzuDBClient: PERMISSION ERROR - Cannot create database directory at '${dbDir}'. The IDE or MCP server process does not have permission to create directories in this location. Please ensure the user running the IDE has full read/write access to this location, or use a different location.`;
+            console.error(userMessage);
+            await reportProgress(
+              `PERMISSION ERROR - Cannot create database directory at '${dbDir}'`,
+            );
+            throw new Error(userMessage);
+          } else {
+            console.error(`KuzuDBClient: Error creating directory ${dbDir}:`, dirError);
+            await reportProgress(`Error creating database directory: ${dirError.message}`);
+            throw new Error(`KuzuDBClient: Error creating directory ${dbDir}: ${dirError.message}`);
+          }
+        }
+      });
+    }
+
+    // Verify the directory is writable even if it already exists
+    if (!permissionCheckFailed) {
+      await timeOperation('Checking directory is writable', dbDir, reportProgress, async () => {
+        const isWritable = await this.isDirectoryWritable(dbDir);
+        if (!isWritable) {
+          const userMessage = `KuzuDBClient: PERMISSION ERROR - The database directory '${dbDir}' exists but is not writable. The IDE or MCP server process does not have sufficient permissions. Please ensure the user running the IDE has full read/write access to this location.`;
+          console.error(userMessage);
+          await reportProgress(
+            `PERMISSION ERROR - The database directory exists but is not writable`,
+          );
+          throw new Error(userMessage);
+        }
+      });
+    }
+
+    if (!this.database) {
+      await timeOperation('Instantiating kuzu.Database', this.dbPath, reportProgress, async () => {
+        try {
+          console.log(
+            `KuzuDBClient: Attempting to instantiate kuzu.Database with path: ${this.dbPath}`,
+          );
+          await reportProgress(`Creating database instance at ${this.dbPath}`, 40);
+          this.database = new kuzu.Database(this.dbPath);
+          console.log(
+            `KuzuDBClient: Database object successfully initialized for ${this.dbPath} (using Kuzu default system config).`,
+          );
+        } catch (dbError: any) {
+          if (this.isPermissionError(dbError)) {
+            const userMessage = `KuzuDBClient: PERMISSION ERROR - Cannot create or access database files at '${this.dbPath}'. The IDE or MCP server process does not have sufficient permissions. Please ensure the user running the IDE has full read/write access to this location and all files within it.`;
+            console.error(userMessage, dbError);
+            throw new Error(userMessage);
+          } else if (
+            dbError.message &&
+            (dbError.message.includes('lock') || dbError.message.includes('Lock'))
+          ) {
+            // Check if there's an actual lock file that can be inspected
+            const lockFileCheck = this.checkForStaleLockFile(this.dbPath);
+            let additionalInfo = '';
+            if (lockFileCheck.exists) {
+              additionalInfo = ` Found lock file at '${lockFileCheck.path}'.`;
+            }
+
+            const userMessage = `KuzuDBClient: DATABASE LOCK ERROR - Cannot access database at '${this.dbPath}' because it appears to be locked by another process.${additionalInfo} This could be caused by another instance of the IDE or MCP server using this database, or a previous process that did not shut down cleanly. If no other process is using this database, try removing the '.lock' file or restarting your IDE.`;
+            console.error(userMessage, dbError);
+            throw new Error(userMessage);
+          } else {
+            console.error(
+              `KuzuDBClient: CRITICAL ERROR instantiating kuzu.Database for ${this.dbPath}:`,
+              dbError,
+            );
+            const message = `KuzuDBClient: CRITICAL ERROR instantiating kuzu.Database for ${this.dbPath}: ${dbError?.message || dbError}`;
+            console.error(message, dbError);
+            throw new Error(message);
+          }
+        }
+      });
+    }
+
+    if (!this.connection) {
+      await timeOperation(
+        'Establishing database connection',
+        this.dbPath,
+        reportProgress,
+        async () => {
+          try {
+            console.log(
+              `KuzuDBClient: Attempting to instantiate kuzu.Connection with database object for: ${this.dbPath}`,
+            );
+            await reportProgress(`Establishing connection to database`, 50);
+            this.connection = new kuzu.Connection(this.database);
+            this.connectionCreatedAt = new Date();
+            this.isConnectionValid = true;
+            console.log(`KuzuDBClient: Connection successfully established to ${this.dbPath}`);
+          } catch (connError: any) {
+            if (this.isPermissionError(connError)) {
+              const userMessage = `KuzuDBClient: PERMISSION ERROR - Cannot establish connection to database at '${this.dbPath}'. The IDE or MCP server process does not have sufficient permissions to access the database files. Please ensure the user running the IDE has full read/write access to this location and all files within it.`;
+              console.error(userMessage, connError);
+              throw new Error(userMessage);
+            } else if (connError.message && connError.message.includes('lock')) {
+              const userMessage = `KuzuDBClient: DATABASE LOCK ERROR - Cannot establish connection to database at '${this.dbPath}' because it appears to be locked by another process. This could be caused by another process accessing the same database, or a previous process that did not shut down cleanly. Try restarting your IDE.`;
+              console.error(userMessage, connError);
+              throw new Error(userMessage);
+            } else {
+              console.error(
+                `KuzuDBClient: CRITICAL ERROR instantiating kuzu.Connection for ${this.dbPath}:`,
+                connError,
+              );
+              const message = `KuzuDBClient: CRITICAL ERROR obtaining connection for ${this.dbPath}: ${connError?.message || connError}`;
+              console.error(message, connError);
+              throw new Error(message);
+            }
+          }
+        },
+      );
+    }
+
+    // Check if schema needs initialization by verifying a key table's existence
+    let schemaNeedsInit = true;
+
+    await timeOperation(
+      'Checking schema initialization status',
+      this.dbPath,
+      reportProgress,
+      async () => {
+        try {
+          // Implement timeout for schema check
+          console.log(
+            `[DEBUG] KuzuDBClient: Testing connection with simple query in ${this.dbPath}...`,
+          );
+          
+          const testQueryPromise = this.connection.query('RETURN 1 AS test;');
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Schema check timeout')), SCHEMA_CHECK_TIMEOUT),
+          );
+          
+          await Promise.race([testQueryPromise, timeoutPromise]);
+          console.log(`[DEBUG] KuzuDBClient: Connection test successful`);
+          
+          // Now check for tables with timeout
+          console.log(
+            `[DEBUG] KuzuDBClient: Checking for existing tables in ${this.dbPath}...`,
+          );
+          
+          const tablesQueryPromise = this.connection.query('CALL show_tables() RETURN *;');
+          const tablesTimeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Table listing timeout')), SCHEMA_CHECK_TIMEOUT),
+          );
+          
+          const tablesResult = await Promise.race([tablesQueryPromise, tablesTimeoutPromise]);
+          const tables = await tablesResult.getAll();
+          
+          console.log(`[DEBUG] KuzuDBClient: show_tables() returned:`, tables);
+          const repositoryTableExists = tables.some((t: any) => t.name === 'Repository');
+          console.log(
+            `[DEBUG] KuzuDBClient: Repository table exists? ${repositoryTableExists}`,
+          );
+
+          if (repositoryTableExists) {
+            console.log(
+              `KuzuDBClient: Schema (Repository table) already exists in ${this.dbPath}. Skipping DDL.`,
+            );
+            schemaNeedsInit = false;
+          }
+        } catch (e: any) {
+          if (e.message && e.message.includes('timeout')) {
+            console.error(
+              `KuzuDBClient: Schema check timed out after ${SCHEMA_CHECK_TIMEOUT}ms. This may indicate a database lock issue.`,
+            );
+            // Reset connection and throw to trigger cleanup
+            await this.resetConnection();
+            throw new Error(
+              `Database schema check timed out. The database may be locked by another process. Please try restarting your IDE or removing any .lock files in the database directory.`
+            );
+          }
+          console.warn(
+            `KuzuDBClient: Error checking for existing tables in ${this.dbPath}, assuming schema needs init.`,
+            e,
+          );
+          // If querying tables fails, assume schema needs to be initialized.
+          schemaNeedsInit = true;
+        }
+      },
+    );
+
+    if (schemaNeedsInit) {
+      await timeOperation(
+        'Initializing database schema (DDL)',
+        this.dbPath,
+        reportProgress,
+        async () => {
+          console.log(
+            `KuzuDBClient: Schema needs initialization for ${this.dbPath}. Running DDL...`,
+          );
+          await reportProgress(`Creating database schema tables and relationships`, 80);
+          await initializeKuzuDBSchema(this.connection);
+          console.log(`KuzuDBClient: Schema DDL executed for ${this.dbPath}`);
+        },
+      );
+    }
+    
+    // Mark successful initialization
+    await reportProgress(`Database initialization complete`, 100);
   }
 
   /**
