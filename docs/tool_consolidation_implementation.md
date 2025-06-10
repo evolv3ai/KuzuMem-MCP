@@ -907,7 +907,7 @@ rm src/__tests__/tools/*-tool.test.ts # (old ones)
 
 ### Final Validation
 - [ ] Run full test suite
-- [ ] Verify tool count is 10 (broadcasted)
+- [ ] Verify tool count is 10 or more (must include the new tools that were not implemented yet in the old codebase) (broadcasted)
 - [ ] Check no references to old tools remain
 - [ ] Performance comparison with old implementation
 - [ ] Create PR with comprehensive description
