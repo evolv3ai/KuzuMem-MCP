@@ -31,6 +31,7 @@ export { memoryBankTool } from './unified/memory-bank-tool';
 export { entityTool } from './unified/entity-tool';
 export { introspectTool } from './unified/introspect-tool';
 export { contextTool } from './unified/context-tool';
+export { queryTool } from './unified/query-tool';
 
 // Import all tools for the combined array
 import { initMemoryBankTool } from './init-memory';

@@ -231,7 +231,135 @@ export const ContextUpdateOutputSchema = z.object({
 // Query Tool Schemas
 // ============================================
 
-// TODO: Add query tool schemas
+export const QueryInputSchema = z.object({
+  type: z.enum([
+    'context',
+    'entities',
+    'relationships',
+    'dependencies',
+    'governance',
+    'history',
+    'tags',
+  ]),
+  clientProjectRoot: z.string().optional(), // From session
+  repository: z.string(),
+  branch: z.string().default('main'),
+  
+  // Type-specific parameters
+  // For context query
+  latest: z.boolean().optional(),
+  limit: z.number().int().positive().optional(),
+  
+  // For entities query
+  label: z.string().optional(),
+  offset: z.number().int().nonnegative().optional(),
+  
+  // For relationships query
+  startItemId: z.string().optional(),
+  depth: z.number().int().positive().optional(),
+  relationshipFilter: z.string().optional(),
+  targetNodeTypeFilter: z.string().optional(),
+  
+  // For dependencies query
+  componentId: z.string().optional(),
+  direction: z.enum(['dependencies', 'dependents']).optional(),
+  
+  // For governance query (uses componentId)
+  
+  // For history query
+  itemId: z.string().optional(),
+  itemType: z.enum(['Component', 'Decision', 'Rule']).optional(),
+  
+  // For tags query
+  tagId: z.string().optional(),
+  entityType: z.string().optional(),
+});
+
+// Different output schemas for each query type
+export const ContextQueryOutputSchema = z.object({
+  type: z.literal('context'),
+  contexts: z.array(z.object({
+    id: z.string(),
+    iso_date: z.string(),
+    agent: z.string().nullable(),
+    summary: z.string().nullable(),
+    observation: z.string().nullable(),
+    repository: z.string(),
+    branch: z.string(),
+    created_at: z.string().nullable(),
+    updated_at: z.string().nullable(),
+  })),
+});
+
+export const EntitiesQueryOutputSchema = z.object({
+  type: z.literal('entities'),
+  label: z.string(),
+  entities: z.array(z.any()), // Generic entities
+  limit: z.number().optional(),
+  offset: z.number().optional(),
+  totalCount: z.number().optional(),
+});
+
+export const RelationshipsQueryOutputSchema = z.object({
+  type: z.literal('relationships'),
+  startItemId: z.string(),
+  relatedItems: z.array(z.object({
+    id: z.string(),
+    type: z.string(),
+  }).catchall(z.any())),
+  relationshipFilter: z.string().optional(),
+  depth: z.number().optional(),
+});
+
+export const DependenciesQueryOutputSchema = z.object({
+  type: z.literal('dependencies'),
+  componentId: z.string(),
+  direction: z.string(),
+  components: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    type: z.string(),
+    kind: z.string().optional(),
+    status: z.string().optional(),
+    depends_on: z.array(z.string()).optional(),
+    repository: z.string(),
+    branch: z.string(),
+  })),
+});
+
+export const GovernanceQueryOutputSchema = z.object({
+  type: z.literal('governance'),
+  componentId: z.string(),
+  decisions: z.array(z.any()),
+  rules: z.array(z.any()),
+});
+
+export const HistoryQueryOutputSchema = z.object({
+  type: z.literal('history'),
+  itemId: z.string(),
+  itemType: z.string(),
+  contextHistory: z.array(z.any()),
+});
+
+export const TagsQueryOutputSchema = z.object({
+  type: z.literal('tags'),
+  tagId: z.string(),
+  items: z.array(z.object({
+    id: z.string(),
+    type: z.string(),
+  }).catchall(z.any())),
+});
+
+// Union of all query outputs
+export const QueryOutputSchema = z.union([
+  ContextQueryOutputSchema,
+  EntitiesQueryOutputSchema,
+  RelationshipsQueryOutputSchema,
+  DependenciesQueryOutputSchema,
+  GovernanceQueryOutputSchema,
+  HistoryQueryOutputSchema,
+  TagsQueryOutputSchema,
+]);
 
 // ============================================
 // Associate Tool Schemas
