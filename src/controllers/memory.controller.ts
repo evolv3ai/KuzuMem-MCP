@@ -1,6 +1,10 @@
 import { Request, Response } from 'express';
 import { MemoryService } from '../services/memory.service';
-import { metadataSchema, contextSchema, Rule } from '../types';
+import {
+  metadataSchema,
+  contextSchema,
+  Rule
+} from '../types';
 import { Mutex } from '../utils/mutex';
 import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
 
@@ -75,11 +79,11 @@ export class MemoryController {
       signal: new AbortController().signal,
       requestId: 'controller-mock-request',
       sendNotification: async () => {},
-      sendRequest: async () => ({ id: 'mock' }) as any,
+      sendRequest: async () => ({ id: 'mock' } as any),
       logger: console,
       session: {},
       sendProgress: async () => {},
-      memoryService: this.memoryService,
+      memoryService: this.memoryService
     };
   }
 
@@ -95,12 +99,7 @@ export class MemoryController {
         .json({ error: 'clientProjectRoot and repositoryName are required in the request body' });
       return;
     }
-    await this.memoryService.initMemoryBank(
-      this.createMockContext(),
-      clientProjectRoot,
-      repositoryName,
-      branch,
-    );
+    await this.memoryService.initMemoryBank(this.createMockContext(), clientProjectRoot, repositoryName, branch);
     res.status(200).json({
       message: `Memory bank for ${repositoryName} initialized successfully at ${clientProjectRoot}.`,
     });
@@ -231,10 +230,13 @@ export class MemoryController {
       this.createMockContext(),
       clientProjectRoot,
       {
+        operation: 'update' as const,
         repository: repositoryName,
         branch,
-        ...result.data,
-      },
+        agent: result.data.agent || 'controller',
+        summary: result.data.summary || '',
+        observation: result.data.observations?.[0] || undefined,
+      }
     );
 
     if (!updatedContext) {
@@ -457,12 +459,7 @@ export class MemoryController {
         return;
       }
 
-      const rules = await this.memoryService.getActiveRules(
-        this.createMockContext(),
-        clientProjectRoot,
-        repository,
-        branch,
-      );
+      const rules = await this.memoryService.getActiveRules(this.createMockContext(), clientProjectRoot, repository, branch);
 
       res.status(200).json(rules);
     } catch (error) {

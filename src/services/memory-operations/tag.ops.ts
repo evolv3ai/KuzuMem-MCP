@@ -1,84 +1,86 @@
-import { z } from 'zod';
-import {
-  AddTagInputSchema,
-  AddTagOutputSchema,
-  FindItemsByTagInputSchema,
-  FindItemsByTagOutputSchema,
-  RelatedItemBaseSchema,
-  TagItemInputSchema,
-  TagItemOutputSchema,
-  TagNodeSchema,
-} from '../../mcp/schemas/tool-schemas';
-import {
-  RepositoryRepository,
-  TagRepository /*, other needed Item Repositories for tagItemOp */,
-} from '../../repositories';
-import {
-  Tag /* Component, Decision, Rule, File, Context - if used for casting */,
-} from '../../types'; // Internal Tag type
+import { RepositoryRepository, TagRepository } from '../../repositories';
+import { Tag, TagInput } from '../../types';
+import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
 
-// Simple context type to avoid SDK import issues
-type McpContext = {
-  logger?: any;
-};
+// Result types for operations
+interface TagOperationResult {
+  success: boolean;
+  message: string;
+  tag?: Tag;
+}
+
+interface TagAssociationResult {
+  success: boolean;
+  message: string;
+}
+
+interface FindItemsResult {
+  success: boolean;
+  message: string;
+  items: Array<{
+    id: string;
+    name: string;
+    type: string;
+  }>;
+}
 
 /**
- * Operation to add or update a tag node.
+ * Operation to add a new tag.
  */
 export async function addTagOp(
-  mcpContext: McpContext,
-  repositoryName: string, // Used for logging/context, even if tags are global
-  branch: string, // Used for logging/context
-  tagDataFromTool: z.infer<typeof AddTagInputSchema>,
-  repositoryRepo: RepositoryRepository, // Potentially for validating repo context if tags were scoped
+  mcpContext: EnrichedRequestHandlerExtra,
+  repositoryName: string,
+  branch: string,
+  tagData: TagInput,
+  repositoryRepo: RepositoryRepository,
   tagRepo: TagRepository,
-): Promise<z.infer<typeof AddTagOutputSchema>> {
-  const logger = mcpContext.logger || console;
-  logger.info(
-    `[tag.ops] addTagOp called for tag ID: ${tagDataFromTool.id}, Name: ${tagDataFromTool.name}`,
-  );
+): Promise<TagOperationResult> {
+  const logger = mcpContext.logger;
+  const repoIdForLog = `${repositoryName}:${branch}`;
+  logger.info(`[tag.ops] addTagOp called for tag ${tagData.name} in ${repoIdForLog}`);
 
   try {
-    // Assuming TagRepository.upsertTagNode expects data aligned with internal Tag type,
-    // (omitting created_at as DB might handle it, or pass it if repo expects it)
-    const tagToUpsert: Omit<Tag, 'created_at'> = {
-      id: tagDataFromTool.id,
-      name: tagDataFromTool.name,
-      color: tagDataFromTool.color,
-      description: tagDataFromTool.description,
-      repository: 'global', // Tags are global, not repo-scoped based on Tag interface
-      branch: 'main', // Default branch for global tags
-    };
-
-    const upsertedTagNode = await tagRepo.upsertTagNode(tagToUpsert);
-
-    if (!upsertedTagNode) {
-      logger.error(
-        `[tag.ops] TagRepository.upsertTagNode returned null for tag ID ${tagDataFromTool.id}`,
-      );
-      return { success: false, message: 'Failed to create/update tag node in repository.' };
+    const repoNode = await repositoryRepo.findByName(repositoryName, branch);
+    if (!repoNode || !repoNode.id) {
+      logger.warn(`[tag.ops] Repository ${repoIdForLog} not found for addTagOp.`);
+      return { success: false, message: `Repository ${repoIdForLog} not found.` };
     }
 
-    // Transform internal Tag node to Zod TagNodeSchema for the output
-    const zodTagNode: z.infer<typeof TagNodeSchema> = {
-      ...upsertedTagNode,
-      id: upsertedTagNode.id,
-      name: upsertedTagNode.name,
-      color: upsertedTagNode.color || null,
-      description: upsertedTagNode.description || null,
-      created_at: upsertedTagNode.created_at
-        ? upsertedTagNode.created_at instanceof Date
-          ? upsertedTagNode.created_at.toISOString()
-          : String(upsertedTagNode.created_at)
-        : null,
+    // Transform input to internal Tag type
+    const tagToCreate: Tag = {
+      id: tagData.id,
+      repository: repoNode.id,
+      branch: branch,
+      name: tagData.name,
+      description: tagData.description || null,
+      color: tagData.color || null,
+      category: tagData.category || null,
+      created_at: new Date(),
+      updated_at: new Date(),
     };
 
-    logger.info(
-      `[tag.ops] Tag node ${upsertedTagNode.id} (${upsertedTagNode.name}) upserted successfully.`,
-    );
-    return { success: true, message: 'Tag added/updated successfully.', tag: zodTagNode };
+    const createdTag = await tagRepo.upsertTagNode(tagToCreate);
+
+    if (!createdTag) {
+      logger.error(`[tag.ops] TagRepository.upsertTagNode returned null for ${tagData.name}`);
+      return { success: false, message: 'Failed to create tag in repository.' };
+    }
+
+    // Normalize the tag to ensure consistent structure
+    const normalizedTag: Tag = {
+      ...createdTag,
+      repository: repositoryName,
+      branch: branch,
+    };
+
+    logger.info(`[tag.ops] Tag ${createdTag.id} created successfully in ${repoIdForLog}`);
+    return {
+      success: true,
+      message: 'Tag added successfully.',
+      tag: normalizedTag,
+    };
   } catch (error: any) {
-    logger.error(`[tag.ops] Error in addTagOp for tag ID ${tagDataFromTool.id}: ${error.message}`, {
+    logger.error(`[tag.ops] Error in addTagOp for ${tagData.name}: ${error.message}`, {
       error: error.toString(),
       stack: error.stack,
     });
@@ -90,34 +92,31 @@ export async function addTagOp(
 }
 
 /**
- * Operation to apply a tag to an item.
+ * Operation to associate a tag with an item (Component, Decision, Rule, or File).
  */
 export async function tagItemOp(
-  mcpContext: McpContext,
+  mcpContext: EnrichedRequestHandlerExtra,
   repositoryName: string,
   branch: string,
   itemId: string,
-  itemType: z.infer<typeof TagItemInputSchema>['itemType'], // From Zod schema
+  itemType: 'Component' | 'Decision' | 'Rule' | 'File' | 'Context',
   tagId: string,
   repositoryRepo: RepositoryRepository,
   tagRepo: TagRepository,
-  // May need other item-specific repositories if TagRepository.addItemTag is not generic enough
-): Promise<z.infer<typeof TagItemOutputSchema>> {
-  const logger = mcpContext.logger || console;
-  const repoId = `${repositoryName}:${branch}`;
-  logger.info(`[tag.ops] tagItemOp: Item ${itemType}:${itemId} with Tag:${tagId} in ${repoId}`);
+): Promise<TagAssociationResult> {
+  const logger = mcpContext.logger;
+  const repoIdForLog = `${repositoryName}:${branch}`;
+  logger.info(`[tag.ops] tagItemOp: ${itemType}:${itemId} with Tag:${tagId} in ${repoIdForLog}`);
 
   try {
     const repoNode = await repositoryRepo.findByName(repositoryName, branch);
     if (!repoNode || !repoNode.id) {
-      logger.warn(`[tag.ops] Repository ${repoId} not found for tagItemOp.`);
-      return { success: false, message: `Repository ${repoId} not found.` };
+      logger.warn(`[tag.ops] Repository ${repoIdForLog} not found for tagItemOp.`);
+      return { success: false, message: `Repository ${repoIdForLog} not found.` };
     }
 
-    // Construct the specific relationship type, e.g., TAGGED_COMPONENT, TAGGED_FILE
-    // Graph schema uses a generic relationship
+    // Create relationship between item and tag
     const relationshipType = `TAGGED_${itemType.toUpperCase()}`;
-
     const success = await tagRepo.addItemTag(
       repoNode.id,
       branch,
@@ -128,68 +127,66 @@ export async function tagItemOp(
     );
 
     if (!success) {
-      logger.warn(
-        `[tag.ops] tagRepo.addItemTag failed for Item ${itemType}:${itemId}, Tag:${tagId}`,
-      );
-      return { success: false, message: 'Failed to apply tag to item in repository.' };
+      logger.warn(`[tag.ops] tagRepo.addItemTag failed for ${itemType}:${itemId}, Tag:${tagId}`);
+      return { success: false, message: 'Failed to associate tag with item.' };
     }
 
-    logger.info(`[tag.ops] Item ${itemType}:${itemId} successfully tagged with ${tagId}.`);
+    logger.info(`[tag.ops] Tag ${tagId} successfully associated with ${itemType} ${itemId}.`);
     return { success: true, message: 'Item tagged successfully.' };
   } catch (error: any) {
     logger.error(
-      `[tag.ops] Error in tagItemOp for Item ${itemType}:${itemId}, Tag:${tagId}: ${error.message}`,
+      `[tag.ops] Error in tagItemOp for ${itemType}:${itemId}, Tag:${tagId}: ${error.message}`,
       { error: error.toString(), stack: error.stack },
     );
-    return {
-      success: false,
-      message: error.message || 'An unexpected error occurred while tagging the item.',
-    };
+    return { success: false, message: error.message || 'An unexpected error occurred.' };
   }
 }
 
 /**
- * Operation to find items associated with a specific tag.
+ * Operation to find items by tag.
  */
 export async function findItemsByTagOp(
-  mcpContext: McpContext,
+  mcpContext: EnrichedRequestHandlerExtra,
   repositoryName: string,
   branch: string,
   tagId: string,
-  itemTypeFilter: z.infer<typeof FindItemsByTagInputSchema>['itemTypeFilter'],
   repositoryRepo: RepositoryRepository,
   tagRepo: TagRepository,
-): Promise<z.infer<typeof FindItemsByTagOutputSchema>> {
-  const logger = mcpContext.logger || console;
-  const repoId = `${repositoryName}:${branch}`;
-  logger.info(
-    `[tag.ops] findItemsByTagOp for Tag:${tagId} in ${repoId}, Filter: ${itemTypeFilter}`,
-  );
+  itemType?: 'Component' | 'Decision' | 'Rule' | 'File' | 'Context' | 'All',
+): Promise<FindItemsResult> {
+  const logger = mcpContext.logger;
+  const repoIdForLog = `${repositoryName}:${branch}`;
+  logger.info(`[tag.ops] findItemsByTagOp: Finding items with Tag:${tagId} in ${repoIdForLog}`);
 
   try {
     const repoNode = await repositoryRepo.findByName(repositoryName, branch);
     if (!repoNode || !repoNode.id) {
-      logger.warn(`[tag.ops] Repository ${repoId} not found for findItemsByTagOp.`);
-      return { tagId, items: [] }; // Return empty items as per schema if repo not found
+      logger.warn(`[tag.ops] Repository ${repoIdForLog} not found for findItemsByTagOp.`);
+      return {
+        success: false,
+        message: `Repository ${repoIdForLog} not found.`,
+        items: [],
+      };
     }
 
-    // tagRepo.findItemsByTag is expected to return internal item representations
-    const itemsInternal = await tagRepo.findItemsByTag(repoNode.id, branch, tagId, itemTypeFilter);
+    const items = await tagRepo.findItemsByTag(repoNode.id, branch, tagId, itemType);
 
-    // Transform internal items to Zod RelatedItemBaseSchema (or a more specific union type if defined)
-    const zodItems: z.infer<typeof RelatedItemBaseSchema>[] = itemsInternal.map((item: any) => ({
-      id: item.id?.toString(),
-      type: item.type || (Array.isArray(item.labels) ? item.labels[0] : 'Unknown'), // Assuming type/label info is available
-      ...(item.properties || item), // Spread other properties
-    }));
+    logger.info(`[tag.ops] Found ${items.length} items with tag ${tagId} in ${repoIdForLog}`);
 
-    logger.info(`[tag.ops] Found ${zodItems.length} items for Tag:${tagId} in ${repoId}`);
-    return { tagId, items: zodItems };
+    return {
+      success: true,
+      message: `Found ${items.length} items with tag.`,
+      items: items,
+    };
   } catch (error: any) {
     logger.error(`[tag.ops] Error in findItemsByTagOp for Tag:${tagId}: ${error.message}`, {
       error: error.toString(),
       stack: error.stack,
     });
-    return { tagId, items: [] }; // Return empty items on error as per schema
+    return {
+      success: false,
+      message: error.message || 'An unexpected error occurred.',
+      items: [],
+    };
   }
 }

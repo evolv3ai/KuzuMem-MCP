@@ -23,14 +23,14 @@ export interface Metadata extends BaseEntity {
   name: string;
   content: {
     id: string;
-    project: {
+    project?: {
       name: string;
-      created: string;
+      created?: string;
       description?: string;
     };
-    tech_stack: Record<string, string>;
-    architecture: string;
-    memory_spec_version: string;
+    tech_stack?: Record<string, string>;
+    architecture?: string;
+    memory_spec_version?: string;
   };
   created_at?: Date;
   updated_at?: Date;
@@ -40,9 +40,10 @@ export interface Metadata extends BaseEntity {
 export interface Context extends BaseEntity {
   name: string;
   iso_date: string;
-  agent?: string;
+  agent?: string | null;
   related_issue?: string;
-  summary?: string;
+  summary?: string | null;
+  observation?: string | null; // Added for compatibility
   decisions?: string[];
   observations?: string[];
 }
@@ -50,9 +51,9 @@ export interface Context extends BaseEntity {
 // Component type
 export interface Component extends BaseEntity {
   name: string;
-  kind?: string;
-  depends_on?: string[];
-  status: 'active' | 'deprecated' | 'planned';
+  kind?: string | null;
+  depends_on?: string[] | null;
+  status?: 'active' | 'deprecated' | 'planned' | null;
 }
 
 // Explicitly export ComponentStatus for use in ComponentInput and elsewhere
@@ -63,9 +64,10 @@ export interface ComponentInput {
   name: string;
   branch?: string;
   kind?: string;
-  status: ComponentStatus;
+  status?: ComponentStatus;
   content?: string | Record<string, any> | null;
   depends_on?: string[] | null;
+  dependsOn?: string[] | null; // Alternative casing used by tools
 }
 
 // Decision type
@@ -73,7 +75,7 @@ export type DecisionStatus = 'proposed' | 'accepted' | 'rejected' | 'deprecated'
 
 export interface Decision extends BaseEntity {
   name: string;
-  context?: string;
+  context?: string | null;
   date: string;
   status?: DecisionStatus;
 }
@@ -82,10 +84,13 @@ export interface Decision extends BaseEntity {
 export interface Rule extends BaseEntity {
   name: string;
   created: string;
-  triggers?: string[];
-  content?: string;
-  status: 'active' | 'deprecated';
+  triggers?: string[] | null;
+  content?: string | null;
+  status?: 'active' | 'deprecated' | 'proposed' | null;
 }
+
+// Rule status type
+export type RuleStatus = 'active' | 'deprecated' | 'proposed';
 
 // Memory type (union of all memory types)
 export type MemoryType = 'metadata' | 'context' | 'component' | 'decision' | 'rule';
@@ -163,14 +168,69 @@ export const ruleSchema = z.object({
 // Tag type
 export interface Tag extends BaseEntity {
   name: string;
-  color?: string;
-  description?: string;
+  color?: string | null;
+  description?: string | null;
+  category?: string | null;
 }
 
-// File type (basic placeholder)
+// File type
 export interface File extends BaseEntity {
   name: string;
   path: string;
   size?: number; // in bytes
   mime_type?: string;
+  content?: string | null;
+  metrics?: Record<string, any> | null;
+}
+
+// FileRecord is an alias for File (used in some operations)
+export type FileRecord = File;
+
+// Input types for operations
+export interface ContextInput {
+  repository: string;
+  branch: string;
+  agent: string;
+  summary: string;
+  observation?: string;
+}
+
+export interface DecisionInput {
+  id: string;
+  repository: string;
+  branch: string;
+  name: string;
+  date: string;
+  context?: string;
+}
+
+export interface RuleInput {
+  id: string;
+  repository: string;
+  branch: string;
+  name: string;
+  created: string;
+  content?: string;
+  status?: RuleStatus;
+  triggers?: string[];
+}
+
+export interface FileInput {
+  id: string;
+  repository: string;
+  branch: string;
+  name: string;
+  path: string;
+  content?: string;
+  metrics?: Record<string, any>;
+}
+
+export interface TagInput {
+  id: string;
+  repository: string;
+  branch: string;
+  name: string;
+  description?: string;
+  color?: string;
+  category?: string;
 }
