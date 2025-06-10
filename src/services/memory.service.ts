@@ -804,6 +804,131 @@ export class MemoryService {
     ) as Promise<Decision | null>;
   }
 
+  // Get methods for individual entities
+  async getComponent(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    componentId: string,
+  ): Promise<Component | null> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.getComponent] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      const componentRepo = this.repositoryProvider.getComponentRepository(clientProjectRoot);
+      const component = await componentRepo.findByIdAndBranch(repositoryName, componentId, branch);
+      return component;
+    } catch (error: any) {
+      logger.error(`[MemoryService.getComponent] Error getting component ${componentId}:`, error);
+      throw error;
+    }
+  }
+
+  async getDecision(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    decisionId: string,
+  ): Promise<Decision | null> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.getDecision] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      const decisionRepo = this.repositoryProvider.getDecisionRepository(clientProjectRoot);
+      const decision = await decisionRepo.findByIdAndBranch(repositoryName, decisionId, branch);
+      return decision;
+    } catch (error: any) {
+      logger.error(`[MemoryService.getDecision] Error getting decision ${decisionId}:`, error);
+      throw error;
+    }
+  }
+
+  async getRule(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    ruleId: string,
+  ): Promise<Rule | null> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.getRule] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      const ruleRepo = this.repositoryProvider.getRuleRepository(clientProjectRoot);
+      const rule = await ruleRepo.findByIdAndBranch(repositoryName, ruleId, branch);
+      return rule;
+    } catch (error: any) {
+      logger.error(`[MemoryService.getRule] Error getting rule ${ruleId}:`, error);
+      throw error;
+    }
+  }
+
+  async getFile(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    fileId: string,
+  ): Promise<FileRecord | null> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.getFile] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      const fileRepo = this.repositoryProvider.getFileRepository(clientProjectRoot);
+      const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+      
+      // Get repository node ID
+      const repository = await repositoryRepo.findByName(repositoryName, branch);
+      if (!repository || !repository.id) {
+        logger.warn(`[MemoryService.getFile] Repository ${repositoryName}:${branch} not found.`);
+        return null;
+      }
+      
+      const file = await fileRepo.findFileById(repository.id, branch, fileId);
+      return file as FileRecord | null;
+    } catch (error: any) {
+      logger.error(`[MemoryService.getFile] Error getting file ${fileId}:`, error);
+      throw error;
+    }
+  }
+
+  async getTag(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    tagId: string,
+  ): Promise<Tag | null> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.getTag] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      const tagRepo = this.repositoryProvider.getTagRepository(clientProjectRoot);
+      const tag = await tagRepo.findTagById(tagId);
+      return tag;
+    } catch (error: any) {
+      logger.error(`[MemoryService.getTag] Error getting tag ${tagId}:`, error);
+      throw error;
+    }
+  }
+
   /**
    * Get all upstream dependencies for a component (transitive DEPENDS_ON)
    */
@@ -1707,24 +1832,38 @@ export class MemoryService {
   ): Promise<z.infer<typeof toolSchemas.AddFileOutputSchema>> {
     const logger = mcpContext.logger || console;
     logger.info(`[MemoryService.addFile] For path ${fileData.path} in ${repositoryName}:${branch}`);
-    await this.getKuzuClient(mcpContext, clientProjectRoot);
-    const repoId = `${repositoryName}:${branch}`;
-    const fileNode = {
-      id: fileData.id,
-      name: fileData.name,
-      path: fileData.path,
-      language: fileData.language || null,
-      metrics: fileData.metrics || null,
-      content_hash: fileData.content_hash || null,
-      mime_type: fileData.mime_type || null,
-      size_bytes: fileData.size_bytes === null ? null : Number(fileData.size_bytes),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      repository: repoId,
-      branch,
-    };
-    logger.warn('TODO: Implement addFile with kuzuClient.runWriteQuery and FileRepository');
-    return { success: true, message: 'File added (stub)', file: fileNode as any };
+    
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.addFile] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+      const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+      const fileRepo = this.repositoryProvider.getFileRepository(clientProjectRoot);
+
+      // Import the file operation
+      const fileOps = await import('./memory-operations/file.ops');
+      
+      // Call the file operation
+      const result = await fileOps.addFileOp(
+        mcpContext,
+        repositoryName,
+        branch,
+        fileData,
+        repositoryRepo,
+        fileRepo,
+      );
+
+      return result;
+    } catch (error: any) {
+      logger.error(`[MemoryService.addFile] Error adding file: ${error.message}`, { error });
+      return {
+        success: false,
+        message: error.message || 'Failed to add file',
+      };
+    }
   }
 
   async associateFileWithComponent(
@@ -1753,16 +1892,38 @@ export class MemoryService {
   ): Promise<z.infer<typeof toolSchemas.AddTagOutputSchema>> {
     const logger = mcpContext.logger || console;
     logger.info(`[MemoryService.addTag] For tag ${tagData.name} in ${repositoryName}:${branch}`);
-    await this.getKuzuClient(mcpContext, clientProjectRoot);
-    const placeholderTag = {
-      id: tagData.id,
-      name: tagData.name,
-      color: tagData.color || null,
-      description: tagData.description || null,
-      created_at: new Date().toISOString(),
-    };
-    logger.warn('TODO: Implement addTag with kuzuClient.runWriteQuery and TagRepository');
-    return { success: true, message: 'Tag added/updated (stub)', tag: placeholderTag as any };
+    
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.addTag] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+      const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+      const tagRepo = this.repositoryProvider.getTagRepository(clientProjectRoot);
+
+      // Import the tag operation
+      const tagOps = await import('./memory-operations/tag.ops');
+      
+      // Call the tag operation
+      const result = await tagOps.addTagOp(
+        mcpContext,
+        repositoryName,
+        branch,
+        tagData,
+        repositoryRepo,
+        tagRepo,
+      );
+
+      return result;
+    } catch (error: any) {
+      logger.error(`[MemoryService.addTag] Error adding tag: ${error.message}`, { error });
+      return {
+        success: false,
+        message: error.message || 'Failed to add tag',
+      };
+    }
   }
 
   async tagItem(
@@ -1845,5 +2006,424 @@ export class MemoryService {
       return path.resolve(clientProjectRoot);
     }
     return clientProjectRoot;
+  }
+
+  // Delete methods for entities
+  async deleteComponent(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    componentId: string,
+  ): Promise<boolean> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.deleteComponent] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+      const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+      
+      // Get repository to ensure it exists
+      const repository = await repositoryRepo.findByName(repositoryName, branch);
+      if (!repository || !repository.id) {
+        logger.warn(`[MemoryService.deleteComponent] Repository ${repositoryName}:${branch} not found.`);
+        return false;
+      }
+
+      // Format the graph unique ID
+      const graphUniqueId = `${repositoryName}:${branch}:${componentId}`;
+      
+      // Delete all relationships and the component node
+      const deleteQuery = `
+        MATCH (c:Component {graph_unique_id: $graphUniqueId})
+        OPTIONAL MATCH (c)-[r]-()
+        DELETE r, c
+        RETURN count(c) as deletedCount
+      `;
+      
+      const result = await kuzuClient.executeQuery(deleteQuery, { graphUniqueId });
+      const deletedCount = result[0]?.deletedCount || 0;
+      
+      logger.info(`[MemoryService.deleteComponent] Deleted ${deletedCount} component(s) with ID ${componentId}`);
+      return deletedCount > 0;
+    } catch (error: any) {
+      logger.error(`[MemoryService.deleteComponent] Error deleting component ${componentId}:`, error);
+      throw error;
+    }
+  }
+
+  async deleteDecision(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    decisionId: string,
+  ): Promise<boolean> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.deleteDecision] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+      const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+      
+      // Get repository to ensure it exists
+      const repository = await repositoryRepo.findByName(repositoryName, branch);
+      if (!repository || !repository.id) {
+        logger.warn(`[MemoryService.deleteDecision] Repository ${repositoryName}:${branch} not found.`);
+        return false;
+      }
+
+      // Format the graph unique ID
+      const graphUniqueId = `${repositoryName}:${branch}:${decisionId}`;
+      
+      // Delete all relationships and the decision node
+      const deleteQuery = `
+        MATCH (d:Decision {graph_unique_id: $graphUniqueId})
+        OPTIONAL MATCH (d)-[r]-()
+        DELETE r, d
+        RETURN count(d) as deletedCount
+      `;
+      
+      const result = await kuzuClient.executeQuery(deleteQuery, { graphUniqueId });
+      const deletedCount = result[0]?.deletedCount || 0;
+      
+      logger.info(`[MemoryService.deleteDecision] Deleted ${deletedCount} decision(s) with ID ${decisionId}`);
+      return deletedCount > 0;
+    } catch (error: any) {
+      logger.error(`[MemoryService.deleteDecision] Error deleting decision ${decisionId}:`, error);
+      throw error;
+    }
+  }
+
+  async deleteRule(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    ruleId: string,
+  ): Promise<boolean> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.deleteRule] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+      const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+      
+      // Get repository to ensure it exists
+      const repository = await repositoryRepo.findByName(repositoryName, branch);
+      if (!repository || !repository.id) {
+        logger.warn(`[MemoryService.deleteRule] Repository ${repositoryName}:${branch} not found.`);
+        return false;
+      }
+
+      // Format the graph unique ID
+      const graphUniqueId = `${repositoryName}:${branch}:${ruleId}`;
+      
+      // Delete all relationships and the rule node
+      const deleteQuery = `
+        MATCH (r:Rule {graph_unique_id: $graphUniqueId})
+        OPTIONAL MATCH (r)-[rel]-()
+        DELETE rel, r
+        RETURN count(r) as deletedCount
+      `;
+      
+      const result = await kuzuClient.executeQuery(deleteQuery, { graphUniqueId });
+      const deletedCount = result[0]?.deletedCount || 0;
+      
+      logger.info(`[MemoryService.deleteRule] Deleted ${deletedCount} rule(s) with ID ${ruleId}`);
+      return deletedCount > 0;
+    } catch (error: any) {
+      logger.error(`[MemoryService.deleteRule] Error deleting rule ${ruleId}:`, error);
+      throw error;
+    }
+  }
+
+  async deleteFile(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    fileId: string,
+  ): Promise<boolean> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.deleteFile] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+      const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+      
+      // Get repository to ensure it exists
+      const repository = await repositoryRepo.findByName(repositoryName, branch);
+      if (!repository || !repository.id) {
+        logger.warn(`[MemoryService.deleteFile] Repository ${repositoryName}:${branch} not found.`);
+        return false;
+      }
+
+      // Format the graph unique ID
+      const graphUniqueId = `${repositoryName}:${branch}:${fileId}`;
+      
+      // Delete all relationships and the file node
+      const deleteQuery = `
+        MATCH (f:File {graph_unique_id: $graphUniqueId})
+        OPTIONAL MATCH (f)-[r]-()
+        DELETE r, f
+        RETURN count(f) as deletedCount
+      `;
+      
+      const result = await kuzuClient.executeQuery(deleteQuery, { graphUniqueId });
+      const deletedCount = result[0]?.deletedCount || 0;
+      
+      logger.info(`[MemoryService.deleteFile] Deleted ${deletedCount} file(s) with ID ${fileId}`);
+      return deletedCount > 0;
+    } catch (error: any) {
+      logger.error(`[MemoryService.deleteFile] Error deleting file ${fileId}:`, error);
+      throw error;
+    }
+  }
+
+  async deleteTag(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    tagId: string,
+  ): Promise<boolean> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.deleteTag] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+      
+      // Tags are global and not scoped to repository/branch, so we just need the ID
+      // Delete all relationships and the tag node
+      const deleteQuery = `
+        MATCH (t:Tag {id: $tagId})
+        OPTIONAL MATCH (t)-[r]-()
+        DELETE r, t
+        RETURN count(t) as deletedCount
+      `;
+      
+      const result = await kuzuClient.executeQuery(deleteQuery, { tagId });
+      const deletedCount = result[0]?.deletedCount || 0;
+      
+      logger.info(`[MemoryService.deleteTag] Deleted ${deletedCount} tag(s) with ID ${tagId}`);
+      return deletedCount > 0;
+    } catch (error: any) {
+      logger.error(`[MemoryService.deleteTag] Error deleting tag ${tagId}:`, error);
+      throw error;
+    }
+  }
+
+  // Update methods for entities (distinct from upsert - only update existing)
+  async updateComponent(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    componentId: string,
+    updates: Partial<Omit<Component, 'id' | 'repository' | 'branch' | 'type'>>,
+  ): Promise<Component | null> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.updateComponent] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      // First check if component exists
+      const existing = await this.getComponent(mcpContext, clientProjectRoot, repositoryName, branch, componentId);
+      if (!existing) {
+        logger.warn(`[MemoryService.updateComponent] Component ${componentId} not found`);
+        return null;
+      }
+
+      // Merge updates with existing data
+      const updatedData = {
+        id: componentId,
+        name: updates.name ?? existing.name,
+        kind: updates.kind ?? existing.kind,
+        status: updates.status ?? existing.status,
+        depends_on: updates.depends_on ?? existing.depends_on,
+      };
+
+      // Use upsert method to update
+      return await this.upsertComponent(mcpContext, clientProjectRoot, repositoryName, branch, updatedData);
+    } catch (error: any) {
+      logger.error(`[MemoryService.updateComponent] Error updating component ${componentId}:`, error);
+      throw error;
+    }
+  }
+
+  async updateDecision(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    decisionId: string,
+    updates: Partial<Omit<Decision, 'id' | 'repository' | 'branch' | 'type'>>,
+  ): Promise<Decision | null> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.updateDecision] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      // First check if decision exists
+      const existing = await this.getDecision(mcpContext, clientProjectRoot, repositoryName, branch, decisionId);
+      if (!existing) {
+        logger.warn(`[MemoryService.updateDecision] Decision ${decisionId} not found`);
+        return null;
+      }
+
+      // Merge updates with existing data
+      const updatedData = {
+        id: decisionId,
+        name: updates.name ?? existing.name,
+        date: updates.date ?? existing.date,
+        context: updates.context ?? existing.context,
+      };
+
+      // Use upsert method to update
+      return await this.upsertDecision(mcpContext, clientProjectRoot, repositoryName, branch, updatedData);
+    } catch (error: any) {
+      logger.error(`[MemoryService.updateDecision] Error updating decision ${decisionId}:`, error);
+      throw error;
+    }
+  }
+
+  async updateRule(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    ruleId: string,
+    updates: Partial<Omit<Rule, 'id' | 'repository' | 'branch' | 'type'>>,
+  ): Promise<Rule | null> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.updateRule] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      // First check if rule exists
+      const existing = await this.getRule(mcpContext, clientProjectRoot, repositoryName, branch, ruleId);
+      if (!existing) {
+        logger.warn(`[MemoryService.updateRule] Rule ${ruleId} not found`);
+        return null;
+      }
+
+      // Merge updates with existing data
+      const updatedData = {
+        id: ruleId,
+        name: updates.name ?? existing.name,
+        created: updates.created ?? existing.created,
+        content: updates.content ?? existing.content,
+        triggers: updates.triggers ?? existing.triggers,
+        status: updates.status ?? existing.status,
+      };
+
+      // Use upsert method to update
+      return await this.upsertRule(mcpContext, clientProjectRoot, repositoryName, updatedData, branch);
+    } catch (error: any) {
+      logger.error(`[MemoryService.updateRule] Error updating rule ${ruleId}:`, error);
+      throw error;
+    }
+  }
+
+  async updateFile(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    fileId: string,
+    updates: Partial<Omit<FileRecord, 'id' | 'repository' | 'branch' | 'type'>>,
+  ): Promise<FileRecord | null> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.updateFile] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      // First check if file exists
+      const existing = await this.getFile(mcpContext, clientProjectRoot, repositoryName, branch, fileId);
+      if (!existing) {
+        logger.warn(`[MemoryService.updateFile] File ${fileId} not found`);
+        return null;
+      }
+
+      // For now, we'll just use addFile to update since it acts as upsert
+      const updatedData = {
+        id: fileId,
+        name: updates.name ?? existing.name,
+        path: updates.path ?? existing.path,
+        language: updates.language ?? existing.language,
+        metrics: updates.metrics ?? existing.metrics,
+        content_hash: updates.content_hash ?? existing.content_hash,
+        mime_type: updates.mime_type ?? existing.mime_type,
+        size_bytes: updates.size_bytes ?? existing.size_bytes,
+      };
+
+      const result = await this.addFile(mcpContext, clientProjectRoot, repositoryName, branch, updatedData);
+      return result.success && result.file ? result.file as FileRecord : null;
+    } catch (error: any) {
+      logger.error(`[MemoryService.updateFile] Error updating file ${fileId}:`, error);
+      throw error;
+    }
+  }
+
+  async updateTag(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    tagId: string,
+    updates: Partial<Omit<Tag, 'id' | 'repository' | 'branch' | 'type'>>,
+  ): Promise<Tag | null> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.updateTag] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      // First check if tag exists
+      const existing = await this.getTag(mcpContext, clientProjectRoot, repositoryName, branch, tagId);
+      if (!existing) {
+        logger.warn(`[MemoryService.updateTag] Tag ${tagId} not found`);
+        return null;
+      }
+
+      // For now, we'll just use addTag to update since it acts as upsert
+      const updatedData = {
+        id: tagId,
+        name: updates.name ?? existing.name,
+        color: updates.color ?? existing.color,
+        description: updates.description ?? existing.description,
+      };
+
+      const result = await this.addTag(mcpContext, clientProjectRoot, repositoryName, branch, updatedData);
+      return result.success && result.tag ? result.tag as Tag : null;
+    } catch (error: any) {
+      logger.error(`[MemoryService.updateTag] Error updating tag ${tagId}:`, error);
+      throw error;
+    }
   }
 }

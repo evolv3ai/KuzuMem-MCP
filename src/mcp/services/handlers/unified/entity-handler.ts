@@ -177,12 +177,70 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
           percent: 50,
         });
 
-        // For now, we'll need to implement get methods in MemoryService
-        // or use graph queries to retrieve individual entities
-        // This is a placeholder that would need actual implementation
+        let entity: any = null;
+        
+        // Call appropriate MemoryService get method based on entity type
+        switch (entityType) {
+          case 'component':
+            entity = await memoryService.getComponent(
+              context,
+              clientProjectRoot,
+              repository,
+              branch,
+              id,
+            );
+            break;
+          case 'decision':
+            entity = await memoryService.getDecision(
+              context,
+              clientProjectRoot,
+              repository,
+              branch,
+              id,
+            );
+            break;
+          case 'rule':
+            entity = await memoryService.getRule(
+              context,
+              clientProjectRoot,
+              repository,
+              branch,
+              id,
+            );
+            break;
+          case 'file':
+            entity = await memoryService.getFile(
+              context,
+              clientProjectRoot,
+              repository,
+              branch,
+              id,
+            );
+            break;
+          case 'tag':
+            entity = await memoryService.getTag(context, clientProjectRoot, repository, branch, id);
+            break;
+        }
+
+        await context.sendProgress({
+          status: 'complete',
+          message: entity
+            ? `${entityType} ${id} retrieved successfully`
+            : `${entityType} ${id} not found`,
+          percent: 100,
+          isFinal: true,
+        });
+
+        if (!entity) {
+          return {
+            success: false,
+            message: `${entityType} with ID ${id} not found`,
+          };
+        }
+
         return {
-          success: false,
-          message: `Get operation not yet implemented for ${entityType}`,
+          success: true,
+          entity: entity,
         };
       }
 
@@ -193,71 +251,83 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
           percent: 50,
         });
 
-        // Similar to get, update would need MemoryService methods
-        // For now, we can implement update as delete + create
         const entityData = mapDataToEntity(entityType, id, data || {});
+        let updatedEntity: any = null;
 
-        // This is a simplified approach - in production, you'd want
-        // proper update methods in MemoryService
+        // Call appropriate MemoryService update method based on entity type
         switch (entityType) {
           case 'component':
-            await memoryService.upsertComponent(
+            updatedEntity = await memoryService.updateComponent(
               context,
               clientProjectRoot,
               repository,
               branch,
-              entityData as Component,
+              id,
+              entityData as Partial<Component>,
             );
             break;
           case 'decision':
-            await memoryService.upsertDecision(
+            updatedEntity = await memoryService.updateDecision(
               context,
               clientProjectRoot,
               repository,
               branch,
-              entityData as Decision,
+              id,
+              entityData as Partial<Decision>,
             );
             break;
           case 'rule':
-            await memoryService.upsertRule(
+            updatedEntity = await memoryService.updateRule(
               context,
               clientProjectRoot,
               repository,
-              entityData as Rule,
               branch,
+              id,
+              entityData as Partial<Rule>,
             );
             break;
           case 'file':
-            await memoryService.addFile(
+            updatedEntity = await memoryService.updateFile(
               context,
               clientProjectRoot,
               repository,
               branch,
-              entityData as FileRecord,
+              id,
+              entityData as Partial<FileRecord>,
             );
             break;
           case 'tag':
-            await memoryService.addTag(
+            updatedEntity = await memoryService.updateTag(
               context,
               clientProjectRoot,
               repository,
               branch,
-              entityData as Tag,
+              id,
+              entityData as Partial<Tag>,
             );
             break;
         }
 
         await context.sendProgress({
           status: 'complete',
-          message: `${entityType} ${id} updated successfully`,
+          message: updatedEntity
+            ? `${entityType} ${id} updated successfully`
+            : `${entityType} ${id} not found`,
           percent: 100,
           isFinal: true,
         });
 
+        if (!updatedEntity) {
+          return {
+            success: false,
+            message: `${entityType} with ID ${id} not found for update`,
+          };
+        }
+
         return {
           success: true,
           message: `${entityType} ${id} updated successfully`,
-          entity: entityData,
+          entity: updatedEntity,
         };
       }
 
@@ -268,11 +338,71 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
           percent: 50,
         });
 
-        // Deletion would also need MemoryService methods
-        // For now, we'll mark as deprecated/inactive
+        let deleted = false;
+        
+        // Call appropriate MemoryService delete method based on entity type
+        switch (entityType) {
+          case 'component':
+            deleted = await memoryService.deleteComponent(
+              context,
+              clientProjectRoot,
+              repository,
+              branch,
+              id,
+            );
+            break;
+          case 'decision':
+            deleted = await memoryService.deleteDecision(
+              context,
+              clientProjectRoot,
+              repository,
+              branch,
+              id,
+            );
+            break;
+          case 'rule':
+            deleted = await memoryService.deleteRule(
+              context,
+              clientProjectRoot,
+              repository,
+              branch,
+              id,
+            );
+            break;
+          case 'file':
+            deleted = await memoryService.deleteFile(
+              context,
+              clientProjectRoot,
+              repository,
+              branch,
+              id,
+            );
+            break;
+          case 'tag':
+            deleted = await memoryService.deleteTag(
+              context,
+              clientProjectRoot,
+              repository,
+              branch,
+              id,
+            );
+            break;
+        }
+
+        await context.sendProgress({
+          status: 'complete',
+          message: deleted
+            ? `${entityType} ${id} deleted successfully`
+            : `${entityType} ${id} not found`,
+          percent: 100,
+          isFinal: true,
+        });
+
         return {
-          success: false,
-          message: `Delete operation not yet implemented for ${entityType}`,
+          success: deleted,
+          message: deleted
+            ? `${entityType} ${id} deleted successfully`
+            : `${entityType} with ID ${id} not found`,
         };
       }
 
