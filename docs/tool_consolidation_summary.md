@@ -212,6 +212,8 @@ Created 15+ commits on feature/tool-consolidation branch documenting incremental
 
 ## Phase 2: Complete Legacy Tool Removal
 
+**Note:** This phase was completed prematurely before refactoring memory operations. A temporary `legacy-compatibility.ts` file was created to maintain compilation.
+
 ### Phase 2 Objectives
 - Remove all legacy tool implementations
 - Remove backward compatibility
@@ -289,3 +291,28 @@ Applications using the legacy tools must update to use unified tools:
 | louvain-community-detection | analyze | algorithm: 'louvain' |
 | strongly-connected-components | detect | pattern: 'strongly-connected' |
 | weakly-connected-components | detect | pattern: 'weakly-connected' |
+
+## Next Steps: Memory Operations Refactoring
+
+### Current Issue
+The project has compilation errors because memory operations still import legacy schemas that were deleted. A temporary `src/mcp/schemas/legacy-compatibility.ts` file was created as a workaround.
+
+### Required Actions
+1. **Refactor Memory Operations**
+   - Update all files in `src/services/memory-operations/` to use internal types
+   - Remove dependencies on Zod schemas for internal operations
+   - Update MemoryService to use unified schemas where appropriate
+
+2. **Remove Temporary Fix**
+   - Delete `src/mcp/schemas/legacy-compatibility.ts`
+   - Ensure all imports are updated
+
+3. **Complete Testing**
+   - Write new e2e tests for unified tools
+   - Ensure all functionality is preserved
+   - Performance benchmarking
+
+### Technical Debt
+- Memory operations are tightly coupled to Zod schemas
+- Need better separation between API schemas and internal types
+- Consider using type mappings or adapters for cleaner architecture
