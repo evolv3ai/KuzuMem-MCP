@@ -377,16 +377,33 @@ export class MemoryService {
       const metadataRepo = this.repositoryProvider.getMetadataRepository(clientProjectRoot);
 
       const metadataContent = await metadataOps.getMetadataOp(
+        mcpContext,
         repositoryName,
         branch,
         repositoryRepo,
-        metadataRepo,
       );
+
       if (!metadataContent) {
-        logger.warn(`Metadata not found for ${repositoryName}:${branch} by getMetadataOp`);
+        logger.warn(
+          `[MemoryService.getMetadata] No metadata found for ${repositoryName}:${branch}`,
+        );
         return null;
       }
-      return metadataContent as z.infer<typeof toolSchemas.GetMetadataOutputSchema>;
+      const metadataResult = {
+        id: metadataContent.id,
+        project: {
+          name: metadataContent.content?.project?.name || repositoryName,
+          created: metadataContent.content?.project?.created || new Date().toISOString(),
+          description: metadataContent.content?.project?.description,
+        },
+        tech_stack: metadataContent.content?.tech_stack || {},
+        architecture: metadataContent.content?.architecture || '',
+        memory_spec_version: metadataContent.content?.memory_spec_version || '1.0',
+      };
+      logger.info(
+        `[MemoryService.getMetadata] Metadata retrieved for ${repositoryName}:${branch}`,
+      );
+      return metadataResult;
     } catch (error: any) {
       logger.error(`Error in getMetadata for ${repositoryName}:${branch}: ${error.message}`, {
         error: error.toString(),
@@ -421,7 +438,6 @@ export class MemoryService {
         branch,
         metadataContentChanges,
         repositoryRepo,
-        metadataRepo,
       );
 
       if (!updatedContent) {
@@ -674,6 +690,8 @@ export class MemoryService {
 
       const updatedCtxNode = await contextOps.updateContextOp(
         mcpContext,
+        params.repository,
+        params.branch,
         params,
         repositoryRepo,
         contextRepo,
@@ -722,17 +740,18 @@ export class MemoryService {
     const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
     const ruleRepo = this.repositoryProvider.getRuleRepository(clientProjectRoot);
 
-    // Convert null to undefined for content field
+    // Ensure content is not null for RuleInput
     const ruleForOps = {
       ...rule,
       content: rule.content === null ? undefined : rule.content,
-    } as Rule;
+      triggers: rule.triggers === null ? undefined : rule.triggers,
+    };
 
     return ruleOps.upsertRuleOp(
       mcpContext,
       repositoryName,
       branch,
-      ruleForOps,
+      ruleForOps as any,
       repositoryRepo,
       ruleRepo,
     ) as Promise<Rule | null>;
@@ -1083,7 +1102,8 @@ export class MemoryService {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
 
       const graphOpsParams = {
-        repositoryName,
+        clientProjectRoot,
+        repository: repositoryName,
         branch,
         itemId,
         itemType,
@@ -1130,7 +1150,8 @@ export class MemoryService {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
 
       const graphOpsParams = {
-        repositoryName,
+        clientProjectRoot,
+        repository: repositoryName,
         branch,
         componentId,
       };
@@ -1932,6 +1953,7 @@ export class MemoryService {
     }
 
     const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
     const fileRepo = this.repositoryProvider.getFileRepository(clientProjectRoot);
 
     const success = await fileOps.associateFileWithComponentOp(
@@ -2036,6 +2058,7 @@ export class MemoryService {
     }
 
     const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
     const tagRepo = this.repositoryProvider.getTagRepository(clientProjectRoot);
 
     const success = await tagOps.tagItemOp(
@@ -2091,6 +2114,7 @@ export class MemoryService {
     }
 
     const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
     const tagRepo = this.repositoryProvider.getTagRepository(clientProjectRoot);
 
     const items = await tagOps.findItemsByTagOp(
@@ -2401,14 +2425,19 @@ export class MemoryService {
 
       // Merge updates with existing data
       const updatedData = {
-        ...existing,
-        ...updates,
-        // Convert null to undefined
-        kind: updates.kind === null ? undefined : updates.kind,
-        depends_on: updates.depends_on === null ? undefined : updates.depends_on,
+        id: componentId,
+        name: existing.name,
+        kind: updates.kind !== undefined ? 
+          (updates.kind === null ? undefined : updates.kind) : 
+          (existing.kind === null ? undefined : existing.kind),
+        depends_on: updates.depends_on !== undefined ? 
+          (updates.depends_on === null ? undefined : updates.depends_on) : 
+          (existing.depends_on === null ? undefined : existing.depends_on),
+        status: updates.status !== undefined ? 
+          (updates.status === null ? undefined : updates.status) : 
+          (existing.status === null ? undefined : existing.status),
       };
 
-      // Use upsert method to update
       return await this.upsertComponent(mcpContext, clientProjectRoot, repositoryName, branch, updatedData);
     } catch (error: any) {
       logger.error(`[MemoryService.updateComponent] Error updating component ${componentId}:`, error);
@@ -2508,27 +2537,26 @@ export class MemoryService {
     }
 
     try {
-      // First check if file exists
       const existing = await this.getFile(mcpContext, clientProjectRoot, repositoryName, branch, fileId);
       if (!existing) {
         logger.warn(`[MemoryService.updateFile] File ${fileId} not found`);
         return null;
       }
-
+      
       // For now, we'll just use addFile to update since it acts as upsert
       const updatedData = {
-        id: fileId,
-        name: updates.name ?? existing.name,
-        path: updates.path ?? existing.path,
-        language: updates.language ?? existing.language,
-        metrics: updates.metrics ?? existing.metrics,
-        content_hash: updates.content_hash ?? existing.content_hash,
-        mime_type: updates.mime_type ?? existing.mime_type,
-        size_bytes: updates.size_bytes ?? existing.size_bytes,
+        ...existing,
+        ...updates,
       };
 
-      const result = await this.addFile(mcpContext, clientProjectRoot, repositoryName, branch, updatedData as any);
-      return result.success && result.file ? result.file as FileRecord : null;
+      const result = await this.addFile(mcpContext, clientProjectRoot, repositoryName, branch, updatedData);
+      
+      // Return the file entity from the result
+      if (result.success && result.entity) {
+        return result.entity as FileRecord;
+      }
+      
+      return null;
     } catch (error: any) {
       logger.error(`[MemoryService.updateFile] Error updating file ${fileId}:`, error);
       throw error;
@@ -2550,13 +2578,12 @@ export class MemoryService {
     }
 
     try {
-      // First check if tag exists
       const existing = await this.getTag(mcpContext, clientProjectRoot, repositoryName, branch, tagId);
       if (!existing) {
         logger.warn(`[MemoryService.updateTag] Tag ${tagId} not found`);
         return null;
       }
-
+      
       // For now, we'll just use addTag to update since it acts as upsert
       const updatedData = {
         ...existing,
@@ -2566,7 +2593,13 @@ export class MemoryService {
       };
 
       const result = await this.addTag(mcpContext, clientProjectRoot, repositoryName, branch, updatedData as any);
-      return result.success && result.tag ? result.tag as Tag : null;
+      
+      // Return the tag entity from the result
+      if (result.success && result.entity) {
+        return result.entity as Tag;
+      }
+      
+      return null;
     } catch (error: any) {
       logger.error(`[MemoryService.updateTag] Error updating tag ${tagId}:`, error);
       throw error;

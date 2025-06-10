@@ -33,13 +33,14 @@ describe('Detect Tool Tests', () => {
   describe('Strongly Connected Components Detection', () => {
     it('should detect strongly connected components', async () => {
       const mockResult = {
+        type: 'strongly-connected' as const,
         status: 'complete',
-        results: {
-          components: [
-            { component_id: 0, nodes: ['comp-1', 'comp-2', 'comp-3'] },
-            { component_id: 1, nodes: ['comp-4', 'comp-5'] },
-          ],
-        },
+        projectedGraphName: 'circular-deps',
+        components: [
+          { componentId: 0, nodes: ['comp-1', 'comp-2', 'comp-3'] },
+          { componentId: 1, nodes: ['comp-4', 'comp-5'] },
+        ],
+        totalComponents: 2,
         message: 'Found circular dependencies',
       };
       mockMemoryService.getStronglyConnectedComponents.mockResolvedValue(mockResult);
@@ -69,6 +70,7 @@ describe('Detect Tool Tests', () => {
         mockContext,
         '/test/project',
         {
+          type: 'strongly-connected',
           repository: 'test-repo',
           branch: 'main',
           projectedGraphName: 'circular-deps',
@@ -80,8 +82,11 @@ describe('Detect Tool Tests', () => {
 
     it('should handle empty results', async () => {
       mockMemoryService.getStronglyConnectedComponents.mockResolvedValue({
+        type: 'strongly-connected' as const,
         status: 'complete',
-        results: { components: [] },
+        projectedGraphName: 'deps',
+        components: [],
+        totalComponents: 0,
       });
 
       const result = await detectHandler(
@@ -104,14 +109,15 @@ describe('Detect Tool Tests', () => {
   describe('Weakly Connected Components Detection', () => {
     it('should detect weakly connected components', async () => {
       const mockResult = {
+        type: 'weakly-connected' as const,
         status: 'complete',
-        results: {
-          components: [
-            { component_id: 0, nodes: ['comp-1', 'comp-2'] },
-            { component_id: 1, nodes: ['comp-3'] },
-            { component_id: 2, nodes: ['comp-4', 'comp-5', 'comp-6'] },
-          ],
-        },
+        projectedGraphName: 'isolated-systems',
+        components: [
+          { componentId: 0, nodes: ['comp-1', 'comp-2'] },
+          { componentId: 1, nodes: ['comp-3'] },
+          { componentId: 2, nodes: ['comp-4', 'comp-5', 'comp-6'] },
+        ],
+        totalComponents: 3,
         message: 'Found isolated subsystems',
       };
       mockMemoryService.getWeaklyConnectedComponents.mockResolvedValue(mockResult);
@@ -217,8 +223,11 @@ describe('Detect Tool Tests', () => {
   describe('Progress Reporting', () => {
     it('should report progress for strongly connected detection', async () => {
       mockMemoryService.getStronglyConnectedComponents.mockResolvedValue({
+        type: 'strongly-connected' as const,
         status: 'complete',
-        results: { components: [] },
+        projectedGraphName: 'deps',
+        components: [],
+        totalComponents: 0,
       });
 
       await detectHandler(
@@ -249,8 +258,11 @@ describe('Detect Tool Tests', () => {
 
     it('should report progress for weakly connected detection', async () => {
       mockMemoryService.getWeaklyConnectedComponents.mockResolvedValue({
+        type: 'weakly-connected' as const,
         status: 'complete',
-        results: { components: [] },
+        projectedGraphName: 'deps',
+        components: [],
+        totalComponents: 0,
       });
 
       await detectHandler(

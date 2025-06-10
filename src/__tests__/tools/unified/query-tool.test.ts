@@ -42,13 +42,15 @@ describe('Query Tool Tests', () => {
       const mockContexts = [
         {
           id: 'ctx-1',
+          name: 'ctx-1',
           iso_date: '2024-12-09',
           agent: 'test-agent',
           summary: 'Test summary',
+          observation: null,
           repository: 'test-repo',
           branch: 'main',
-          created_at: '2024-12-09T10:00:00Z',
-          updated_at: '2024-12-09T10:00:00Z',
+          created_at: new Date('2024-12-09T10:00:00Z'),
+          updated_at: new Date('2024-12-09T10:00:00Z'),
         },
       ];
       mockMemoryService.getLatestContexts.mockResolvedValue(mockContexts);
@@ -101,14 +103,15 @@ describe('Query Tool Tests', () => {
   describe('Entities Query', () => {
     it('should list entities by label', async () => {
       const mockResult = {
+        type: 'entities' as const,
         label: 'Component',
-        nodes: [
+        entities: [
           { id: 'comp-1', name: 'Component 1' },
           { id: 'comp-2', name: 'Component 2' },
         ],
         limit: 100,
         offset: 0,
-        totalInLabel: 2,
+        totalCount: 2,
       };
       mockMemoryService.listNodesByLabel.mockResolvedValue(mockResult);
 
@@ -145,7 +148,7 @@ describe('Query Tool Tests', () => {
   describe('Relationships Query', () => {
     it('should find related items', async () => {
       const mockResult = {
-        status: 'complete',
+        startItemId: 'comp-1',
         relatedItems: [
           { id: 'comp-2', type: 'Component' },
           { id: 'rule-1', type: 'Rule' },
@@ -200,7 +203,7 @@ describe('Query Tool Tests', () => {
   describe('Dependencies Query', () => {
     it('should get component dependencies', async () => {
       const mockResult = {
-        status: 'complete',
+        componentId: 'comp-1',
         dependencies: [{ id: 'comp-2', name: 'Component 2', type: 'Component' }],
       };
       mockMemoryService.getComponentDependencies.mockResolvedValue(mockResult as any);
@@ -225,7 +228,7 @@ describe('Query Tool Tests', () => {
 
     it('should get component dependents', async () => {
       const mockResult = {
-        status: 'complete',
+        componentId: 'comp-1',
         dependents: [{ id: 'comp-3', name: 'Component 3', type: 'Component' }],
       };
       mockMemoryService.getComponentDependents.mockResolvedValue(mockResult as any);
@@ -265,7 +268,7 @@ describe('Query Tool Tests', () => {
   describe('Governance Query', () => {
     it('should get governing items for component', async () => {
       const mockResult = {
-        status: 'complete',
+        componentId: 'comp-1',
         decisions: [{ id: 'dec-1', name: 'Decision 1' }],
         rules: [{ id: 'rule-1', name: 'Rule 1' }],
       };
@@ -304,7 +307,8 @@ describe('Query Tool Tests', () => {
   describe('History Query', () => {
     it('should get item contextual history', async () => {
       const mockResult = {
-        status: 'complete',
+        itemId: 'comp-1',
+        itemType: 'Component',
         contextHistory: [
           { id: 'ctx-1', summary: 'Created component' },
           { id: 'ctx-2', summary: 'Updated component' },
@@ -347,6 +351,7 @@ describe('Query Tool Tests', () => {
   describe('Tags Query', () => {
     it('should find items by tag', async () => {
       const mockResult = {
+        type: 'tags' as const,
         tagId: 'tag-security',
         items: [
           { id: 'comp-1', type: 'Component' },
@@ -373,6 +378,7 @@ describe('Query Tool Tests', () => {
 
     it('should find items by tag with entity type filter', async () => {
       const mockResult = {
+        type: 'tags' as const,
         tagId: 'tag-security',
         items: [{ id: 'comp-1', type: 'Component' }],
       };

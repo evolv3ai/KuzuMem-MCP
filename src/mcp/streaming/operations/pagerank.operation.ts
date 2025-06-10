@@ -61,6 +61,7 @@ export class PageRankOperation {
       }
 
       const params: any = {
+        type: 'pagerank' as const,
         repository: repositoryName,
         branch: branch,
         projectedGraphName: projectedGraphName,
@@ -76,7 +77,7 @@ export class PageRankOperation {
 
       const pageRankOutput = await memoryService.pageRank(createMockContext(), clientProjectRoot, params);
 
-      const ranks = pageRankOutput?.results?.ranks || [];
+      const nodes = pageRankOutput?.nodes || [];
       const resultStatus = pageRankOutput?.status || 'error';
 
       const resultPayload = {
@@ -86,7 +87,7 @@ export class PageRankOperation {
         branch,
         projectedGraphName,
         results: {
-          ranks: ranks,
+          ranks: nodes.map((node) => ({ nodeId: node.id, score: node.pagerank })),
         },
         message: pageRankOutput?.message,
       };
@@ -94,8 +95,8 @@ export class PageRankOperation {
       if (progressHandler) {
         progressHandler.progress({
           status: 'in_progress',
-          message: `PageRank calculation processing for ${projectedGraphName}. Ranks found: ${ranks.length}.`,
-          ranksCount: ranks.length,
+          message: `PageRank calculation processing for ${projectedGraphName}. Ranks found: ${nodes.length}.`,
+          ranksCount: nodes.length,
         });
 
         // Send final progress event

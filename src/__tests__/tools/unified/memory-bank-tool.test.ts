@@ -61,7 +61,7 @@ describe('Unified Memory Bank Tool', () => {
         mockMemoryService.initMemoryBank.mockResolvedValue({
           success: true,
           message: 'Memory bank initialized',
-          dbPath: '/test/project/.kuzu',
+          path: '/test/project/.kuzu',
         });
 
         const result = await memoryBankHandler(params, mockContext, mockMemoryService);
@@ -78,7 +78,7 @@ describe('Unified Memory Bank Tool', () => {
         expect(result).toEqual({
           success: true,
           message: 'Memory bank initialized',
-          dbPath: '/test/project/.kuzu',
+          path: '/test/project/.kuzu',
         });
       });
 
@@ -170,7 +170,7 @@ describe('Unified Memory Bank Tool', () => {
 
         mockMemoryService.updateMetadata.mockResolvedValue({
           success: true,
-          metadata: params.metadata,
+          message: 'Metadata updated successfully',
         });
 
         const result = await memoryBankHandler(params, mockContext, mockMemoryService);
@@ -184,7 +184,7 @@ describe('Unified Memory Bank Tool', () => {
         );
         expect(result).toEqual({
           success: true,
-          metadata: params.metadata,
+          message: 'Metadata updated successfully',
         });
       });
 

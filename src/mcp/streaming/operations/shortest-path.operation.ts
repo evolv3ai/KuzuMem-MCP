@@ -69,6 +69,7 @@ export class ShortestPathOperation {
       }
 
       const paramsForService = {
+        type: 'shortest-path' as const,
         repository: repositoryName,
         branch: branch,
         projectedGraphName: projectedGraphName,
@@ -85,11 +86,10 @@ export class ShortestPathOperation {
         paramsForService,
       );
 
-      const pathFound = shortestPathOutput?.results?.pathFound || false;
-      const path = shortestPathOutput?.results?.path || [];
-      // Kuzu's shortest path op might not directly return length, it's often len(path)-1 or based on cost.
-      // For now, assume path is an array of nodes, so length can be path.length if pathFound.
-      const pathLength = pathFound ? path.length : 0;
+      const pathFound = shortestPathOutput?.pathFound || false;
+      const path = shortestPathOutput?.path || [];
+      // Use pathLength from response or calculate from path array
+      const pathLength = shortestPathOutput?.pathLength ?? (pathFound ? path.length : 0);
       const resultStatus = shortestPathOutput?.status || 'error';
 
       const resultPayload = {
