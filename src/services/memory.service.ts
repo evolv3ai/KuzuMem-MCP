@@ -73,8 +73,9 @@ export class MemoryService {
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
   ): Promise<KuzuDBClient> {
-    process.stdout.write(
-      `[STDOUT-DEBUG] MemoryService.getKuzuClient ENTERED with CPR: ${clientProjectRoot}\n`,
+    // Write debug information to stderr to avoid interfering with MCP JSON communication on stdout.
+    process.stderr.write(
+      `[DEBUG] MemoryService.getKuzuClient ENTERED with CPR: ${clientProjectRoot}\n`,
     );
     const logger = mcpContext.logger || console; // Fallback for safety, though context should always have logger
 
