@@ -108,10 +108,6 @@ export class KuzuDBClient {
   }
 
   /**
-   * Asynchronously initializes the database and connection for this client instance.
-   * Ensures the database directory exists and schema is initialized (idempotently).
-   */
-  /**
    * Helper method to detect and format permission error messages
    * @private
    */
@@ -653,22 +649,34 @@ export class KuzuDBClient {
    */
   async close(): Promise<void> {
     if (this.connection) {
-      // Kuzu Node.js driver does not have an explicit close for connection or database.
-      // Connections are managed by the Database object's lifecycle.
-      // Finalization/resource release happens when Database object is garbage collected
-      // or process exits. For manual cleanup, one might set database and connection to null.
-      console.log(
-        `KuzuDBClient: Connection for ${this.dbPath} is managed by KuzuDB C++ core. No explicit close needed for connection object.`,
-      );
-      this.connection = null; // Allow GC
+      try {
+        // Explicitly close the connection so that any file-locks held by the underlying C++
+        // layer are released immediately. If we skip this step the lock will only be removed
+        // when the object is garbage collected or the Node process exits, which is exactly
+        // what caused the "database locked" errors that appear when a new session tries to
+        // open the same memory-bank right after a previous one finished.
+        await this.connection.close();
+        console.log(`KuzuDBClient: Connection closed for ${this.dbPath}`);
+      } catch (err) {
+        // Log but do not throw – shutdown should continue even if we cannot close gracefully.
+        console.error(`KuzuDBClient: Error closing connection for ${this.dbPath}:`, err);
+      } finally {
+        this.connection = null; // allow GC
+      }
     }
+
     if (this.database) {
-      // Similar to connection, explicit database.close() is not a standard feature of the node driver.
-      // Database resources are typically released when the object is GC'd or process exits.
-      console.log(
-        `KuzuDBClient: Database for ${this.dbPath} resources managed by KuzuDB C++ core. No explicit close needed.`,
-      );
-      this.database = null; // Allow GC
+      try {
+        // The Node.js driver does expose a .close() on the Database class (it delegates to the
+        // underlying C++ Database::close). Calling it ensures the .lock file is cleaned up so
+        // that subsequent processes can open the database in READ_WRITE mode.
+        await this.database.close();
+        console.log(`KuzuDBClient: Database closed for ${this.dbPath}`);
+      } catch (err) {
+        console.error(`KuzuDBClient: Error closing database for ${this.dbPath}:`, err);
+      } finally {
+        this.database = null; // allow GC
+      }
     }
   }
 }
