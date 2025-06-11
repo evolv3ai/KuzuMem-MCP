@@ -5,6 +5,23 @@ import path from 'path';
 import { Mutex } from '../utils/mutex'; // For ensuring atomic initialization of a KuzuDBClient instance
 import config from './config'; // Now imports DB_RELATIVE_DIR and DB_FILENAME
 
+// -----------------------------------------------------------------------------
+// Redirect standard output logs to stderr when running under the MCP stdio
+// server so that stdout remains a clean JSON channel.  We intentionally make
+// this unconditional because the MCP process should *never* emit plain text on
+// stdout except for the JSON protocol messages produced by the stdio transport
+// layer.  This simple redirect keeps all existing `console.log` debugging lines
+// functional while guaranteeing they do not corrupt the JSON stream consumed by
+// the front-end extension.
+// -----------------------------------------------------------------------------
+/* eslint-disable no-global-assign */
+console.log = (...args: unknown[]): void => {
+  // Use console.error which writes to stderr
+  // eslint-disable-next-line no-console
+  console.error(...args);
+};
+/* eslint-enable no-global-assign */
+
 // Add connection validation interval (5 minutes)
 const CONNECTION_VALIDATION_INTERVAL = 5 * 60 * 1000;
 const SCHEMA_CHECK_TIMEOUT = 5000; // 5 seconds timeout for schema check
