@@ -2755,3 +2755,16 @@ export class MemoryService {
     }
   }
 }
+
+// -----------------------------------------------------------------------------
+// Ensure that any accidental console.log calls inside runtime paths emit to
+// stderr instead of stdout so that the MCP JSON channel remains clean.
+// We do it once here because MemoryService is loaded by all runtime servers
+// very early on.
+// -----------------------------------------------------------------------------
+/* eslint-disable no-global-assign */
+console.log = (...args: unknown[]): void => {
+  // eslint-disable-next-line no-console
+  console.error(...args);
+};
+/* eslint-enable no-global-assign */
