@@ -73,8 +73,9 @@ export class MemoryService {
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
   ): Promise<KuzuDBClient> {
-    process.stdout.write(
-      `[STDOUT-DEBUG] MemoryService.getKuzuClient ENTERED with CPR: ${clientProjectRoot}\n`,
+    // Write debug information to stderr to avoid interfering with MCP JSON communication on stdout.
+    process.stderr.write(
+      `[DEBUG] MemoryService.getKuzuClient ENTERED with CPR: ${clientProjectRoot}\n`,
     );
     const logger = mcpContext.logger || console; // Fallback for safety, though context should always have logger
 
@@ -2754,3 +2755,16 @@ export class MemoryService {
     }
   }
 }
+
+// -----------------------------------------------------------------------------
+// Ensure that any accidental console.log calls inside runtime paths emit to
+// stderr instead of stdout so that the MCP JSON channel remains clean.
+// We do it once here because MemoryService is loaded by all runtime servers
+// very early on.
+// -----------------------------------------------------------------------------
+/* eslint-disable no-global-assign */
+console.log = (...args: unknown[]): void => {
+  // eslint-disable-next-line no-console
+  console.error(...args);
+};
+/* eslint-enable no-global-assign */
