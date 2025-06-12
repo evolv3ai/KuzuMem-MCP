@@ -76,3 +76,6 @@ tasks/
 
 # KuzuDB
 *.kuzu/
+
+#vscode
+.vscode
