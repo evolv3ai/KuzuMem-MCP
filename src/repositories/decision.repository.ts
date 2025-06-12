@@ -114,6 +114,7 @@ export class DecisionRepository {
       name,
       date,
       context: decisionContext,
+      status,
     } = decision;
 
     const [logicalRepositoryName] = repositoryNodeId.split(':');
@@ -121,20 +122,24 @@ export class DecisionRepository {
     const now = new Date().toISOString();
 
     const query = `
-      MERGE (d:Decision {id: $id})
+      MERGE (d:Decision {graph_unique_id: $graphUniqueId})
       ON CREATE SET
-        d.graph_unique_id = $graphUniqueId,
-        d.title = $name,
-        d.dateCreated = $date,
-        d.rationale = $context,
+        d.id = $id,
+        d.name = $name,
+        d.date = $date,
+        d.context = $context,
         d.status = $status,
+        d.branch = $branch,
+        d.repository = $repository,
         d.created_at = $now,
         d.updated_at = $now
       ON MATCH SET
-        d.title = $name,
-        d.dateCreated = $date,
-        d.rationale = $context,
+        d.name = $name,
+        d.date = $date,
+        d.context = $context,
         d.status = $status,
+        d.branch = $branch,
+        d.repository = $repository,
         d.updated_at = $now
       RETURN d
     `;
@@ -145,7 +150,9 @@ export class DecisionRepository {
       name,
       date,
       context: decisionContext,
-      status: (decision as any).status || 'proposed',
+      status: status || 'proposed',
+      branch,
+      repository: repositoryNodeId,
       now,
     };
 

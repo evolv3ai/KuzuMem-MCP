@@ -397,9 +397,9 @@ function getSearchableProperties(entityType: string): string[] {
     case 'component':
       return ['name', 'kind'];
     case 'decision':
-      return ['name', 'context'];
+      return ['title', 'rationale'];
     case 'rule':
-      return ['name', 'content'];
+      return ['name', 'description'];
     case 'file':
       return ['name', 'path'];
     case 'context':

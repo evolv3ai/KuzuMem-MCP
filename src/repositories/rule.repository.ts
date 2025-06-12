@@ -103,9 +103,9 @@ export class RuleRepository {
     const now = new Date().toISOString();
 
     const query = `
-      MERGE (r:Rule {id: $id})
+      MERGE (r:Rule {graph_unique_id: $graphUniqueId})
       ON CREATE SET
-        r.graph_unique_id = $graphUniqueId,
+        r.id = $id,
         r.title = $name,
         r.description = $description,
         r.scope = $scope,

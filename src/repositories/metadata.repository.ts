@@ -151,27 +151,30 @@ export class MetadataRepository {
       updated_val: new Date().toISOString(),
     };
 
-    // Use a simple CREATE query instead of MERGE which might be causing issues
+    // MERGE to prevent duplicate metadata entries.
     const query = `
-      CREATE (m:Metadata {
-        id: $id_val,
-        graph_unique_id: $gid,
-        branch: $branch_val,
-        name: $name_val,
-        content: $content_val,
-        created_at: $created_val,
-        updated_at: $updated_val
-      })
+      MERGE (m:Metadata {graph_unique_id: $gid})
+      ON CREATE SET
+        m.id = $id_val,
+        m.branch = $branch_val,
+        m.name = $name_val,
+        m.content = $content_val,
+        m.created_at = $created_val,
+        m.updated_at = $updated_val
+      ON MATCH SET
+        m.name = $name_val,
+        m.content = $content_val,
+        m.updated_at = $updated_val
     `;
 
-    logger.debug(`[MetadataRepository] Creating metadata (PK for query: ${graph_unique_id_val})`, {
+    logger.debug(`[MetadataRepository] Upserting metadata (PK for query: ${graph_unique_id_val})`, {
       params: Object.keys(flatParams),
     });
 
     try {
       await this.kuzuClient.executeQuery(query, flatParams);
       logger.info(
-        `[MetadataRepository] CREATE executed for metadata (PK: ${graph_unique_id_val}). Attempting to find...`,
+        `[MetadataRepository] Upsert executed for metadata (PK: ${graph_unique_id_val}). Attempting to find...`,
       );
 
       const foundMetadata = await this.findMetadata(

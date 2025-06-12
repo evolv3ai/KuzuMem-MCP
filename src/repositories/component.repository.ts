@@ -278,9 +278,9 @@ export class ComponentRepository {
 
       // Simplified MERGE query
       const upsertNodeQuery = `
-        MERGE (c:Component {id: $componentId})
+        MERGE (c:Component {graph_unique_id: $graphUniqueId})
         ON CREATE SET
-          c.graph_unique_id = $graphUniqueId,
+          c.id = $componentId,
           c.name = $name,
           c.kind = $kind,
           c.status = $status,
@@ -289,7 +289,6 @@ export class ComponentRepository {
           c.created_at = $now,
           c.updated_at = $now
         ON MATCH SET
-          c.graph_unique_id = $graphUniqueId,
           c.name = $name,
           c.kind = $kind,
           c.status = $status,
