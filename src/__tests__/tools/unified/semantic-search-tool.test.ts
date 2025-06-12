@@ -1,6 +1,6 @@
-import { semanticSearchHandler } from '../../../mcp/services/handlers/unified/semantic-search-handler';
-import { MemoryService } from '../../../services/memory.service';
+import { searchHandler } from '../../../mcp/services/handlers/unified/search-handler';
 import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { MemoryService } from '../../../services/memory.service';
 
 describe('Semantic Search Tool Tests', () => {
   let mockMemoryService: jest.Mocked<MemoryService>;
@@ -29,7 +29,7 @@ describe('Semantic Search Tool Tests', () => {
 
   describe('Placeholder Implementation', () => {
     it('should return placeholder results for semantic search', async () => {
-      const result = await semanticSearchHandler(
+      const result = await searchHandler(
         {
           query: 'find authentication components',
           repository: 'test-repo',
@@ -49,7 +49,7 @@ describe('Semantic Search Tool Tests', () => {
     });
 
     it('should accept optional parameters', async () => {
-      const result = await semanticSearchHandler(
+      const result = await searchHandler(
         {
           query: 'database connections',
           repository: 'test-repo',
@@ -91,7 +91,7 @@ describe('Semantic Search Tool Tests', () => {
       } as any;
 
       await expect(
-        semanticSearchHandler(
+        searchHandler(
           {
             query: 'test query',
             repository: 'test-repo',
@@ -105,7 +105,7 @@ describe('Semantic Search Tool Tests', () => {
 
   describe('Progress Reporting', () => {
     it('should report progress for placeholder search', async () => {
-      await semanticSearchHandler(
+      await searchHandler(
         {
           query: 'test query',
           repository: 'test-repo',

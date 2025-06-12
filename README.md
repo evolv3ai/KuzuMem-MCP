@@ -4,7 +4,7 @@ A TypeScript implementation of a distributed memory bank as an MCP (Model Contex
 
 ## Key Features
 
-- **Unified Tool Architecture** - 9 consolidated tools covering all memory bank operations
+- **Unified Tool Architecture** - 10 consolidated tools covering all memory bank operations
 - **Thread-Safe Singleton Pattern** - Ensures each resource is instantiated only once, with proper thread safety
 - **Distributed Graph Structure** - Follows the advanced memory bank specification using a KùzuDB graph
 - **Repository & Branch Awareness** - All operations are contextualized by repository name and branch
@@ -17,7 +17,7 @@ A TypeScript implementation of a distributed memory bank as an MCP (Model Contex
 
 ## Unified Tools
 
-The system currently broadcasts **9** unified tools that consolidate all memory bank operations (two additional tools are planned):
+The system currently broadcasts **10** unified tools that consolidate all memory bank operations (one additional tool is planned):
 
 1. **memory-bank** - Initialize and manage memory bank metadata
 2. **entity** - Create, update, delete, and retrieve all entity types (components, decisions, rules, files, tags)
@@ -28,8 +28,7 @@ The system currently broadcasts **9** unified tools that consolidate all memory 
 7. **analyze** - Run graph algorithms (PageRank, K-Core, Louvain, Shortest Path)
 8. **detect** - Detect patterns (strongly/weakly connected components)
 9. **bulk-import** - Efficient bulk entity import
-10. **search** - Planned standard search tool (not yet broadcast)
-11. **semantic-search** - Planned semantic search capability (placeholder)
+10. **search** - Full-text search across all entity types with KuzuDB FTS integration
 
 For detailed tool documentation, see [Unified Tools Documentation](docs/unified-tools.md).
 
