@@ -833,6 +833,77 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     });
   });
 
+  describe('Tool 10: search', () => {
+    it('should perform full-text search across entities', async () => {
+      const result = await callTool('search', {
+        query: 'test component service',
+        clientProjectRoot: testProjectRoot,
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        mode: 'fulltext',
+        entityTypes: ['component'],
+        limit: 10,
+      });
+
+      expect(result).toMatchObject({
+        status: 'success',
+        mode: 'fulltext',
+        results: expect.any(Array),
+        totalResults: expect.any(Number),
+        query: 'test component service',
+      });
+
+      // Should find our test components
+      if (result.results.length > 0) {
+        expect(result.results[0]).toMatchObject({
+          id: expect.any(String),
+          type: 'component',
+          name: expect.any(String),
+          score: expect.any(Number),
+        });
+      }
+    });
+
+    it('should search across multiple entity types', async () => {
+      const result = await callTool('search', {
+        query: 'bulk decision',
+        clientProjectRoot: testProjectRoot,
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        mode: 'fulltext',
+        entityTypes: ['component', 'decision', 'rule'],
+        limit: 5,
+      });
+
+      expect(result).toMatchObject({
+        status: 'success',
+        mode: 'fulltext',
+        results: expect.any(Array),
+        totalResults: expect.any(Number),
+        query: 'bulk decision',
+      });
+    });
+
+    it('should handle empty search results gracefully', async () => {
+      const result = await callTool('search', {
+        query: 'httpstream-nonexistent-term-xyz789',
+        clientProjectRoot: testProjectRoot,
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        mode: 'fulltext',
+        limit: 10,
+      });
+
+      expect(result).toMatchObject({
+        status: 'success',
+        mode: 'fulltext',
+        results: [],
+        totalResults: 0,
+        query: 'httpstream-nonexistent-term-xyz789',
+      });
+    });
+  });
+
   describe('Cleanup verification', () => {
     it('should verify all test data exists', async () => {
       const result = await callTool('query', {

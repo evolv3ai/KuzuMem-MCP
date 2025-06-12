@@ -49,7 +49,7 @@ function getSchemaKeyForTool(toolName: string): keyof typeof toolSchemas | undef
     analyze: 'AnalyzeInputSchema',
     detect: 'DetectInputSchema',
     'bulk-import': 'BulkImportInputSchema',
-    'semantic-search': 'SemanticSearchInputSchema',
+    search: 'SearchInputSchema',
   };
 
   const schemaKey = unifiedToolSchemas[toolName];

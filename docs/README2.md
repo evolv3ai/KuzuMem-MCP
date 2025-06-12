@@ -2,7 +2,7 @@
 
 > **Enhance AI coding assistants with persistent, graph-based knowledge**
 
-The KuzuMem-MCP server provides a structured approach to storing and retrieving repository knowledge, enabling AI coding assistants to maintain context across sessions and branches. Recently consolidated from 29 individual tools to 11 unified tools (9 currently active) for improved maintainability and user experience.
+The KuzuMem-MCP server provides a structured approach to storing and retrieving repository knowledge, enabling AI coding assistants to maintain context across sessions and branches. Recently consolidated from 29 individual tools to 11 unified tools (10 currently active) for improved maintainability and user experience.
 
 ## 🎯 Purpose & Goals
 
@@ -46,7 +46,7 @@ The implementation supports branch-based workflows:
 
 The recent consolidation provides:
 
-- Reduced complexity from 29 to 11 tools (9 active, 2 planned)
+- Reduced complexity from 29 to 11 tools (10 active, 1 planned)
 - Consistent parameter patterns across all tools
 - Simplified learning curve for new users
 - Better maintainability and testing
@@ -236,6 +236,57 @@ $ curl -X POST http://localhost:3000/tools/detect \
 
 These examples demonstrate how the graph-based architecture enables complex queries about component relationships, architectural decisions, and system structure that would be difficult or impossible with traditional databases. AI assistants can use these insights to provide more informed guidance about code changes, architectural evolution, and potential design weaknesses.
 
+### 7. Full-Text Search Across All Entities
+
+```bash
+# Search for components, decisions, rules, files, and context containing specific terms
+$ curl -X POST http://localhost:3000/tools/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "authentication user login",
+    "repository": "my-app", 
+    "branch": "main",
+    "mode": "fulltext",
+    "entityTypes": ["component", "decision", "rule"],
+    "limit": 10
+  }'
+
+# Results include relevant entities with snippets and scores
+{
+  "status": "success",
+  "mode": "fulltext",
+  "results": [
+    {
+      "id": "comp-AuthService",
+      "type": "component", 
+      "name": "Authentication Service",
+      "score": 0.95,
+      "snippet": "Handles user authentication and login flows...",
+      "metadata": {"kind": "service", "status": "active"}
+    },
+    {
+      "id": "dec-20250301-oauth",
+      "type": "decision",
+      "name": "OAuth 2.0 Implementation",
+      "score": 0.87,
+      "snippet": "Decision to implement OAuth 2.0 for user authentication...",
+      "metadata": {"date": "2025-03-01", "status": "approved"}
+    }
+  ],
+  "totalResults": 2,
+  "query": "authentication user login"
+}
+```
+
+The search tool leverages **KuzuDB's Full-Text Search (FTS) extension** to provide:
+
+- **Cross-entity search** - Find relevant information across components, decisions, rules, files, and context
+- **Automatic index management** - FTS indexes are created and maintained automatically
+- **Snippet extraction** - Returns relevant text snippets with search term highlighting context
+- **Metadata filtering** - Include entity-specific metadata in results
+- **Scalable performance** - Efficient full-text indexing that scales with repository size
+- **Future extensibility** - Architecture ready for semantic and hybrid search modes
+
 ### Key Schema Design Elements
 
 1. **Branch-Aware Repository Nodes**
@@ -302,12 +353,13 @@ This server implements Model Context Protocol standards:
 
 ### Fall 2025 - Tool Consolidation
 
-- ✅ **Tool Consolidation** - Reduced from 29 individual tools to 11 unified tools (9 active)
+- ✅ **Tool Consolidation** - Reduced from 29 individual tools to 11 unified tools (10 active)
 - ✅ **Unified Parameter Patterns** - Consistent interface across all tools
 - ✅ **Memory Operations Refactoring** - Removed Zod dependencies from core operations
 - ✅ **E2E Testing Infrastructure** - Comprehensive tests for stdio and HTTP streaming
 - ✅ **TypeScript Compilation** - All compilation errors resolved
 - ✅ **Documentation Updates** - Basic documentation for unified tools
+- ✅ **Full-Text Search Implementation** - Replaced semantic search placeholder with working KuzuDB FTS integration
 
 ## 💡 Use Cases
 
@@ -315,6 +367,7 @@ This server implements Model Context Protocol standards:
 - **Architecture Understanding** - Query component dependencies and relationships
 - **Decision History** - Track why implementation choices were made
 - **Impact Assessment** - Identify affected components when making changes
+- **Knowledge Discovery** - Full-text search across all entities to find relevant information
 - **Onboarding** - Help new team members understand system structure
 - **Multi-Project Support** - Maintain separate memory banks for different projects
 - **Code Review Assistance** - Use governance queries to ensure compliance with rules
@@ -356,7 +409,7 @@ DEBUG=1
 
 ### MCP Tools
 
-The server currently provides 9 broadcasted tools for repository operations, memory management, and graph traversal (two additional tools are planned and not yet broadcast). See [README.md](../README.md) for the complete tool list.
+The server currently provides 10 broadcasted tools for repository operations, memory management, and graph traversal (one additional tool is planned and not yet broadcast). See [README.md](../README.md) for the complete tool list.
 
 ## 🏗️ Architecture
 
