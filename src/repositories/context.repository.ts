@@ -309,20 +309,21 @@ export class ContextRepository {
     const now = new Date().toISOString();
 
     const query = `
-      MERGE (c:Context {id: $id})
+      MERGE (c:Context {graph_unique_id: $graphUniqueId})
       ON CREATE SET
-        c.graph_unique_id = $graphUniqueId,
+        c.id = $id,
         c.summary = $summary,
         c.agent = $agent,
         c.branch = $branch,
         c.repository = $repository,
-        c.timestamp = $now
+        c.created_at = $now,
+        c.updated_at = $now
       ON MATCH SET
         c.summary = $summary,
         c.agent = $agent,
         c.branch = $branch,
         c.repository = $repository,
-        c.timestamp = $now
+        c.updated_at = $now
       RETURN c
     `;
 
