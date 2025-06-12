@@ -2,7 +2,7 @@
 
 > **Enhance AI coding assistants with persistent, graph-based knowledge**
 
-The KuzuMem-MCP server provides a structured approach to storing and retrieving repository knowledge, enabling AI coding assistants to maintain context across sessions and branches. Recently consolidated from 29 individual tools to 11 unified tools for improved maintainability and user experience.
+The KuzuMem-MCP server provides a structured approach to storing and retrieving repository knowledge, enabling AI coding assistants to maintain context across sessions and branches. Recently consolidated from 29 individual tools to 11 unified tools (9 currently active) for improved maintainability and user experience.
 
 ## 🎯 Purpose & Goals
 
@@ -46,7 +46,7 @@ The implementation supports branch-based workflows:
 
 The recent consolidation provides:
 
-- Reduced complexity from 29 to 11 tools
+- Reduced complexity from 29 to 11 tools (9 active, 2 planned)
 - Consistent parameter patterns across all tools
 - Simplified learning curve for new users
 - Better maintainability and testing
@@ -282,7 +282,7 @@ This server implements Model Context Protocol standards:
 - **🔄 JSON-RPC Communication** - Standard protocol support
 - **🗺️ Graph Traversal Tools** - Path finding and dependency analysis
 - **🔐 Client Project Isolation** - Each client project gets its own memory bank
-- **🎯 Unified Tool Architecture** - 11 consolidated tools from original 29
+- **🎯 Unified Tool Architecture** - 9 active (11 planned) consolidated tools from original 29
 
 ## 📅 Feature Timeline
 
@@ -302,7 +302,7 @@ This server implements Model Context Protocol standards:
 
 ### Fall 2025 - Tool Consolidation
 
-- ✅ **Tool Consolidation** - Reduced from 29 individual tools to 11 unified tools
+- ✅ **Tool Consolidation** - Reduced from 29 individual tools to 11 unified tools (9 active)
 - ✅ **Unified Parameter Patterns** - Consistent interface across all tools
 - ✅ **Memory Operations Refactoring** - Removed Zod dependencies from core operations
 - ✅ **E2E Testing Infrastructure** - Comprehensive tests for stdio and HTTP streaming
@@ -356,7 +356,7 @@ DEBUG=1
 
 ### MCP Tools
 
-The server provides 11 unified tools for repository operations, memory management, and graph traversal. See [README.md](../README.md) for the complete tool list.
+The server currently provides 9 broadcasted tools for repository operations, memory management, and graph traversal (two additional tools are planned and not yet broadcast). See [README.md](../README.md) for the complete tool list.
 
 ## 🏗️ Architecture
 
