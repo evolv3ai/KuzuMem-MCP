@@ -96,115 +96,49 @@ export class RuleRepository {
    */
   async upsertRule(rule: Rule): Promise<Rule | null> {
     const logger = console; // Placeholder logger
-    const {
-      repository: repositoryNodeId,
-      branch,
-      id: logicalId,
-      name,
-      created,
-      content,
-      status,
-      triggers,
-    } = rule;
-    const statusFromInput = (rule as any).status; // Assuming internal Rule type will be updated for status
+    const { repository: repositoryNodeId, branch, id: logicalId, name } = rule;
 
-    const repoIdParts = repositoryNodeId.split(':');
-    if (repoIdParts.length < 1) {
-      logger.error(`[RuleRepository] Invalid repositoryNodeId format: ${repositoryNodeId}`);
-      throw new Error(`Invalid repositoryNodeId format for upsertRule: ${repositoryNodeId}`);
-    }
-    const logicalRepositoryName = repoIdParts[0];
-    const effectiveBranch = repoIdParts.length > 1 ? repoIdParts[1] : branch;
-
-    const graphUniqueId = formatGraphUniqueId(logicalRepositoryName, effectiveBranch, logicalId);
-    const now = new Date();
-
-    // Validate 'created' date format (YYYY-MM-DD string) from input 'rule.created'
-    let kuzuCreatedDateString = rule.created; // Directly use the string from Rule type
-    if (
-      typeof kuzuCreatedDateString !== 'string' ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(kuzuCreatedDateString)
-    ) {
-      logger.warn(
-        `[RuleRepository] Invalid or non-string 'created' date for rule ${logicalId}: '${kuzuCreatedDateString}'. Defaulting to current date. Expected YYYY-MM-DD string.`,
-      );
-      kuzuCreatedDateString = new Date().toISOString().split('T')[0];
-    }
-
-    const propsOnCreate = {
-      id: logicalId,
-      graph_unique_id: graphUniqueId,
-      name: name,
-      created: kuzuCreatedDateString,
-      triggers: Array.isArray(triggers) ? triggers.map(String) : triggers ? [String(triggers)] : [],
-      content: content || null,
-      status: statusFromInput || 'active',
-      branch: effectiveBranch,
-      repository: repositoryNodeId,
-      created_at: now,
-      updated_at: now,
-    };
-
-    const propsOnMatch = {
-      name: name,
-      created: kuzuCreatedDateString,
-      triggers: Array.isArray(triggers) ? triggers.map(String) : triggers ? [String(triggers)] : [],
-      content: content || null,
-      status: statusFromInput || 'active',
-      updated_at: now,
-    };
+    const [logicalRepositoryName] = repositoryNodeId.split(':');
+    const graphUniqueId = formatGraphUniqueId(logicalRepositoryName, branch, logicalId);
+    const now = new Date().toISOString();
 
     const query = `
-      MATCH (repo:Repository {id: $repositoryNodeIdParam})
-      MERGE (r:Rule {graph_unique_id: $graphUniqueIdParam})
-      ON CREATE SET 
-        r.id = $idParam,
-        r.name = $nameParam,
-        r.created = date($createdDateParam),
-        r.triggers = $triggersParam,
-        r.content = $contentParam,
-        r.status = $statusParam,
-        r.branch = $branchParam,
-        r.repository = $repositoryNodeIdParam,
-        r.created_at = $createdAtParam,
-        r.updated_at = $updatedAtParam
-      ON MATCH SET 
-        r.name = $nameParam, 
-        r.created = date($createdDateParam), 
-        r.triggers = $triggersParam, 
-        r.content = $contentParam, 
-        r.status = $statusParam, 
-        r.updated_at = $updatedAtParam 
-      MERGE (repo)-[:HAS_RULE]->(r)
+      MERGE (r:Rule {id: $id})
+      ON CREATE SET
+        r.graph_unique_id = $graphUniqueId,
+        r.title = $name,
+        r.description = $description,
+        r.scope = $scope,
+        r.severity = $severity,
+        r.category = $category,
+        r.created_at = $now,
+        r.updated_at = $now
+      ON MATCH SET
+        r.title = $name,
+        r.description = $description,
+        r.scope = $scope,
+        r.severity = $severity,
+        r.category = $category,
+        r.updated_at = $now
       RETURN r
     `;
 
-    const queryParams = {
-      repositoryNodeIdParam: repositoryNodeId,
-      graphUniqueIdParam: graphUniqueId,
-      idParam: propsOnCreate.id,
-      nameParam: propsOnCreate.name,
-      createdDateParam: propsOnCreate.created,
-      triggersParam: propsOnCreate.triggers,
-      contentParam: propsOnCreate.content,
-      statusParam: propsOnCreate.status,
-      branchParam: propsOnCreate.branch,
-      createdAtParam: propsOnCreate.created_at,
-      updatedAtParam: now, // Use current time for both create and update
+    const params = {
+      id: logicalId,
+      graphUniqueId,
+      name,
+      description: (rule as any).description || '',
+      scope: (rule as any).scope || 'component',
+      severity: (rule as any).severity || 'medium',
+      category: (rule as any).category || 'general',
+      now,
     };
 
     try {
-      logger.debug(
-        `[RuleRepository] Upserting Rule GID ${graphUniqueId} for repo ${repositoryNodeId}`,
-      );
-      const result = await this.kuzuClient.executeQuery(query, queryParams);
-      if (result && result.length > 0 && result[0].r) {
-        logger.info(
-          `[RuleRepository] Rule ${logicalId} upserted successfully for ${repositoryNodeId}`,
-        );
-        return this.formatKuzuRowToRule(result[0].r, logicalRepositoryName, effectiveBranch);
+      const result = await this.kuzuClient.executeQuery(query, params);
+      if (result && result.length > 0) {
+        return this.formatKuzuRowToRule(result[0].r, logicalRepositoryName, branch);
       }
-      logger.warn(`[RuleRepository] UpsertRule did not return a node for GID ${graphUniqueId}`);
       return null;
     } catch (error: any) {
       logger.error(

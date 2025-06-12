@@ -113,93 +113,47 @@ export class DecisionRepository {
       id: logicalId,
       name,
       date,
-      context: decisionContext /*, status */,
+      context: decisionContext,
     } = decision;
-    const statusFromInput = (decision as any).status;
 
-    const repoIdParts = repositoryNodeId.split(':');
-    if (repoIdParts.length < 1) {
-      logger.error(`[DecisionRepository] Invalid repositoryNodeId format: ${repositoryNodeId}`);
-      throw new Error(`Invalid repositoryNodeId format for upsertDecision: ${repositoryNodeId}`);
-    }
-    const logicalRepositoryName = repoIdParts[0];
-    const effectiveBranch = repoIdParts.length > 1 ? repoIdParts[1] : branch;
+    const [logicalRepositoryName] = repositoryNodeId.split(':');
+    const graphUniqueId = formatGraphUniqueId(logicalRepositoryName, branch, logicalId);
+    const now = new Date().toISOString();
 
-    const graphUniqueId = formatGraphUniqueId(logicalRepositoryName, effectiveBranch, logicalId);
-    const now = new Date();
-
-    // Validate date format (YYYY-MM-DD string) from input 'decision.date'
-    let kuzuDateString = decision.date; // Directly use the string from Decision type
-    if (typeof kuzuDateString !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(kuzuDateString)) {
-      logger.warn(
-        `[DecisionRepository] Invalid or non-string date format for decision ${logicalId}: '${kuzuDateString}'. Defaulting to current date. Expected YYYY-MM-DD string.`,
-      );
-      kuzuDateString = new Date().toISOString().split('T')[0];
-    }
-
-    const propsOnCreate = {
-      id: logicalId,
-      graph_unique_id: graphUniqueId,
-      name: name,
-      date: kuzuDateString,
-      branch: effectiveBranch,
-      created_at: now.toISOString(),
-    };
-
-    const propsOnMatch = {
-      name: name,
-      date: kuzuDateString,
-    };
-
-    const refinedQuery = `
-      MATCH (repo:Repository {id: $repositoryNodeIdParam})
-      MERGE (d:Decision {graph_unique_id: $graphUniqueIdParam})
-      ON CREATE SET 
-        d.id = $propsOnCreateParam.id,
-        d.graph_unique_id = $graphUniqueIdParam,
-        d.branch = $propsOnCreateParam.branch,
-        d.name = $propsOnCreateParam.name,
-        d.context = $decisionContextParamForCreate,
-        d.date = date($propsOnCreateParam.date),
-        d.repository = $repositoryNodeIdParam,
-        d.created_at = CASE 
-          WHEN $propsOnCreateParam.created_at IS NOT NULL THEN timestamp($propsOnCreateParam.created_at) 
-          ELSE current_timestamp() 
-        END,
-        d.updated_at = current_timestamp()
-      ON MATCH SET 
-        d.name = $nameParam, 
-        d.context = $decisionContextParamForMatch,
-        d.date = date($dateParam),
-        d.updated_at = current_timestamp()
-      MERGE (repo)-[:HAS_DECISION]->(d)
+    const query = `
+      MERGE (d:Decision {id: $id})
+      ON CREATE SET
+        d.graph_unique_id = $graphUniqueId,
+        d.title = $name,
+        d.dateCreated = $date,
+        d.rationale = $context,
+        d.status = $status,
+        d.created_at = $now,
+        d.updated_at = $now
+      ON MATCH SET
+        d.title = $name,
+        d.dateCreated = $date,
+        d.rationale = $context,
+        d.status = $status,
+        d.updated_at = $now
       RETURN d
     `;
 
-    const queryParams = {
-      repositoryNodeIdParam: repositoryNodeId,
-      graphUniqueIdParam: graphUniqueId,
-      propsOnCreateParam: propsOnCreate,
-      decisionContextParamForCreate: decisionContext || null,
-      nameParam: propsOnMatch.name,
-      decisionContextParamForMatch: decisionContext || null,
-      dateParam: propsOnMatch.date,
+    const params = {
+      id: logicalId,
+      graphUniqueId,
+      name,
+      date,
+      context: decisionContext,
+      status: (decision as any).status || 'proposed',
+      now,
     };
 
     try {
-      logger.debug(
-        `[DecisionRepository] Upserting Decision GID ${graphUniqueId} for repo ${repositoryNodeId}`,
-      );
-      const result = await this.kuzuClient.executeQuery(refinedQuery, queryParams);
-      if (result && result.length > 0 && result[0].d) {
-        logger.info(
-          `[DecisionRepository] Decision ${logicalId} upserted successfully for ${repositoryNodeId}`,
-        );
-        return this.formatKuzuRowToDecision(result[0].d, logicalRepositoryName, effectiveBranch);
+      const result = await this.kuzuClient.executeQuery(query, params);
+      if (result && result.length > 0) {
+        return this.formatKuzuRowToDecision(result[0].d, logicalRepositoryName, branch);
       }
-      logger.warn(
-        `[DecisionRepository] UpsertDecision did not return a node for GID ${graphUniqueId}`,
-      );
       return null;
     } catch (error: any) {
       logger.error(

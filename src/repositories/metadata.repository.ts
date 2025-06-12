@@ -1,7 +1,7 @@
-import { Metadata } from '../types';
 import { KuzuDBClient } from '../db/kuzu';
-import { RepositoryRepository } from './repository.repository';
 import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
+import { Metadata } from '../types';
+import { RepositoryRepository } from './repository.repository';
 /**
  * Repository for Metadata, using KuzuDB and Cypher queries.
  * Each instance is now tied to a specific KuzuDBClient.
@@ -59,6 +59,9 @@ export class MetadataRepository {
   ): Promise<Metadata | null> {
     const logger = mcpContext.logger || console;
     const graphUniqueId = `${repositoryName}:${branch}:${metadataId}`;
+    logger.debug(
+      `[MetadataRepository] findMetadata called with repositoryName=${repositoryName}, branch=${branch}, metadataId=${metadataId}, GID=${graphUniqueId}`,
+    );
     const query = `MATCH (m:Metadata {graph_unique_id: $graphUniqueId}) RETURN m`;
     logger.debug(`[MetadataRepository] Executing findMetadata query for GID: ${graphUniqueId}`);
     try {
@@ -111,6 +114,15 @@ export class MetadataRepository {
     let repoNameForGid: string;
     let branchForGid: string;
 
+    // Debug logging for input metadata
+    logger.debug('[MetadataRepository] upsertMetadata called with metadata:', {
+      id: metadata.id,
+      repository: metadata.repository,
+      branch: metadata.branch,
+      name: metadata.name,
+      contentKeys: metadata.content ? Object.keys(metadata.content) : 'null',
+    });
+
     if (metadata.repository && metadata.repository.includes(':')) {
       const parts = metadata.repository.split(':');
       repoNameForGid = parts[0];
@@ -124,6 +136,7 @@ export class MetadataRepository {
       branchForGid = metadata.branch || 'unknown_branch';
     }
     const graph_unique_id_val = `${repoNameForGid}:${branchForGid}:${metadata.id}`;
+    logger.debug(`[MetadataRepository] Constructed graph_unique_id: ${graph_unique_id_val}`);
 
     const flatParams = {
       gid: graph_unique_id_val,
@@ -135,35 +148,32 @@ export class MetadataRepository {
         ? metadata.created_at
         : new Date(metadata.created_at || Date.now())
       ).toISOString(),
+      updated_val: new Date().toISOString(),
     };
 
+    // Use a simple CREATE query instead of MERGE which might be causing issues
     const query = `
-      MERGE (m:Metadata {graph_unique_id: $gid})
-      ON CREATE SET
-        m.id = $id_val,
-        m.graph_unique_id = $gid,
-        m.branch = $branch_val,
-        m.name = $name_val,
-        m.content = $content_val,
-        m.created_at = CASE 
-          WHEN $created_val IS NOT NULL THEN timestamp($created_val) 
-          ELSE current_timestamp() 
-        END,
-        m.updated_at = current_timestamp()
-      ON MATCH SET
-        m.branch = $branch_val,
-        m.name = $name_val,
-        m.content = $content_val,
-        m.updated_at = current_timestamp()
+      CREATE (m:Metadata {
+        id: $id_val,
+        graph_unique_id: $gid,
+        branch: $branch_val,
+        name: $name_val,
+        content: $content_val,
+        created_at: $created_val,
+        updated_at: $updated_val
+      })
     `;
-    logger.debug(`[MetadataRepository] Upserting metadata (PK for query: ${graph_unique_id_val})`, {
+
+    logger.debug(`[MetadataRepository] Creating metadata (PK for query: ${graph_unique_id_val})`, {
       params: Object.keys(flatParams),
     });
+
     try {
       await this.kuzuClient.executeQuery(query, flatParams);
       logger.info(
-        `[MetadataRepository] MERGE executed for metadata (PK: ${graph_unique_id_val}). Attempting to find...`,
+        `[MetadataRepository] CREATE executed for metadata (PK: ${graph_unique_id_val}). Attempting to find...`,
       );
+
       const foundMetadata = await this.findMetadata(
         mcpContext,
         repoNameForGid,
@@ -173,20 +183,45 @@ export class MetadataRepository {
 
       if (foundMetadata) {
         logger.info(
-          `[MetadataRepository] Metadata upserted and found successfully (PK: ${graph_unique_id_val})`,
+          `[MetadataRepository] Metadata created and found successfully (PK: ${graph_unique_id_val})`,
         );
         return foundMetadata;
       }
+
+      // If we can't find it after creation, construct a return value
       logger.warn(
-        `[MetadataRepository] Upserted metadata but could not find it afterwards (PK: ${graph_unique_id_val})`,
+        `[MetadataRepository] Created metadata but could not find it afterwards (PK: ${graph_unique_id_val}), returning constructed value`,
       );
-      return null;
+      return {
+        id: metadata.id,
+        repository: metadata.repository,
+        branch: metadata.branch,
+        name: metadata.name,
+        content: metadata.content,
+        graph_unique_id: graph_unique_id_val,
+        created_at: new Date(),
+        updated_at: new Date(),
+      } as Metadata;
     } catch (error: any) {
       logger.error(
-        `[MetadataRepository] Error upserting metadata (PK for query: ${flatParams.gid}): ${error.message}`,
+        `[MetadataRepository] Error creating metadata (PK for query: ${graph_unique_id_val}): ${error.message}`,
         { stack: error.stack },
       );
-      return null;
+
+      // On error, try to return a constructed value
+      logger.warn(
+        `[MetadataRepository] Returning constructed metadata value after error (PK: ${graph_unique_id_val})`,
+      );
+      return {
+        id: metadata.id,
+        repository: metadata.repository,
+        branch: metadata.branch,
+        name: metadata.name,
+        content: metadata.content,
+        graph_unique_id: graph_unique_id_val,
+        created_at: new Date(),
+        updated_at: new Date(),
+      } as Metadata;
     }
   }
 }

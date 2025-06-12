@@ -1,8 +1,8 @@
-import { Context } from '../types';
 import { KuzuDBClient } from '../db/kuzu';
+import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
+import { Context } from '../types';
 import { formatGraphUniqueId } from '../utils/id.utils';
 import { RepositoryRepository } from './repository.repository';
-import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
 
 /**
  * Repository for Context, using KuzuDB and Cypher queries.
@@ -302,121 +302,45 @@ export class ContextRepository {
     context: Context,
   ): Promise<Context | null> {
     const logger = mcpContext.logger || console;
-    const {
-      repository: repositoryNodeId,
-      branch,
-      id: logicalId,
-      name,
-      summary,
-      iso_date,
-      agent,
-      related_issue,
-      decisions,
-      observations,
-    } = context;
+    const { repository: repositoryNodeId, branch, id: logicalId, summary, agent } = context;
 
-    const repoIdParts = repositoryNodeId.split(':');
-    if (repoIdParts.length < 1) {
-      logger.error(
-        `[ContextRepository] Invalid repositoryNodeId format in upsertContext: ${repositoryNodeId}`,
-      );
-      throw new Error(`Invalid repositoryNodeId format for upsertContext: ${repositoryNodeId}`);
-    }
-    const logicalRepositoryName = repoIdParts[0];
-    const effectiveBranch = repoIdParts.length > 1 ? repoIdParts[1] : branch;
+    const [logicalRepositoryName] = repositoryNodeId.split(':');
+    const graphUniqueId = formatGraphUniqueId(logicalRepositoryName, branch, logicalId);
+    const now = new Date().toISOString();
 
-    const graphUniqueId = formatGraphUniqueId(logicalRepositoryName, effectiveBranch, logicalId);
-    const now = new Date();
-
-    let kuzuIsoDate = iso_date;
-    if (typeof kuzuIsoDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(kuzuIsoDate)) {
-      logger.warn(
-        `[ContextRepository] Invalid iso_date format for context ${logicalId}: '${kuzuIsoDate}'. Defaulting to current date.`,
-      );
-      kuzuIsoDate = new Date().toISOString().split('T')[0];
-    }
-
-    const propsOnCreate = {
-      id: logicalId,
-      graph_unique_id: graphUniqueId,
-      name: name || summary || `Context ${kuzuIsoDate}`,
-      summary: summary || null,
-      iso_date: kuzuIsoDate,
-      branch: effectiveBranch,
-      created_at: now,
-      updated_at: now,
-    };
-
-    const propsOnMatch = {
-      name: name || summary || `Context ${kuzuIsoDate}`,
-      summary: summary || null,
-      agent: agent || null,
-      related_issue: related_issue || null,
-      decisions: Array.isArray(decisions)
-        ? decisions.map(String)
-        : decisions
-          ? [String(decisions)]
-          : [],
-      observations: Array.isArray(observations)
-        ? observations.map(String)
-        : observations
-          ? [String(observations)]
-          : [],
-      updated_at: now,
-    };
-
-    const refinedQuery = `
-      MATCH (repo:Repository {id: $repositoryNodeIdParam})
-      MERGE (c:Context {graph_unique_id: $graphUniqueIdParam})
-      ON CREATE SET 
-        c.id = $idParam,
-        c.name = $nameParam,
-        c.summary = $summaryParam,
-        c.iso_date = date($isoDateParam),
-        c.branch = $branchParam,
-        c.created_at = $createdAtParam,
-        c.updated_at = $updatedAtParam
-      ON MATCH SET 
-        c.name = $nameParam, 
-        c.summary = $summaryParam, 
-        c.updated_at = $updatedAtParam,
-        c.iso_date = date($isoDateParam)
-      MERGE (repo)-[:HAS_CONTEXT]->(c)
+    const query = `
+      MERGE (c:Context {id: $id})
+      ON CREATE SET
+        c.graph_unique_id = $graphUniqueId,
+        c.summary = $summary,
+        c.agent = $agent,
+        c.branch = $branch,
+        c.repository = $repository,
+        c.timestamp = $now
+      ON MATCH SET
+        c.summary = $summary,
+        c.agent = $agent,
+        c.branch = $branch,
+        c.repository = $repository,
+        c.timestamp = $now
       RETURN c
     `;
 
-    const queryParams = {
-      repositoryNodeIdParam: repositoryNodeId,
-      graphUniqueIdParam: graphUniqueId,
-      idParam: propsOnCreate.id,
-      nameParam: propsOnCreate.name,
-      summaryParam: propsOnCreate.summary,
-      isoDateParam: kuzuIsoDate,
-      branchParam: propsOnCreate.branch,
-      createdAtParam: propsOnCreate.created_at,
-      updatedAtParam: now, // Use current time for both create and update
+    const params = {
+      id: logicalId,
+      graphUniqueId,
+      summary: summary || '',
+      agent,
+      branch,
+      repository: repositoryNodeId,
+      now,
     };
 
     try {
-      logger.debug(
-        `[ContextRepository] Upserting Context GID ${graphUniqueId} for repo ${repositoryNodeId}`,
-      );
-      const result = await this.kuzuClient.executeQuery(refinedQuery, queryParams);
-      if (result && result.length > 0 && result[0].c) {
-        logger.info(
-          `[ContextRepository] Context ${logicalId} upserted successfully for ${repositoryNodeId}`,
-        );
-        // Use the proper formatter method
-        return this.formatKuzuRowToContext(
-          result[0].c,
-          logicalRepositoryName,
-          effectiveBranch,
-          logger,
-        );
+      const result = await this.kuzuClient.executeQuery(query, params);
+      if (result && result.length > 0) {
+        return this.formatKuzuRowToContext(result[0].c, logicalRepositoryName, branch, logger);
       }
-      logger.warn(
-        `[ContextRepository] UpsertContext did not return a node for GID ${graphUniqueId}`,
-      );
       return null;
     } catch (error: any) {
       logger.error(

@@ -260,222 +260,85 @@ export class ComponentRepository {
     const logger = console; // Placeholder for actual logger if passed down
     const repoIdParts = repositoryNodeId.split(':');
     if (repoIdParts.length < 2) {
-      // This should ideally not happen if repositoryNodeId is always correctly formed
       logger.error(
         `[ComponentRepository] Invalid repositoryNodeId format: ${repositoryNodeId} in upsertComponent`,
       );
       throw new Error(`Invalid repositoryNodeId format: ${repositoryNodeId}`);
     }
     const logicalRepositoryName = repoIdParts[0];
-    // const componentBranch = repoIdParts[1]; // Branch is also on component input
 
     const componentId = String(component.id);
-    const componentBranch = String(component.branch || 'main'); // Default branch if not on input
+    const componentBranch = String(component.branch || 'main');
     const graphUniqueId = formatGraphUniqueId(logicalRepositoryName, componentBranch, componentId);
 
-    const now = new Date(); // For timestamps
-
-    // Properties for the main component node
-    const componentNodeProps = {
-      id: componentId, // Logical ID, Kuzu PK for Component table
-      graph_unique_id: graphUniqueId,
-      name: component.name,
-      kind: component.kind || null,
-      status: component.status || 'active',
-      branch: componentBranch,
-      repository: repositoryNodeId, // Link to parent Repository node's PK
-      // created_at and updated_at are handled by ON CREATE / ON MATCH
-    };
-
-    // Properties for ON CREATE clause
-    const propsOnCreate = { ...componentNodeProps, created_at: now, updated_at: now };
-    // Properties for ON MATCH clause (subset, only updatable fields + updated_at)
-    const propsOnMatch = {
-      name: component.name,
-      kind: component.kind || null,
-      status: component.status || 'active',
-      // id, branch, repository, graph_unique_id should not change on match for the same node
-      updated_at: now,
-    };
+    const now = new Date().toISOString();
 
     try {
       await this.kuzuClient.executeQuery('BEGIN TRANSACTION');
-      logger.debug(
-        `[ComponentRepository] upsertComponent - BEGAN TRANSACTION for ${graphUniqueId}`,
-      );
 
+      // Simplified MERGE query
       const upsertNodeQuery = `
-        MATCH (repo:Repository {id: $repositoryNodeId})
-        MERGE (c:Component {graph_unique_id: $graphUniqueId})
-        ON CREATE SET 
-          c.id = $componentId,
-          c.name = $componentName,
-          c.kind = $componentKind,
-          c.status = $componentStatus,
-          c.branch = $componentBranch,
-          c.repository = $repositoryNodeId,
-          c.created_at = $createdAt,
-          c.updated_at = $updatedAt
-        ON MATCH SET 
-          c.name = $componentName,
-          c.kind = $componentKind,
-          c.status = $componentStatus,
-          c.updated_at = $updatedAt
-        MERGE (repo)-[:HAS_COMPONENT]->(c)
+        MERGE (c:Component {id: $componentId})
+        ON CREATE SET
+          c.graph_unique_id = $graphUniqueId,
+          c.name = $name,
+          c.kind = $kind,
+          c.status = $status,
+          c.branch = $branch,
+          c.repository = $repository,
+          c.created_at = $now,
+          c.updated_at = $now
+        ON MATCH SET
+          c.graph_unique_id = $graphUniqueId,
+          c.name = $name,
+          c.kind = $kind,
+          c.status = $status,
+          c.branch = $branch,
+          c.repository = $repository,
+          c.updated_at = $now
       `;
       await this.kuzuClient.executeQuery(upsertNodeQuery, {
-        repositoryNodeId,
-        graphUniqueId,
         componentId,
-        componentName: component.name,
-        componentKind: component.kind || null,
-        componentStatus: component.status || 'active',
-        componentBranch,
-        createdAt: now,
-        updatedAt: now,
+        graphUniqueId,
+        name: component.name,
+        kind: component.kind || 'Unknown',
+        status: component.status || 'active',
+        branch: componentBranch,
+        repository: repositoryNodeId,
+        now,
       });
-      logger.debug(`[ComponentRepository] Upserted main node ${graphUniqueId}`);
 
-      // Delete existing DEPENDS_ON relationships for this component
-      const deleteDepsQuery = `
-          MATCH (c:Component {graph_unique_id: $graphUniqueId})-[r:DEPENDS_ON]->()
-          DELETE r
-      `;
-      await this.kuzuClient.executeQuery(deleteDepsQuery, { graphUniqueId });
-      logger.debug(`[ComponentRepository] Deleted existing deps for ${graphUniqueId}`);
+      // Attach to repository
+      await this.kuzuClient.executeQuery(
+        'MATCH (repo:Repository {id: $repoId}), (c:Component {id: $comp_id}) MERGE (c)-[:PART_OF]->(repo)',
+        { repoId: repositoryNodeId, comp_id: componentId },
+      );
 
-      // Add new DEPENDS_ON relationships
+      // Handle dependencies
       if (component.depends_on && component.depends_on.length > 0) {
-        logger.debug(
-          `[ComponentRepository] Creating ${component.depends_on.length} dependencies for ${graphUniqueId}`,
+        // First, delete existing dependencies for this component
+        await this.kuzuClient.executeQuery(
+          'MATCH (c:Component {id: $comp_id})-[r:DEPENDS_ON]->() DELETE r',
+          { comp_id: componentId },
         );
 
-        for (const depLogicalId of component.depends_on) {
-          const depGraphUniqueId = formatGraphUniqueId(
-            logicalRepositoryName,
-            componentBranch,
-            depLogicalId,
-          );
-          console.error(
-            `[ComponentRepository] DEBUG: Processing dependency ${depLogicalId} -> ${depGraphUniqueId}`,
+        for (const depId of component.depends_on) {
+          // Ensure dependency node exists (as a placeholder if needed)
+          await this.kuzuClient.executeQuery(
+            `MERGE (dep:Component {id: $depId}) ON CREATE SET dep.name = $depName, dep.status = 'planned'`,
+            { depId, depName: `Placeholder for ${depId}` },
           );
 
-          // First, check if the dependency component already exists
-          const checkDepQuery = `MATCH (dep:Component {graph_unique_id: $depGraphUniqueId}) RETURN dep.id, dep.name`;
-          const existingDep = await this.kuzuClient.executeQuery(checkDepQuery, {
-            depGraphUniqueId,
-          });
-          console.error(
-            `[ComponentRepository] DEBUG: Existing dependency check result:`,
-            existingDep?.length || 0,
-            'rows',
-          );
-
-          // Ensure dependent node exists or create a placeholder
-          // This is complex: placeholder might not have correct 'repository' field if dep is from different repo/branch
-          // For now, assume dependent components are in the same repo/branch context for placeholder creation.
-          const depPlaceholderProps = {
-            id: depLogicalId,
-            graph_unique_id: depGraphUniqueId,
-            name: `Placeholder: ${depLogicalId}`,
-            kind: 'Unknown',
-            status: 'planned' as ComponentStatus,
-            branch: componentBranch,
-            repository: repositoryNodeId, // Assume same repo for placeholder
-            created_at: now,
-            updated_at: now,
-          };
-          const ensureDepNodeQuery = `
-              MATCH (repoDep:Repository {id: $repositoryNodeId})
-              MERGE (dep:Component {graph_unique_id: $depGraphUniqueId})
-              ON CREATE SET 
-                dep.id = $depId,
-                dep.name = $depName,
-                dep.kind = $depKind,
-                dep.status = $depStatus,
-                dep.branch = $depBranch,
-                dep.repository = $repositoryNodeId,
-                dep.created_at = $depCreatedAt,
-                dep.updated_at = $depUpdatedAt
-              MERGE (repoDep)-[:HAS_COMPONENT]->(dep)
-          `;
-          console.error(
-            `[ComponentRepository] DEBUG: Executing ensure dependency query for ${depGraphUniqueId}`,
-          );
-          await this.kuzuClient.executeQuery(ensureDepNodeQuery, {
-            repositoryNodeId,
-            depGraphUniqueId,
-            depId: depLogicalId,
-            depName: `Placeholder: ${depLogicalId}`,
-            depKind: 'Unknown',
-            depStatus: 'planned',
-            depBranch: componentBranch,
-            depCreatedAt: now,
-            depUpdatedAt: now,
-          });
-          console.error(
-            `[ComponentRepository] DEBUG: Ensured/Created dependency node: ${depGraphUniqueId}`,
-          );
-
-          // Double-check both nodes exist before creating relationship
-          const checkBothQuery = `
-            MATCH (c:Component {graph_unique_id: $graphUniqueId}) 
-            MATCH (dep:Component {graph_unique_id: $depGraphUniqueId}) 
-            RETURN c.id as sourceId, dep.id as depId
-          `;
-          const bothNodesResult = await this.kuzuClient.executeQuery(checkBothQuery, {
-            graphUniqueId,
-            depGraphUniqueId,
-          });
-          console.error(
-            `[ComponentRepository] DEBUG: Both nodes check result:`,
-            bothNodesResult?.length || 0,
-            'rows',
-          );
-          if (bothNodesResult && bothNodesResult.length > 0) {
-            console.error(
-              `[ComponentRepository] DEBUG: Found source: ${bothNodesResult[0].sourceId}, dep: ${bothNodesResult[0].depId}`,
-            );
-          }
-
-          const addDepRelQuery = `
-            MATCH (c:Component {graph_unique_id: $graphUniqueId}), (dep:Component {graph_unique_id: $depGraphUniqueId})
-            MERGE (c)-[:DEPENDS_ON]->(dep)
-            RETURN c.id as sourceId, dep.id as depId
-          `;
-          console.error(
-            `[ComponentRepository] DEBUG: Creating DEPENDS_ON relationship: ${graphUniqueId} -> ${depGraphUniqueId}`,
-          );
-          const relResult = await this.kuzuClient.executeQuery(addDepRelQuery, {
-            graphUniqueId,
-            depGraphUniqueId,
-          });
-          console.error(
-            `[ComponentRepository] DEBUG: Relationship creation result:`,
-            relResult?.length || 0,
-            'rows',
-          );
-          if (relResult && relResult.length > 0) {
-            console.error(
-              `[ComponentRepository] DEBUG: Successfully created relationship between ${relResult[0].sourceId} -> ${relResult[0].depId}`,
-            );
-          }
-
-          logger.debug(
-            `[ComponentRepository] Added DEPENDS_ON: ${graphUniqueId} -> ${depGraphUniqueId}`,
+          // Create the new dependency relationship
+          await this.kuzuClient.executeQuery(
+            'MATCH (c:Component {id: $cId}), (d:Component {id: $dId}) MERGE (c)-[:DEPENDS_ON]->(d)',
+            { cId: componentId, dId: depId },
           );
         }
-      } else {
-        console.error(
-          `[ComponentRepository] DEBUG: No dependencies to create for ${graphUniqueId} - depends_on:`,
-          component.depends_on,
-        );
       }
+
       await this.kuzuClient.executeQuery('COMMIT');
-      logger.info(
-        `[ComponentRepository] COMMITTED TRANSACTION for upsertComponent ${graphUniqueId}`,
-      );
-      // Fetch and return the fully formatted component
+
       return this.findByIdAndBranch(logicalRepositoryName, componentId, componentBranch);
     } catch (error: any) {
       logger.error(
@@ -484,19 +347,12 @@ export class ComponentRepository {
       );
       try {
         await this.kuzuClient.executeQuery('ROLLBACK');
-        logger.warn(
-          `[ComponentRepository] ROLLED BACK TRANSACTION for upsertComponent ${graphUniqueId}`,
-        );
       } catch (rollbackError: any) {
         logger.error(
           `[ComponentRepository] CRITICAL ERROR: Failed to ROLLBACK transaction for ${graphUniqueId}: ${rollbackError.message}`,
-          { stack: rollbackError.stack },
         );
       }
-      // Decide: throw error or return null?
-      // To match Promise<Component | null>, return null, but error is logged.
-      // Throwing might be cleaner for service layer to handle and build Zod output.
-      throw error; // Let service layer decide how to map this to Zod output
+      throw error;
     }
   }
 
@@ -520,13 +376,27 @@ export class ComponentRepository {
       const query = `MATCH (c:Component {graph_unique_id: $graphUniqueId}) RETURN c LIMIT 1`;
       const result = await this.kuzuClient.executeQuery(query, { graphUniqueId });
 
-      if (!result || result.length === 0 || !result[0].c) {
+      // Handle various result formats
+      if (!result || result.length === 0) {
         logger.debug(`[ComponentRepository] Component not found for GID: ${graphUniqueId}`);
         return null;
       }
 
+      // Check if we have a component in the result
+      const componentNode = result[0]?.c;
+      if (!componentNode) {
+        logger.debug(
+          `[ComponentRepository] Component result format invalid for GID: ${graphUniqueId}`,
+        );
+        return null;
+      }
+
       // Get component data from the basic result
-      const componentData = this.formatKuzuRowToComponent(result[0].c, repositoryName, itemBranch);
+      const componentData = this.formatKuzuRowToComponent(
+        componentNode,
+        repositoryName,
+        itemBranch,
+      );
 
       // Step 2: Get the component's dependencies
       const depsQuery = `
@@ -927,22 +797,28 @@ export class ComponentRepository {
   ): Promise<any> {
     const globalProjectedGraphName = 'AllComponentsAndDependencies';
     try {
-      await this.kuzuClient.executeQuery(
-        `CALL project_graph('${globalProjectedGraphName}', ['Component'], ['DEPENDS_ON'])`,
-      );
-      console.error(`Ensured graph projection '${globalProjectedGraphName}' for PageRank.`);
-    } catch (projectionError: any) {
-      if (projectionError.message && projectionError.message.includes('already exists')) {
+      // First check if the graph projection exists
+      const checkQuery = `CALL show_graphs() RETURN name;`;
+      const checkResult = await this.kuzuClient.executeQuery(checkQuery);
+      const existingGraphs = checkResult.map((row: any) => row.name);
+
+      if (!existingGraphs.includes(globalProjectedGraphName)) {
+        // Create the graph projection if it doesn't exist
+        await this.kuzuClient.executeQuery(
+          `CALL create_graph('${globalProjectedGraphName}', ['Component'], ['DEPENDS_ON']);`,
+        );
+        console.error(`Created graph projection '${globalProjectedGraphName}' for PageRank.`);
+      } else {
         console.warn(
           `Graph projection '${globalProjectedGraphName}' already exists. Proceeding with existing projection for PageRank.`,
         );
-      } else {
-        console.error(
-          `Could not ensure graph projection '${globalProjectedGraphName}' for PageRank. An unexpected error occurred:`,
-          projectionError,
-        );
-        throw projectionError;
       }
+    } catch (projectionError: any) {
+      console.error(
+        `Could not ensure graph projection '${globalProjectedGraphName}' for PageRank. An unexpected error occurred:`,
+        projectionError,
+      );
+      throw projectionError;
     }
 
     const escapedRepositoryNodeId = this.escapeStr(repositoryNodeId);
@@ -1007,22 +883,28 @@ export class ComponentRepository {
   ): Promise<any> {
     const globalProjectedGraphName = 'AllComponentsAndDependencies';
     try {
-      await this.kuzuClient.executeQuery(
-        `CALL project_graph('${globalProjectedGraphName}', ['Component'], ['DEPENDS_ON'])`,
-      );
-      console.error(`Ensured graph projection '${globalProjectedGraphName}' for SCC.`);
-    } catch (projectionError: any) {
-      if (projectionError.message && projectionError.message.includes('already exists')) {
+      // First check if the graph projection exists
+      const checkQuery = `CALL show_graphs() RETURN name;`;
+      const checkResult = await this.kuzuClient.executeQuery(checkQuery);
+      const existingGraphs = checkResult.map((row: any) => row.name);
+
+      if (!existingGraphs.includes(globalProjectedGraphName)) {
+        // Create the graph projection if it doesn't exist
+        await this.kuzuClient.executeQuery(
+          `CALL create_graph('${globalProjectedGraphName}', ['Component'], ['DEPENDS_ON']);`,
+        );
+        console.error(`Created graph projection '${globalProjectedGraphName}' for SCC.`);
+      } else {
         console.warn(
           `Graph projection '${globalProjectedGraphName}' already exists. Proceeding with existing projection for SCC.`,
         );
-      } else {
-        console.error(
-          `Could not ensure graph projection '${globalProjectedGraphName}' for SCC. An unexpected error occurred:`,
-          projectionError,
-        );
-        throw projectionError;
       }
+    } catch (projectionError: any) {
+      console.error(
+        `Could not ensure graph projection '${globalProjectedGraphName}' for SCC. An unexpected error occurred:`,
+        projectionError,
+      );
+      throw projectionError;
     }
 
     const escapedRepositoryNodeId = this.escapeStr(repositoryNodeId);
@@ -1074,22 +956,28 @@ export class ComponentRepository {
   ): Promise<any> {
     const globalProjectedGraphName = 'AllComponentsAndDependencies';
     try {
-      await this.kuzuClient.executeQuery(
-        `CALL project_graph('${globalProjectedGraphName}', ['Component'], ['DEPENDS_ON'])`,
-      );
-      console.error(`Ensured graph projection '${globalProjectedGraphName}' for WCC.`);
-    } catch (projectionError: any) {
-      if (projectionError.message && projectionError.message.includes('already exists')) {
+      // First check if the graph projection exists
+      const checkQuery = `CALL show_graphs() RETURN name;`;
+      const checkResult = await this.kuzuClient.executeQuery(checkQuery);
+      const existingGraphs = checkResult.map((row: any) => row.name);
+
+      if (!existingGraphs.includes(globalProjectedGraphName)) {
+        // Create the graph projection if it doesn't exist
+        await this.kuzuClient.executeQuery(
+          `CALL create_graph('${globalProjectedGraphName}', ['Component'], ['DEPENDS_ON']);`,
+        );
+        console.error(`Created graph projection '${globalProjectedGraphName}' for WCC.`);
+      } else {
         console.warn(
           `Graph projection '${globalProjectedGraphName}' already exists. Proceeding with existing projection for WCC.`,
         );
-      } else {
-        console.error(
-          `Could not ensure graph projection '${globalProjectedGraphName}' for WCC. An unexpected error occurred:`,
-          projectionError,
-        );
-        throw projectionError;
       }
+    } catch (projectionError: any) {
+      console.error(
+        `Could not ensure graph projection '${globalProjectedGraphName}' for WCC. An unexpected error occurred:`,
+        projectionError,
+      );
+      throw projectionError;
     }
 
     const escapedRepositoryNodeId = this.escapeStr(repositoryNodeId);
