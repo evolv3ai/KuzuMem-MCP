@@ -2,10 +2,6 @@
 
 A TypeScript implementation of a distributed memory bank as an MCP (Model Context Protocol) tool, storing memories in a **KùzuDB graph database** with repository and branch filtering capabilities. Branch isolation is achieved by using a graph-unique identifier for entities, enabling a centralized memory bank while allowing repository-specific and branch-specific views. Fully compliant with MCP specification for seamless integration with IDEs and AI agents.
 
-## 🎉 Recent Updates
-
-**Tool Consolidation Complete** - Successfully consolidated from 29 individual tools to 11 unified tools, reducing complexity while maintaining all functionality. All TypeScript compilation errors resolved and the project builds successfully.
-
 ## Key Features
 
 - **Unified Tool Architecture** - 11 consolidated tools covering all memory bank operations
@@ -39,11 +35,8 @@ For detailed tool documentation, see [Unified Tools Documentation](docs/unified-
 
 ## Documentation
 
-- [Unified Tools Documentation](docs/unified-tools.md) - Complete guide to all unified tools with examples
 - [Extended Documentation](docs/README2.md) - Architecture and advanced usage patterns
 - [Graph Schema](docs/graph-schema.md) - Database schema details
-- [MCP Tools Streaming Support](src/mcp/tools/README.md) - Progressive results documentation
-- [Tool Consolidation Summary](docs/tool_consolidation_summary.md) - Migration from 29 to 11 tools
 
 ## Installation
 
@@ -81,18 +74,17 @@ Add to your IDE's MCP configuration:
 {
   "mcpServers": {
     "KuzuMem-MCP": {
-      "command": "npx",
+      "command": "node",
       "args": [
-        "-y",
-        "ts-node",
-        "/path/to/kuzumem-mcp/src/mcp-stdio-server.ts"
+        "/absolute/path/to/kuzumem-mcp/dist/src/mcp-stdio-server.js" // or "mcp-httpstream-server.js" or "mcp-sse-server.js"
       ],
       "env": {
+        "PORT": "3000",
         "HOST": "localhost",
         "DB_FILENAME": "memory-bank.kuzu",
         "HTTP_STREAM_PORT": "3001"
       },
-      "protocol": "stdio"
+      "protocol": "stdio" // or "httpstream" or "sse"
     }
   }
 }
@@ -189,20 +181,29 @@ The project follows clean architecture with clear separation of concerns:
 
 For detailed architecture information, see [Extended Documentation](docs/README2.md).
 
-## Project Status
+## Agent Development Loop (Rules-Enforced)
 
-### ✅ Completed
-- Tool consolidation from 29 to 11 unified tools
-- All TypeScript compilation errors resolved
-- E2E testing infrastructure implemented
-- Basic documentation updated
-- Memory operations refactored to remove Zod dependencies
-- Legacy tool compatibility layer removed
+When both the repository-level "Always-Applied Workspace Rules" (`project_config_updated.md`) and the short-term workflow rules (`workflow_state_updated.mdc`) are active, every IDE or AI agent that communicates with **KuzuMem-MCP** must follow the five-phase finite-state loop below. Each transition is observable via the unified `context` tool and is backed by mandatory MCP calls that keep the graph database in sync and governance rules enforced.
 
-### 🚧 In Progress
-- Extended documentation updates
-- Test suite stabilization
-- Performance optimization
+1. **ANALYZE** – Pull the latest context, inspect 1-hop neighbourhood, and optionally execute a PageRank analysis. Produce a high-level problem statement.
+2. **BLUEPRINT** – Draft a numbered implementation plan and persist it as a `Decision` entity (`status: proposed`, tag `architecture`). Wait for explicit user approval.
+3. **CONSTRUCT** – Execute plan steps, apply code edits, and immediately mirror changes through `entity`, `associate`, and `context` tool calls while honouring dependency & tagging rules.
+4. **VALIDATE** – Run the full test & linter suite. If green, update the `Decision` to `implemented`; if red, log context and loop back to CONSTRUCT.
+5. **ROLLBACK** – Automatically triggered on unrecoverable errors, reverting partial work before returning to ANALYZE.
+
+### Phase Diagram
+
+```mermaid
+stateDiagram-v2
+    [*] --> ANALYZE
+    ANALYZE --> BLUEPRINT: blueprint drafted
+    BLUEPRINT --> CONSTRUCT: approved
+    CONSTRUCT --> VALIDATE: steps complete
+    VALIDATE --> DONE: tests pass
+    VALIDATE --> CONSTRUCT: tests fail
+    CONSTRUCT --> ROLLBACK: unrecoverable error
+    ROLLBACK --> ANALYZE
+```
 
 ## License
 
@@ -211,19 +212,16 @@ MIT
 ## Contributing
 
 Contributions are welcome! Please ensure:
+
 - All tests pass (or create issues for failing tests)
 - Code follows the existing style
 - New features include tests
 - Documentation is updated
 
-## Migration from Legacy Tools
-
-If you're migrating from the legacy tool structure (29 individual tools), see the [Migration Guide](docs/unified-tools.md#migration-guide) for mapping old tool names to new unified tools.
-
 ## Future Improvements
 
 - **Full-Text Search** - Native keyword-based search using KùzuDB's FTS extension
 - **Vector Embeddings** - Semantic similarity search (pending KuzuDB vector column updates)
-- **Enhanced CLI** - More intuitive command-line interface
 - **Advanced Graph Algorithms** - Additional analysis capabilities
-- **Complete Semantic Search** - Implementation of the semantic-search tool (currently placeholder)
+- **Graph Schema Updates** - Based on how well the automated development loop works, the graph schema may need to be updated to support new features
+- **Complete Semantic Search** - Implementation of the semantic-search tool (currently placeholder - KuzuDB Vector Indexes are immutable and would make developing this feature difficult since updating memories wouldn't update the vector indexes)
