@@ -1,4 +1,6 @@
+import { MemoryService } from '../../../../services/memory.service';
 import { SdkToolHandler } from '../../../tool-handlers';
+import { EnrichedRequestHandlerExtra } from '../../../types/sdk-custom';
 
 // TypeScript interface for search parameters
 interface SearchParams {
@@ -10,6 +12,7 @@ interface SearchParams {
   limit?: number;
   conjunctive?: boolean;
   threshold?: number;
+  clientProjectRoot?: string;
 }
 
 // Search result interface
@@ -27,27 +30,28 @@ interface SearchResult {
  * Supports both full-text search and semantic search (future)
  */
 export const searchHandler: SdkToolHandler = async (params, context, memoryService) => {
-  // 1. Validate and extract parameters
-  const validatedParams = params as SearchParams;
-
-  // Basic validation
-  if (!validatedParams.query) {
-    throw new Error('query parameter is required');
-  }
-  if (!validatedParams.repository) {
-    throw new Error('repository parameter is required');
-  }
-
+  // 1. Extract parameters
   const {
     mode = 'fulltext',
     query,
     repository,
     branch = 'main',
-    entityTypes = ['component', 'decision', 'rule', 'context'],
+    entityTypes = ['component', 'decision', 'rule', 'file', 'context'],
     limit = 10,
     conjunctive = false,
-    threshold = 0.7,
-  } = validatedParams;
+    threshold = 0.5,
+    clientProjectRoot = context.session?.clientProjectRoot ||
+      process.env.CLIENT_PROJECT_ROOT ||
+      '/tmp',
+  } = params as SearchParams;
+
+  // Validate required parameters
+  if (!query) {
+    throw new Error('Query parameter is required');
+  }
+  if (!repository) {
+    throw new Error('Repository parameter is required');
+  }
 
   // Validate limit range
   if (limit < 1 || limit > 50) {
@@ -59,32 +63,22 @@ export const searchHandler: SdkToolHandler = async (params, context, memoryServi
     throw new Error('threshold must be between 0.0 and 1.0');
   }
 
-  // 2. Get clientProjectRoot from session
-  const clientProjectRoot = context.session.clientProjectRoot as string | undefined;
-  if (!clientProjectRoot) {
-    throw new Error('No active session. Use memory-bank tool with operation "init" first.');
-  }
-
-  // 3. Log the operation
-  context.logger.info(`Search requested (mode: ${mode})`, {
-    mode,
-    query,
+  // 2. Log the operation
+  context.logger.info(`Executing search operation: ${mode}`, {
     repository,
     branch,
-    clientProjectRoot,
     entityTypes,
-    limit,
-    conjunctive,
+    query,
   });
 
-  // 4. Send progress notification
+  // 3. Send progress update
   await context.sendProgress({
     status: 'in_progress',
-    message: `Executing ${mode} search for "${query}"`,
-    percent: 25,
+    message: `Searching for "${query}" in ${repository}:${branch}...`,
+    percent: 10,
   });
 
-  // 5. Execute search based on mode
+  // 4. Execute search based on mode
   let results: SearchResult[] = [];
 
   try {
@@ -197,7 +191,7 @@ async function executeFullTextSearch(
   const results: SearchResult[] = [];
 
   // Check if FTS extension is installed and loaded
-  await ensureFtsExtensionLoaded(memoryService, repository, branch, clientProjectRoot, context);
+  await ensureFtsExtensionLoaded(context, clientProjectRoot, memoryService);
 
   // For each entity type, execute FTS query
   for (const entityType of entityTypes) {
@@ -256,21 +250,76 @@ async function executeFullTextSearch(
 }
 
 /**
- * Ensure FTS extension is installed and loaded
+ * Ensure the FTS extension is loaded
  */
 async function ensureFtsExtensionLoaded(
-  memoryService: any,
-  repository: string,
-  branch: string,
+  mcpContext: EnrichedRequestHandlerExtra,
   clientProjectRoot: string,
-  context: any,
-): Promise<void> {
+  memoryService: MemoryService,
+): Promise<boolean> {
   try {
-    const kuzuClient = await memoryService.getKuzuClient(clientProjectRoot);
-    await kuzuClient.executeQuery('INSTALL FTS;');
-    await kuzuClient.executeQuery('LOAD FTS;');
+    const kuzuClient = await memoryService.getKuzuClient(mcpContext, clientProjectRoot);
+
+    // Try to check if FTS extension is already loaded
+    try {
+      const checkQuery = `CALL show_extensions() RETURN name, loaded;`;
+      const checkResult = await kuzuClient.executeQuery(checkQuery);
+
+      // Look for FTS extension in the results
+      const ftsExtension = checkResult.find((ext: any) => ext.name === 'FTS');
+
+      if (!ftsExtension) {
+        // Extension not found, try to install and load it
+        mcpContext.logger.info('FTS extension not found, installing...');
+        await kuzuClient.executeQuery('INSTALL FTS;');
+        await kuzuClient.executeQuery('LOAD FTS;');
+        mcpContext.logger.info('FTS extension installed and loaded');
+        return true;
+      }
+
+      if (!ftsExtension.loaded) {
+        // Extension found but not loaded
+        mcpContext.logger.info('FTS extension found but not loaded, loading...');
+        await kuzuClient.executeQuery('LOAD FTS;');
+        mcpContext.logger.info('FTS extension loaded');
+      } else {
+        mcpContext.logger.debug('FTS extension already loaded');
+      }
+
+      return true;
+    } catch (checkError: any) {
+      // If show_extensions doesn't exist, just try to install and load FTS directly
+      if (checkError.message && checkError.message.includes('show_extensions does not exist')) {
+        mcpContext.logger.info('show_extensions not available, trying direct install/load');
+        try {
+          await kuzuClient.executeQuery('INSTALL FTS;');
+          await kuzuClient.executeQuery('LOAD FTS;');
+          mcpContext.logger.info('FTS extension installed and loaded');
+          return true;
+        } catch (directError: any) {
+          // If install fails because it's already installed, try just loading
+          if (directError.message && directError.message.includes('already installed')) {
+            try {
+              await kuzuClient.executeQuery('LOAD FTS;');
+              mcpContext.logger.info('FTS extension loaded');
+              return true;
+            } catch (loadError: any) {
+              // If load fails because it's already loaded, that's fine
+              if (loadError.message && loadError.message.includes('already loaded')) {
+                mcpContext.logger.info('FTS extension already loaded');
+                return true;
+              }
+              throw loadError;
+            }
+          }
+          throw directError;
+        }
+      }
+      throw checkError;
+    }
   } catch (error) {
-    context.logger.warn('FTS extension may already be loaded', { error: (error as Error).message });
+    mcpContext.logger.error(`Failed to ensure FTS extension: ${error}`);
+    return false;
   }
 }
 

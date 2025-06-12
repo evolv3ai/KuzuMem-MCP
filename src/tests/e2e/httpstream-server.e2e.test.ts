@@ -4,6 +4,13 @@ import fetch from 'node-fetch';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
+interface RpcMessage {
+  jsonrpc: '2.0';
+  id: number;
+  result?: any;
+  error?: any;
+}
+
 describe('MCP HTTP Stream Server E2E Tests', () => {
   let serverProcess: ChildProcess;
   let testProjectRoot: string;
@@ -111,23 +118,18 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     testProjectRoot = await mkdtemp(join(tmpdir(), 'kuzumem-httpstream-e2e-'));
     console.log(`Test project root: ${testProjectRoot}`);
 
-    // Start the httpstream server
-    const serverPath = join(__dirname, '../../..', 'src/mcp-httpstream-server.ts');
-    serverProcess = spawn('npx', ['tsx', serverPath], {
-      stdio: ['pipe', 'pipe', 'pipe'],
+    // Start the server using the compiled JS file
+    const serverPath = join(__dirname, '../../..', 'dist/src/mcp-httpstream-server.js');
+    serverProcess = spawn('node', [serverPath], {
+      stdio: 'pipe',
       env: {
         ...process.env,
         NODE_ENV: 'test',
         HTTP_STREAM_PORT: String(SERVER_PORT),
-        DEBUG: '2', // Enable debug logging
       },
     });
 
-    // Capture stdout/stderr for debugging
-    serverProcess.stdout!.on('data', (data) => {
-      console.log(`Server stdout: ${data}`);
-    });
-
+    // Capture stderr for debugging
     serverProcess.stderr!.on('data', (data) => {
       console.error(`Server stderr: ${data}`);
     });
@@ -142,12 +144,12 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         const output = data.toString();
         if (output.includes(`MCP HTTP Streaming Server running at`)) {
           clearTimeout(timeout);
-          serverProcess.stdout!.off('data', readyHandler);
+          serverProcess.stderr!.off('data', readyHandler);
           resolve();
         }
       };
 
-      serverProcess.stdout!.on('data', readyHandler);
+      serverProcess.stderr!.on('data', readyHandler);
     });
 
     // Initialize the connection - need to do this manually to extract session ID from headers
