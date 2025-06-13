@@ -1,6 +1,6 @@
+import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
 import { RepositoryRepository, TagRepository } from '../../repositories';
 import { Tag, TagInput } from '../../types';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
 
 // Result types for operations
 interface TagOperationResult {
@@ -59,7 +59,10 @@ export async function addTagOp(
       updated_at: new Date(),
     };
 
-    const createdTag = await tagRepo.upsertTagNode(tagToCreate);
+    const createdTag = await tagRepo.upsertTagNode({
+      ...tagToCreate,
+      category: tagToCreate.category || undefined, // Convert null to undefined
+    });
 
     if (!createdTag) {
       logger.error(`[tag.ops] TagRepository.upsertTagNode returned null for ${tagData.name}`);

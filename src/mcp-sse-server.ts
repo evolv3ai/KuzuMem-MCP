@@ -183,41 +183,52 @@ app.use(
   }),
 );
 
-// Map to store transports by session ID
-const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
+// Map to store server and transport pairs by session ID
+interface SessionData {
+  server: Server;
+  transport: StreamableHTTPServerTransport;
+}
+const sessions: { [sessionId: string]: SessionData } = {};
 
 // Handle POST requests for client-to-server communication
 app.post('/mcp', async (req: Request, res: Response) => {
   // Check for existing session ID
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
-  let transport: StreamableHTTPServerTransport;
+  let sessionData: SessionData;
 
-  if (sessionId && transports[sessionId]) {
-    // Reuse existing transport
-    transport = transports[sessionId];
+  if (sessionId && sessions[sessionId]) {
+    // Reuse existing session
+    sessionData = sessions[sessionId];
   } else if (!sessionId && isInitializeRequest(req.body)) {
     // New initialization request
-    transport = new StreamableHTTPServerTransport({
+    const server = createMcpServer();
+
+    const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (sessionId) => {
-        // Store the transport by session ID
-        transports[sessionId] = transport;
         debugLog(1, `New MCP session initialized: ${sessionId}`);
+
+        // Store the session data immediately when session ID is available
+        const sessionData = { server, transport };
+        sessions[sessionId] = sessionData;
+
+        debugLog(2, `Session ${sessionId} stored successfully`);
       },
     });
 
-    // Clean up transport when closed
+    // Connect to the MCP server
+    await server.connect(transport);
+
+    // Set up cleanup handler
     transport.onclose = () => {
       if (transport.sessionId) {
         debugLog(1, `Cleaning up MCP session: ${transport.sessionId}`);
-        delete transports[transport.sessionId];
+        delete sessions[transport.sessionId];
       }
     };
 
-    const server = createMcpServer();
-
-    // Connect to the MCP server
-    await server.connect(transport);
+    // Create session data for immediate use
+    sessionData = { server, transport };
   } else {
     // Invalid request
     res.status(400).json({
@@ -231,20 +242,20 @@ app.post('/mcp', async (req: Request, res: Response) => {
     return;
   }
 
-  // Handle the request
-  await transport.handleRequest(req, res, req.body);
+  // Handle the request using the session's transport
+  await sessionData.transport.handleRequest(req, res, req.body);
 });
 
 // Reusable handler for GET and DELETE requests
 const handleSessionRequest = async (req: Request, res: Response) => {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
-  if (!sessionId || !transports[sessionId]) {
+  if (!sessionId || !sessions[sessionId]) {
     res.status(400).send('Invalid or missing session ID');
     return;
   }
 
-  const transport = transports[sessionId];
-  await transport.handleRequest(req, res);
+  const sessionData = sessions[sessionId];
+  await sessionData.transport.handleRequest(req, res);
 };
 
 // Handle GET requests for server-to-client notifications via SSE
@@ -281,12 +292,13 @@ process.on('SIGINT', async () => {
     console.error('Error shutting down MemoryService:', error);
   }
 
-  // Close all transports
-  for (const transport of Object.values(transports)) {
+  // Close all sessions
+  for (const sessionId of Object.keys(sessions)) {
     try {
-      transport.close();
+      const sessionData = sessions[sessionId];
+      await sessionData.transport.close();
     } catch (error) {
-      console.error('Error closing transport:', error);
+      console.error(`Error closing session ${sessionId}:`, error);
     }
   }
 
