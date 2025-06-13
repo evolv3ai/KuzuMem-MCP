@@ -35,7 +35,7 @@ For detailed tool documentation, see [Unified Tools Documentation](docs/unified-
 ## Documentation
 
 - [Extended Documentation](docs/README2.md) - Architecture and advanced usage patterns
-- [Graph Schema](docs/graph-schema.md) - Database schema details
+- [Graph Schema](docs/schema_evolution.md) - Database schema details
 
 ## Installation
 

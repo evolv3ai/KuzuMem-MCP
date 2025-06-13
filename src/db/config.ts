@@ -17,10 +17,13 @@ const KUZU_DB_FILENAME =
   process.env.DB_FILENAME || process.env.KUZU_DB_FILENAME || 'test-memory-bank.kuzu';
 
 // Use console.error for MCP stdio server compatibility (stdout is reserved for JSON protocol)
-console.error(
-  `KuzuDB default relative directory (should be empty for root placement): '${KUZU_DB_RELATIVE_DIR}'`,
-);
-console.error(`KuzuDB default database filename: '${KUZU_DB_FILENAME}'`);
+// But suppress output during MCP stdio server startup to avoid protocol interference
+if (process.env.MCP_STDIO_SERVER !== 'true') {
+  console.error(
+    `KuzuDB default relative directory (should be empty for root placement): '${KUZU_DB_RELATIVE_DIR}'`,
+  );
+  console.error(`KuzuDB default database filename: '${KUZU_DB_FILENAME}'`);
+}
 
 /**
  * KuzuDB configuration object
