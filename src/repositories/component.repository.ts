@@ -276,8 +276,9 @@ export class ComponentRepository {
     try {
       await this.kuzuClient.executeQuery('BEGIN TRANSACTION');
 
-      // Simplified MERGE query - include id in MERGE for KuzuDB
+      // Atomic MERGE query that includes PART_OF relationship creation
       const upsertNodeQuery = `
+        MATCH (repo:Repository {id: $repository})
         MERGE (c:Component {id: $componentId, graph_unique_id: $graphUniqueId})
         ON CREATE SET
           c.name = $name,
@@ -294,6 +295,7 @@ export class ComponentRepository {
           c.branch = $branch,
           c.repository = $repository,
           c.updated_at = $now
+        MERGE (c)-[:PART_OF]->(repo)
       `;
       await this.kuzuClient.executeQuery(upsertNodeQuery, {
         graphUniqueId,
@@ -305,12 +307,6 @@ export class ComponentRepository {
         repository: repositoryNodeId,
         now,
       });
-
-      // Attach to repository
-      await this.kuzuClient.executeQuery(
-        'MATCH (repo:Repository {id: $repoId}), (c:Component {graph_unique_id: $graphUniqueId}) MERGE (c)-[:PART_OF]->(repo)',
-        { repoId: repositoryNodeId, graphUniqueId },
-      );
 
       // Handle dependencies
       if (component.depends_on && component.depends_on.length > 0) {

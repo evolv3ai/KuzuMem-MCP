@@ -40,12 +40,21 @@ export class TagRepository {
       // updated_at: now, // Kuzu MERGE ON MATCH can handle updates if needed
     };
 
-    // MERGE is good for upserting based on a unique property (id for Tag)
-    // KuzuDB doesn't support setting properties from a map parameter, so we set them individually
+    // Atomic query that creates the Tag node and establishes PART_OF relationship
     const query = `
+      MATCH (repo:Repository {id: $repository})
       MERGE (t:Tag {id: $id})
-      ON CREATE SET t.id = $id, t.name = $name, t.color = $color, t.description = $description, t.repository = $repository, t.branch = $branch, t.created_at = $created_at
-      ON MATCH SET t.name = $name, t.color = $color, t.description = $description
+      ON CREATE SET 
+        t.name = $name, 
+        t.color = $color, 
+        t.description = $description,
+        t.category = $category
+      ON MATCH SET 
+        t.name = $name, 
+        t.color = $color, 
+        t.description = $description,
+        t.category = $category
+      MERGE (t)-[:PART_OF]->(repo)
       RETURN t
     `;
 
@@ -56,8 +65,7 @@ export class TagRepository {
         color: tagNodeProps.color,
         description: tagNodeProps.description,
         repository: tagNodeProps.repository,
-        branch: tagNodeProps.branch,
-        created_at: tagNodeProps.created_at,
+        category: tagData.category || 'general',
       });
       if (result && result.length > 0) {
         const node = result[0].t.properties || result[0].t;
