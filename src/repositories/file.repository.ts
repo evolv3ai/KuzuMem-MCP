@@ -156,7 +156,11 @@ export class FileRepository {
       RETURN f
     `;
     try {
-      const result = await this.kuzuClient.executeQuery(query, { componentGraphUniqueId, repoNodeId, branch });
+      const result = await this.kuzuClient.executeQuery(query, {
+        componentGraphUniqueId,
+        repoNodeId,
+        branch,
+      });
       return result.map((row: any) => {
         const fileNode = row.f.properties || row.f;
         return { ...fileNode, id: fileNode.id?.toString() } as File;
