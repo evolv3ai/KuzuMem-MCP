@@ -1,13 +1,14 @@
 import { ProgressTransport } from './progress-handler';
+import { loggers } from '../../utils/logger';
 
-// Define the debug log type matching the pattern used elsewhere
-type GenericDebugLogger = (level: number, message: string, data?: any) => void;
+// Create stdio transport specific logger
+const stdioTransportLogger = loggers.mcpStdio().child({ component: 'StdioTransport' });
 
 /**
  * Stdio implementation of ProgressTransport
  */
 export class StdioProgressTransport implements ProgressTransport {
-  constructor(private debugLog: (level: number, message: string, data?: any) => void) {}
+  constructor() {}
 
   /**
    * Send a notification via stdout (for progress or final responses)
@@ -15,8 +16,11 @@ export class StdioProgressTransport implements ProgressTransport {
    * @param eventName Optional event name for debugging (not used in actual protocol)
    */
   sendNotification(payload: object, eventName?: string): void {
-    this.debugLog(1, `Sending ${eventName || 'notification'} via stdout`);
-    this.debugLog(2, 'Payload details:', payload);
+    stdioTransportLogger.debug(
+      { eventName: eventName || 'notification' },
+      `Sending ${eventName || 'notification'} via stdout`,
+    );
+    stdioTransportLogger.debug({ payload }, 'Payload details');
 
     // Send the JSON payload directly to stdout
     process.stdout.write(JSON.stringify(payload) + '\n');
