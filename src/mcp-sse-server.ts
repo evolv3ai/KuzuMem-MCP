@@ -73,12 +73,10 @@ server.setRequestHandler(InitializeRequestSchema, async (request) => {
       version: '3.0.0',
     },
     capabilities: {
-      tools: {
-        listChanged: true,
-      },
-      resources: {},
-      prompts: {},
+      tools: { listChanged: true },
     },
+    resources: {},
+    prompts: {},
     sessionId: currentSessionId,
   };
 });

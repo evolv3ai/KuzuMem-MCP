@@ -173,9 +173,12 @@ async function main() {
       mcpStdioLogger.info({ sessionId: currentSessionId }, 'New session initialized');
     }
     return {
-      protocolVersion: '1.0.0',
+      protocolVersion: '2025-03-26',
       serverInfo,
       sessionId: currentSessionId,
+      capabilities: { tools: { listChanged: true } },
+      resources: {},
+      prompts: {},
     };
   });
 

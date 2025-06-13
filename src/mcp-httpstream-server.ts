@@ -35,8 +35,14 @@ const repositoryRootMap = new Map<string, string>();
 
 // Create the official MCP server
 const mcpServer = new McpServer(
-  { name: 'KuzuMem-MCP-HTTPStream', version: '1.0.0' },
-  { capabilities: { tools: { list: true, call: true } } },
+  { name: 'KuzuMem-MCP-HTTPStream', version: '2025-03-26' },
+  {
+    capabilities: {
+      tools: { list: true, call: true },
+      resources: {},
+      prompts: {},
+    },
+  },
 );
 
 // Create tool schema helper
