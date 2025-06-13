@@ -48,11 +48,11 @@ if (process.env.DB_PATH_OVERRIDE) {
 }
 
 // Graceful shutdown function
-function gracefulShutdown(signal: string): void {
+async function gracefulShutdown(signal: string): Promise<void> {
   mcpStdioLogger.info({ signal }, `Received ${signal}, starting graceful shutdown`);
 
   // For stdio servers, we need to gracefully close connections and clean up
-  const cleanup = async () => {
+  const cleanup = async (): Promise<void> => {
     try {
       // Get MemoryService instance and shut it down if it exists
       // We'll try to get any existing instances to clean them up
@@ -62,24 +62,33 @@ function gracefulShutdown(signal: string): void {
       // But the process exit will clean them up anyway
 
       mcpStdioLogger.info('Cleanup completed');
-      process.exit(0);
     } catch (error) {
       logError(mcpStdioLogger, error as Error, { operation: 'graceful-shutdown-cleanup' });
-      process.exit(1);
+      // Re-throw to allow the main handler to catch it and exit.
+      throw error;
     }
   };
 
-  cleanup();
-
   // Timeout for forced exit
-  setTimeout(() => {
+  const timeout = setTimeout(() => {
     mcpStdioLogger.error('Graceful shutdown timed out, forcing exit');
     process.exit(1);
   }, 10000); // 10 second timeout for stdio server
+
+  try {
+    await cleanup();
+    clearTimeout(timeout);
+    mcpStdioLogger.info('Graceful shutdown completed successfully.');
+    process.exit(0);
+  } catch (error) {
+    clearTimeout(timeout);
+    logError(mcpStdioLogger, error as Error, { operation: 'graceful-shutdown-failure' });
+    process.exit(1);
+  }
 }
 
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => void gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => void gracefulShutdown('SIGTERM'));
 
 import packageJson from '../package.json';
 
