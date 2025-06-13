@@ -201,22 +201,25 @@ app.post('/mcp', async (req: Request, res: Response) => {
     sessionData = sessions[sessionId];
   } else if (!sessionId && isInitializeRequest(req.body)) {
     // New initialization request
+    const server = createMcpServer();
+
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (sessionId) => {
         debugLog(1, `New MCP session initialized: ${sessionId}`);
+
+        // Store the session data immediately when session ID is available
+        const sessionData = { server, transport };
+        sessions[sessionId] = sessionData;
+
+        debugLog(2, `Session ${sessionId} stored successfully`);
       },
     });
-
-    const server = createMcpServer();
 
     // Connect to the MCP server
     await server.connect(transport);
 
-    // Store both server and transport by session ID
-    sessionData = { server, transport };
-    
-    // Clean up session when transport closes
+    // Set up cleanup handler
     transport.onclose = () => {
       if (transport.sessionId) {
         debugLog(1, `Cleaning up MCP session: ${transport.sessionId}`);
@@ -224,13 +227,8 @@ app.post('/mcp', async (req: Request, res: Response) => {
       }
     };
 
-    // Store the session data after connection is established
-    // We need to wait for the session ID to be available
-    setTimeout(() => {
-      if (transport.sessionId) {
-        sessions[transport.sessionId] = sessionData;
-      }
-    }, 100);
+    // Create session data for immediate use
+    sessionData = { server, transport };
   } else {
     // Invalid request
     res.status(400).json({
