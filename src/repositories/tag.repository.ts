@@ -46,9 +46,9 @@ export class TagRepository {
     let queryParams: Record<string, any>;
 
     if (tagNodeProps.repository) {
-      // Atomic query that creates the Tag node and establishes PART_OF relationship
+      // Atomic query that creates the Tag node and establishes PART_OF relationship if repository exists
       query = `
-        MATCH (repo:Repository {id: $repository})
+        OPTIONAL MATCH (repo:Repository {id: $repository})
         MERGE (t:Tag {id: $id})
         ON CREATE SET 
           t.name = $name, 
@@ -65,7 +65,9 @@ export class TagRepository {
           t.category = $category,
           t.repository = $repository,
           t.branch = $branch
-        MERGE (t)-[:PART_OF]->(repo)
+        FOREACH (_ IN CASE WHEN repo IS NOT NULL THEN [1] ELSE [] END |
+          MERGE (t)-[:PART_OF]->(repo)
+        )
         RETURN t
       `;
       queryParams = {
