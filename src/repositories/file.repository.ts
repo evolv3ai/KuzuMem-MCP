@@ -30,7 +30,7 @@ export class FileRepository {
       id: fileData.id,
       name: fileData.name,
       path: fileData.path,
-      type: fileData.mime_type || 'unknown',
+      mime_type: fileData.mime_type || 'unknown',
       size: fileData.size ?? 0,
       lastModified: new Date().toISOString(),
       checksum: '',
@@ -49,8 +49,8 @@ export class FileRepository {
     // 2. Conditionally MATCH the repository and MERGE the relationship.
     const upsertFileQuery = `
       MERGE (f:File {id: $id})
-      ON CREATE SET f.name = $name, f.path = $path, f.type = $type, f.size = $size, f.lastModified = $lastModified, f.checksum = $checksum, f.metadata = $metadata
-      ON MATCH SET f.name = $name, f.path = $path, f.type = $type, f.size = $size, f.lastModified = $lastModified, f.checksum = $checksum, f.metadata = $metadata
+      ON CREATE SET f.name = $name, f.path = $path, f.mime_type = $mime_type, f.size = $size, f.lastModified = $lastModified, f.checksum = $checksum, f.metadata = $metadata
+      ON MATCH SET f.name = $name, f.path = $path, f.mime_type = $mime_type, f.size = $size, f.lastModified = $lastModified, f.checksum = $checksum, f.metadata = $metadata
     `;
 
     const linkRepoQuery = `
@@ -94,7 +94,7 @@ export class FileRepository {
           name: createdNode.name,
           path: createdNode.path,
           size: createdNode.size,
-          mime_type: parsedMetadata.mime_type,
+          mime_type: parsedMetadata.mime_type || fileNodeProps.mime_type,
           content: parsedMetadata.content,
           metrics: parsedMetadata.metrics,
           repository: repositoryName, // Consistent repository name extraction
