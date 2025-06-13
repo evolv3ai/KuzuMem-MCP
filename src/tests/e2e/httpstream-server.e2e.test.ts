@@ -18,7 +18,8 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
   let sessionId: string;
   const TEST_REPO = 'test-repo';
   const TEST_BRANCH = 'main';
-  const SERVER_PORT = 3002; // Different port for testing
+  // Pick a high, likely-free port dynamically to avoid EADDRINUSE clashes between test retries
+  const SERVER_PORT = 30000 + Math.floor(Math.random() * 1000);
   const SERVER_URL = `http://localhost:${SERVER_PORT}`;
 
   // Helper to send HTTP request to server
@@ -121,9 +122,9 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     testProjectRoot = await mkdtemp(join(tmpdir(), 'kuzumem-httpstream-e2e-'));
     console.log(`Test project root: ${testProjectRoot}`);
 
-    // Start the server using the compiled JS file
-    const serverPath = join(__dirname, '../../..', 'dist/src/mcp-httpstream-server.js');
-    serverProcess = spawn('node', [serverPath], {
+    // Start the server directly from TypeScript via tsx – no pre-build step required
+    const serverPath = join(__dirname, '../../..', 'src/mcp-httpstream-server.ts');
+    serverProcess = spawn('npx', ['tsx', serverPath], {
       stdio: 'pipe',
       env: {
         ...process.env,
@@ -148,11 +149,13 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         if (output.includes(`MCP HTTP Streaming Server running at`)) {
           clearTimeout(timeout);
           serverProcess.stderr!.off('data', readyHandler);
+          serverProcess.stdout!.off('data', readyHandler);
           resolve();
         }
       };
 
       serverProcess.stderr!.on('data', readyHandler);
+      serverProcess.stdout!.on('data', readyHandler);
     });
 
     // Initialize the connection - need to do this manually to extract session ID from headers
