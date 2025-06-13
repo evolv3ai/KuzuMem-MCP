@@ -1,6 +1,9 @@
 // CRITICAL: Set environment variables FIRST before any imports
 // This prevents debug output from other components during MCP stdio server startup
-process.env.NODE_ENV = 'production'; // This ensures JSON logging instead of pretty
+// Only set NODE_ENV to production if we're not in a test environment
+if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+  process.env.NODE_ENV = 'production'; // This ensures JSON logging instead of pretty
+}
 process.env.PINO_PRETTY = 'false'; // Explicitly disable pretty printing
 process.env.MCP_STDIO_SERVER = 'true'; // Suppress debug output from other components
 

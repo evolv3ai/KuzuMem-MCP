@@ -44,7 +44,7 @@ export class TagRepository {
         color: tagData.color || null,
         description: tagData.description || null,
         repository: tagData.repository || null,
-        branch: tagData.branch || null,
+        branch: tagData.branch || 'main',
         created_at: now,
       });
       if (result && result.length > 0) {
