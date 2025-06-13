@@ -137,6 +137,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
             ...process.env,
             NODE_ENV: 'test',
             HTTP_STREAM_PORT: String(SERVER_PORT),
+            LOG_LEVEL: 'info',
           },
         });
 
