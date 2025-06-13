@@ -186,8 +186,8 @@ export class FileRepository {
     // This means: Component implements functionality that is contained in File
     // Use PART_OF relationship and metadata JSON extraction to find the correct file
     const query = `
-      MATCH (c:Component {graph_unique_id: $componentGraphUniqueId}), 
-            (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId})
+      MATCH (c:Component {graph_unique_id: $componentGraphUniqueId})
+      MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId})
       WHERE json_extract_string(f.metadata, '$.branch') = $branch
       MERGE (c)-[r:${safeRelType}]->(f)
       RETURN r
