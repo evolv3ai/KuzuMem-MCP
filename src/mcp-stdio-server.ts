@@ -337,7 +337,10 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  logError(mcpStdioLogger, error as Error, { operation: 'server-startup' });
-  process.exit(1);
-});
+// Start the server only if the script is executed directly
+if (require.main === module) {
+  main().catch((err) => {
+    logError(mcpStdioLogger, err, { operation: 'main-execution-error' });
+    process.exit(1);
+  });
+}

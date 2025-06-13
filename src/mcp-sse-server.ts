@@ -17,14 +17,14 @@ import path from 'path';
 import { toolHandlers } from './mcp/tool-handlers';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
 import { MemoryService } from './services/memory.service';
-import { loggers, createPerformanceLogger, logError } from './utils/logger';
+import { createPerformanceLogger, logError, loggers } from './utils/logger';
 
 // Load environment variables
 import dotenv from 'dotenv';
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 // Configuration
-const port = parseInt(process.env.PORT || '3001', 10);
+const port = parseInt(process.env.PORT || '8000', 10);
 const host = process.env.HOST || 'localhost';
 
 // Create SSE-specific logger
@@ -282,7 +282,7 @@ async function startServer(): Promise<void> {
 
   // Start listening
   httpServer.listen(port, host, () => {
-    sseLogger.info({ port, host }, `MCP SSE Server listening on port ${port}`);
+    sseLogger.info(`MCP SSE server listening on http://${host}:${port}`);
   });
 
   // Handle server errors
@@ -321,15 +321,10 @@ function gracefulShutdown(signal: string): void {
   }
 }
 
-// Main execution
+// Start the server only if the script is executed directly
 if (require.main === module) {
-  // Handle shutdown signals
-  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
-  // Start the server
   startServer().catch((error) => {
-    logError(sseLogger, error as Error, { operation: 'server-startup' });
+    sseLogger.error({ error }, 'Failed to start MCP SSE server');
     process.exit(1);
   });
 }
