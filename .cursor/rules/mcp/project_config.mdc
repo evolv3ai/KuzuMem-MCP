@@ -18,7 +18,7 @@ All MCP calls **MUST** include these exact base fields and ensure `branch` refle
 {
   "clientProjectRoot": "/Users/jokkeruokolainen/Documents/Solita/GenAI/Azure/MCP/kuzumem-mcp",
   "repository": "kuzumem-mcp",
-  "branch": "main"          // ⇐ update when on feature branches
+  "branch": "the_name_of_the_current_working_branch_you_have_to_check_this"          // ⇐ update when on feature branches
 }
 ```
 

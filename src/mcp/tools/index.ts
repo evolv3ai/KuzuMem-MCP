@@ -4,28 +4,28 @@
  */
 
 // Export all unified tools
-export { memoryBankTool } from './unified/memory-bank-tool';
+export { analyzeTool } from './unified/analyze-tool';
+export { associateTool } from './unified/associate-tool';
+export { bulkImportTool } from './unified/bulk-import-tool';
+export { contextTool } from './unified/context-tool';
+export { detectTool } from './unified/detect-tool';
 export { entityTool } from './unified/entity-tool';
 export { introspectTool } from './unified/introspect-tool';
-export { contextTool } from './unified/context-tool';
+export { memoryBankTool } from './unified/memory-bank-tool';
 export { queryTool } from './unified/query-tool';
-export { associateTool } from './unified/associate-tool';
-export { analyzeTool } from './unified/analyze-tool';
-export { detectTool } from './unified/detect-tool';
-export { bulkImportTool } from './unified/bulk-import-tool';
-export { semanticSearchTool } from './unified/semantic-search-tool';
+export { searchTool } from './unified/search-tool';
 
 // Import unified tools for the combined array
-import { memoryBankTool } from './unified/memory-bank-tool';
+import { analyzeTool } from './unified/analyze-tool';
+import { associateTool } from './unified/associate-tool';
+import { bulkImportTool } from './unified/bulk-import-tool';
+import { contextTool } from './unified/context-tool';
+import { detectTool } from './unified/detect-tool';
 import { entityTool } from './unified/entity-tool';
 import { introspectTool } from './unified/introspect-tool';
-import { contextTool } from './unified/context-tool';
+import { memoryBankTool } from './unified/memory-bank-tool';
 import { queryTool } from './unified/query-tool';
-import { associateTool } from './unified/associate-tool';
-import { analyzeTool } from './unified/analyze-tool';
-import { detectTool } from './unified/detect-tool';
-import { bulkImportTool } from './unified/bulk-import-tool';
-// Note: semanticSearchTool is not included in the broadcast list as it's a future capability
+import { searchTool } from './unified/search-tool';
 
 import { McpTool } from '../types';
 
@@ -44,5 +44,5 @@ export const MEMORY_BANK_MCP_TOOLS: McpTool[] = [
   analyzeTool,
   detectTool,
   bulkImportTool,
-  // Note: semanticSearchTool is not included here as it's a future capability
+  searchTool,
 ];

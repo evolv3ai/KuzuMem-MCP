@@ -2,25 +2,9 @@
 const kuzu = require('kuzu');
 import fs from 'fs';
 import path from 'path';
+import { createPerformanceLogger, kuzuLogger, logError } from '../utils/logger';
 import { Mutex } from '../utils/mutex'; // For ensuring atomic initialization of a KuzuDBClient instance
 import config from './config'; // Now imports DB_RELATIVE_DIR and DB_FILENAME
-
-// -----------------------------------------------------------------------------
-// Redirect standard output logs to stderr when running under the MCP stdio
-// server so that stdout remains a clean JSON channel.  We intentionally make
-// this unconditional because the MCP process should *never* emit plain text on
-// stdout except for the JSON protocol messages produced by the stdio transport
-// layer.  This simple redirect keeps all existing `console.log` debugging lines
-// functional while guaranteeing they do not corrupt the JSON stream consumed by
-// the front-end extension.
-// -----------------------------------------------------------------------------
-/* eslint-disable no-global-assign */
-console.log = (...args: unknown[]): void => {
-  // Use console.error which writes to stderr
-  // eslint-disable-next-line no-console
-  console.error(...args);
-};
-/* eslint-enable no-global-assign */
 
 // Add connection validation interval (5 minutes)
 const CONNECTION_VALIDATION_INTERVAL = 5 * 60 * 1000;
@@ -41,22 +25,22 @@ async function timeOperation<T>(
   progressCallback: ((message: string, percent?: number) => Promise<void>) | null = null,
   fn: () => Promise<T>,
 ): Promise<T> {
-  const start = Date.now();
+  const perfLogger = createPerformanceLogger(kuzuLogger, operation);
+
   try {
-    const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] Starting ${operation} for ${context}`);
+    kuzuLogger.debug({ operation, context }, 'Operation starting');
 
     // Send progress notification if callback provided
     if (progressCallback) {
       await progressCallback(`${operation} for ${context}`);
     }
 
-    return await fn();
-  } finally {
-    const duration = Date.now() - start;
-    console.log(
-      `[${new Date().toISOString()}] Completed ${operation} for ${context} in ${duration}ms`,
-    );
+    const result = await fn();
+    perfLogger.complete({ context });
+    return result;
+  } catch (error) {
+    perfLogger.fail(error as Error, { context });
+    throw error;
   }
 }
 
@@ -83,16 +67,17 @@ export class KuzuDBClient {
    * @param clientProjectRoot The absolute root path of the client project.
    */
   constructor(clientProjectRoot: string) {
+    const logger = kuzuLogger.child({ operation: 'constructor' });
     const overrideDbPath = process.env.DB_PATH_OVERRIDE;
 
     if (overrideDbPath) {
       this.dbPath = overrideDbPath;
-      console.log(`KuzuDBClient using DB_PATH_OVERRIDE from environment: ${this.dbPath}`);
+      logger.info({ dbPath: this.dbPath }, 'Using DB_PATH_OVERRIDE from environment');
       // Ensure the directory for the override path exists, similar to non-override logic
       const dbDir = path.dirname(this.dbPath);
       if (!fs.existsSync(dbDir)) {
         fs.mkdirSync(dbDir, { recursive: true });
-        console.log(`KuzuDBClient: Created directory for override DB path: ${dbDir}`);
+        logger.info({ dbDir }, 'Created directory for override DB path');
       }
     } else {
       if (!clientProjectRoot || clientProjectRoot.trim() === '') {
@@ -103,9 +88,7 @@ export class KuzuDBClient {
           );
         }
         clientProjectRoot = envClientRoot;
-        console.log(
-          `KuzuDBClient using CLIENT_PROJECT_ROOT from environment: ${clientProjectRoot}`,
-        );
+        logger.info({ clientProjectRoot }, 'Using CLIENT_PROJECT_ROOT from environment');
       }
 
       if (!path.isAbsolute(clientProjectRoot)) {
@@ -118,10 +101,10 @@ export class KuzuDBClient {
       const dbDir = path.dirname(this.dbPath);
       if (!fs.existsSync(dbDir)) {
         fs.mkdirSync(dbDir, { recursive: true });
-        console.log(`KuzuDBClient: Created database directory: ${dbDir}`);
+        logger.info({ dbDir }, 'Created database directory');
       }
     }
-    console.log(`KuzuDBClient instance created for path: ${this.dbPath}`);
+    logger.info({ dbPath: this.dbPath }, 'KuzuDBClient instance created');
   }
 
   /**
@@ -178,18 +161,20 @@ export class KuzuDBClient {
    * @private
    */
   private async cleanupStaleLock(lockFilePath: string, age: number): Promise<boolean> {
+    const logger = kuzuLogger.child({ operation: 'cleanup-stale-lock' });
     // Only clean up locks older than 5 minutes
     const STALE_LOCK_THRESHOLD = 5 * 60 * 1000;
 
     if (age > STALE_LOCK_THRESHOLD) {
       try {
         await fs.promises.unlink(lockFilePath);
-        console.log(
-          `KuzuDBClient: Removed stale lock file (age: ${Math.round(age / 1000)}s): ${lockFilePath}`,
+        logger.info(
+          { lockFilePath, ageSeconds: Math.round(age / 1000) },
+          'Removed stale lock file',
         );
         return true;
       } catch (e) {
-        console.error(`KuzuDBClient: Failed to remove stale lock file: ${lockFilePath}`, e);
+        logError(logger, e as Error, { lockFilePath });
         return false;
       }
     }
@@ -201,692 +186,591 @@ export class KuzuDBClient {
    * @private
    */
   private async validateConnection(): Promise<boolean> {
-    if (!this.connection || !this.database) {
+    const logger = kuzuLogger.child({
+      operation: 'validate-connection',
+      dbPath: this.dbPath,
+    });
+
+    if (!this.connection || !this.connectionCreatedAt) {
+      logger.debug('No connection to validate');
       return false;
     }
 
     // Check connection age
-    if (this.connectionCreatedAt) {
-      const age = Date.now() - this.connectionCreatedAt.getTime();
-      if (age > MAX_CONNECTION_AGE) {
-        console.log(
-          `KuzuDBClient: Connection too old (${Math.round(age / 1000)}s), marking as invalid`,
-        );
-        return false;
-      }
+    const connectionAge = Date.now() - this.connectionCreatedAt.getTime();
+    if (connectionAge > MAX_CONNECTION_AGE) {
+      logger.warn({ connectionAge }, 'Connection exceeded maximum age');
+      return false;
     }
 
-    // Skip validation if recently validated
-    if (this.lastValidationTime) {
-      const timeSinceLastValidation = Date.now() - this.lastValidationTime.getTime();
-      if (timeSinceLastValidation < CONNECTION_VALIDATION_INTERVAL) {
-        return this.isConnectionValid;
-      }
+    // Check last validation time
+    const now = Date.now();
+    if (
+      this.lastValidationTime &&
+      now - this.lastValidationTime.getTime() < CONNECTION_VALIDATION_INTERVAL
+    ) {
+      return this.isConnectionValid;
     }
 
+    // Perform actual validation
     try {
-      // Simple validation query with timeout
-      const validationPromise = this.connection.query('RETURN 1 AS test;');
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Connection validation timeout')), 1000),
-      );
-
-      await Promise.race([validationPromise, timeoutPromise]);
-
+      const result = await this.connection.query('RETURN 1 as test;');
       this.lastValidationTime = new Date();
       this.isConnectionValid = true;
+      logger.debug('Connection validation successful');
       return true;
     } catch (e) {
-      console.error(`KuzuDBClient: Connection validation failed:`, e);
       this.isConnectionValid = false;
+      logError(logger, e as Error, { operation: 'connection-validation' });
       return false;
     }
   }
 
   /**
-   * Reset the connection, forcing a fresh connection on next use
+   * Reset/close the current connection and database
    * @private
    */
   private async resetConnection(): Promise<void> {
-    console.log(`KuzuDBClient: Resetting connection for ${this.dbPath}`);
+    const logger = kuzuLogger.child({
+      operation: 'reset-connection',
+      dbPath: this.dbPath,
+    });
 
-    // Clear existing connection
+    logger.info('Resetting connection');
+
     if (this.connection) {
+      try {
+        this.connection.close();
+      } catch (e) {
+        // Ignore errors during connection close
+      }
       this.connection = null;
     }
+
     if (this.database) {
+      try {
+        this.database.close();
+      } catch (e) {
+        // Ignore errors during database close
+      }
       this.database = null;
     }
 
-    // Clear tracking
     this.connectionCreatedAt = null;
     this.lastValidationTime = null;
     this.isConnectionValid = false;
-
-    // Remove from initialization promises to allow re-init
-    if (KuzuDBClient.initializationPromises.has(this.dbPath)) {
-      KuzuDBClient.initializationPromises.delete(this.dbPath);
-    }
   }
 
-  /**
-   * Initialize the KuzuDBClient with optional progress reporting
-   * @param progressReporter Optional function to report progress during initialization
-   */
   async initialize(progressReporter?: {
     sendProgress: (progress: any) => Promise<void>;
   }): Promise<void> {
-    const initStartTime = Date.now();
-    console.log(
-      `[${new Date().toISOString()}] KuzuDBClient: Starting initialization for ${this.dbPath}`,
-    );
-
-    // Helper function to send progress if a reporter is available
+    // Set up progress reporting function
     const reportProgress = async (message: string, percent?: number) => {
-      if (progressReporter) {
+      if (progressReporter?.sendProgress) {
         try {
-          await progressReporter.sendProgress({
-            status: 'in_progress',
-            message: `Database: ${message}`,
-            percent,
-          });
+          await progressReporter.sendProgress({ message, percent });
         } catch (err) {
-          console.error(`Error sending progress notification: ${err}`);
+          logError(kuzuLogger, err as Error, { operation: 'progress-notification' });
         }
       }
     };
 
-    // Validate existing connection first
-    if (this.database && this.connection) {
-      const isValid = await this.validateConnection();
-      if (isValid) {
-        console.log(`KuzuDBClient: Using existing valid connection for ${this.dbPath}`);
-        return;
-      } else {
-        console.log(`KuzuDBClient: Existing connection invalid, resetting...`);
-        await this.resetConnection();
-      }
+    // Check if there's an ongoing initialization for this dbPath
+    const existingPromise = KuzuDBClient.initializationPromises.get(this.dbPath);
+    if (existingPromise) {
+      kuzuLogger.debug({ dbPath: this.dbPath }, 'Waiting for existing initialization');
+      return existingPromise;
     }
 
-    const release = await timeOperation(
-      'Acquiring initialization lock',
-      this.dbPath,
-      reportProgress,
-      async () => await KuzuDBClient.initializationLock.acquire(),
-    );
+    // Use existing valid connection if available
+    const isValid = await this.validateConnection();
+    if (isValid) {
+      kuzuLogger.debug({ dbPath: this.dbPath }, 'Using existing valid connection');
+      return;
+    } else if (this.connection) {
+      kuzuLogger.debug('Existing connection invalid, resetting...');
+      await this.resetConnection();
+    }
+
+    // Create new initialization promise
+    const initPromise = this._performInitialization(reportProgress);
+    KuzuDBClient.initializationPromises.set(this.dbPath, initPromise);
 
     try {
-      // Check if already initializing for this path
-      if (KuzuDBClient.initializationPromises.has(this.dbPath)) {
-        console.log(
-          `KuzuDBClient: Already initializing for ${this.dbPath}, waiting for completion...`,
-        );
-        await KuzuDBClient.initializationPromises.get(this.dbPath);
-        return;
-      }
-
-      // Set up the initialization promise
-      const initPromise = this._performInitialization(reportProgress);
-      KuzuDBClient.initializationPromises.set(this.dbPath, initPromise);
-
-      // Execute initialization
       await initPromise;
-    } catch (error) {
-      console.error(`KuzuDBClient: Error initializing for ${this.dbPath}:`, error);
-      // Clean up on error
-      KuzuDBClient.initializationPromises.delete(this.dbPath);
-      await this.resetConnection();
-      throw error;
     } finally {
-      release();
-      const totalTime = Date.now() - initStartTime;
-      console.log(
-        `[${new Date().toISOString()}] KuzuDBClient: Total initialization time for ${this.dbPath}: ${totalTime}ms`,
-      );
+      // Clean up the promise from the map once initialization is complete (success or failure)
+      KuzuDBClient.initializationPromises.delete(this.dbPath);
     }
   }
 
   /**
-   * Perform the actual initialization
+   * Performs the actual initialization work.
    * @private
    */
   private async _performInitialization(
     reportProgress: (message: string, percent?: number) => Promise<void>,
   ): Promise<void> {
-    let permissionCheckFailed = false;
-    const dbDir = path.dirname(this.dbPath);
+    const logger = kuzuLogger.child({
+      operation: 'initialize',
+      dbPath: this.dbPath,
+    });
+    const perfLogger = createPerformanceLogger(logger, 'database-initialization');
 
-    // Check for and handle stale lock files
-    const lockFileCheck = this.checkForStaleLockFile(this.dbPath);
-    if (lockFileCheck.exists && lockFileCheck.path && lockFileCheck.age) {
-      console.warn(
-        `Lock file detected at ${lockFileCheck.path} (age: ${Math.round(lockFileCheck.age / 1000)}s)`,
-      );
-      await reportProgress(`Checking for stale database locks...`, 15);
+    const release = await KuzuDBClient.initializationLock.acquire();
 
-      const cleaned = await this.cleanupStaleLock(lockFileCheck.path, lockFileCheck.age);
-      if (cleaned) {
-        await reportProgress(`Cleaned up stale lock file`, 20);
-      }
-    }
+    try {
+      logger.info('Starting database initialization');
 
-    // Try to create the directory if it doesn't exist
-    if (!fs.existsSync(dbDir)) {
-      await timeOperation('Creating database directory', dbDir, reportProgress, async () => {
+      const dbDir = path.dirname(this.dbPath);
+
+      // Check and create directory if needed
+      if (!fs.existsSync(dbDir)) {
+        await reportProgress(`Creating database directory: ${dbDir}`, 10);
         try {
           fs.mkdirSync(dbDir, { recursive: true });
-          console.log(`KuzuDBClient: Created database directory: ${dbDir}`);
-        } catch (dirError: any) {
+          logger.info({ dbDir }, 'Created database directory');
+        } catch (dirError: unknown) {
           if (this.isPermissionError(dirError)) {
-            permissionCheckFailed = true;
-            const userMessage = `KuzuDBClient: PERMISSION ERROR - Cannot create database directory at '${dbDir}'. The IDE or MCP server process does not have permission to create directories in this location. Please ensure the user running the IDE has full read/write access to this location, or use a different location.`;
-            console.error(userMessage);
-            await reportProgress(
-              `PERMISSION ERROR - Cannot create database directory at '${dbDir}'`,
-            );
+            const userMessage = `Permission denied: Cannot create database directory '${dbDir}'. Please check file system permissions or try running with appropriate privileges.`;
+            logger.error({ dbDir, error: dirError }, userMessage);
             throw new Error(userMessage);
           } else {
-            console.error(`KuzuDBClient: Error creating directory ${dbDir}:`, dirError);
-            await reportProgress(`Error creating database directory: ${dirError.message}`);
-            throw new Error(`KuzuDBClient: Error creating directory ${dbDir}: ${dirError.message}`);
+            logError(logger, dirError as Error, { dbDir, operation: 'create-directory' });
+            throw dirError;
           }
         }
-      });
-    }
+      }
 
-    // Verify the directory is writable even if it already exists
-    if (!permissionCheckFailed) {
-      await timeOperation('Checking directory is writable', dbDir, reportProgress, async () => {
-        const isWritable = await this.isDirectoryWritable(dbDir);
-        if (!isWritable) {
-          const userMessage = `KuzuDBClient: PERMISSION ERROR - The database directory '${dbDir}' exists but is not writable. The IDE or MCP server process does not have sufficient permissions. Please ensure the user running the IDE has full read/write access to this location.`;
-          console.error(userMessage);
-          await reportProgress(
-            `PERMISSION ERROR - The database directory exists but is not writable`,
-          );
+      // Check directory writability
+      const isWritable = await this.isDirectoryWritable(dbDir);
+      if (!isWritable) {
+        const userMessage = `Database directory '${dbDir}' is not writable. Please check file system permissions.`;
+        logger.error({ dbDir }, userMessage);
+        throw new Error(userMessage);
+      }
+
+      // Check for stale lock files
+      const lockInfo = this.checkForStaleLockFile(this.dbPath);
+      if (lockInfo.exists && lockInfo.path && lockInfo.age) {
+        await this.cleanupStaleLock(lockInfo.path, lockInfo.age);
+      }
+
+      // Initialize database
+      await reportProgress(`Opening database: ${this.dbPath}`, 30);
+      try {
+        this.database = new kuzu.Database(this.dbPath);
+        logger.info('Database opened successfully');
+      } catch (dbError: unknown) {
+        if (this.isPermissionError(dbError)) {
+          const userMessage = `Permission denied: Cannot access database file '${this.dbPath}'. Please check file system permissions.`;
+          logger.error({ dbPath: this.dbPath, error: dbError }, userMessage);
+          throw new Error(userMessage);
+        } else if (
+          (dbError as any).message &&
+          ((dbError as any).message.includes('lock') || (dbError as any).message.includes('busy'))
+        ) {
+          const userMessage = `Database file '${this.dbPath}' is locked or in use by another process. Please close other connections and try again.`;
+          logger.error({ dbPath: this.dbPath, error: dbError }, userMessage);
+          throw new Error(userMessage);
+        } else {
+          const message = `Failed to open database file '${this.dbPath}'. The file may be corrupted or inaccessible.`;
+          logError(logger, dbError as Error, { dbPath: this.dbPath, operation: 'open-database' });
+          throw new Error(message);
+        }
+      }
+
+      // Create connection
+      await reportProgress(`Establishing connection`, 50);
+      try {
+        this.connection = new kuzu.Connection(this.database);
+        this.connectionCreatedAt = new Date();
+        this.isConnectionValid = true;
+        logger.info('Connection successfully established');
+      } catch (connError: unknown) {
+        if (this.isPermissionError(connError)) {
+          const userMessage = `Permission denied: Cannot establish connection to database '${this.dbPath}'.`;
+          logger.error({ dbPath: this.dbPath, error: connError }, userMessage);
+          throw new Error(userMessage);
+        } else {
+          const userMessage = `Failed to establish connection to database '${this.dbPath}'.`;
+          logError(logger, connError as Error, {
+            dbPath: this.dbPath,
+            operation: 'create-connection',
+          });
           throw new Error(userMessage);
         }
-      });
-    }
+      }
 
-    if (!this.database) {
-      await timeOperation('Instantiating kuzu.Database', this.dbPath, reportProgress, async () => {
-        try {
-          console.log(
-            `KuzuDBClient: Attempting to instantiate kuzu.Database with path: ${this.dbPath}`,
-          );
-          await reportProgress(`Creating database instance at ${this.dbPath}`, 40);
-          this.database = new kuzu.Database(this.dbPath);
-          console.log(
-            `KuzuDBClient: Database object successfully initialized for ${this.dbPath} (using Kuzu default system config).`,
-          );
-        } catch (dbError: any) {
-          if (this.isPermissionError(dbError)) {
-            const userMessage = `KuzuDBClient: PERMISSION ERROR - Cannot create or access database files at '${this.dbPath}'. The IDE or MCP server process does not have sufficient permissions. Please ensure the user running the IDE has full read/write access to this location and all files within it.`;
-            console.error(userMessage, dbError);
-            throw new Error(userMessage);
-          } else if (
-            dbError.message &&
-            (dbError.message.includes('lock') || dbError.message.includes('Lock'))
-          ) {
-            // Check if there's an actual lock file that can be inspected
-            const lockFileCheck = this.checkForStaleLockFile(this.dbPath);
-            let additionalInfo = '';
-            if (lockFileCheck.exists) {
-              additionalInfo = ` Found lock file at '${lockFileCheck.path}'.`;
-            }
+      // Validate connection and check schema
+      await reportProgress(`Validating connection and checking schema`, 70);
+      let repositoryTableExists = false;
+      try {
+        logger.debug('Testing connection...');
+        const testResult = await this.connection.query('RETURN 1;');
+        logger.debug('Connection test successful');
 
-            const userMessage = `KuzuDBClient: DATABASE LOCK ERROR - Cannot access database at '${this.dbPath}' because it appears to be locked by another process.${additionalInfo} This could be caused by another instance of the IDE or MCP server using this database, or a previous process that did not shut down cleanly. If no other process is using this database, try removing the '.lock' file or restarting your IDE.`;
-            console.error(userMessage, dbError);
-            throw new Error(userMessage);
-          } else {
-            console.error(
-              `KuzuDBClient: CRITICAL ERROR instantiating kuzu.Database for ${this.dbPath}:`,
-              dbError,
-            );
-            const message = `KuzuDBClient: CRITICAL ERROR instantiating kuzu.Database for ${this.dbPath}: ${dbError?.message || dbError}`;
-            console.error(message, dbError);
-            throw new Error(message);
-          }
+        logger.debug('Checking for existing tables...');
+        const result = await this.connection.query(`
+          CALL show_tables() RETURN name;
+        `);
+
+        const tables = result || [];
+        logger.debug(
+          { tables, resultType: typeof result, isArray: Array.isArray(result) },
+          'show_tables() returned',
+        );
+
+        // Handle different possible result structures
+        if (Array.isArray(tables)) {
+          repositoryTableExists = tables.some(
+            (table: any) => table.name === 'Repository' || table === 'Repository',
+          );
+        } else if (tables && typeof tables === 'object') {
+          // Handle case where result is a single object or different structure
+          repositoryTableExists = JSON.stringify(tables).includes('Repository');
         }
-      });
+
+        logger.debug({ repositoryTableExists }, 'Repository table exists?');
+
+        logger.debug('Connection and schema validation completed');
+      } catch (error) {
+        logError(logger, error as Error, {
+          dbPath: this.dbPath,
+          operation: 'connection-validation',
+        });
+      }
+
+      // Initialize schema if needed
+      if (!repositoryTableExists) {
+        await reportProgress(`Initializing database schema`, 90);
+        logger.info('Repository table not found, initializing schema...');
+        await initializeKuzuDBSchema(this.connection);
+        logger.info('Schema DDL executed');
+      }
+
+      await reportProgress(`Initialization complete`, 100);
+      perfLogger.complete({ repositoryTableExists });
+      logger.info('Database initialization completed successfully');
+    } catch (error) {
+      perfLogger.fail(error as Error);
+      logError(logger, error as Error, { dbPath: this.dbPath, operation: 'initialization' });
+      throw error;
+    } finally {
+      release();
     }
-
-    if (!this.connection) {
-      await timeOperation(
-        'Establishing database connection',
-        this.dbPath,
-        reportProgress,
-        async () => {
-          try {
-            console.log(
-              `KuzuDBClient: Attempting to instantiate kuzu.Connection with database object for: ${this.dbPath}`,
-            );
-            await reportProgress(`Establishing connection to database`, 50);
-            this.connection = new kuzu.Connection(this.database);
-            this.connectionCreatedAt = new Date();
-            this.isConnectionValid = true;
-            console.log(`KuzuDBClient: Connection successfully established to ${this.dbPath}`);
-          } catch (connError: any) {
-            if (this.isPermissionError(connError)) {
-              const userMessage = `KuzuDBClient: PERMISSION ERROR - Cannot establish connection to database at '${this.dbPath}'. The IDE or MCP server process does not have sufficient permissions to access the database files. Please ensure the user running the IDE has full read/write access to this location and all files within it.`;
-              console.error(userMessage, connError);
-              throw new Error(userMessage);
-            } else if (connError.message && connError.message.includes('lock')) {
-              const userMessage = `KuzuDBClient: DATABASE LOCK ERROR - Cannot establish connection to database at '${this.dbPath}' because it appears to be locked by another process. This could be caused by another process accessing the same database, or a previous process that did not shut down cleanly. Try restarting your IDE.`;
-              console.error(userMessage, connError);
-              throw new Error(userMessage);
-            } else {
-              console.error(
-                `KuzuDBClient: CRITICAL ERROR instantiating kuzu.Connection for ${this.dbPath}:`,
-                connError,
-              );
-              const message = `KuzuDBClient: CRITICAL ERROR obtaining connection for ${this.dbPath}: ${connError?.message || connError}`;
-              console.error(message, connError);
-              throw new Error(message);
-            }
-          }
-        },
-      );
-    }
-
-    // Check if schema needs initialization by verifying a key table's existence
-    let schemaNeedsInit = true;
-
-    await timeOperation(
-      'Checking schema initialization status',
-      this.dbPath,
-      reportProgress,
-      async () => {
-        try {
-          // Implement timeout for schema check
-          console.log(
-            `[DEBUG] KuzuDBClient: Testing connection with simple query in ${this.dbPath}...`,
-          );
-
-          const testQueryPromise = this.connection.query('RETURN 1 AS test;');
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Schema check timeout')), SCHEMA_CHECK_TIMEOUT),
-          );
-
-          await Promise.race([testQueryPromise, timeoutPromise]);
-          console.log(`[DEBUG] KuzuDBClient: Connection test successful`);
-
-          // Now check for tables with timeout
-          console.log(`[DEBUG] KuzuDBClient: Checking for existing tables in ${this.dbPath}...`);
-
-          const tablesQueryPromise = this.connection.query('CALL show_tables() RETURN *;');
-          const tablesTimeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Table listing timeout')), SCHEMA_CHECK_TIMEOUT),
-          );
-
-          const tablesResult = await Promise.race([tablesQueryPromise, tablesTimeoutPromise]);
-          const tables = await tablesResult.getAll();
-
-          console.log(`[DEBUG] KuzuDBClient: show_tables() returned:`, tables);
-          const repositoryTableExists = tables.some((t: any) => t.name === 'Repository');
-          console.log(`[DEBUG] KuzuDBClient: Repository table exists? ${repositoryTableExists}`);
-
-          if (repositoryTableExists) {
-            console.log(
-              `KuzuDBClient: Schema (Repository table) already exists in ${this.dbPath}. Skipping DDL.`,
-            );
-            schemaNeedsInit = false;
-          }
-        } catch (e: any) {
-          if (e.message && e.message.includes('timeout')) {
-            console.error(
-              `KuzuDBClient: Schema check timed out after ${SCHEMA_CHECK_TIMEOUT}ms. This may indicate a database lock issue.`,
-            );
-            // Reset connection and throw to trigger cleanup
-            await this.resetConnection();
-            throw new Error(
-              `Database schema check timed out. The database may be locked by another process. Please try restarting your IDE or removing any .lock files in the database directory.`,
-            );
-          }
-          console.warn(
-            `KuzuDBClient: Error checking for existing tables in ${this.dbPath}, assuming schema needs init.`,
-            e,
-          );
-          // If querying tables fails, assume schema needs to be initialized.
-          schemaNeedsInit = true;
-        }
-      },
-    );
-
-    if (schemaNeedsInit) {
-      await timeOperation(
-        'Initializing database schema (DDL)',
-        this.dbPath,
-        reportProgress,
-        async () => {
-          console.log(
-            `KuzuDBClient: Schema needs initialization for ${this.dbPath}. Running DDL...`,
-          );
-          await reportProgress(`Creating database schema tables and relationships`, 80);
-          await initializeKuzuDBSchema(this.connection);
-          console.log(`KuzuDBClient: Schema DDL executed for ${this.dbPath}`);
-        },
-      );
-    }
-
-    // Mark successful initialization
-    await reportProgress(`Database initialization complete`, 100);
   }
 
-  /**
-   * Gets the active connection. Throws if not initialized.
-   */
   private getConnection(): any {
     if (!this.connection) {
       throw new Error(
-        `KuzuDBClient for ${this.dbPath} is not initialized. Call initialize() first.`,
+        `Database connection is not initialized for path: ${this.dbPath}. Call initialize() first.`,
       );
     }
     return this.connection;
   }
 
-  /**
-   * Executes a Cypher query against this specific KuzuDB instance.
-   * @param query The Cypher query string.
-   * @param params Optional query parameters.
-   * @param _progressCallback Optional callback for progress messages.
-   */
   async executeQuery(
     query: string,
     params?: Record<string, any>,
-    _progressCallback?: (message: string) => void, // Param retained for external compatibility if ever used
+    options?: { timeout?: number },
   ): Promise<any> {
-    const conn = this.getConnection();
+    const logger = kuzuLogger.child({
+      operation: 'execute-query',
+      dbPath: this.dbPath,
+      queryLength: query.length,
+    });
 
-    try {
-      // Create a timeout promise
-      const timeoutMs = 30000; // 30 seconds timeout
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error(`Query timeout after ${timeoutMs}ms`)), timeoutMs);
-      });
-
-      const executePromise = (async () => {
-        if (params && Object.keys(params).length > 0) {
-          // If we have parameters, prepare the statement first then execute it
-          const preparedStatement = await conn.prepare(query);
-          if (!preparedStatement.isSuccess()) {
-            throw new Error(preparedStatement.getErrorMessage());
-          }
-
-          // Pass progressCallback as optional third parameter to execute
-          const progressCallback = function (
-            pipelineProgress: number,
-            numPipelinesFinished: number,
-            numPipelines: number,
-          ) {
-            // Simple no-op callback with proper signature for execute method
-            // Do nothing but maintain proper function signature expected by Kuzu
-          };
-          return await conn.execute(preparedStatement, params, progressCallback);
-        } else {
-          // For queries without parameters, use query method directly
-          const progressCallback = function (
-            pipelineProgress: number,
-            numPipelinesFinished: number,
-            numPipelines: number,
-          ) {
-            // Simple no-op callback with proper signature for query method
-            // Do nothing but maintain proper function signature expected by Kuzu
-          };
-          return await conn.query(query, progressCallback);
-        }
-      })();
-
-      // Race between the query execution and timeout
-      const result = await Promise.race([executePromise, timeoutPromise]);
-
-      // Process result: if it has getAll (like a QueryResult from a SELECT/RETURN),
-      // then call it. Otherwise, return the result directly (might be info for DML).
-      if (result && typeof result.getAll === 'function') {
-        return await result.getAll();
-      }
-      return result;
-    } catch (error: any) {
-      console.error(
-        `KuzuDBClient (${this.dbPath}): executeQuery FAILED for query: ${query.substring(0, 150)}... `,
-        {
-          paramsKeys: params ? Object.keys(params) : 'none',
-          errorMessage: error.message,
-          errorStack: error.stack?.substring(0, 200),
-          errorObject: error, // Logging the full error object might give more Kuzu-specific details
-        },
-      );
-      throw error;
+    // Validate connection before executing
+    const isValid = await this.validateConnection();
+    if (!isValid) {
+      logger.warn('Connection invalid, reinitializing...');
+      await this.initialize();
     }
+
+    const connection = this.getConnection();
+
+    const queryPromise = async () => {
+      try {
+        let queryResult;
+        if (params && Object.keys(params).length > 0) {
+          const preparedStatement = await connection.prepare(query);
+          queryResult = await connection.execute(preparedStatement, params);
+        } else {
+          queryResult = await connection.query(query);
+        }
+
+        // KuzuDB returns a QueryResult object. We must call getAll() to get the actual rows.
+        if (queryResult && typeof queryResult.getAll === 'function') {
+          const rows = await queryResult.getAll();
+          logger.debug(
+            {
+              resultLength: rows.length,
+              hasParams: !!(params && Object.keys(params).length > 0),
+            },
+            'Query executed successfully and results fetched',
+          );
+          return rows;
+        }
+
+        // For queries that don't return a QueryResult (e.g., some DDL), return the raw result.
+        logger.debug(
+          {
+            resultType: typeof queryResult,
+            hasParams: !!(params && Object.keys(params).length > 0),
+          },
+          'Query executed successfully, but no standard QueryResult object returned.',
+        );
+
+        return queryResult;
+      } catch (error) {
+        logError(logger, error as Error, {
+          query: query.substring(0, 100) + '...',
+          hasParams: !!(params && Object.keys(params).length > 0),
+        });
+        throw error;
+      }
+    };
+
+    if (options?.timeout) {
+      return Promise.race([
+        queryPromise(),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`Query timed out after ${options.timeout}ms`)),
+            options.timeout,
+          ),
+        ),
+      ]);
+    }
+
+    return queryPromise();
   }
 
-  /**
-   * Closes the database connection. Should be called on application shutdown.
-   */
   async close(): Promise<void> {
+    const logger = kuzuLogger.child({
+      operation: 'close',
+      dbPath: this.dbPath,
+    });
+
     if (this.connection) {
       try {
-        // Explicitly close the connection so that any file-locks held by the underlying C++
-        // layer are released immediately. If we skip this step the lock will only be removed
-        // when the object is garbage collected or the Node process exits, which is exactly
-        // what caused the "database locked" errors that appear when a new session tries to
-        // open the same memory-bank right after a previous one finished.
-        await this.connection.close();
-        console.log(`KuzuDBClient: Connection closed for ${this.dbPath}`);
+        this.connection.close();
+        logger.info('Connection closed');
       } catch (err) {
-        // Log but do not throw – shutdown should continue even if we cannot close gracefully.
-        console.error(`KuzuDBClient: Error closing connection for ${this.dbPath}:`, err);
-      } finally {
-        this.connection = null; // allow GC
+        logError(logger, err as Error, { operation: 'close-connection' });
       }
+      this.connection = null;
     }
 
     if (this.database) {
       try {
-        // The Node.js driver does expose a .close() on the Database class (it delegates to the
-        // underlying C++ Database::close). Calling it ensures the .lock file is cleaned up so
-        // that subsequent processes can open the database in READ_WRITE mode.
-        await this.database.close();
-        console.log(`KuzuDBClient: Database closed for ${this.dbPath}`);
+        this.database.close();
+        logger.info('Database closed');
       } catch (err) {
-        console.error(`KuzuDBClient: Error closing database for ${this.dbPath}:`, err);
-      } finally {
-        this.database = null; // allow GC
+        logError(logger, err as Error, { operation: 'close-database' });
       }
+      this.database = null;
     }
+
+    this.connectionCreatedAt = null;
+    this.lastValidationTime = null;
+    this.isConnectionValid = false;
   }
 }
 
-/**
- * Initializes the KuzuDB schema (tables and relationships) on a given connection.
- * This function is designed to be idempotent.
- * @param connection An active KuzuDB connection object.
- */
 export async function initializeKuzuDBSchema(connection: any): Promise<void> {
-  if (!connection) {
-    throw new Error('A valid KuzuDB connection is required to initialize schema.');
-  }
+  const logger = kuzuLogger.child({ operation: 'initialize-schema' });
+  const perfLogger = createPerformanceLogger(logger, 'schema-initialization');
+
   const execute = async (query: string) => {
     try {
-      // console.log(`[KuzuDB Schema] Executing: ${query.substring(0, 100)}...`);
-      // Use query method for schema DDL (no parameters needed)
-      const progressCallback = function (
-        pipelineProgress: number,
-        numPipelinesFinished: number,
-        numPipelines: number,
-      ) {
-        // Simple no-op callback with proper signature expected by Kuzu
-      };
-      await connection.query(query, progressCallback);
-    } catch (e: any) {
-      const errorMsg = `[KuzuDB Schema] Failed to execute DDL: "${query}". Error: ${e.message}`;
-      console.error(errorMsg, e);
-      throw new Error(errorMsg); // Wrap schema execution errors
+      // KuzuDB progress bar API removed in current version
+      await connection.query(query);
+    } catch (e) {
+      const errorMsg = `Failed to execute DDL query: ${query.substring(0, 100)}...`;
+      logError(logger, e as Error, { query: query.substring(0, 100) });
+      throw new Error(errorMsg);
     }
   };
 
-  console.info('[KuzuDB Schema] Attempting DDL setup...');
+  logger.info('Attempting DDL setup...');
+
   try {
-    // --- Extensions ---
-    await execute('INSTALL JSON');
-    await execute('LOAD EXTENSION JSON'); // Kuzu docs specify 'LOAD EXTENSION JSON'
-
-    // --- Core Node Tables (as before) ---
-    await execute(`CREATE NODE TABLE IF NOT EXISTS Repository(
-      id STRING,
-      name STRING,
-      branch STRING,
-      created_at TIMESTAMP,
-      updated_at TIMESTAMP,
-      PRIMARY KEY (id)
-    )`);
-
-    await execute(`CREATE NODE TABLE IF NOT EXISTS Metadata(
-      graph_unique_id STRING,
-      id STRING,
-      name STRING,
-      content STRING,
-      branch STRING,
-      created_at TIMESTAMP,
-      updated_at TIMESTAMP,
-      PRIMARY KEY (graph_unique_id)
-    )`);
-
-    await execute(`CREATE NODE TABLE IF NOT EXISTS Context(
-      graph_unique_id STRING,
-      id STRING,
-      name STRING,
-      summary STRING,
-      iso_date DATE,
-      branch STRING,
-      created_at TIMESTAMP,
-      updated_at TIMESTAMP,
-      PRIMARY KEY (graph_unique_id)
-    )`);
-
-    await execute(`CREATE NODE TABLE IF NOT EXISTS Component(
-      graph_unique_id STRING,
-      id STRING,
-      name STRING,
-      kind STRING,
-      status STRING,
-      repository STRING,
-      branch STRING,
-      created_at TIMESTAMP,
-      updated_at TIMESTAMP,
-      PRIMARY KEY (graph_unique_id)
-    )`);
-
-    await execute(`CREATE NODE TABLE IF NOT EXISTS Decision(
-      graph_unique_id STRING,
-      id STRING,
-      name STRING,
-      context STRING,
-      date DATE,
-      repository STRING,
-      branch STRING,
-      created_at TIMESTAMP,
-      updated_at TIMESTAMP,
-      PRIMARY KEY (graph_unique_id)
-    )`);
-
-    await execute(`CREATE NODE TABLE IF NOT EXISTS Rule(
-      graph_unique_id STRING,
-      id STRING,
-      name STRING,
-      created DATE,
-      triggers STRING[],
-      content STRING,
-      status STRING,
-      repository STRING,
-      branch STRING,
-      created_at TIMESTAMP,
-      updated_at TIMESTAMP,
-      PRIMARY KEY (graph_unique_id)
-    )`);
-
-    // --- New File Node Table ---
-    await execute(`CREATE NODE TABLE IF NOT EXISTS File(
-      id STRING, 
-      graph_unique_id STRING, 
-      name STRING, 
-      path STRING, 
-      language STRING, 
-      metrics STRING, 
-      content_hash STRING, 
-      mime_type STRING, 
-      size_bytes INT64, 
-      created_at TIMESTAMP, 
-      updated_at TIMESTAMP, 
-      repository STRING, 
-      branch STRING, 
-      PRIMARY KEY (id)
-    )`);
-
-    // --- New Tag Node Table ---
-    await execute(`CREATE NODE TABLE IF NOT EXISTS Tag(
-      id STRING, 
-      name STRING, 
-      color STRING, 
-      description STRING, 
-      repository STRING,
-      branch STRING,
-      created_at TIMESTAMP, 
-      PRIMARY KEY (id)
-    )`);
-
-    // --- Core Relationship Tables (as before) ---
-    await execute(`CREATE REL TABLE IF NOT EXISTS HAS_METADATA(FROM Repository TO Metadata)`);
-    await execute(`CREATE REL TABLE IF NOT EXISTS HAS_CONTEXT(FROM Repository TO Context)`);
-    await execute(`CREATE REL TABLE IF NOT EXISTS HAS_COMPONENT(FROM Repository TO Component)`);
-    await execute(`CREATE REL TABLE IF NOT EXISTS HAS_DECISION(FROM Repository TO Decision)`);
-    await execute(`CREATE REL TABLE IF NOT EXISTS HAS_RULE(FROM Repository TO Rule)`);
-    await execute(`CREATE REL TABLE IF NOT EXISTS DEPENDS_ON(FROM Component TO Component)`);
-    await execute(`CREATE REL TABLE IF NOT EXISTS CONTEXT_OF(FROM Context TO Component)`);
-    await execute(`CREATE REL TABLE IF NOT EXISTS CONTEXT_OF_DECISION(FROM Context TO Decision)`);
-    await execute(`CREATE REL TABLE IF NOT EXISTS CONTEXT_OF_RULE(FROM Context TO Rule)`);
-    await execute(`CREATE REL TABLE IF NOT EXISTS DECISION_ON(FROM Decision TO Component)`);
-    await execute(`CREATE REL TABLE IF NOT EXISTS GOVERNED_BY(FROM Component TO Decision)`);
-    await execute(`CREATE REL TABLE IF NOT EXISTS GOVERNED_BY_RULE(FROM Component TO Rule)`);
-
-    // --- New Relationship Tables for Files and Tags ---
-    await execute(`CREATE REL TABLE IF NOT EXISTS HAS_FILE(FROM Repository TO File)`);
-    await execute(`CREATE REL TABLE IF NOT EXISTS IMPLEMENTS(FROM File TO Component)`);
-    await execute(
-      `CREATE REL TABLE IF NOT EXISTS COMPONENT_IMPLEMENTS_FILE(FROM Component TO File)`,
-    );
-    await execute(`CREATE REL TABLE IF NOT EXISTS TAGGED_COMPONENT(FROM Component TO Tag)`);
-    await execute(`CREATE REL TABLE IF NOT EXISTS TAGGED_RULE(FROM Rule TO Tag)`);
-    await execute(`CREATE REL TABLE IF NOT EXISTS TAGGED_CONTEXT(FROM Context TO Tag)`);
-    await execute(`CREATE REL TABLE IF NOT EXISTS TAGGED_FILE(FROM File TO Tag)`);
-    await execute(`CREATE REL TABLE IF NOT EXISTS TAGGED_WITH(FROM Component TO Tag)`);
-    await execute(`CREATE REL TABLE IF NOT EXISTS TAGGED_WITH(FROM Decision TO Tag)`);
-    await execute(`CREATE REL TABLE IF NOT EXISTS TAGGED_WITH(FROM Rule TO Tag)`);
-    await execute(`CREATE REL TABLE IF NOT EXISTS TAGGED_WITH(FROM File TO Tag)`);
-
-    // --- Optional Algo Extension ---
+    // Install and load ALGO extension for graph algorithms
     try {
-      await execute(`INSTALL ALGO`);
-      await execute(`LOAD ALGO`);
-    } catch (algoError: any) {
-      console.warn(
-        `[KuzuDB Schema] WARNING: Failed to install or load Algo extension. Algorithmic functions may not be available. Error: ${algoError.message}`,
-      );
-      // Do not re-throw; allow schema initialization to continue without it.
+      logger.info('Installing ALGO extension...');
+      await execute('INSTALL ALGO;');
+      logger.info('Loading ALGO extension...');
+      await execute('LOAD ALGO;');
+      logger.info('ALGO extension installed and loaded');
+    } catch (e: any) {
+      // If the error is that the extension is already installed, that's fine
+      if (
+        e.message &&
+        (e.message.includes('already installed') || e.message.includes('already loaded'))
+      ) {
+        logger.info('ALGO extension was already installed and loaded');
+      } else {
+        logger.warn('Failed to install/load ALGO extension, some graph algorithms may not work', {
+          error: e.message,
+        });
+      }
     }
 
-    console.info('[KuzuDB Schema] DDL setup finished for the provided connection.');
-  } catch (error: unknown) {
-    let messageContent = 'Unknown error during schema initialization';
-    if (error instanceof Error) {
-      messageContent = error.message;
-    } else if (typeof error === 'string') {
-      messageContent = error;
-    }
-    const finalMessage = `[KuzuDB Schema] Error during schema initialization: ${messageContent}`;
-    console.error(finalMessage, error);
-    // Re-throw as a new Error to ensure a clean stack trace and error object
+    // Create node tables
+    await execute(`
+      CREATE NODE TABLE IF NOT EXISTS Repository (
+        id STRING,
+        name STRING,
+        branch STRING,
+        created_at STRING,
+        updated_at STRING,
+        techStack STRING[],
+        architecture STRING,
+        PRIMARY KEY (id)
+      );
+    `);
+
+    await execute(`
+      CREATE NODE TABLE IF NOT EXISTS Component (
+        id STRING,
+        name STRING,
+        kind STRING,
+        status STRING,
+        dependsOn STRING[],
+        description STRING,
+        metadata STRING,
+        graph_unique_id STRING,
+        branch STRING,
+        repository STRING,
+        created_at STRING,
+        updated_at STRING,
+        PRIMARY KEY (id)
+      );
+    `);
+
+    await execute(`
+      CREATE NODE TABLE IF NOT EXISTS Decision (
+        id STRING,
+        title STRING,
+        rationale STRING,
+        status STRING,
+        dateCreated STRING,
+        impact STRING[],
+        tags STRING[],
+        graph_unique_id STRING,
+        created_at STRING,
+        updated_at STRING,
+        PRIMARY KEY (id)
+      );
+    `);
+
+    await execute(`
+      CREATE NODE TABLE IF NOT EXISTS Rule (
+        id STRING,
+        title STRING,
+        description STRING,
+        scope STRING,
+        severity STRING,
+        category STRING,
+        examples STRING[],
+        graph_unique_id STRING,
+        created_at STRING,
+        updated_at STRING,
+        PRIMARY KEY (id)
+      );
+    `);
+
+    await execute(`
+      CREATE NODE TABLE IF NOT EXISTS File (
+        id STRING,
+        name STRING,
+        path STRING,
+        type STRING,
+        size INT64,
+        lastModified STRING,
+        checksum STRING,
+        metadata STRING,
+        PRIMARY KEY (id)
+      );
+    `);
+
+    await execute(`
+      CREATE NODE TABLE IF NOT EXISTS Tag (
+        id STRING,
+        name STRING,
+        category STRING,
+        description STRING,
+        color STRING,
+        PRIMARY KEY (id)
+      );
+    `);
+
+    await execute(`
+      CREATE NODE TABLE IF NOT EXISTS Context (
+        id STRING,
+        agent STRING,
+        summary STRING,
+        observation STRING,
+        timestamp STRING,
+        repository STRING,
+        branch STRING,
+        graph_unique_id STRING,
+        created_at STRING,
+        updated_at STRING,
+        PRIMARY KEY (id)
+      );
+    `);
+
+    await execute(`
+      CREATE NODE TABLE IF NOT EXISTS Metadata (
+        id STRING,
+        graph_unique_id STRING,
+        branch STRING,
+        name STRING,
+        content STRING,
+        created_at STRING,
+        updated_at STRING,
+        PRIMARY KEY (graph_unique_id)
+      );
+    `);
+
+    // Create relationship tables
+    await execute(`
+      CREATE REL TABLE IF NOT EXISTS DEPENDS_ON (FROM Component TO Component);
+    `);
+
+    await execute(`
+      CREATE REL TABLE IF NOT EXISTS IMPLEMENTS (FROM File TO Component);
+    `);
+
+    await execute(`
+      CREATE REL TABLE IF NOT EXISTS TAGGED_WITH (FROM Component TO Tag, FROM Decision TO Tag, FROM Rule TO Tag, FROM File TO Tag);
+    `);
+
+    await execute(`
+      CREATE REL TABLE IF NOT EXISTS GOVERNS (FROM Rule TO Component);
+    `);
+
+    await execute(`
+      CREATE REL TABLE IF NOT EXISTS AFFECTS (FROM Decision TO Component);
+    `);
+
+    await execute(`
+      CREATE REL TABLE IF NOT EXISTS CONTEXT_OF (FROM Context TO Component, FROM Context TO Decision, FROM Context TO Rule);
+    `);
+
+    await execute(`
+      CREATE REL TABLE IF NOT EXISTS PART_OF (FROM Component TO Repository, FROM Decision TO Repository, FROM Rule TO Repository, FROM File TO Repository, FROM Tag TO Repository, FROM Context TO Repository);
+    `);
+
+    perfLogger.complete();
+    logger.info('DDL setup finished for the provided connection');
+  } catch (error) {
+    perfLogger.fail(error as Error);
+    const finalMessage = 'Schema setup failed during DDL execution.';
+    logError(logger, error as Error, { operation: 'schema-setup' });
     throw new Error(finalMessage);
   }
 }

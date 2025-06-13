@@ -19,7 +19,7 @@ Use cases:
   parameters: {
     type: 'object',
     properties: {
-      algorithm: {
+      type: {
         type: 'string',
         enum: ['pagerank', 'k-core', 'louvain'],
         description: 'Analysis algorithm to execute',
@@ -36,26 +36,34 @@ Use cases:
         type: 'string',
         description: 'Git branch name',
       },
-      graphName: {
+      projectedGraphName: {
         type: 'string',
         description: 'Name for the projected graph',
       },
-      nodeTypes: {
+      nodeTableNames: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Node types to include in analysis',
+        description: 'Node table names to include in analysis',
       },
-      relationshipTypes: {
+      relationshipTableNames: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Relationship types to include in analysis',
+        description: 'Relationship table names to include in analysis',
       },
-      parameters: {
-        type: 'object',
-        description: 'Algorithm-specific parameters',
+      damping: {
+        type: 'number',
+        description: 'Damping factor for PageRank (default: 0.85)',
+      },
+      maxIterations: {
+        type: 'number',
+        description: 'Maximum iterations for PageRank',
+      },
+      k: {
+        type: 'number',
+        description: 'K value for k-core decomposition',
       },
     },
-    required: ['algorithm', 'clientProjectRoot', 'repository'],
+    required: ['type', 'clientProjectRoot', 'repository'],
   },
   returns: {
     type: 'object',

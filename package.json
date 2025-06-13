@@ -9,14 +9,16 @@
   "scripts": {
     "build": "tsc",
     "start:stdio": "node dist/src/mcp-stdio-server.js",
+    "start:httpstream": "node dist/src/mcp-httpstream-server.js",
     "cli": "ts-node src/cli/index.ts",
     "test": "jest",
-    "test:e2e": "jest --config jest.e2e.config.js --runInBand",
-    "test:e2e:stdio": "jest --config jest.e2e.config.js --testPathPattern=stdio-server --runInBand",
-    "test:e2e:httpstream": "jest --config jest.e2e.config.js --testPathPattern=httpstream-server --runInBand",
+    "test:e2e": "pnpm build && jest --config ./jest.e2e.config.js --runInBand",
+    "test:e2e:stdio": "pnpm build && jest --config ./jest.e2e.config.js --runInBand --testPathPattern=stdio-server.e2e.test.ts",
+    "test:e2e:sse": "pnpm build && jest --config ./jest.e2e.config.js --runInBand --testPathPattern=sse-server.e2e.spec.ts",
+    "test:e2e:httpstream": "pnpm build && jest --config ./jest.e2e.config.js --runInBand --testNamePattern=httpstream-server",
     "test:all": "npm run test && npm run test:e2e",
-    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "format": "prettier --write \"src/**/*.ts\"",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write .",
     "lint:check": "eslint \"{src,apps,libs,test}/**/*.ts\" --quiet"
   },
   "dependencies": {
@@ -30,6 +32,8 @@
     "kuzu": "^0.10.0",
     "node-fetch": "^2.7.0",
     "pg": "^8.15.6",
+    "pino": "^9.7.0",
+    "pino-pretty": "^13.0.0",
     "yaml": "^2.7.1",
     "zod": "^3.24.1"
   },
@@ -39,6 +43,7 @@
     "@types/express": "^5.0.1",
     "@types/jest": "^29.5.14",
     "@types/node-fetch": "^2.6.4",
+    "@types/pino": "^7.0.4",
     "@types/supertest": "^6.0.3",
     "@typescript-eslint/eslint-plugin": "^7.7.0",
     "@typescript-eslint/parser": "^7.7.0",

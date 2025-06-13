@@ -1,6 +1,6 @@
 import { queryHandler } from '../../../mcp/services/handlers/unified/query-handler';
-import { MemoryService } from '../../../services/memory.service';
 import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { MemoryService } from '../../../services/memory.service';
 
 // Test file for query tool - consolidates 7 query types
 describe('Query Tool Tests', () => {
@@ -482,7 +482,9 @@ describe('Query Tool Tests', () => {
           mockContext,
           mockMemoryService,
         ),
-      ).rejects.toThrow("Invalid enum value. Expected 'context' | 'entities' | 'relationships' | 'dependencies' | 'governance' | 'history' | 'tags', received 'unknown'");
+      ).rejects.toThrow(
+        "Invalid enum value. Expected 'context' | 'entities' | 'relationships' | 'dependencies' | 'governance' | 'history' | 'tags', received 'unknown'",
+      );
     });
   });
 });

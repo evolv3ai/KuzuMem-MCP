@@ -2,16 +2,16 @@ import { MemoryService } from '../services/memory.service';
 import { EnrichedRequestHandlerExtra } from './types/sdk-custom';
 
 // Import unified tool handlers
-import { memoryBankHandler } from './services/handlers/unified/memory-bank-handler';
+import { analyzeHandler } from './services/handlers/unified/analyze-handler';
+import { associateHandler } from './services/handlers/unified/associate-handler';
+import { bulkImportHandler } from './services/handlers/unified/bulk-import-handler';
+import { contextHandler } from './services/handlers/unified/context-handler';
+import { detectHandler } from './services/handlers/unified/detect-handler';
 import { entityHandler } from './services/handlers/unified/entity-handler';
 import { introspectHandler } from './services/handlers/unified/introspect-handler';
-import { contextHandler } from './services/handlers/unified/context-handler';
+import { memoryBankHandler } from './services/handlers/unified/memory-bank-handler';
 import { queryHandler } from './services/handlers/unified/query-handler';
-import { associateHandler } from './services/handlers/unified/associate-handler';
-import { analyzeHandler } from './services/handlers/unified/analyze-handler';
-import { detectHandler } from './services/handlers/unified/detect-handler';
-import { bulkImportHandler } from './services/handlers/unified/bulk-import-handler';
-import { semanticSearchHandler } from './services/handlers/unified/semantic-search-handler';
+import { searchHandler } from './services/handlers/unified/search-handler';
 
 // New Handler Type based on SDK
 export type SdkToolHandler = (
@@ -33,5 +33,5 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
   analyze: analyzeHandler,
   detect: detectHandler,
   'bulk-import': bulkImportHandler,
-  'semantic-search': semanticSearchHandler,
+  search: searchHandler,
 };

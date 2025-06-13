@@ -18,6 +18,7 @@ describe('MCP Stdio Server E2E Tests', () => {
   let messageId = 1;
   const TEST_REPO = 'test-repo';
   const TEST_BRANCH = 'main';
+  const testSessionId = `e2e-session-${Date.now()}`;
 
   // Helper to send JSON-RPC message to server
   const sendMessage = (message: RpcMessage): Promise<RpcMessage> => {
@@ -126,6 +127,7 @@ describe('MCP Stdio Server E2E Tests', () => {
       method: 'initialize',
       params: {
         protocolVersion: '1.0.0',
+        sessionId: testSessionId,
         capabilities: {},
         clientInfo: {
           name: 'E2E Test Client',
@@ -609,6 +611,74 @@ describe('MCP Stdio Server E2E Tests', () => {
         imported: expect.any(Number),
       });
       expect(result.imported).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Tool 10: search', () => {
+    it('should perform full-text search across entities', async () => {
+      const result = await callTool('search', {
+        query: 'test service',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        mode: 'fulltext',
+        entityTypes: ['component'],
+        limit: 10,
+      });
+
+      expect(result).toMatchObject({
+        status: 'success',
+        mode: 'fulltext',
+        results: expect.any(Array),
+        totalResults: expect.any(Number),
+        query: 'test service',
+      });
+
+      // Should find our test components
+      if (result.results.length > 0) {
+        expect(result.results[0]).toMatchObject({
+          id: expect.any(String),
+          type: 'component',
+          name: expect.any(String),
+          score: expect.any(Number),
+        });
+      }
+    });
+
+    it('should search across multiple entity types', async () => {
+      const result = await callTool('search', {
+        query: 'test decision',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        mode: 'fulltext',
+        entityTypes: ['component', 'decision', 'rule'],
+        limit: 5,
+      });
+
+      expect(result).toMatchObject({
+        status: 'success',
+        mode: 'fulltext',
+        results: expect.any(Array),
+        totalResults: expect.any(Number),
+        query: 'test decision',
+      });
+    });
+
+    it('should handle empty search results gracefully', async () => {
+      const result = await callTool('search', {
+        query: 'nonexistent-super-unique-term-12345',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        mode: 'fulltext',
+        limit: 10,
+      });
+
+      expect(result).toMatchObject({
+        status: 'success',
+        mode: 'fulltext',
+        results: [],
+        totalResults: 0,
+        query: 'nonexistent-super-unique-term-12345',
+      });
     });
   });
 

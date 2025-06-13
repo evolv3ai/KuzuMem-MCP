@@ -595,27 +595,29 @@ export const BulkImportOutputSchema = z.object({
 });
 
 // ============================================
-// SemanticSearch Tool Schemas
+// Search Tool Schemas (Full-Text Search)
 // ============================================
 
-export const SemanticSearchInputSchema = z.object({
+export const SearchInputSchema = z.object({
   query: z.string(),
   clientProjectRoot: z.string().optional(), // From session
   repository: z.string(),
   branch: z.string().default('main'),
 
-  // Search options
-  entityTypes: z.array(z.enum(['components', 'decisions', 'rules', 'context'])).optional(),
+  // Search mode and options
+  mode: z.enum(['fulltext', 'semantic', 'hybrid']).default('fulltext'),
+  entityTypes: z.array(z.enum(['component', 'decision', 'rule', 'file', 'context'])).optional(),
   limit: z.number().min(1).max(50).default(10),
-  threshold: z.number().min(0).max(1).default(0.7), // Similarity threshold
+  threshold: z.number().min(0).max(1).default(0.7), // Similarity threshold for semantic/hybrid modes
 });
 
-export const SemanticSearchOutputSchema = z.object({
+export const SearchOutputSchema = z.object({
   status: z.string(),
+  mode: z.enum(['fulltext', 'semantic', 'hybrid']),
   results: z.array(
     z.object({
       id: z.string(),
-      type: z.enum(['component', 'decision', 'rule', 'context']),
+      type: z.enum(['component', 'decision', 'rule', 'file', 'context']),
       name: z.string(),
       score: z.number(),
       snippet: z.string().optional(),
