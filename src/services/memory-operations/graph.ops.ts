@@ -86,6 +86,7 @@ interface PageRankResult {
     nodeId: string;
     score: number;
   }>;
+  error?: string;
 }
 
 // K-Core Decomposition
@@ -99,6 +100,7 @@ interface KCoreResult {
     nodeId: string;
     coreness: number;
   }>;
+  error?: string;
 }
 
 // Community Detection
@@ -109,6 +111,7 @@ interface LouvainResult {
     nodeId: string;
     communityId: number;
   }>;
+  error?: string;
 }
 
 // Connected Components
@@ -503,7 +506,7 @@ export async function kCoreDecompositionOp(
     `[graph.ops] Executing K-Core Decomposition on G: ${params.projectedGraphName}, k: ${params.k}, R: ${params.repository}, B: ${params.branch}`,
   );
 
-  return await withProjectedGraph(
+  const result = await withProjectedGraph(
     mcpContext,
     kuzuClient,
     params.projectedGraphName,
@@ -521,6 +524,11 @@ export async function kCoreDecompositionOp(
       return { k: params.k, components };
     },
   );
+
+  if (result.error) {
+    return { k: params.k, components: [], error: result.error };
+  }
+  return result;
 }
 
 // Helper function for projected graph operations
@@ -555,7 +563,7 @@ async function withProjectedGraph(
       query: createProjectionQuery,
     });
     // Return a graceful error response instead of throwing
-    throw new Error(`Failed to create projected graph: ${projectionError.message}`);
+    return { error: `Failed to create projected graph: ${projectionError.message}` };
   } finally {
     try {
       logger.debug(`[graph.ops] Dropping projected graph: ${safeProjectionName}`);
@@ -583,7 +591,7 @@ export async function pageRankOp(
   );
   const safeProjectionName = params.projectedGraphName.replace(/[^a-zA-Z0-9_]/g, '_');
 
-  return await withProjectedGraph(
+  const result = await withProjectedGraph(
     mcpContext,
     kuzuClient,
     safeProjectionName,
@@ -609,6 +617,11 @@ export async function pageRankOp(
       return { ranks };
     },
   );
+
+  if (result.error) {
+    return { ranks: [], error: result.error };
+  }
+  return result;
 }
 
 /**
@@ -624,7 +637,7 @@ export async function louvainCommunityDetectionOp(
     `[graph.ops] Executing Louvain Community Detection on G: ${params.projectedGraphName}, R: ${params.repository}, B: ${params.branch}`,
   );
 
-  return await withProjectedGraph(
+  const result = await withProjectedGraph(
     mcpContext,
     kuzuClient,
     params.projectedGraphName,
@@ -642,6 +655,11 @@ export async function louvainCommunityDetectionOp(
       return { communities };
     },
   );
+
+  if (result.error) {
+    return { communities: [], error: result.error };
+  }
+  return result;
 }
 
 /**
