@@ -39,39 +39,41 @@ export class FileRepository {
       mime_type: fileData.mime_type || null,
     };
 
-    // KuzuDB doesn't support setting properties from a map parameter, so we set them individually
+    // Atomic query that creates the File node and establishes PART_OF relationship
     const query = `
-      CREATE (f:File {
-        id: $id,
-        repository: $repository,
-        branch: $branch,
-        name: $name,
-        path: $path,
-        size_bytes: $size_bytes,
-        mime_type: $mime_type,
-        created_at: $created_at,
-        updated_at: $updated_at
-      })
+      MATCH (repo:Repository {id: $repository})
+      MERGE (f:File {id: $id})
+      ON CREATE SET
+        f.name = $name,
+        f.path = $path,
+        f.size = $size_bytes,
+        f.type = $mime_type,
+        f.lastModified = $created_at,
+        f.checksum = $checksum,
+        f.metadata = $metadata
+      ON MATCH SET
+        f.name = $name,
+        f.path = $path,
+        f.size = $size_bytes,
+        f.type = $mime_type,
+        f.lastModified = $updated_at,
+        f.metadata = $metadata
+      MERGE (f)-[:PART_OF]->(repo)
       RETURN f
     `;
-    // KuzuDB might require MERGE for unique PKs:
-    // MERGE (f:File {id: $fileNodeProps.id, repository: $fileNodeProps.repository, branch: $fileNodeProps.branch})
-    // ON CREATE SET f = $fileNodeProps
-    // ON MATCH SET f += $fileNodeProps // Or specific properties to update
-    // RETURN f
-    // Simpler CREATE for now, assuming ID + repo + branch makes it unique or handled by PK constraint
 
     try {
       const result = await this.kuzuClient.executeQuery(query, {
         id: fileNodeProps.id,
         repository: fileNodeProps.repository,
-        branch: fileNodeProps.branch,
         name: fileNodeProps.name,
         path: fileNodeProps.path,
         size_bytes: fileNodeProps.size,
         mime_type: fileNodeProps.mime_type,
         created_at: fileNodeProps.created_at,
         updated_at: fileNodeProps.updated_at,
+        checksum: '',
+        metadata: '',
       });
       if (result && result.length > 0) {
         const createdNode = result[0].f.properties || result[0].f; // Kuzu specific result access
@@ -115,11 +117,11 @@ export class FileRepository {
     relationshipType: string = 'COMPONENT_IMPLEMENTS_FILE',
   ): Promise<boolean> {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
-    // Component schema: graph_unique_id, id, name, kind, status, branch, created_at, updated_at
-    // File schema: id, graph_unique_id, name, path, language, metrics, content_hash, mime_type, size_bytes, created_at, updated_at, repository, branch
+    // Component has branch property, File does not have repository or branch properties
+    // Instead, we'll match files via PART_OF relationship to the same repository
     const query = `
-      MATCH (c:Component {id: $componentId, branch: $branch}), 
-            (f:File {id: $fileId, repository: $repoNodeId, branch: $branch})
+      MATCH (c:Component {id: $componentId, branch: $branch})-[:PART_OF]->(repo:Repository {id: $repoNodeId}), 
+            (f:File {id: $fileId})-[:PART_OF]->(repo)
       MERGE (c)-[r:${safeRelType}]->(f)
       RETURN r
     `;

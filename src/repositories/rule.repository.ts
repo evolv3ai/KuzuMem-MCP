@@ -103,6 +103,7 @@ export class RuleRepository {
     const now = new Date().toISOString();
 
     const query = `
+      MATCH (repo:Repository {id: $repositoryNodeId})
       MERGE (r:Rule {id: $id, graph_unique_id: $graphUniqueId})
       ON CREATE SET
         r.title = $name,
@@ -110,6 +111,8 @@ export class RuleRepository {
         r.scope = $scope,
         r.severity = $severity,
         r.category = $category,
+        r.branch = $branch,
+        r.status = $status,
         r.created_at = $now,
         r.updated_at = $now
       ON MATCH SET
@@ -118,14 +121,20 @@ export class RuleRepository {
         r.scope = $scope,
         r.severity = $severity,
         r.category = $category,
+        r.branch = $branch,
+        r.status = $status,
         r.updated_at = $now
+      MERGE (r)-[:PART_OF]->(repo)
       RETURN r
     `;
 
     const params = {
+      repositoryNodeId,
       graphUniqueId,
       id: logicalId,
       name,
+      branch,
+      status: (rule as any).status || 'active',
       description: (rule as any).description || '',
       scope: (rule as any).scope || 'component',
       severity: (rule as any).severity || 'medium',
