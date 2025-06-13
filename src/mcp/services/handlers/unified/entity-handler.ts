@@ -58,13 +58,11 @@ function mapDataToEntity(entityType: string, id: string, data: any): EntityData 
       return {
         id,
         name: data.name || '',
-        type: 'file',
         path: data.path || '',
-        language: data.language,
-        metrics: data.metrics,
-        content_hash: data.content_hash,
+        size: data.size_bytes || data.size || 0, // Map size_bytes to size for File interface compatibility
         mime_type: data.mime_type,
-        size_bytes: data.size_bytes,
+        content: data.content,
+        metrics: data.metrics,
       } as FileRecord;
 
     case 'tag':

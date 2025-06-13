@@ -24,14 +24,23 @@ export class FileRepository {
     // Input data should be clean, matching internal File type structure for new node properties
     fileData: Omit<File, 'repository' | 'branch' | 'created_at' | 'updated_at'> & { id: string },
   ): Promise<File | null> {
-    const now = new Date();
+    // Map the file data to match the database schema
+    // The database schema has: id, name, path, type, size, lastModified, checksum, metadata
     const fileNodeProps = {
-      ...fileData,
-      id: fileData.id, // This is the logical ID used as Kuzu PK for File table
-      repository: repoNodeId, // Link to the Repository node's PK
-      branch: branch,
-      created_at: now,
-      updated_at: now,
+      id: fileData.id,
+      name: fileData.name,
+      path: fileData.path,
+      type: fileData.mime_type || 'unknown', // Map mime_type to type for DB schema
+      size: fileData.size || 0, // Use size directly as per File interface
+      lastModified: new Date().toISOString(),
+      checksum: '', // Not provided in File interface, use empty string
+      metadata: JSON.stringify({
+        branch: branch,
+        repository: repoNodeId,
+        content: fileData.content || null,
+        metrics: fileData.metrics || null,
+        mime_type: fileData.mime_type || null,
+      }), // Store additional metadata as JSON string
     };
 
     // Atomic query that creates the File node and establishes PART_OF relationship
@@ -41,22 +50,19 @@ export class FileRepository {
       ON CREATE SET
         f.name = $name,
         f.path = $path,
+        f.type = $type,
         f.size = $size,
-        f.mime_type = $mime_type,
-        f.branch = $branch,
-        f.created_at = $created_at,
-        f.updated_at = $updated_at,
-        f.content = $content,
-        f.metrics = $metrics
+        f.lastModified = $lastModified,
+        f.checksum = $checksum,
+        f.metadata = $metadata
       ON MATCH SET
         f.name = $name,
         f.path = $path,
+        f.type = $type,
         f.size = $size,
-        f.mime_type = $mime_type,
-        f.branch = $branch,
-        f.updated_at = $updated_at,
-        f.content = $content,
-        f.metrics = $metrics
+        f.lastModified = $lastModified,
+        f.checksum = $checksum,
+        f.metadata = $metadata
       MERGE (f)-[:PART_OF]->(repo)
       RETURN f
     `;
@@ -64,20 +70,41 @@ export class FileRepository {
     try {
       const result = await this.kuzuClient.executeQuery(query, {
         id: fileNodeProps.id,
-        repository: fileNodeProps.repository,
+        repository: repoNodeId,
         name: fileNodeProps.name,
         path: fileNodeProps.path,
+        type: fileNodeProps.type,
         size: fileNodeProps.size,
-        mime_type: fileNodeProps.mime_type,
-        branch: fileNodeProps.branch,
-        created_at: fileNodeProps.created_at,
-        updated_at: fileNodeProps.updated_at,
-        content: fileData.content || null,
-        metrics: fileData.metrics || {},
+        lastModified: fileNodeProps.lastModified,
+        checksum: fileNodeProps.checksum,
+        metadata: fileNodeProps.metadata,
       });
+
       if (result && result.length > 0) {
-        const createdNode = result[0].f.properties || result[0].f; // Kuzu specific result access
-        return { ...createdNode, id: createdNode.id?.toString() } as File;
+        const createdNode = result[0].f.properties || result[0].f;
+
+        // Parse metadata back to individual properties for the return object
+        let parsedMetadata = {};
+        try {
+          parsedMetadata = JSON.parse(createdNode.metadata || '{}');
+        } catch (e) {
+          console.warn(`[FileRepository] Failed to parse metadata for file ${createdNode.id}`);
+        }
+
+        // Return a File object that matches our interface
+        return {
+          id: createdNode.id?.toString(),
+          name: createdNode.name,
+          path: createdNode.path,
+          size: createdNode.size,
+          mime_type: (parsedMetadata as any).mime_type,
+          content: (parsedMetadata as any).content,
+          metrics: (parsedMetadata as any).metrics,
+          repository: repoNodeId,
+          branch: branch,
+          created_at: new Date(createdNode.lastModified),
+          updated_at: new Date(createdNode.lastModified),
+        } as File;
       }
       return null;
     } catch (error) {
@@ -88,14 +115,36 @@ export class FileRepository {
 
   async findFileById(repoNodeId: string, branch: string, fileId: string): Promise<File | null> {
     const query = `
-      MATCH (f:File {id: $fileId, branch: $branch})-[:PART_OF]->(repo:Repository {id: $repoNodeId}) 
+      MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId}) 
       RETURN f
     `;
     try {
-      const result = await this.kuzuClient.executeQuery(query, { fileId, repoNodeId, branch });
+      const result = await this.kuzuClient.executeQuery(query, { fileId, repoNodeId });
       if (result && result.length > 0) {
         const foundNode = result[0].f.properties || result[0].f;
-        return { ...foundNode, id: foundNode.id?.toString() } as File;
+
+        // Parse metadata back to individual properties
+        let parsedMetadata = {};
+        try {
+          parsedMetadata = JSON.parse(foundNode.metadata || '{}');
+        } catch (e) {
+          console.warn(`[FileRepository] Failed to parse metadata for file ${foundNode.id}`);
+        }
+
+        // Return a File object that matches our interface
+        return {
+          id: foundNode.id?.toString(),
+          name: foundNode.name,
+          path: foundNode.path,
+          size: foundNode.size,
+          mime_type: (parsedMetadata as any).mime_type,
+          content: (parsedMetadata as any).content,
+          metrics: (parsedMetadata as any).metrics,
+          repository: repoNodeId,
+          branch: (parsedMetadata as any).branch || branch,
+          created_at: new Date(foundNode.lastModified),
+          updated_at: new Date(foundNode.lastModified),
+        } as File;
       }
       return null;
     } catch (error) {
@@ -117,14 +166,14 @@ export class FileRepository {
     branch: string,
     componentId: string,
     fileId: string,
-    relationshipType: string = 'COMPONENT_IMPLEMENTS_FILE',
+    relationshipType: string = 'IMPLEMENTS',
   ): Promise<boolean> {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
-    // Both Component and File have branch properties for proper scoping
+    // Updated query to work with actual database schema
     const query = `
-      MATCH (c:Component {id: $componentId, branch: $branch})-[:PART_OF]->(repo:Repository {id: $repoNodeId}), 
-            (f:File {id: $fileId, branch: $branch})-[:PART_OF]->(repo)
-      MERGE (c)-[r:${safeRelType}]->(f)
+      MATCH (c:Component {id: $componentId})-[:PART_OF]->(repo:Repository {id: $repoNodeId}), 
+            (f:File {id: $fileId})-[:PART_OF]->(repo)
+      MERGE (f)-[r:${safeRelType}]->(c)
       RETURN r
     `;
     try {
@@ -132,7 +181,6 @@ export class FileRepository {
         componentId,
         fileId,
         repoNodeId,
-        branch,
       });
       return result && result.length > 0;
     } catch (error) {
@@ -151,19 +199,41 @@ export class FileRepository {
     repoNodeId: string,
     branch: string,
     componentId: string,
-    relationshipType: string = 'COMPONENT_IMPLEMENTS_FILE',
+    relationshipType: string = 'IMPLEMENTS',
   ): Promise<File[]> {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
     const query = `
-      MATCH (c:Component {id: $componentId, branch: $branch})-[:PART_OF]->(repo:Repository {id: $repoNodeId}),
-            (c)-[r:${safeRelType}]->(f:File {branch: $branch})-[:PART_OF]->(repo)
+      MATCH (c:Component {id: $componentId})-[:PART_OF]->(repo:Repository {id: $repoNodeId}),
+            (f:File)-[r:${safeRelType}]->(c)
+      WHERE (f)-[:PART_OF]->(repo)
       RETURN f
     `;
     try {
-      const result = await this.kuzuClient.executeQuery(query, { componentId, repoNodeId, branch });
+      const result = await this.kuzuClient.executeQuery(query, { componentId, repoNodeId });
       return result.map((row: any) => {
         const fileNode = row.f.properties || row.f;
-        return { ...fileNode, id: fileNode.id?.toString() } as File;
+
+        // Parse metadata back to individual properties
+        let parsedMetadata = {};
+        try {
+          parsedMetadata = JSON.parse(fileNode.metadata || '{}');
+        } catch (e) {
+          console.warn(`[FileRepository] Failed to parse metadata for file ${fileNode.id}`);
+        }
+
+        return {
+          id: fileNode.id?.toString(),
+          name: fileNode.name,
+          path: fileNode.path,
+          size: fileNode.size,
+          mime_type: (parsedMetadata as any).mime_type,
+          content: (parsedMetadata as any).content,
+          metrics: (parsedMetadata as any).metrics,
+          repository: repoNodeId,
+          branch: (parsedMetadata as any).branch || branch,
+          created_at: new Date(fileNode.lastModified),
+          updated_at: new Date(fileNode.lastModified),
+        } as File;
       });
     } catch (error) {
       console.error(

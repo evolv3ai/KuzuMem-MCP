@@ -1,7 +1,6 @@
-import { SdkToolHandler } from '../../../mcp/tool-handlers';
 import { entityHandler } from '../../../mcp/services/handlers/unified/entity-handler';
-import { MemoryService } from '../../../services/memory.service';
 import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { MemoryService } from '../../../services/memory.service';
 
 describe('entity tool handler', () => {
   let mockContext: EnrichedRequestHandlerExtra;
@@ -200,10 +199,11 @@ describe('entity tool handler', () => {
         expect.objectContaining({
           id: 'file-auth-service-ts',
           name: 'auth.service.ts',
-          type: 'file',
           path: 'src/services/auth.service.ts',
-          language: 'typescript',
-          size_bytes: 5432,
+          size: 5432, // Updated to match File interface
+          mime_type: undefined,
+          content: undefined,
+          metrics: undefined,
         }),
       );
 
