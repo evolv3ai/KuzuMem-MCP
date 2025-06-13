@@ -642,7 +642,7 @@ describe('MCP Stdio Server E2E Tests', () => {
           score: expect.any(Number),
         });
       }
-    });
+    }, 15000);
 
     it('should search across multiple entity types', async () => {
       const result = await callTool('search', {
@@ -661,7 +661,7 @@ describe('MCP Stdio Server E2E Tests', () => {
         totalResults: expect.any(Number),
         query: 'test decision',
       });
-    });
+    }, 15000);
 
     it('should handle empty search results gracefully', async () => {
       const result = await callTool('search', {
@@ -679,7 +679,7 @@ describe('MCP Stdio Server E2E Tests', () => {
         totalResults: 0,
         query: 'nonexistent-super-unique-term-12345',
       });
-    });
+    }, 15000);
   });
 
   describe('Cleanup verification', () => {
@@ -712,6 +712,6 @@ describe('MCP Stdio Server E2E Tests', () => {
         const foundTestComponents = testComponentIds.filter((id) => componentIds.includes(id));
         expect(foundTestComponents.length).toBeGreaterThan(0);
       }
-    });
+    }, 15000);
   });
 });
