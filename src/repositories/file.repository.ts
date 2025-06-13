@@ -24,14 +24,14 @@ export class FileRepository {
     // Input data should be clean, matching internal File type structure for new node properties
     fileData: Omit<File, 'repository' | 'branch' | 'created_at' | 'updated_at'> & { id: string },
   ): Promise<File | null> {
-    // Map the file data to match the database schema
+    // Map the file data to match the database schema, handling undefined values properly
     // The database schema has: id, name, path, type, size, lastModified, checksum, metadata
     const fileNodeProps = {
       id: fileData.id,
       name: fileData.name,
       path: fileData.path,
       type: fileData.mime_type || 'unknown', // Map mime_type to type for DB schema
-      size: fileData.size || 0, // Use size directly as per File interface
+      size: fileData.size ?? 0, // Use nullish coalescing to handle undefined properly
       lastModified: new Date().toISOString(),
       checksum: '', // Not provided in File interface, use empty string
       metadata: JSON.stringify({
@@ -43,9 +43,10 @@ export class FileRepository {
       }), // Store additional metadata as JSON string
     };
 
-    // Atomic query that creates the File node and establishes PART_OF relationship
+    // Query that creates/updates the File node and optionally establishes PART_OF relationship
+    // Uses OPTIONAL MATCH to allow file creation even if repository doesn't exist yet
     const query = `
-      MATCH (repo:Repository {id: $repository})
+      OPTIONAL MATCH (repo:Repository {id: $repository})
       MERGE (f:File {id: $id})
       ON CREATE SET
         f.name = $name,
@@ -63,6 +64,8 @@ export class FileRepository {
         f.lastModified = $lastModified,
         f.checksum = $checksum,
         f.metadata = $metadata
+      WITH f, repo
+      WHERE repo IS NOT NULL
       MERGE (f)-[:PART_OF]->(repo)
       RETURN f
     `;
