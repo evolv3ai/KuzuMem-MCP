@@ -30,7 +30,7 @@ export class FileRepository {
       id: fileData.id,
       name: fileData.name,
       path: fileData.path,
-      type: fileData.mime_type || 'unknown',
+      mime_type: fileData.mime_type || 'unknown',
       size: fileData.size ?? 0,
       lastModified: new Date().toISOString(),
       checksum: '',
@@ -49,8 +49,8 @@ export class FileRepository {
     // 2. Conditionally MATCH the repository and MERGE the relationship.
     const upsertFileQuery = `
       MERGE (f:File {id: $id})
-      ON CREATE SET f.name = $name, f.path = $path, f.type = $type, f.size = $size, f.lastModified = $lastModified, f.checksum = $checksum, f.metadata = $metadata
-      ON MATCH SET f.name = $name, f.path = $path, f.type = $type, f.size = $size, f.lastModified = $lastModified, f.checksum = $checksum, f.metadata = $metadata
+      ON CREATE SET f.name = $name, f.path = $path, f.mime_type = $mime_type, f.size = $size, f.lastModified = $lastModified, f.checksum = $checksum, f.metadata = $metadata
+      ON MATCH SET f.name = $name, f.path = $path, f.mime_type = $mime_type, f.size = $size, f.lastModified = $lastModified, f.checksum = $checksum, f.metadata = $metadata
     `;
 
     const linkRepoQuery = `
@@ -94,7 +94,7 @@ export class FileRepository {
           name: createdNode.name,
           path: createdNode.path,
           size: createdNode.size,
-          mime_type: parsedMetadata.mime_type,
+          mime_type: parsedMetadata.mime_type || fileNodeProps.mime_type,
           content: parsedMetadata.content,
           metrics: parsedMetadata.metrics,
           repository: repositoryName, // Consistent repository name extraction
@@ -182,12 +182,12 @@ export class FileRepository {
       return false;
     }
 
-    // Explicit direction: (Component)-[:IMPLEMENTS]->(File)
+    // Create the relationship: (Component)-[:IMPLEMENTS]->(File)
     // This means: Component implements functionality that is contained in File
     // Use PART_OF relationship and metadata JSON extraction to find the correct file
     const query = `
-      MATCH (c:Component {graph_unique_id: $componentGraphUniqueId}), 
-            (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId})
+      MATCH (c:Component {graph_unique_id: $componentGraphUniqueId})
+      MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId})
       WHERE json_extract_string(f.metadata, '$.branch') = $branch
       MERGE (c)-[r:${safeRelType}]->(f)
       RETURN r
@@ -233,7 +233,9 @@ export class FileRepository {
     // Query expects: (Component)-[:IMPLEMENTS]->(File)
     // This finds Files that are implemented by the Component, filtered by branch using metadata JSON
     const query = `
-      MATCH (c:Component {graph_unique_id: $componentGraphUniqueId})-[r:${safeRelType}]->(f:File)-[:PART_OF]->(repo:Repository {id: $repoNodeId})
+      MATCH (c:Component {graph_unique_id: $componentGraphUniqueId})
+      MATCH (c)-[r:${safeRelType}]->(f:File)
+      MATCH (f)-[:PART_OF]->(repo:Repository {id: $repoNodeId})
       WHERE json_extract_string(f.metadata, '$.branch') = $branch
       RETURN f, repo
     `;
@@ -301,11 +303,9 @@ export class FileRepository {
     // This finds Components that implement the File, filtered by branch
     // Use proper JSON extraction instead of fragile CONTAINS on JSON string
     const query = `
-      MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId}),
-            (c:Component)-[r:${safeRelType}]->(f)
-      WHERE (c)-[:PART_OF]->(repo)
-        AND json_extract_string(f.metadata, '$.branch') = $branch
-        AND c.branch = $branch
+      MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId})
+      MATCH (c:Component)-[r:${safeRelType}]->(f)
+      WHERE c.branch = $branch
       RETURN c
     `;
     try {

@@ -8,7 +8,8 @@ import { cleanupTestDB, setupTestDB } from '../utils/test-db-setup'; // Removed 
 // Increase Jest timeout
 jest.setTimeout(90000);
 
-const STREAM_PORT = process.env.SSE_STREAM_PORT || 3002; // Different port for SSE server
+// Dynamically select a high port to avoid collisions across test retries
+const STREAM_PORT = Number(process.env.SSE_STREAM_PORT) || 31000 + Math.floor(Math.random() * 1000);
 const STREAM_HOST = process.env.HOST || 'localhost';
 const BASE_URL = `http://${STREAM_HOST}:${STREAM_PORT}`;
 
@@ -377,6 +378,7 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
         DEBUG: '3', // Increase debug level for more verbose logging
         DEBUG_LEVEL: '3', // SSE server uses DEBUG_LEVEL instead of DEBUG
         DB_FILENAME: dbPathForTest,
+        LOG_LEVEL: 'info',
         NODE_ENV: 'test',
         ...envVars,
       };
