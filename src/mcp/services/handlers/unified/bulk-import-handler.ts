@@ -74,19 +74,13 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
             }
 
             // Import component
-            await memoryService.upsertComponent(
-              context,
-              clientProjectRoot,
-              repository,
-              branch,
-              {
-                id: component.id,
-                name: component.name,
-                kind: component.kind,
-                status: component.status,
-                depends_on: component.depends_on,
-              },
-            );
+            await memoryService.upsertComponent(context, clientProjectRoot, repository, branch, {
+              id: component.id,
+              name: component.name,
+              kind: component.kind,
+              status: component.status,
+              depends_on: component.depends_on,
+            });
             imported++;
           } catch (error) {
             failed++;
@@ -133,18 +127,12 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
             }
 
             // Import decision
-            await memoryService.upsertDecision(
-              context,
-              clientProjectRoot,
-              repository,
-              branch,
-              {
-                id: decision.id,
-                name: decision.name,
-                date: decision.date,
-                context: decision.context,
-              },
-            );
+            await memoryService.upsertDecision(context, clientProjectRoot, repository, branch, {
+              id: decision.id,
+              name: decision.name,
+              date: decision.date,
+              context: decision.context,
+            });
             imported++;
           } catch (error) {
             failed++;
