@@ -770,8 +770,8 @@ export async function shortestPathOp(
 
     // First check if nodes exist
     const checkNodesQuery = `
-      MATCH (start:Component {graph_unique_id: $startGraphId}),
-            (end:Component {graph_unique_id: $endGraphId})
+      MATCH (start:Component {graph_unique_id: $startGraphId})
+      MATCH (end:Component {graph_unique_id: $endGraphId})
       RETURN start.id AS startId, end.id AS endId
     `;
 
@@ -861,8 +861,8 @@ export async function shortestPathOp(
       const endGraphId = `${params.repository}:${params.branch}:${endNodeId}`;
 
       const fallbackQuery = `
-        MATCH (start:Component {graph_unique_id: $startGraphId}),
-              (end:Component {graph_unique_id: $endGraphId})
+        MATCH (start:Component {graph_unique_id: $startGraphId})
+        MATCH (end:Component {graph_unique_id: $endGraphId})
         RETURN start, end
       `;
 
