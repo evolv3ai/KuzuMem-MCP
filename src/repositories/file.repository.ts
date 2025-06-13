@@ -189,7 +189,7 @@ export class FileRepository {
       MATCH (c:Component {graph_unique_id: $componentGraphUniqueId})
       MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId})
       WHERE json_extract_string(f.metadata, '$.branch') = $branch
-      MERGE (c)-[r:${safeRelType}]->(f)
+      MERGE (c:Component)-[r:${safeRelType}]->(f:File)
       RETURN r
     `;
     try {

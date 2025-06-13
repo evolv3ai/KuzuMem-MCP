@@ -786,10 +786,10 @@ export async function shortestPathOp(
     });
 
     const shortestPathQuery = `
-      MATCH p = (start:Component {graph_unique_id: $startGraphId})-[:DEPENDS_ON*1..10]->(end:Component {graph_unique_id: $endGraphId})
+      MATCH (start:Component {graph_unique_id: $startGraphId})
+      MATCH (end:Component {graph_unique_id: $endGraphId})
+      MATCH p = shortestPath( (start)-[:DEPENDS_ON*1..10]->(end) )
       RETURN p, length(p) AS path_length
-      ORDER BY path_length
-      LIMIT 1
     `;
 
     logger.info(`[graph.ops] Executing shortest path query`, {
