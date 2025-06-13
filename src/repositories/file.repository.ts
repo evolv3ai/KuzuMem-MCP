@@ -26,63 +26,60 @@ export class FileRepository {
     fileData: Omit<File, 'repository' | 'branch' | 'created_at' | 'updated_at'> & { id: string },
   ): Promise<File | null> {
     // Map the file data to match the database schema, handling undefined values properly
-    // The database schema has: id, name, path, type, size, lastModified, checksum, metadata
     const fileNodeProps = {
       id: fileData.id,
       name: fileData.name,
       path: fileData.path,
-      type: fileData.mime_type || 'unknown', // Map mime_type to type for DB schema
-      size: fileData.size ?? 0, // Use nullish coalescing to handle undefined properly
+      type: fileData.mime_type || 'unknown',
+      size: fileData.size ?? 0,
       lastModified: new Date().toISOString(),
-      checksum: '', // Not provided in File interface, use empty string
+      checksum: '',
       metadata: JSON.stringify({
         branch: branch,
         repository: repoNodeId,
         content: fileData.content || null,
         metrics: fileData.metrics || null,
         mime_type: fileData.mime_type || null,
-      }), // Store additional metadata as JSON string
+      }),
     };
 
-    // Query that creates/updates the File node and optionally establishes PART_OF relationship
-    // Uses OPTIONAL MATCH to allow file creation even if repository doesn't exist yet
-    const query = `
+    // KuzuDB does not support the Neo4j-style FOREACH hack for conditional linking.
+    // We use a transaction to perform the two steps atomically:
+    // 1. MERGE the File node.
+    // 2. Conditionally MATCH the repository and MERGE the relationship.
+    const upsertFileQuery = `
       MERGE (f:File {id: $id})
-      ON CREATE SET
-        f.name = $name,
-        f.path = $path,
-        f.type = $type,
-        f.size = $size,
-        f.lastModified = $lastModified,
-        f.checksum = $checksum,
-        f.metadata = $metadata
-      ON MATCH SET
-        f.name = $name,
-        f.path = $path,
-        f.type = $type,
-        f.size = $size,
-        f.lastModified = $lastModified,
-        f.checksum = $checksum,
-        f.metadata = $metadata
-      WITH f
+      ON CREATE SET f.name = $name, f.path = $path, f.type = $type, f.size = $size, f.lastModified = $lastModified, f.checksum = $checksum, f.metadata = $metadata
+      ON MATCH SET f.name = $name, f.path = $path, f.type = $type, f.size = $size, f.lastModified = $lastModified, f.checksum = $checksum, f.metadata = $metadata
+    `;
+
+    const linkRepoQuery = `
+      MATCH (f:File {id: $id}), (repo:Repository {id: $repository})
+      MERGE (f)-[:PART_OF]->(repo)
+    `;
+
+    const getFileQuery = `
+      MATCH (f:File {id: $id})
       OPTIONAL MATCH (repo:Repository {id: $repository})
-      FOREACH (ignoreMe IN CASE WHEN repo IS NOT NULL THEN [1] ELSE [] END |
-        MERGE (f)-[:PART_OF]->(repo)
-      )
       RETURN f, repo
     `;
 
     try {
-      const result = await this.kuzuClient.executeQuery(query, {
-        id: fileNodeProps.id,
-        repository: repoNodeId,
-        name: fileNodeProps.name,
-        path: fileNodeProps.path,
-        type: fileNodeProps.type,
-        size: fileNodeProps.size,
-        lastModified: fileNodeProps.lastModified,
-        checksum: fileNodeProps.checksum,
-        metadata: fileNodeProps.metadata,
+      const result = await this.kuzuClient.transaction(async (tx) => {
+        // Step 1: Create or update the file node.
+        await tx.executeQuery(upsertFileQuery, fileNodeProps);
+
+        // Step 2: Attempt to link to the repository. This is conditional on the repo existing.
+        await tx.executeQuery(linkRepoQuery, {
+          id: fileNodeProps.id,
+          repository: repoNodeId,
+        });
+
+        // Step 3: Fetch the final state of the file and its relationship.
+        return tx.executeQuery(getFileQuery, {
+          id: fileNodeProps.id,
+          repository: repoNodeId,
+        });
       });
 
       if (result && result.length > 0) {

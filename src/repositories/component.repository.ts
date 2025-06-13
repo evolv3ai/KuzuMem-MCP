@@ -151,9 +151,10 @@ export class ComponentRepository {
     const escapedStartGraphUniqueId = this.escapeStr(startGraphUniqueId);
     const escapedEndGraphUniqueId = this.escapeStr(endGraphUniqueId);
 
-    // Use KuzuDB shortest path syntax from official documentation
+    // Use KuzuDB shortest path syntax. The 'e' variable is required for variable-length
+    // relationship patterns, especially when no type is specified.
     const query = `
-      MATCH p = (startNode:Component)${arrowLeft}[${relTypeString}* SHORTEST]${arrowRight}(endNode:Component)
+      MATCH p = (startNode:Component)${arrowLeft}[e${relTypeString}* SHORTEST]${arrowRight}(endNode:Component)
       WHERE startNode.graph_unique_id = '${escapedStartGraphUniqueId}' AND endNode.graph_unique_id = '${escapedEndGraphUniqueId}'
       RETURN p AS path, length(p) AS path_length
     `;
@@ -162,19 +163,24 @@ export class ComponentRepository {
 
     try {
       const result = await this.kuzuClient.executeQuery(query);
-      if (!result || !Array.isArray(result)) {
-        console.warn(
-          `Query for findShortestPath from ${startNodeId} to ${endNodeId} returned invalid result type.`,
-        );
-        return { path: [], length: 0, error: 'Query returned invalid result type.' };
+      let rows: any[] = [];
+
+      // Handle both direct array results and object with getAll() method
+      if (Array.isArray(result)) {
+        rows = result;
+      } else if (result && typeof result.getAll === 'function') {
+        rows = await result.getAll();
+      } else if (result) {
+        // Handle cases where a single object might be returned
+        rows = [result];
       }
 
-      if (!result || result.length === 0) {
+      if (rows.length === 0) {
         console.log(`DEBUG: No path found by query for ${startNodeId} -> ${endNodeId}`);
         return { path: [], length: 0, error: null }; // No path found is not an error, just empty result
       }
 
-      const row = result[0];
+      const row = rows[0];
       const kuzuPathObject = row.path; // This is Kuzu's path structure
       const pathLength = row.path_length || 0;
 
