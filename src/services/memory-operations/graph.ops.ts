@@ -506,7 +506,7 @@ export async function kCoreDecompositionOp(
     `[graph.ops] Executing K-Core Decomposition on G: ${params.projectedGraphName}, k: ${params.k}, R: ${params.repository}, B: ${params.branch}`,
   );
 
-  const result = await withProjectedGraph(
+  const result = await withProjectedGraph<{ k: number; components: any[] }>(
     mcpContext,
     kuzuClient,
     params.projectedGraphName,
@@ -525,21 +525,21 @@ export async function kCoreDecompositionOp(
     },
   );
 
-  if (result.error) {
+  if ('error' in result) {
     return { k: params.k, components: [], error: result.error };
   }
   return result;
 }
 
 // Helper function for projected graph operations
-async function withProjectedGraph(
+async function withProjectedGraph<T>(
   mcpContext: EnrichedRequestHandlerExtra,
   kuzuClient: KuzuDBClient,
   projectionName: string,
   nodeTables: string[],
   relTables: string[],
-  callback: () => Promise<any>,
-): Promise<any> {
+  callback: () => Promise<T>,
+): Promise<T | { error: string }> {
   const logger = mcpContext.logger;
   const nodeTableNamesArray = `[${nodeTables.map((n) => `'${n}'`).join(', ')}]`;
   const relTableNamesArray = `[${relTables.map((r) => `'${r}'`).join(', ')}]`;
@@ -555,7 +555,6 @@ async function withProjectedGraph(
     );
     await kuzuClient.executeQuery(createProjectionQuery, {});
     logger.debug(`[graph.ops] Successfully created projected graph: ${safeProjectionName}`);
-    return await callback();
   } catch (projectionError: any) {
     logger.error(`[graph.ops] Error creating projected graph ${safeProjectionName}:`, {
       error: projectionError.toString(),
@@ -563,7 +562,22 @@ async function withProjectedGraph(
       query: createProjectionQuery,
     });
     // Return a graceful error response instead of throwing
-    return { error: `Failed to create projected graph: ${projectionError.message}` };
+    return {
+      error: `Failed to create projected graph '${safeProjectionName}': ${projectionError.message}`,
+    };
+  }
+
+  try {
+    return await callback();
+  } catch (callbackError: any) {
+    logger.error(
+      `[graph.ops] Error executing callback for projected graph ${safeProjectionName}:`,
+      {
+        error: callbackError.toString(),
+        stack: callbackError.stack,
+      },
+    );
+    return { error: `Algorithm execution failed: ${callbackError.message}` };
   } finally {
     try {
       logger.debug(`[graph.ops] Dropping projected graph: ${safeProjectionName}`);
@@ -573,6 +587,7 @@ async function withProjectedGraph(
         error: dropError.toString(),
         stack: dropError.stack,
       });
+      // This error is less critical and should not mask a success or a more important error.
     }
   }
 }
@@ -591,7 +606,7 @@ export async function pageRankOp(
   );
   const safeProjectionName = params.projectedGraphName.replace(/[^a-zA-Z0-9_]/g, '_');
 
-  const result = await withProjectedGraph(
+  const result = await withProjectedGraph<{ ranks: any[] }>(
     mcpContext,
     kuzuClient,
     safeProjectionName,
@@ -618,7 +633,7 @@ export async function pageRankOp(
     },
   );
 
-  if (result.error) {
+  if ('error' in result) {
     return { ranks: [], error: result.error };
   }
   return result;
@@ -637,7 +652,7 @@ export async function louvainCommunityDetectionOp(
     `[graph.ops] Executing Louvain Community Detection on G: ${params.projectedGraphName}, R: ${params.repository}, B: ${params.branch}`,
   );
 
-  const result = await withProjectedGraph(
+  const result = await withProjectedGraph<{ communities: any[] }>(
     mcpContext,
     kuzuClient,
     params.projectedGraphName,
@@ -656,7 +671,7 @@ export async function louvainCommunityDetectionOp(
     },
   );
 
-  if (result.error) {
+  if ('error' in result) {
     return { communities: [], error: result.error };
   }
   return result;
