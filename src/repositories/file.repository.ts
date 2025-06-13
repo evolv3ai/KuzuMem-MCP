@@ -188,9 +188,9 @@ export class FileRepository {
     const query = `
       MATCH (c:Component {graph_unique_id: $componentGraphUniqueId})
       MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId})
+      MATCH (c)-[r:${safeRelType}]->(f)
       WHERE json_extract_string(f.metadata, '$.branch') = $branch
-      MERGE (c:Component)-[r:${safeRelType}]->(f:File)
-      RETURN r
+      RETURN f, repo
     `;
     try {
       const result = await this.kuzuClient.executeQuery(query, {
@@ -233,7 +233,9 @@ export class FileRepository {
     // Query expects: (Component)-[:IMPLEMENTS]->(File)
     // This finds Files that are implemented by the Component, filtered by branch using metadata JSON
     const query = `
-      MATCH (c:Component {graph_unique_id: $componentGraphUniqueId})-[r:${safeRelType}]->(f:File)-[:PART_OF]->(repo:Repository {id: $repoNodeId})
+      MATCH (c:Component {graph_unique_id: $componentGraphUniqueId})
+      MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId})
+      MATCH (c)-[r:${safeRelType}]->(f)
       WHERE json_extract_string(f.metadata, '$.branch') = $branch
       RETURN f, repo
     `;
