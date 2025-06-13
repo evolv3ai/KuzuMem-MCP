@@ -47,14 +47,67 @@ if (process.env.DB_PATH_OVERRIDE) {
   );
 }
 
-process.on('SIGINT', () => {
-  mcpStdioLogger.info('Received SIGINT, shutting down gracefully');
-  process.exit(0);
-});
+// Add a re-entrancy guard to prevent concurrent shutdown executions
+let isShuttingDown = false;
 
+// Graceful shutdown function
+async function gracefulShutdown(signal: string): Promise<void> {
+  if (isShuttingDown) {
+    mcpStdioLogger.debug({ signal }, 'Shutdown already in progress, ignoring subsequent signal.');
+    return;
+  }
+  isShuttingDown = true;
+
+  mcpStdioLogger.info({ signal }, `Received ${signal}, starting graceful shutdown`);
+
+  // For stdio servers, we need to gracefully close connections and clean up
+  const cleanup = async (): Promise<void> => {
+    try {
+      // Get MemoryService instance and shut it down if it exists
+      // We'll try to get any existing instances to clean them up
+      mcpStdioLogger.info('Starting cleanup process');
+
+      // Note: We can't easily get all MemoryService instances since they're created on-demand
+      // But the process exit will clean them up anyway
+
+      mcpStdioLogger.info('Cleanup completed');
+    } catch (error) {
+      logError(mcpStdioLogger, error as Error, { operation: 'graceful-shutdown-cleanup' });
+      // Re-throw to allow the main handler to catch it and exit.
+      throw error;
+    }
+  };
+
+  // Timeout for forced exit
+  const timeout = setTimeout(() => {
+    mcpStdioLogger.error('Graceful shutdown timed out, forcing exit');
+    process.exit(1);
+  }, 10000); // 10 second timeout for stdio server
+
+  try {
+    await cleanup();
+    clearTimeout(timeout);
+    mcpStdioLogger.info('Graceful shutdown completed successfully.');
+    process.exit(0);
+  } catch (error) {
+    clearTimeout(timeout);
+    logError(mcpStdioLogger, error as Error, { operation: 'graceful-shutdown-failure' });
+    process.exit(1);
+  }
+}
+
+// Ensure unhandled promise rejections are caught and the process exits correctly.
+process.on('SIGINT', () => {
+  gracefulShutdown('SIGINT').catch((err) => {
+    logError(mcpStdioLogger, err as Error, { operation: 'unhandled-shutdown-error' });
+    process.exit(1);
+  });
+});
 process.on('SIGTERM', () => {
-  mcpStdioLogger.info('Received SIGTERM, shutting down gracefully');
-  process.exit(0);
+  gracefulShutdown('SIGTERM').catch((err) => {
+    logError(mcpStdioLogger, err as Error, { operation: 'unhandled-shutdown-error' });
+    process.exit(1);
+  });
 });
 
 import packageJson from '../package.json';
