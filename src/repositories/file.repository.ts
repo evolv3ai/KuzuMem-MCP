@@ -210,40 +210,52 @@ export class FileRepository {
   ): Promise<File[]> {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
     // Query expects: (Component)-[:IMPLEMENTS]->(File)
-    // This finds Files that are implemented by the Component
+    // This finds Files that are implemented by the Component, filtered by branch
     const query = `
       MATCH (c:Component {id: $componentId})-[:PART_OF]->(repo:Repository {id: $repoNodeId}),
             (c)-[r:${safeRelType}]->(f:File)
       WHERE (f)-[:PART_OF]->(repo)
+        AND f.metadata CONTAINS $branch
       RETURN f
     `;
     try {
-      const result = await this.kuzuClient.executeQuery(query, { componentId, repoNodeId });
-      return result.map((row: any) => {
-        const fileNode = row.f.properties || row.f;
-
-        // Parse metadata back to individual properties
-        let parsedMetadata = {};
-        try {
-          parsedMetadata = JSON.parse(fileNode.metadata || '{}');
-        } catch (e) {
-          console.warn(`[FileRepository] Failed to parse metadata for file ${fileNode.id}`);
-        }
-
-        return {
-          id: fileNode.id?.toString(),
-          name: fileNode.name,
-          path: fileNode.path,
-          size: fileNode.size,
-          mime_type: (parsedMetadata as any).mime_type,
-          content: (parsedMetadata as any).content,
-          metrics: (parsedMetadata as any).metrics,
-          repository: repoNodeId,
-          branch: (parsedMetadata as any).branch || branch,
-          created_at: new Date(fileNode.lastModified),
-          updated_at: new Date(fileNode.lastModified),
-        } as File;
+      const result = await this.kuzuClient.executeQuery(query, {
+        componentId,
+        repoNodeId,
+        branch: `"branch":"${branch}"`,
       });
+      return result
+        .map((row: any) => {
+          const fileNode = row.f.properties || row.f;
+
+          // Parse metadata back to individual properties
+          let parsedMetadata = {};
+          try {
+            parsedMetadata = JSON.parse(fileNode.metadata || '{}');
+          } catch (e) {
+            console.warn(`[FileRepository] Failed to parse metadata for file ${fileNode.id}`);
+          }
+
+          // Verify branch matches (additional safety check)
+          if ((parsedMetadata as any).branch !== branch) {
+            return null;
+          }
+
+          return {
+            id: fileNode.id?.toString(),
+            name: fileNode.name,
+            path: fileNode.path,
+            size: fileNode.size,
+            mime_type: (parsedMetadata as any).mime_type,
+            content: (parsedMetadata as any).content,
+            metrics: (parsedMetadata as any).metrics,
+            repository: repoNodeId,
+            branch: (parsedMetadata as any).branch || branch,
+            created_at: new Date(fileNode.lastModified),
+            updated_at: new Date(fileNode.lastModified),
+          } as File;
+        })
+        .filter(Boolean); // Filter out null results from branch mismatch
     } catch (error) {
       console.error(
         `[FileRepository] Error finding files for C:${componentId} via ${safeRelType}:`,
@@ -265,15 +277,21 @@ export class FileRepository {
   ): Promise<any[]> {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
     // Query expects: (Component)-[:IMPLEMENTS]->(File)
-    // This finds Components that implement the File
+    // This finds Components that implement the File, filtered by branch
     const query = `
       MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId}),
             (c:Component)-[r:${safeRelType}]->(f)
       WHERE (c)-[:PART_OF]->(repo)
+        AND f.metadata CONTAINS $branch
+        AND c.branch = $branch
       RETURN c
     `;
     try {
-      const result = await this.kuzuClient.executeQuery(query, { fileId, repoNodeId });
+      const result = await this.kuzuClient.executeQuery(query, {
+        fileId,
+        repoNodeId,
+        branch: `"branch":"${branch}"`,
+      });
       return result.map((row: any) => {
         const componentNode = row.c.properties || row.c;
         return {
