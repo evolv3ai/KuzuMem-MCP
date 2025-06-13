@@ -28,12 +28,12 @@ export class TagRepository {
     },
   ): Promise<Tag | null> {
     const now = new Date();
-    
+
     // KuzuDB doesn't support setting properties from a map parameter, so we set them individually
     const query = `
       MERGE (t:Tag {id: $id})
-      ON CREATE SET t.id = $id, t.name = $name, t.color = $color, t.description = $description, t.created_at = $created_at
-      ON MATCH SET t.name = $name, t.color = $color, t.description = $description
+      ON CREATE SET t.id = $id, t.name = $name, t.color = $color, t.description = $description, t.repository = $repository, t.branch = $branch, t.created_at = $created_at
+      ON MATCH SET t.name = $name, t.color = $color, t.description = $description, t.repository = $repository, t.branch = $branch
       RETURN t
     `;
 
@@ -43,6 +43,8 @@ export class TagRepository {
         name: tagData.name,
         color: tagData.color || null,
         description: tagData.description || null,
+        repository: tagData.repository || null,
+        branch: tagData.branch || null,
         created_at: now,
       });
       if (result && result.length > 0) {
