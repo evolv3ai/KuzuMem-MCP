@@ -4,10 +4,9 @@
  * Based on: https://github.com/modelcontextprotocol/typescript-sdk
  */
 
-import { createServer, type Server } from 'node:http';
-import { AddressInfo } from 'node:net';
-import { randomUUID } from 'node:crypto';
 import dotenv from 'dotenv';
+import { randomUUID } from 'node:crypto';
+import { createServer, type Server } from 'node:http';
 import { z } from 'zod';
 
 // Official MCP SDK imports
@@ -17,15 +16,15 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 // Our tool handlers and services
 import { toolHandlers as sdkToolHandlers } from './mcp/tool-handlers';
-import { MemoryService } from './services/memory.service';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
-import { loggers, createPerformanceLogger, logError } from './utils/logger';
+import { MemoryService } from './services/memory.service';
+import { createPerformanceLogger, logError, loggers } from './utils/logger';
 
 // Load environment variables
 dotenv.config();
 
 // Server configuration
-const port = parseInt(process.env.HTTP_STREAM_PORT || '3001', 10);
+const port = parseInt(process.env.HTTP_STREAM_PORT || '8001', 10);
 const host = process.env.HOST || 'localhost';
 
 // Create HTTP stream specific logger
@@ -249,8 +248,8 @@ async function startServer(): Promise<void> {
   // Start listening
   server.listen(port, host, () => {
     httpStreamLogger.info(
-      { port, host, url: `http://${host}:${port}` },
-      `MCP HTTP Streaming Server running at http://${host}:${port}`,
+      { host, port },
+      `MCP HTTP stream server listening at http://${host}:${port}`,
     );
   });
 
@@ -280,7 +279,7 @@ function gracefulShutdown(signal: string): void {
   }
 }
 
-// Main execution
+// Start the server only if this script is executed directly
 if (require.main === module) {
   // Handle shutdown signals
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
@@ -288,7 +287,7 @@ if (require.main === module) {
 
   // Start the server
   startServer().catch((error) => {
-    logError(httpStreamLogger, error as Error, { operation: 'server-startup' });
+    httpStreamLogger.error({ err: error }, 'Failed to start MCP HTTP Stream server');
     process.exit(1);
   });
 }
