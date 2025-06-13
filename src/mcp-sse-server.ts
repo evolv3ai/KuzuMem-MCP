@@ -122,7 +122,7 @@ function createMcpServer(): Server {
 
     if (!effectiveClientProjectRoot) {
       throw new Error(
-        toolName === 'init-memory-bank'
+        toolName === 'memory-bank'
           ? `Tool '${toolName}' requires clientProjectRoot argument.`
           : `Server error: clientProjectRoot context not established for tool '${toolName}'. Provide clientProjectRoot in tool arguments.`,
       );
@@ -296,6 +296,6 @@ process.on('SIGINT', async () => {
 // Start the server
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.error(`MCP HTTP Streaming Server running at http://localhost:${PORT}`);
+  console.log(`MCP SSE Server listening on port ${PORT}`);
   debugLog(1, `Server started with debug level: ${debugLevel}`);
 });

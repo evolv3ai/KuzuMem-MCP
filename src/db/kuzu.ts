@@ -473,7 +473,7 @@ export class KuzuDBClient {
   async executeQuery(
     query: string,
     params?: Record<string, any>,
-    _progressCallback?: (message: string) => void, // Param retained for external compatibility if ever used
+    options?: { timeout?: number },
   ): Promise<any> {
     const logger = kuzuLogger.child({
       operation: 'execute-query',
@@ -490,45 +490,61 @@ export class KuzuDBClient {
 
     const connection = this.getConnection();
 
-    try {
-      let queryResult;
-      if (params && Object.keys(params).length > 0) {
-        const preparedStatement = await connection.prepare(query);
-        queryResult = await connection.execute(preparedStatement, params);
-      } else {
-        queryResult = await connection.query(query);
-      }
+    const queryPromise = async () => {
+      try {
+        let queryResult;
+        if (params && Object.keys(params).length > 0) {
+          const preparedStatement = await connection.prepare(query);
+          queryResult = await connection.execute(preparedStatement, params);
+        } else {
+          queryResult = await connection.query(query);
+        }
 
-      // KuzuDB returns a QueryResult object. We must call getAll() to get the actual rows.
-      if (queryResult && typeof queryResult.getAll === 'function') {
-        const rows = await queryResult.getAll();
+        // KuzuDB returns a QueryResult object. We must call getAll() to get the actual rows.
+        if (queryResult && typeof queryResult.getAll === 'function') {
+          const rows = await queryResult.getAll();
+          logger.debug(
+            {
+              resultLength: rows.length,
+              hasParams: !!(params && Object.keys(params).length > 0),
+            },
+            'Query executed successfully and results fetched',
+          );
+          return rows;
+        }
+
+        // For queries that don't return a QueryResult (e.g., some DDL), return the raw result.
         logger.debug(
           {
-            resultLength: rows.length,
+            resultType: typeof queryResult,
             hasParams: !!(params && Object.keys(params).length > 0),
           },
-          'Query executed successfully and results fetched',
+          'Query executed successfully, but no standard QueryResult object returned.',
         );
-        return rows;
-      }
 
-      // For queries that don't return a QueryResult (e.g., some DDL), return the raw result.
-      logger.debug(
-        {
-          resultType: typeof queryResult,
+        return queryResult;
+      } catch (error) {
+        logError(logger, error as Error, {
+          query: query.substring(0, 100) + '...',
           hasParams: !!(params && Object.keys(params).length > 0),
-        },
-        'Query executed successfully, but no standard QueryResult object returned.',
-      );
+        });
+        throw error;
+      }
+    };
 
-      return queryResult;
-    } catch (error) {
-      logError(logger, error as Error, {
-        query: query.substring(0, 100) + '...',
-        hasParams: !!(params && Object.keys(params).length > 0),
-      });
-      throw error;
+    if (options?.timeout) {
+      return Promise.race([
+        queryPromise(),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`Query timed out after ${options.timeout}ms`)),
+            options.timeout,
+          ),
+        ),
+      ]);
     }
+
+    return queryPromise();
   }
 
   async close(): Promise<void> {

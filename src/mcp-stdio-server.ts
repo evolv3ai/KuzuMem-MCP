@@ -1,6 +1,10 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import {
+  CallToolRequestSchema,
+  InitializeRequestSchema,
+  ListToolsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import * as toolSchemas from './mcp/schemas/unified-tool-schemas';
 import { toolHandlers } from './mcp/tool-handlers';
@@ -52,6 +56,7 @@ const sessionStore = new Map<
   string,
   { clientProjectRoot?: string; repository?: string; branch?: string }
 >();
+let currentSessionId = 'default-session'; // Fallback session ID
 
 // Helper function to derive schema name for unified tools
 function getSchemaKeyForTool(toolName: string): keyof typeof toolSchemas | undefined {
@@ -100,6 +105,21 @@ async function main() {
     },
   });
 
+  // Handle Initialize request to set up session
+  server.setRequestHandler(InitializeRequestSchema, async (request) => {
+    const sessionId = (request.params as any)?.sessionId || `session-${Date.now()}`;
+    currentSessionId = sessionId;
+    if (!sessionStore.has(currentSessionId)) {
+      sessionStore.set(currentSessionId, {});
+      mcpStdioLogger.info({ sessionId: currentSessionId }, 'New session initialized');
+    }
+    return {
+      protocolVersion: '1.0.0',
+      serverInfo,
+      sessionId: currentSessionId,
+    };
+  });
+
   // Set up tool list handler with full tool definitions including descriptions
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const toolsPerfLogger = createPerformanceLogger(mcpStdioLogger, 'list-tools');
@@ -128,6 +148,7 @@ async function main() {
     const toolLogger = mcpStdioLogger.child({
       tool: toolName,
       requestId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      sessionId: currentSessionId,
     });
 
     const toolDef = MEMORY_BANK_MCP_TOOLS.find((t) => t.name === toolName);
@@ -143,7 +164,7 @@ async function main() {
 
     try {
       const validatedParams = request.params.arguments;
-      const sessionId = 'default-e2e-session-fallback'; // We'll need to get this from somewhere
+      const sessionId = currentSessionId; // Use the session ID from the initialize request
 
       let currentSessionData = sessionStore.get(sessionId);
       if (!currentSessionData) {
@@ -197,8 +218,8 @@ async function main() {
         session: currentSessionData || {},
         logger: toolLogger, // Use structured logger instead of console
         sendProgress: async (progressData: McpProgressNotification) => {
-          toolLogger.info({ progressData }, 'Progress notification sent');
-          // Progress notifications would need to be handled differently in this approach
+          // Stdio server does not support progress notifications, this is a no-op
+          toolLogger.info({ progressData }, 'Progress notification received (no-op)');
         },
       };
 

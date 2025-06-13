@@ -48,10 +48,10 @@ export class RuleRepository {
     return {
       id: logicalId,
       graph_unique_id: graphUniqueId,
-      name: rawRule.name,
+      name: rawRule.title || rawRule.name,
       created: createdDate,
       triggers: Array.isArray(rawRule.triggers) ? rawRule.triggers.map(String) : [],
-      content: rawRule.content,
+      content: rawRule.description || rawRule.content,
       status: rawRule.status,
       branch: rawRule.branch,
       repository: `${repositoryName}:${branch}`,
@@ -65,7 +65,7 @@ export class RuleRepository {
    */
   async getActiveRules(repositoryNodeId: string, ruleBranch: string): Promise<Rule[]> {
     const query = `
-      MATCH (repo:Repository {id: $repositoryNodeId})-[:HAS_RULE]->(r:Rule)
+      MATCH (repo:Repository {id: $repositoryNodeId})<-[:PART_OF]-(r:Rule)
       WHERE r.status = $status AND r.branch = $ruleBranch 
       RETURN r ORDER BY r.created DESC
     `;
@@ -103,9 +103,8 @@ export class RuleRepository {
     const now = new Date().toISOString();
 
     const query = `
-      MERGE (r:Rule {graph_unique_id: $graphUniqueId})
+      MERGE (r:Rule {id: $id, graph_unique_id: $graphUniqueId})
       ON CREATE SET
-        r.id = $id,
         r.title = $name,
         r.description = $description,
         r.scope = $scope,
@@ -124,8 +123,8 @@ export class RuleRepository {
     `;
 
     const params = {
-      id: logicalId,
       graphUniqueId,
+      id: logicalId,
       name,
       description: (rule as any).description || '',
       scope: (rule as any).scope || 'component',
@@ -177,7 +176,7 @@ export class RuleRepository {
    */
   async getAllRules(repositoryNodeId: string, ruleBranch: string): Promise<Rule[]> {
     const query = `
-      MATCH (repo:Repository {id: $repositoryNodeId})-[:HAS_RULE]->(r:Rule)
+      MATCH (repo:Repository {id: $repositoryNodeId})<-[:PART_OF]-(r:Rule)
       WHERE r.branch = $ruleBranch
       RETURN r ORDER BY r.created DESC, r.name ASC
     `;

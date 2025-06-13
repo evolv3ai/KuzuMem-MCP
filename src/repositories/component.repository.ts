@@ -78,7 +78,7 @@ export class ComponentRepository {
   ): Promise<Component[]> {
     const logger = console; // Placeholder for actual logger
     const query = `
-      MATCH (r:Repository {id: $repositoryNodeId})-[:HAS_COMPONENT]->(c:Component)
+      MATCH (r:Repository {id: $repositoryNodeId})<-[:PART_OF]-(c:Component)
       WHERE c.status = $status AND c.branch = $componentBranch 
       RETURN c ORDER BY c.name ASC
     `;
@@ -276,11 +276,10 @@ export class ComponentRepository {
     try {
       await this.kuzuClient.executeQuery('BEGIN TRANSACTION');
 
-      // Simplified MERGE query
+      // Simplified MERGE query - include id in MERGE for KuzuDB
       const upsertNodeQuery = `
-        MERGE (c:Component {graph_unique_id: $graphUniqueId})
+        MERGE (c:Component {id: $componentId, graph_unique_id: $graphUniqueId})
         ON CREATE SET
-          c.id = $componentId,
           c.name = $name,
           c.kind = $kind,
           c.status = $status,
@@ -297,8 +296,8 @@ export class ComponentRepository {
           c.updated_at = $now
       `;
       await this.kuzuClient.executeQuery(upsertNodeQuery, {
-        componentId,
         graphUniqueId,
+        componentId,
         name: component.name,
         kind: component.kind || 'Unknown',
         status: component.status || 'active',
@@ -309,29 +308,39 @@ export class ComponentRepository {
 
       // Attach to repository
       await this.kuzuClient.executeQuery(
-        'MATCH (repo:Repository {id: $repoId}), (c:Component {id: $comp_id}) MERGE (c)-[:PART_OF]->(repo)',
-        { repoId: repositoryNodeId, comp_id: componentId },
+        'MATCH (repo:Repository {id: $repoId}), (c:Component {graph_unique_id: $graphUniqueId}) MERGE (c)-[:PART_OF]->(repo)',
+        { repoId: repositoryNodeId, graphUniqueId },
       );
 
       // Handle dependencies
       if (component.depends_on && component.depends_on.length > 0) {
         // First, delete existing dependencies for this component
         await this.kuzuClient.executeQuery(
-          'MATCH (c:Component {id: $comp_id})-[r:DEPENDS_ON]->() DELETE r',
-          { comp_id: componentId },
+          'MATCH (c:Component {graph_unique_id: $graphUniqueId})-[r:DEPENDS_ON]->() DELETE r',
+          { graphUniqueId },
         );
 
         for (const depId of component.depends_on) {
+          const depGraphUniqueId = formatGraphUniqueId(
+            logicalRepositoryName,
+            componentBranch,
+            depId,
+          );
           // Ensure dependency node exists (as a placeholder if needed)
           await this.kuzuClient.executeQuery(
-            `MERGE (dep:Component {id: $depId}) ON CREATE SET dep.name = $depName, dep.status = 'planned'`,
-            { depId, depName: `Placeholder for ${depId}` },
+            `MERGE (dep:Component {graph_unique_id: $depGraphUniqueId}) ON CREATE SET dep.id = $depId, dep.name = $depName, dep.status = 'planned', dep.branch = $branch`,
+            {
+              depGraphUniqueId,
+              depId,
+              depName: `Placeholder for ${depId}`,
+              branch: componentBranch,
+            },
           );
 
           // Create the new dependency relationship
           await this.kuzuClient.executeQuery(
-            'MATCH (c:Component {id: $cId}), (d:Component {id: $dId}) MERGE (c)-[:DEPENDS_ON]->(d)',
-            { cId: componentId, dId: depId },
+            'MATCH (c:Component {graph_unique_id: $cId}), (d:Component {graph_unique_id: $dId}) MERGE (c)-[:DEPENDS_ON]->(d)',
+            { cId: graphUniqueId, dId: depGraphUniqueId },
           );
         }
       }
@@ -673,7 +682,7 @@ export class ComponentRepository {
       CALL k_core_decomposition('${globalProjectedGraphName}') YIELD node AS algo_component_node, k_degree
       WITH algo_component_node, k_degree
       WHERE k_degree >= ${kValue}
-      MATCH (repo:Repository {id: '${escapedRepositoryNodeId}'})-[:HAS_COMPONENT]->(algo_component_node)
+      MATCH (repo:Repository {id: '${escapedRepositoryNodeId}'})<-[:PART_OF]-(algo_component_node)
       RETURN algo_component_node AS component, k_degree
     `;
 
@@ -746,7 +755,7 @@ export class ComponentRepository {
     const query = `
       CALL louvain(${louvainCallParams}) YIELD node AS algo_component_node, louvain_id 
       WITH algo_component_node, louvain_id
-      MATCH (repo:Repository {id: '${escapedRepositoryNodeId}'})-[:HAS_COMPONENT]->(algo_component_node)
+      MATCH (repo:Repository {id: '${escapedRepositoryNodeId}'})<-[:PART_OF]-(algo_component_node)
       RETURN algo_component_node AS component, louvain_id AS community_id 
       ORDER BY community_id, algo_component_node.name 
     `;
@@ -838,7 +847,7 @@ export class ComponentRepository {
     const query = `
       CALL page_rank(${callParams}) YIELD node AS algo_component_node, rank
       WITH algo_component_node, rank
-      MATCH (repo:Repository {id: '${escapedRepositoryNodeId}'})-[:HAS_COMPONENT]->(algo_component_node)
+      MATCH (repo:Repository {id: '${escapedRepositoryNodeId}'})<-[:PART_OF]-(algo_component_node)
       RETURN algo_component_node AS component, rank
       ORDER BY rank DESC
     `;
@@ -912,7 +921,7 @@ export class ComponentRepository {
     const query = `
       CALL strongly_connected_components(${sccCallParams}) YIELD node AS algo_component_node, component_id AS group_id 
       WITH algo_component_node, group_id
-      MATCH (repo:Repository {id: '${escapedRepositoryNodeId}'})-[:HAS_COMPONENT]->(algo_component_node)
+      MATCH (repo:Repository {id: '${escapedRepositoryNodeId}'})<-[:PART_OF]-(algo_component_node)
       RETURN algo_component_node AS component, group_id
       ORDER BY group_id, algo_component_node.name
     `;
@@ -985,7 +994,7 @@ export class ComponentRepository {
     const query = `
       CALL weakly_connected_components(${wccCallParams}) YIELD node AS algo_component_node, component_id AS group_id
       WITH algo_component_node, group_id
-      MATCH (repo:Repository {id: '${escapedRepositoryNodeId}'})-[:HAS_COMPONENT]->(algo_component_node)
+      MATCH (repo:Repository {id: '${escapedRepositoryNodeId}'})<-[:PART_OF]-(algo_component_node)
       RETURN algo_component_node AS component, group_id
       ORDER BY group_id, algo_component_node.name
     `;
@@ -1206,7 +1215,7 @@ export class ComponentRepository {
             c.id = '${escapedLogicalId}',        
             c.branch = '${escapedComponentBranch}',
             c.updated_at = timestamp('${kuzuTimestamp}')
-        MERGE (repo)-[:HAS_COMPONENT]->(c)
+        MERGE (c)-[:PART_OF]->(repo)
         RETURN c`;
 
     try {
@@ -1234,7 +1243,7 @@ export class ComponentRepository {
             MATCH (repoDep:Repository {id: $repositoryNodeId})
             MERGE (dep:Component {graph_unique_id: $depGraphUniqueId})
             ON CREATE SET dep.id = $depId, dep.branch = $depBranch, dep.name = $depName, dep.kind = $depKind, dep.status = $depStatus, dep.repository = $repositoryNodeId, dep.created_at = $depCreatedAt, dep.updated_at = $depUpdatedAt
-            MERGE (repoDep)-[:HAS_COMPONENT]->(dep)`;
+            MERGE (dep)-[:PART_OF]->(repoDep)`;
 
         await this.kuzuClient.executeQuery(ensureDepNodeQuery, {
           repositoryNodeId,

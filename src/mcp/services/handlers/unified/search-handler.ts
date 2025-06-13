@@ -185,38 +185,26 @@ async function executeFullTextSearch(
   clientProjectRoot: string,
   limit: number,
   conjunctive: boolean,
-  memoryService: any,
-  context: any,
+  memoryService: MemoryService,
+  context: EnrichedRequestHandlerExtra,
 ): Promise<SearchResult[]> {
   const results: SearchResult[] = [];
 
-  // Check if FTS extension is installed and loaded
-  await ensureFtsExtensionLoaded(context, clientProjectRoot, memoryService);
-
-  // For each entity type, execute FTS query
   for (const entityType of entityTypes) {
-    // Convert to proper table name (capitalized)
-    const tableName = entityType.charAt(0).toUpperCase() + entityType.slice(1);
-    const indexName = `${entityType}_fts_index`;
-
     try {
-      // Get searchable properties for this entity type
-      const searchableProps = getSearchableProperties(entityType);
-
-      // Ensure FTS index exists for this entity type
-      await ensureFtsIndexExists(
+      await ensureExtensionsAndFtsIndex(
+        context,
         memoryService,
+        clientProjectRoot,
         repository,
         branch,
-        clientProjectRoot,
-        tableName,
-        indexName,
-        searchableProps,
-        context,
+        entityType,
       );
 
-      // Execute the FTS query
-      const kuzuClient = await memoryService.getKuzuClient(clientProjectRoot);
+      const tableName = entityType.charAt(0).toUpperCase() + entityType.slice(1);
+      const indexName = `${entityType}_fts_index`;
+      const kuzuClient = await memoryService.getKuzuClient(context, clientProjectRoot);
+
       const entityResults = await kuzuClient.executeQuery(
         `
         CALL QUERY_FTS_INDEX('${tableName}', '${indexName}', $query, conjunctive := ${conjunctive})
@@ -226,9 +214,9 @@ async function executeFullTextSearch(
         LIMIT ${limit}
         `,
         { query },
+        { timeout: 5000 },
       );
 
-      // Transform results to standard format
       const transformedResults = entityResults.map((result: any) => ({
         id: result.node.id,
         type: entityType,
@@ -240,152 +228,84 @@ async function executeFullTextSearch(
 
       results.push(...transformedResults);
     } catch (error) {
-      context.logger.warn(`Error searching ${entityType}`, { error: (error as Error).message });
-      // Continue with other entity types even if one fails
+      const errorMessage = (error as Error).message;
+      // KuzuDB can throw an error if the FTS index doesn't find any matches.
+      // We should only log a warning and continue, not treat it as a fatal error.
+      if (!errorMessage.includes('does not find any match')) {
+        context.logger.warn(`Error searching ${entityType}: ${errorMessage}`);
+        // Optionally re-throw if it's not a "not found" error
+        // throw error;
+      }
     }
   }
 
-  // Sort by score and limit
   return results.sort((a, b) => b.score - a.score).slice(0, limit);
 }
 
-/**
- * Ensure the FTS extension is loaded
- */
-async function ensureFtsExtensionLoaded(
-  mcpContext: EnrichedRequestHandlerExtra,
-  clientProjectRoot: string,
+async function ensureExtensionsAndFtsIndex(
+  context: EnrichedRequestHandlerExtra,
   memoryService: MemoryService,
-): Promise<boolean> {
-  try {
-    const kuzuClient = await memoryService.getKuzuClient(mcpContext, clientProjectRoot);
-
-    // Try to check if FTS extension is already loaded
-    try {
-      const checkQuery = `CALL show_extensions() RETURN name, loaded;`;
-      const checkResult = await kuzuClient.executeQuery(checkQuery);
-
-      // Look for FTS extension in the results
-      const ftsExtension = checkResult.find((ext: any) => ext.name === 'FTS');
-
-      if (!ftsExtension) {
-        // Extension not found, try to install and load it
-        mcpContext.logger.info('FTS extension not found, installing...');
-        await kuzuClient.executeQuery('INSTALL FTS;');
-        await kuzuClient.executeQuery('LOAD FTS;');
-        mcpContext.logger.info('FTS extension installed and loaded');
-        return true;
-      }
-
-      if (!ftsExtension.loaded) {
-        // Extension found but not loaded
-        mcpContext.logger.info('FTS extension found but not loaded, loading...');
-        await kuzuClient.executeQuery('LOAD FTS;');
-        mcpContext.logger.info('FTS extension loaded');
-      } else {
-        mcpContext.logger.debug('FTS extension already loaded');
-      }
-
-      return true;
-    } catch (checkError: any) {
-      // If show_extensions doesn't exist, just try to install and load FTS directly
-      if (checkError.message && checkError.message.includes('show_extensions does not exist')) {
-        mcpContext.logger.info('show_extensions not available, trying direct install/load');
-        try {
-          await kuzuClient.executeQuery('INSTALL FTS;');
-          await kuzuClient.executeQuery('LOAD FTS;');
-          mcpContext.logger.info('FTS extension installed and loaded');
-          return true;
-        } catch (directError: any) {
-          // If install fails because it's already installed, try just loading
-          if (directError.message && directError.message.includes('already installed')) {
-            try {
-              await kuzuClient.executeQuery('LOAD FTS;');
-              mcpContext.logger.info('FTS extension loaded');
-              return true;
-            } catch (loadError: any) {
-              // If load fails because it's already loaded, that's fine
-              if (loadError.message && loadError.message.includes('already loaded')) {
-                mcpContext.logger.info('FTS extension already loaded');
-                return true;
-              }
-              throw loadError;
-            }
-          }
-          throw directError;
-        }
-      }
-      throw checkError;
-    }
-  } catch (error) {
-    mcpContext.logger.error(`Failed to ensure FTS extension: ${error}`);
-    return false;
-  }
-}
-
-/**
- * Ensure FTS index exists for the entity type
- */
-async function ensureFtsIndexExists(
-  memoryService: any,
+  clientProjectRoot: string,
   repository: string,
   branch: string,
-  clientProjectRoot: string,
-  tableName: string,
-  indexName: string,
-  properties: string[],
-  context: any,
-): Promise<void> {
+  entityType: string,
+) {
+  const kuzuClient = await memoryService.getKuzuClient(context, clientProjectRoot);
+
+  // 1. Ensure extensions are loaded
+  const extensions = ['FTS', 'algo'];
+  for (const ext of extensions) {
+    try {
+      await kuzuClient.executeQuery(`INSTALL ${ext};`);
+      context.logger.info(`${ext} extension installed.`);
+    } catch (e) {
+      context.logger.warn(`${ext} extension likely already installed.`);
+    }
+    await kuzuClient.executeQuery(`LOAD ${ext};`);
+    context.logger.info(`${ext} extension loaded.`);
+  }
+
+  // 2. Ensure FTS index exists
+  const tableName = entityType.charAt(0).toUpperCase() + entityType.slice(1);
+  const indexName = `${entityType}_fts_index`;
+  const searchableProps = getSearchableProperties(entityType);
+
   try {
-    // Check if index already exists
-    const indexExists = await checkIndexExists(
-      memoryService,
-      repository,
-      branch,
-      clientProjectRoot,
-      tableName,
-      indexName,
+    // First check if the index exists
+    const result = await kuzuClient.executeQuery(`CALL SHOW_INDEXES() RETURN *`);
+
+    const indexExists = result.some(
+      (row: any) =>
+        row.table_name === tableName && row.index_name === indexName && row.index_type === 'FTS',
     );
 
     if (!indexExists) {
-      // Create the index
-      const propsArray = JSON.stringify(properties);
-      const kuzuClient = await memoryService.getKuzuClient(clientProjectRoot);
+      const propsArray = JSON.stringify(searchableProps);
       await kuzuClient.executeQuery(
         `CALL CREATE_FTS_INDEX('${tableName}', '${indexName}', ${propsArray}, stemmer := 'english');`,
       );
-
-      context.logger.info(`Created FTS index for ${tableName}`, { indexName, properties });
+      context.logger.info(`Created FTS index for ${tableName}`, { indexName, searchableProps });
     }
   } catch (error) {
     context.logger.warn(`Could not ensure FTS index for ${tableName}`, {
       error: (error as Error).message,
     });
-    throw error;
-  }
-}
-
-/**
- * Check if an FTS index exists
- */
-async function checkIndexExists(
-  memoryService: any,
-  repository: string,
-  branch: string,
-  clientProjectRoot: string,
-  tableName: string,
-  indexName: string,
-): Promise<boolean> {
-  try {
-    const kuzuClient = await memoryService.getKuzuClient(clientProjectRoot);
-    const result = await kuzuClient.executeQuery(
-      `CALL SHOW_INDEXES() YIELD tableName, indexName, indexType WHERE tableName = '${tableName}' AND indexName = '${indexName}' AND indexType = 'FTS' RETURN COUNT(*) as count`,
-    );
-
-    return result[0]?.count > 0;
-  } catch (error) {
-    // If we can't check, assume it doesn't exist
-    return false;
+    // If we can't check, we assume it doesn't exist and try to create it.
+    try {
+      const propsArray = JSON.stringify(searchableProps);
+      await kuzuClient.executeQuery(
+        `CALL CREATE_FTS_INDEX('${tableName}', '${indexName}', ${propsArray}, stemmer := 'english');`,
+      );
+      context.logger.info(`Created FTS index for ${tableName}`, { indexName, searchableProps });
+    } catch (creationError) {
+      context.logger.error(`Failed to create FTS index for ${tableName}`, {
+        error: (creationError as Error).message,
+      });
+      // Don't throw if index already exists
+      if (!(creationError as Error).message.includes('already exists')) {
+        throw creationError;
+      }
+    }
   }
 }
 

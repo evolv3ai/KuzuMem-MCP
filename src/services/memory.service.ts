@@ -5,13 +5,13 @@ import { RepositoryProvider } from '../db/repository-provider';
 import * as toolSchemas from '../mcp/schemas/unified-tool-schemas';
 import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
 import {
-    Component,
-    ComponentStatus,
-    Context,
-    Decision,
-    Metadata,
-    Repository,
-    Rule,
+  Component,
+  ComponentStatus,
+  Context,
+  Decision,
+  Metadata,
+  Repository,
+  Rule,
 } from '../types';
 import { Mutex } from '../utils/mutex';
 
