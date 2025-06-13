@@ -598,9 +598,19 @@ export class KuzuDBClient {
       await this.connection.query('BEGIN TRANSACTION');
 
       const txContext = {
-        executeQuery: (query: string, params?: Record<string, any>): Promise<any> => {
+        executeQuery: async (query: string, params?: Record<string, any>): Promise<any> => {
           logger.debug({ query, params }, 'Executing query in transaction');
-          return this.connection.query(query, params);
+
+          // When parameters are provided, use prepared statements to avoid the
+          // "progressCallback must be a function" error that occurs when
+          // passing a params object directly to connection.query().
+          if (params && Object.keys(params).length > 0) {
+            const prepared = await this.connection.prepare(query);
+            return this.connection.execute(prepared, params);
+          }
+
+          // No params: run the query directly.
+          return this.connection.query(query);
         },
       };
 

@@ -764,31 +764,17 @@ export async function shortestPathOp(
 
   // Don't use projected graph for shortest path - query directly
   try {
-    // Use simple variable-length path query with correct graph_unique_id format
+    // Use path binding with variable-length relationships as shown in KuzuDB documentation
     const startGraphId = `${params.repository}:${params.branch}:${startNodeId}`;
     const endGraphId = `${params.repository}:${params.branch}:${endNodeId}`;
 
-    // First check if nodes exist
-    const checkNodesQuery = `
-      MATCH (start:Component {graph_unique_id: $startGraphId})
-      MATCH (end:Component {graph_unique_id: $endGraphId})
-      RETURN start.id AS startId, end.id AS endId
-    `;
-
-    const nodesCheck = await kuzuClient.executeQuery(checkNodesQuery, {
-      startGraphId,
-      endGraphId,
-    });
-
-    logger.info(`[graph.ops] Nodes existence check:`, {
-      nodesExist: nodesCheck?.length > 0,
-      nodes: nodesCheck?.[0],
-    });
-
+    // Use the correct SHORTEST syntax from KuzuDB documentation
     const shortestPathQuery = `
-      MATCH p = (start:Component {graph_unique_id: $startGraphId})-[:DEPENDS_ON*1..10]->(end:Component {graph_unique_id: $endGraphId})
-      RETURN p, length(p) AS path_length
-      ORDER BY path_length
+      MATCH p = (start:Component)-[:DEPENDS_ON*1..10]->(:Component)
+      WHERE start.graph_unique_id = $startGraphId 
+        AND (nodes(p)[-1]).graph_unique_id = $endGraphId
+      RETURN nodes(p) AS path_nodes, length(p) AS path_length
+      ORDER BY path_length ASC
       LIMIT 1
     `;
 
@@ -810,19 +796,19 @@ export async function shortestPathOp(
 
     if (result && result.length > 0) {
       const pathResult = result[0];
-      const path = pathResult.p; // KuzuDB returns path as 'p'
+      const pathNodes = pathResult.path_nodes; // nodes(p) returns array of nodes
       const pathLength = pathResult.path_length || 0;
 
-      // Extract nodes and relationships from KuzuDB path object
+      // pathNodes should already be an array from nodes(p) function
       let pathData: any[] = [];
-      if (path && typeof path === 'object') {
-        // KuzuDB path structure: {_NODES: [...], _RELS: [...]}
-        if (path._NODES && Array.isArray(path._NODES)) {
-          pathData = path._NODES;
-        } else if (path.nodes && Array.isArray(path.nodes)) {
-          pathData = path.nodes;
-        } else if (Array.isArray(path)) {
-          pathData = path;
+      if (Array.isArray(pathNodes)) {
+        pathData = pathNodes;
+      } else if (pathNodes && typeof pathNodes === 'object') {
+        // Fallback: try to extract from object structure
+        if (pathNodes._NODES && Array.isArray(pathNodes._NODES)) {
+          pathData = pathNodes._NODES;
+        } else if (pathNodes.nodes && Array.isArray(pathNodes.nodes)) {
+          pathData = pathNodes.nodes;
         }
       }
 
@@ -855,45 +841,15 @@ export async function shortestPathOp(
       error,
     });
 
-    // Return fallback result - try simple node existence check
-    try {
-      const startGraphId = `${params.repository}:${params.branch}:${startNodeId}`;
-      const endGraphId = `${params.repository}:${params.branch}:${endNodeId}`;
-
-      const fallbackQuery = `
-        MATCH (start:Component {graph_unique_id: $startGraphId})
-        MATCH (end:Component {graph_unique_id: $endGraphId})
-        RETURN start, end
-      `;
-
-      const fallbackResult = await kuzuClient.executeQuery(fallbackQuery, {
-        startGraphId,
-        endGraphId,
-      });
-
-      const nodesExist = fallbackResult && fallbackResult.length > 0;
-
-      return {
-        type: 'shortest-path',
-        pathFound: false,
-        path: [],
-        pathLength: 0,
-        startNodeId,
-        endNodeId,
-        projectedGraphName: params.projectedGraphName,
-        error: nodesExist ? `No path found between nodes` : `One or both nodes do not exist`,
-      };
-    } catch (fallbackError) {
-      return {
-        type: 'shortest-path',
-        pathFound: false,
-        path: [],
-        pathLength: 0,
-        startNodeId,
-        endNodeId,
-        projectedGraphName: params.projectedGraphName,
-        error: errorMessage,
-      };
-    }
+    return {
+      type: 'shortest-path',
+      pathFound: false,
+      path: [],
+      pathLength: 0,
+      startNodeId,
+      endNodeId,
+      projectedGraphName: params.projectedGraphName,
+      error: errorMessage,
+    };
   }
 }

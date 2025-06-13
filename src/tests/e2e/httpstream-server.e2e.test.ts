@@ -18,8 +18,9 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
   let sessionId: string;
   const TEST_REPO = 'test-repo';
   const TEST_BRANCH = 'main';
-  const SERVER_PORT = 3002; // Different port for testing
-  const SERVER_URL = `http://localhost:${SERVER_PORT}`;
+  // Will be assigned once we find a free port
+  let SERVER_PORT: number;
+  let SERVER_URL: string;
 
   // Helper to send HTTP request to server
   const sendHttpRequest = async (method: string, params: any): Promise<any> => {
@@ -121,39 +122,76 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     testProjectRoot = await mkdtemp(join(tmpdir(), 'kuzumem-httpstream-e2e-'));
     console.log(`Test project root: ${testProjectRoot}`);
 
-    // Start the server using the compiled JS file
-    const serverPath = join(__dirname, '../../..', 'dist/src/mcp-httpstream-server.js');
-    serverProcess = spawn('node', [serverPath], {
-      stdio: 'pipe',
-      env: {
-        ...process.env,
-        NODE_ENV: 'test',
-        HTTP_STREAM_PORT: String(SERVER_PORT),
-      },
-    });
+    // Helper to spawn the HTTP-stream server and wait until it is ready.
+    const startServer = async (): Promise<void> => {
+      const pickRandomPort = () => 30000 + Math.floor(Math.random() * 1000);
 
-    // Capture stderr for debugging
-    serverProcess.stderr!.on('data', (data) => {
-      console.error(`Server stderr: ${data}`);
-    });
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        SERVER_PORT = pickRandomPort();
+        SERVER_URL = `http://localhost:${SERVER_PORT}`;
 
-    // Wait for server to be ready
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Server startup timeout'));
-      }, 30000);
+        const serverPath = join(__dirname, '../../..', 'src/mcp-httpstream-server.ts');
+        serverProcess = spawn('npx', ['tsx', serverPath], {
+          stdio: 'pipe',
+          env: {
+            ...process.env,
+            NODE_ENV: 'test',
+            HTTP_STREAM_PORT: String(SERVER_PORT),
+            LOG_LEVEL: 'info',
+          },
+        });
 
-      const readyHandler = (data: Buffer) => {
-        const output = data.toString();
-        if (output.includes(`MCP HTTP Streaming Server running at`)) {
-          clearTimeout(timeout);
-          serverProcess.stderr!.off('data', readyHandler);
-          resolve();
+        let resolved = false;
+
+        // eslint-disable-next-line no-await-in-loop
+        const started = await new Promise<boolean>((resolve) => {
+          const timeout = setTimeout(() => {
+            if (!resolved) {
+              resolve(false);
+            }
+          }, 15000);
+
+          const handleData = (data: Buffer) => {
+            const output = data.toString();
+            if (output.includes('EADDRINUSE')) {
+              // Port in use – abort and retry
+              clearTimeout(timeout);
+              serverProcess.kill();
+              resolve(false);
+            }
+
+            if (output.includes('MCP HTTP Streaming Server running at')) {
+              clearTimeout(timeout);
+              serverProcess.stderr!.off('data', handleData);
+              serverProcess.stdout!.off('data', handleData);
+              resolved = true;
+              resolve(true);
+            }
+          };
+
+          serverProcess.stderr!.on('data', handleData);
+          serverProcess.stdout!.on('data', handleData);
+
+          // Capture unexpected error events
+          serverProcess.on('error', () => {
+            clearTimeout(timeout);
+            resolve(false);
+          });
+        });
+
+        if (started) {
+          console.log(`HTTP Stream server started on port ${SERVER_PORT} (attempt ${attempt})`);
+          return;
         }
-      };
 
-      serverProcess.stderr!.on('data', readyHandler);
-    });
+        console.warn(`Retrying HTTP Stream server startup (attempt ${attempt}/5)…`);
+      }
+
+      throw new Error('Failed to start HTTP Stream server after multiple attempts');
+    };
+
+    // Actually start (with retries)
+    await startServer();
 
     // Initialize the connection - need to do this manually to extract session ID from headers
     const initHeaders: Record<string, string> = {
