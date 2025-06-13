@@ -37,28 +37,28 @@ export class DecisionRepository {
       rawDecision.graph_unique_id?.toString() ||
       formatGraphUniqueId(repositoryName, branch, logicalId);
 
-    let decisionDate = rawDecision.date;
-    if (rawDecision.date instanceof Date) {
-      decisionDate = rawDecision.date.toISOString().split('T')[0];
-    } else if (typeof rawDecision.date === 'number') {
-      decisionDate = new Date(rawDecision.date).toISOString().split('T')[0];
+    let decisionDate = rawDecision.dateCreated || rawDecision.date;
+    if (decisionDate instanceof Date) {
+      decisionDate = decisionDate.toISOString().split('T')[0];
+    } else if (typeof decisionDate === 'number') {
+      decisionDate = new Date(decisionDate).toISOString().split('T')[0];
     } else if (
-      typeof rawDecision.date === 'object' &&
-      rawDecision.date !== null &&
-      'year' in rawDecision.date &&
-      'month' in rawDecision.date &&
-      'day' in rawDecision.date
+      typeof decisionDate === 'object' &&
+      decisionDate !== null &&
+      'year' in decisionDate &&
+      'month' in decisionDate &&
+      'day' in decisionDate
     ) {
-      decisionDate = `${String(rawDecision.date.year).padStart(4, '0')}-${String(rawDecision.date.month).padStart(2, '0')}-${String(rawDecision.date.day).padStart(2, '0')}`;
+      decisionDate = `${String(decisionDate.year).padStart(4, '0')}-${String(decisionDate.month).padStart(2, '0')}-${String(decisionDate.day).padStart(2, '0')}`;
     }
 
     return {
       id: logicalId,
       graph_unique_id: graphUniqueId,
-      name: rawDecision.name,
-      context: rawDecision.context,
+      name: rawDecision.title || rawDecision.name,
+      context: rawDecision.rationale || rawDecision.context,
       date: decisionDate,
-      branch: rawDecision.branch,
+      branch,
       repository: `${repositoryName}:${branch}`,
       status: rawDecision.status,
       created_at: rawDecision.created_at ? new Date(rawDecision.created_at) : new Date(),
@@ -76,7 +76,7 @@ export class DecisionRepository {
     endDate: string,
   ): Promise<Decision[]> {
     const query = `
-      MATCH (repo:Repository {id: $repositoryNodeId})-[:HAS_DECISION]->(d:Decision)
+      MATCH (repo:Repository {id: $repositoryNodeId})<-[:PART_OF]-(d:Decision)
       WHERE d.branch = $decisionBranch AND d.date >= date($startDate) AND d.date <= date($endDate) 
       RETURN d ORDER BY d.date DESC
     `;
@@ -122,24 +122,19 @@ export class DecisionRepository {
     const now = new Date().toISOString();
 
     const query = `
-      MERGE (d:Decision {graph_unique_id: $graphUniqueId})
+      MERGE (d:Decision {id: $id, graph_unique_id: $graphUniqueId})
       ON CREATE SET
-        d.id = $id,
-        d.name = $name,
-        d.date = $date,
-        d.context = $context,
+        d.title = $name,
+        d.dateCreated = $date,
+        d.rationale = $context,
         d.status = $status,
-        d.branch = $branch,
-        d.repository = $repository,
         d.created_at = $now,
         d.updated_at = $now
       ON MATCH SET
-        d.name = $name,
-        d.date = $date,
-        d.context = $context,
+        d.title = $name,
+        d.dateCreated = $date,
+        d.rationale = $context,
         d.status = $status,
-        d.branch = $branch,
-        d.repository = $repository,
         d.updated_at = $now
       RETURN d
     `;
@@ -151,8 +146,6 @@ export class DecisionRepository {
       date,
       context: decisionContext,
       status: status || 'proposed',
-      branch,
-      repository: repositoryNodeId,
       now,
     };
 
@@ -202,9 +195,9 @@ export class DecisionRepository {
    */
   async getAllDecisions(repositoryNodeId: string, decisionBranch: string): Promise<Decision[]> {
     const query = `
-      MATCH (repo:Repository {id: $repositoryNodeId})-[:HAS_DECISION]->(d:Decision)
+      MATCH (repo:Repository {id: $repositoryNodeId})<-[:PART_OF]-(d:Decision)
       WHERE d.branch = $decisionBranch
-      RETURN d ORDER BY d.date DESC, d.name ASC
+      RETURN d ORDER BY d.dateCreated DESC, d.title ASC
     `;
     const params = { repositoryNodeId, decisionBranch };
     try {

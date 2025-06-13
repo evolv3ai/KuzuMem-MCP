@@ -18,6 +18,7 @@ describe('MCP Stdio Server E2E Tests', () => {
   let messageId = 1;
   const TEST_REPO = 'test-repo';
   const TEST_BRANCH = 'main';
+  const testSessionId = `e2e-session-${Date.now()}`;
 
   // Helper to send JSON-RPC message to server
   const sendMessage = (message: RpcMessage): Promise<RpcMessage> => {
@@ -126,6 +127,7 @@ describe('MCP Stdio Server E2E Tests', () => {
       method: 'initialize',
       params: {
         protocolVersion: '1.0.0',
+        sessionId: testSessionId,
         capabilities: {},
         clientInfo: {
           name: 'E2E Test Client',

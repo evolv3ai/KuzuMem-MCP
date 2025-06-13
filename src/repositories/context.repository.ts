@@ -309,9 +309,8 @@ export class ContextRepository {
     const now = new Date().toISOString();
 
     const query = `
-      MERGE (c:Context {graph_unique_id: $graphUniqueId})
+      MERGE (c:Context {id: $id, graph_unique_id: $graphUniqueId})
       ON CREATE SET
-        c.id = $id,
         c.summary = $summary,
         c.agent = $agent,
         c.branch = $branch,

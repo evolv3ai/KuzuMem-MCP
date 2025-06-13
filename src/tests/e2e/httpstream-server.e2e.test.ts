@@ -96,7 +96,10 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
   const callTool = async (toolName: string, params: any): Promise<any> => {
     const response = await sendHttpRequest('tools/call', {
       name: toolName,
-      arguments: params,
+      arguments: {
+        ...params,
+        clientProjectRoot: testProjectRoot,
+      },
     });
 
     if (response.result?.content?.[0]?.text) {
@@ -254,7 +257,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should initialize memory bank', async () => {
       const result = await callTool('memory-bank', {
         operation: 'init',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
       });
@@ -268,7 +270,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should get metadata', async () => {
       const result = await callTool('memory-bank', {
         operation: 'get-metadata',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
       });
@@ -289,7 +290,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should update metadata', async () => {
       const params = {
         operation: 'update-metadata',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         metadata: {
@@ -323,7 +323,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       const result = await callTool('entity', {
         operation: 'create',
         entityType: 'component',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         id: 'comp-TestComponent',
@@ -345,7 +344,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       const result = await callTool('entity', {
         operation: 'create',
         entityType: 'decision',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         id: 'dec-20241209-test-decision',
@@ -367,7 +365,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       const result = await callTool('entity', {
         operation: 'create',
         entityType: 'rule',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         id: 'rule-test-rule',
@@ -390,7 +387,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       const result = await callTool('entity', {
         operation: 'create',
         entityType: 'file',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         id: 'file-test-file',
@@ -412,7 +408,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       const result = await callTool('entity', {
         operation: 'create',
         entityType: 'tag',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         id: 'tag-test-tag',
@@ -435,7 +430,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should list all labels', async () => {
       const result = await callTool('introspect', {
         query: 'labels',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
       });
@@ -449,7 +443,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should count nodes by label', async () => {
       const result = await callTool('introspect', {
         query: 'count',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         target: 'Component',
@@ -464,7 +457,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should get node properties', async () => {
       const result = await callTool('introspect', {
         query: 'properties',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         target: 'Component',
@@ -487,7 +479,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should list indexes', async () => {
       const result = await callTool('introspect', {
         query: 'indexes',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
       });
@@ -502,7 +493,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should update context', async () => {
       const result = await callTool('context', {
         operation: 'update',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         agent: 'e2e-test',
@@ -520,7 +510,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should query context', async () => {
       const result = await callTool('query', {
         type: 'context',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         latest: true,
@@ -536,7 +525,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should query entities', async () => {
       const result = await callTool('query', {
         type: 'entities',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         label: 'Component',
@@ -553,7 +541,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should query history', async () => {
       const result = await callTool('query', {
         type: 'history',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         itemId: 'comp-TestComponent',
@@ -569,7 +556,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should query governance', async () => {
       const result = await callTool('query', {
         type: 'governance',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         componentId: 'comp-TestComponent',
@@ -587,7 +573,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should associate file with component', async () => {
       const result = await callTool('associate', {
         type: 'file-component',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         fileId: 'file-test-file',
@@ -603,7 +588,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should tag an item', async () => {
       const result = await callTool('associate', {
         type: 'tag-item',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         itemId: 'comp-TestComponent',
@@ -619,10 +603,9 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
 
   describe('Tool 7: analyze', () => {
     // Skip these tests for now - need to create graph projections first
-    it.skip('should run PageRank analysis', async () => {
+    it('should run PageRank analysis', async () => {
       const result = await callTool('analyze', {
         type: 'pagerank',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         projectedGraphName: 'test-pagerank',
@@ -637,10 +620,9 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       });
     });
 
-    it.skip('should run k-core analysis', async () => {
+    it('should run k-core analysis', async () => {
       const result = await callTool('analyze', {
         type: 'k-core',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         projectedGraphName: 'test-kcore',
@@ -656,10 +638,9 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       });
     });
 
-    it.skip('should run Louvain community detection', async () => {
+    it('should run Louvain community detection', async () => {
       const result = await callTool('analyze', {
         type: 'louvain',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         projectedGraphName: 'test-louvain',
@@ -674,10 +655,9 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       });
     });
 
-    it.skip('should find shortest path', async () => {
+    it('should find shortest path', async () => {
       const result = await callTool('detect', {
         type: 'path',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         projectedGraphName: 'test-path',
@@ -700,7 +680,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       await callTool('entity', {
         operation: 'create',
         entityType: 'component',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         id: 'comp-ServiceA',
@@ -715,7 +694,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       await callTool('entity', {
         operation: 'create',
         entityType: 'component',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         id: 'comp-ServiceB',
@@ -730,7 +708,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       await callTool('entity', {
         operation: 'create',
         entityType: 'component',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         id: 'comp-ServiceC',
@@ -746,7 +723,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should detect islands', async () => {
       const result = await callTool('detect', {
         type: 'islands',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         projectedGraphName: 'test-islands',
@@ -764,7 +740,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should detect cycles', async () => {
       const result = await callTool('detect', {
         type: 'cycles',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         projectedGraphName: 'test-cycles',
@@ -782,7 +757,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should find path', async () => {
       const result = await callTool('detect', {
         type: 'path',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         projectedGraphName: 'test-path-detect',
@@ -803,7 +777,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should bulk import entities', async () => {
       const result = await callTool('bulk-import', {
         type: 'components',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         components: [
@@ -839,7 +812,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should perform full-text search across entities', async () => {
       const result = await callTool('search', {
         query: 'test component service',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         mode: 'fulltext',
@@ -869,7 +841,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should search across multiple entity types', async () => {
       const result = await callTool('search', {
         query: 'bulk decision',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         mode: 'fulltext',
@@ -889,7 +860,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should handle empty search results gracefully', async () => {
       const result = await callTool('search', {
         query: 'httpstream-nonexistent-term-xyz789',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         mode: 'fulltext',
@@ -910,7 +880,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     it('should verify all test data exists', async () => {
       const result = await callTool('query', {
         type: 'entities',
-        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         label: 'Component',
