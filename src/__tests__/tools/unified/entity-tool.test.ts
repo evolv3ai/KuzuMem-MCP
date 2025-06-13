@@ -199,10 +199,11 @@ describe('entity tool handler', () => {
         expect.objectContaining({
           id: 'file-auth-service-ts',
           name: 'auth.service.ts',
-          type: 'file',
           path: 'src/services/auth.service.ts',
-          language: 'typescript',
-          size_bytes: 5432,
+          size: 5432, // Updated to match File interface
+          mime_type: undefined,
+          content: undefined,
+          metrics: undefined,
         }),
       );
 

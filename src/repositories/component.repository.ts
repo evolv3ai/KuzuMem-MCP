@@ -121,28 +121,32 @@ export class ComponentRepository {
       relationshipTableNames?: string[];
     },
   ): Promise<{ path: Component[]; length: number; error?: string | null }> {
-    // Corrected return type
-    let relTypeString = '';
+    let relationshipPattern: string;
     if (params?.relationshipTypes && params.relationshipTypes.length > 0) {
       const sanitizedTypes = params.relationshipTypes
         .map((rt) => rt.replace(/[^a-zA-Z0-9_]/g, ''))
         .filter((rt) => rt.length > 0);
       if (sanitizedTypes.length > 0) {
-        relTypeString = ':' + sanitizedTypes.join('|');
+        relationshipPattern = `[e:${sanitizedTypes.join('|')}* SHORTEST]`;
+      } else {
+        // If provided types are empty strings after sanitization, traverse all.
+        relationshipPattern = `[* SHORTEST]`;
       }
+    } else {
+      // If no relationship types are provided, traverse all relationship types.
+      relationshipPattern = `[* SHORTEST]`;
     }
 
+    // Build direction arrows
     let arrowLeft = '-';
     let arrowRight = '->';
     if (params?.direction === 'INCOMING') {
-      arrowLeft = '<- '; // Added space for clarity in Cypher if needed
+      arrowLeft = '<-';
       arrowRight = '-';
     } else if (params?.direction === 'BOTH') {
       arrowLeft = '-';
       arrowRight = '-';
     }
-    // Kuzu's *shortest* path variant usually implies finding one path. Default hop [1..10] is reasonable.
-    const relationshipPattern = `[${relTypeString}* SHORTEST 1..10]`;
 
     const startGraphUniqueId = formatGraphUniqueId(repositoryName, startNodeBranch, startNodeId);
     const endGraphUniqueId = formatGraphUniqueId(repositoryName, startNodeBranch, endNodeId);
@@ -150,42 +154,62 @@ export class ComponentRepository {
     const escapedStartGraphUniqueId = this.escapeStr(startGraphUniqueId);
     const escapedEndGraphUniqueId = this.escapeStr(endGraphUniqueId);
 
-    // Standard Cypher for shortest path. Kuzu should support this.
-    // Using projectedGraphName here is tricky if it's not a Kuzu CALL algo(graphName)
-    // For now, assume the default graph contains the necessary data if projection isn't used by a CALL.
-    // If Kuzu's MATCH...RETURN path needs explicit graph context, this query would need to change significantly.
+    // Use KuzuDB shortest path syntax. A variable for the relationship (e.g., 'e')
+    // can only be used when specific relationship types are provided.
     const query = `
-      MATCH (startNode:Component {graph_unique_id: '${escapedStartGraphUniqueId}'}), 
-            (endNode:Component {graph_unique_id: '${escapedEndGraphUniqueId}'})
-      MATCH p = (startNode)${arrowLeft}${relationshipPattern}${arrowRight}(endNode)
-      RETURN p AS path ORDER BY length(p) LIMIT 1
-    `; // Added ORDER BY length(p) LIMIT 1 to ensure one shortest path
+      MATCH p = (startNode:Component)${arrowLeft}${relationshipPattern}${arrowRight}(endNode:Component)
+      WHERE startNode.graph_unique_id = '${escapedStartGraphUniqueId}' AND endNode.graph_unique_id = '${escapedEndGraphUniqueId}'
+      RETURN p AS path, length(p) AS path_length
+    `;
 
     console.error(`DEBUG: ComponentRepository.findShortestPath query: ${query}`);
 
     try {
       const result = await this.kuzuClient.executeQuery(query);
-      if (!result || typeof result.getAll !== 'function') {
-        console.warn(
-          `Query for findShortestPath from ${startNodeId} to ${endNodeId} returned invalid result type.`,
-        );
-        return { path: [], length: 0, error: 'Query returned invalid result type.' };
+      let rows: any[] = [];
+
+      // Handle both direct array results and object with getAll() method
+      if (Array.isArray(result)) {
+        rows = result;
+      } else if (result && typeof result.getAll === 'function') {
+        rows = await result.getAll();
+      } else if (result) {
+        // Handle cases where a single object might be returned
+        rows = [result];
       }
-      const rows = await result.getAll();
-      if (!rows || rows.length === 0 || !rows[0].path) {
+
+      if (rows.length === 0) {
         console.log(`DEBUG: No path found by query for ${startNodeId} -> ${endNodeId}`);
         return { path: [], length: 0, error: null }; // No path found is not an error, just empty result
       }
 
-      const kuzuPathObject = rows[0].path; // This is Kuzu's path structure
+      const row = rows[0];
+      const kuzuPathObject = row.path; // This is Kuzu's path structure
+      const pathLength = row.path_length || 0;
 
-      const nodes: Component[] = (kuzuPathObject._nodes || []).map((node: any) => ({
-        ...(node._properties || node), // Kuzu node properties might be under _properties
-        id: (node._properties || node).id,
-        graph_unique_id: undefined,
-      }));
+      // Extract nodes from the KuzuDB path structure
+      let nodes: Component[] = [];
 
-      const pathLength = (kuzuPathObject._rels || []).length;
+      if (kuzuPathObject && kuzuPathObject._NODES) {
+        nodes = kuzuPathObject._NODES.map((node: any) => ({
+          ...node, // KuzuDB path nodes should have all properties directly
+          id: node.id,
+          graph_unique_id: undefined, // Don't expose internal IDs
+        }));
+      } else if (kuzuPathObject && kuzuPathObject.nodes) {
+        nodes = kuzuPathObject.nodes.map((node: any) => ({
+          ...node,
+          id: node.id,
+          graph_unique_id: undefined,
+        }));
+      } else if (Array.isArray(kuzuPathObject)) {
+        // Fallback: if path is returned as array of nodes
+        nodes = kuzuPathObject.map((node: any) => ({
+          ...node,
+          id: node.id,
+          graph_unique_id: undefined,
+        }));
+      }
 
       return { path: nodes, length: pathLength, error: null };
     } catch (error: any) {
@@ -276,8 +300,10 @@ export class ComponentRepository {
     try {
       await this.kuzuClient.executeQuery('BEGIN TRANSACTION');
 
-      // Simplified MERGE query - include id in MERGE for KuzuDB
+      // Atomic MERGE query that includes PART_OF relationship creation
       const upsertNodeQuery = `
+        MERGE (repo:Repository {id: $repository})
+        ON CREATE SET repo.name = $repository, repo.created_at = $now
         MERGE (c:Component {id: $componentId, graph_unique_id: $graphUniqueId})
         ON CREATE SET
           c.name = $name,
@@ -294,6 +320,7 @@ export class ComponentRepository {
           c.branch = $branch,
           c.repository = $repository,
           c.updated_at = $now
+        MERGE (c)-[:PART_OF]->(repo)
       `;
       await this.kuzuClient.executeQuery(upsertNodeQuery, {
         graphUniqueId,
@@ -305,12 +332,6 @@ export class ComponentRepository {
         repository: repositoryNodeId,
         now,
       });
-
-      // Attach to repository
-      await this.kuzuClient.executeQuery(
-        'MATCH (repo:Repository {id: $repoId}), (c:Component {graph_unique_id: $graphUniqueId}) MERGE (c)-[:PART_OF]->(repo)',
-        { repoId: repositoryNodeId, graphUniqueId },
-      );
 
       // Handle dependencies
       if (component.depends_on && component.depends_on.length > 0) {
@@ -1198,7 +1219,8 @@ export class ComponentRepository {
     const escapedComponentBranch = this.escapeStr(componentBranch);
 
     const upsertNodeQuery = `
-        MATCH (repo:Repository {id: '${this.escapeStr(repositoryNodeId)}'}) 
+        MERGE (repo:Repository {id: '${this.escapeStr(repositoryNodeId)}'})
+        ON CREATE SET repo.name = '${this.escapeStr(repositoryNodeId)}', repo.created_at = timestamp('${kuzuTimestamp}')
         MERGE (c:Component {graph_unique_id: '${escapedGraphUniqueId}'})
         ON CREATE SET 
             c.id = '${escapedLogicalId}',
@@ -1240,7 +1262,8 @@ export class ComponentRepository {
         const escapedDepGraphUniqueId = this.escapeStr(depGraphUniqueId);
 
         const ensureDepNodeQuery = `
-            MATCH (repoDep:Repository {id: $repositoryNodeId})
+            MERGE (repoDep:Repository {id: $repositoryNodeId})
+            ON CREATE SET repoDep.name = $repositoryNodeId, repoDep.created_at = $depCreatedAt
             MERGE (dep:Component {graph_unique_id: $depGraphUniqueId})
             ON CREATE SET dep.id = $depId, dep.branch = $depBranch, dep.name = $depName, dep.kind = $depKind, dep.status = $depStatus, dep.repository = $repositoryNodeId, dep.created_at = $depCreatedAt, dep.updated_at = $depUpdatedAt
             MERGE (dep)-[:PART_OF]->(repoDep)`;
