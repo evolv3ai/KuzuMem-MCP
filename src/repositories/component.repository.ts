@@ -128,7 +128,7 @@ export class ComponentRepository {
         .map((rt) => rt.replace(/[^a-zA-Z0-9_]/g, ''))
         .filter((rt) => rt.length > 0);
       if (sanitizedTypes.length > 0) {
-        relTypeString = ':' + sanitizedTypes.join('|:');
+        relTypeString = ':' + sanitizedTypes.join('|');
       }
     } else {
       // Default to DEPENDS_ON if no specific relationship types provided
