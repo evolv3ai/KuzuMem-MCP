@@ -31,37 +31,39 @@ export class TagRepository {
   ): Promise<Tag | null> {
     const now = new Date();
 
-    // Build query conditionally based on whether repository is provided
-    let query: string;
-    let queryParams: Record<string, any>;
-
     if (tagData.repository) {
-      // Atomic query that creates the Tag node and establishes PART_OF relationship if repository exists
-      query = `
-        OPTIONAL MATCH (repo:Repository {id: $repository})
+      // KuzuDB does not support the Neo4j FOREACH hack for conditional linking.
+      // We use a transaction to perform two steps atomically:
+      // 1. MERGE the Tag node.
+      // 2. Conditionally MATCH the repository and MERGE the relationship.
+      const upsertTagQuery = `
         MERGE (t:Tag {id: $id})
-        ON CREATE SET 
-          t.name = $name, 
-          t.color = $color, 
+        ON CREATE SET
+          t.name = $name,
+          t.color = $color,
           t.description = $description,
           t.category = $category,
           t.repository = $repository,
           t.branch = $branch,
           t.created_at = $created_at
-        ON MATCH SET 
-          t.name = $name, 
-          t.color = $color, 
+        ON MATCH SET
+          t.name = $name,
+          t.color = $color,
           t.description = $description,
           t.category = $category,
           t.repository = $repository,
           t.branch = $branch
-        WITH t, repo
-        FOREACH (ignoreMe IN CASE WHEN repo IS NOT NULL THEN [1] ELSE [] END |
-          MERGE (t)-[:PART_OF]->(repo)
-        )
+      `;
+      const linkRepoQuery = `
+        MATCH (t:Tag {id: $id}), (repo:Repository {id: $repository})
+        MERGE (t)-[:PART_OF]->(repo)
+      `;
+      const getTagQuery = `
+        MATCH (t:Tag {id: $id})
         RETURN t
       `;
-      queryParams = {
+
+      const queryParams = {
         id: tagData.id,
         name: tagData.name,
         color: tagData.color || null,
@@ -71,9 +73,32 @@ export class TagRepository {
         category: tagData.category || 'general',
         created_at: now,
       };
+
+      try {
+        const result = await this.kuzuClient.transaction(async (tx) => {
+          await tx.executeQuery(upsertTagQuery, queryParams);
+          await tx.executeQuery(linkRepoQuery, {
+            id: tagData.id,
+            repository: tagData.repository!,
+          });
+          return tx.executeQuery(getTagQuery, { id: tagData.id });
+        });
+
+        if (result && result.length > 0) {
+          const node = result[0].t.properties || result[0].t;
+          return { ...node, id: node.id?.toString() } as Tag;
+        }
+        return null;
+      } catch (error) {
+        console.error(
+          `[TagRepository] Error upserting Tag node ${tagData.id} with repository link:`,
+          error,
+        );
+        return null;
+      }
     } else {
       // Create global tag without repository relationship
-      query = `
+      const query = `
         MERGE (t:Tag {id: $id})
         ON CREATE SET 
           t.name = $name, 
@@ -90,7 +115,7 @@ export class TagRepository {
           t.branch = $branch
         RETURN t
       `;
-      queryParams = {
+      const queryParams = {
         id: tagData.id,
         name: tagData.name,
         color: tagData.color || null,
@@ -99,18 +124,18 @@ export class TagRepository {
         category: tagData.category || 'general',
         created_at: now,
       };
-    }
 
-    try {
-      const result = await this.kuzuClient.executeQuery(query, queryParams);
-      if (result && result.length > 0) {
-        const node = result[0].t.properties || result[0].t;
-        return { ...node, id: node.id?.toString() } as Tag;
+      try {
+        const result = await this.kuzuClient.executeQuery(query, queryParams);
+        if (result && result.length > 0) {
+          const node = result[0].t.properties || result[0].t;
+          return { ...node, id: node.id?.toString() } as Tag;
+        }
+        return null;
+      } catch (error) {
+        console.error(`[TagRepository] Error upserting Tag node ${tagData.id}:`, error);
+        return null;
       }
-      return null;
-    } catch (error) {
-      console.error(`[TagRepository] Error upserting Tag node ${tagData.id}:`, error);
-      return null;
     }
   }
 

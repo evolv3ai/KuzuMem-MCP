@@ -121,17 +121,20 @@ export class ComponentRepository {
       relationshipTableNames?: string[];
     },
   ): Promise<{ path: Component[]; length: number; error?: string | null }> {
-    let relTypeString = '';
+    let relationshipPattern: string;
     if (params?.relationshipTypes && params.relationshipTypes.length > 0) {
       const sanitizedTypes = params.relationshipTypes
         .map((rt) => rt.replace(/[^a-zA-Z0-9_]/g, ''))
         .filter((rt) => rt.length > 0);
       if (sanitizedTypes.length > 0) {
-        relTypeString = ':' + sanitizedTypes.join('|');
+        relationshipPattern = `[e:${sanitizedTypes.join('|')}* SHORTEST]`;
+      } else {
+        // If provided types are empty strings after sanitization, traverse all.
+        relationshipPattern = `[* SHORTEST]`;
       }
     } else {
-      // If no relationship types are provided, traverse all relationship types by leaving the string empty.
-      relTypeString = '';
+      // If no relationship types are provided, traverse all relationship types.
+      relationshipPattern = `[* SHORTEST]`;
     }
 
     // Build direction arrows
@@ -151,10 +154,10 @@ export class ComponentRepository {
     const escapedStartGraphUniqueId = this.escapeStr(startGraphUniqueId);
     const escapedEndGraphUniqueId = this.escapeStr(endGraphUniqueId);
 
-    // Use KuzuDB shortest path syntax. The 'e' variable is required for variable-length
-    // relationship patterns, especially when no type is specified.
+    // Use KuzuDB shortest path syntax. A variable for the relationship (e.g., 'e')
+    // can only be used when specific relationship types are provided.
     const query = `
-      MATCH p = (startNode:Component)${arrowLeft}[e${relTypeString}* SHORTEST]${arrowRight}(endNode:Component)
+      MATCH p = (startNode:Component)${arrowLeft}${relationshipPattern}${arrowRight}(endNode:Component)
       WHERE startNode.graph_unique_id = '${escapedStartGraphUniqueId}' AND endNode.graph_unique_id = '${escapedEndGraphUniqueId}'
       RETURN p AS path, length(p) AS path_length
     `;
