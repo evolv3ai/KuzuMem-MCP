@@ -62,17 +62,13 @@ describe('context tool handler', () => {
 
       const result = await contextHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.updateContext).toHaveBeenCalledWith(
-        mockContext,
-        '/test/project',
-        {
-          repository: 'test-repo',
-          branch: 'main',
-          agent: 'cursor',
-          summary: 'Implemented new feature',
-          observation: 'Used new pattern for error handling',
-        },
-      );
+      expect(mockMemoryService.updateContext).toHaveBeenCalledWith(mockContext, '/test/project', {
+        repository: 'test-repo',
+        branch: 'main',
+        agent: 'cursor',
+        summary: 'Implemented new feature',
+        observation: 'Used new pattern for error handling',
+      });
 
       expect(result).toEqual({
         success: true,

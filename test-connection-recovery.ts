@@ -38,20 +38,20 @@ const createMockContext = () => ({
 
 async function runTest() {
   console.log('=== Database Connection Recovery Test ===\n');
-  
+
   try {
     // Step 1: Initialize memory bank for the first time
     console.log('Step 1: Initializing memory bank for the first time...');
     const memoryService1 = await MemoryService.getInstance();
     const context1 = createMockContext();
-    
+
     const initResult1 = await memoryService1.initMemoryBank(
       context1,
       TEST_PROJECT_ROOT,
       TEST_REPO_NAME,
-      TEST_BRANCH
+      TEST_BRANCH,
     );
-    
+
     if (!initResult1.success) {
       throw new Error(`First initialization failed: ${initResult1.message}`);
     }
@@ -69,9 +69,9 @@ async function runTest() {
         name: 'Test Service',
         kind: 'service',
         status: 'active',
-      }
+      },
     );
-    
+
     if (!componentResult) {
       throw new Error('Failed to create test component');
     }
@@ -84,21 +84,21 @@ async function runTest() {
 
     // Step 4: Wait a moment to simulate rebuild time
     console.log('Step 4: Waiting 2 seconds to simulate rebuild...');
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
     console.log('✓ Wait complete\n');
 
     // Step 5: Re-initialize with existing database
     console.log('Step 5: Re-initializing with existing database...');
     const memoryService2 = await MemoryService.getInstance();
     const context2 = createMockContext();
-    
+
     const initResult2 = await memoryService2.initMemoryBank(
       context2,
       TEST_PROJECT_ROOT,
       TEST_REPO_NAME,
-      TEST_BRANCH
+      TEST_BRANCH,
     );
-    
+
     if (!initResult2.success) {
       throw new Error(`Re-initialization failed: ${initResult2.message}`);
     }
@@ -110,10 +110,10 @@ async function runTest() {
       context2,
       TEST_PROJECT_ROOT,
       TEST_REPO_NAME,
-      TEST_BRANCH
+      TEST_BRANCH,
     );
-    
-    const foundComponent = components.find(c => c.id === 'comp-TestService');
+
+    const foundComponent = components.find((c) => c.id === 'comp-TestService');
     if (!foundComponent) {
       throw new Error('Test component not found after re-initialization');
     }
@@ -122,14 +122,14 @@ async function runTest() {
     // Step 7: Test rapid re-initialization (should use cached connection)
     console.log('Step 7: Testing rapid re-initialization...');
     const startTime = Date.now();
-    
+
     const initResult3 = await memoryService2.initMemoryBank(
       context2,
       TEST_PROJECT_ROOT,
       TEST_REPO_NAME,
-      TEST_BRANCH
+      TEST_BRANCH,
     );
-    
+
     const elapsed = Date.now() - startTime;
     if (!initResult3.success) {
       throw new Error(`Rapid re-initialization failed: ${initResult3.message}`);
@@ -139,11 +139,10 @@ async function runTest() {
     // Cleanup
     console.log('Cleaning up...');
     await memoryService2.shutdown();
-    
+
     console.log('\n=== TEST PASSED ===');
     console.log('The memory bank successfully handles existing databases');
     console.log('and recovers from connection issues without data loss.');
-    
   } catch (error) {
     console.error('\n=== TEST FAILED ===');
     console.error(error);
@@ -152,9 +151,11 @@ async function runTest() {
 }
 
 // Run the test
-runTest().then(() => {
-  process.exit(0);
-}).catch((error) => {
-  console.error('Unexpected error:', error);
-  process.exit(1);
-});
+runTest()
+  .then(() => {
+    process.exit(0);
+  })
+  .catch((error) => {
+    console.error('Unexpected error:', error);
+    process.exit(1);
+  });

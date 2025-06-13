@@ -72,9 +72,9 @@ $ curl -X POST http://localhost:3000/tools/query \
   -H "Content-Type: application/json" \
   -d '{
     "type": "dependencies",
-    "clientProjectRoot": "/path/to/project", 
-    "repository": "my-app", 
-    "branch": "main", 
+    "clientProjectRoot": "/path/to/project",
+    "repository": "my-app",
+    "branch": "main",
     "componentId": "comp-AuthService",
     "direction": "dependents"
   }'
@@ -101,8 +101,8 @@ $ curl -X POST http://localhost:3000/tools/query \
   -d '{
     "type": "governance",
     "clientProjectRoot": "/path/to/project",
-    "repository": "my-app", 
-    "branch": "main", 
+    "repository": "my-app",
+    "branch": "main",
     "componentId": "comp-UserProfile"
   }'
 
@@ -129,12 +129,12 @@ $ curl -X POST http://localhost:3000/tools/analyze \
   -H "Content-Type: application/json" \
   -d '{
     "type": "shortest-path",
-    "repository": "my-app", 
-    "branch": "main", 
+    "repository": "my-app",
+    "branch": "main",
     "projectedGraphName": "component-paths",
     "nodeTableNames": ["Component"],
     "relationshipTableNames": ["DEPENDS_ON"],
-    "startNodeId": "comp-AdminPanel", 
+    "startNodeId": "comp-AdminPanel",
     "endNodeId": "comp-DataStore"
   }'
 
@@ -156,7 +156,7 @@ $ curl -X POST http://localhost:3000/tools/analyze \
   -H "Content-Type: application/json" \
   -d '{
     "type": "pagerank",
-    "repository": "my-app", 
+    "repository": "my-app",
     "branch": "main",
     "projectedGraphName": "component-importance",
     "nodeTableNames": ["Component"],
@@ -183,7 +183,7 @@ $ curl -X POST http://localhost:3000/tools/analyze \
   -H "Content-Type: application/json" \
   -d '{
     "type": "louvain",
-    "repository": "my-app", 
+    "repository": "my-app",
     "branch": "main",
     "projectedGraphName": "system-modules",
     "nodeTableNames": ["Component"],
@@ -213,7 +213,7 @@ $ curl -X POST http://localhost:3000/tools/detect \
   -H "Content-Type: application/json" \
   -d '{
     "type": "strongly-connected",
-    "repository": "my-app", 
+    "repository": "my-app",
     "branch": "main",
     "projectedGraphName": "circular-deps",
     "nodeTableNames": ["Component"],
@@ -244,7 +244,7 @@ $ curl -X POST http://localhost:3000/tools/search \
   -H "Content-Type: application/json" \
   -d '{
     "query": "authentication user login",
-    "repository": "my-app", 
+    "repository": "my-app",
     "branch": "main",
     "mode": "fulltext",
     "entityTypes": ["component", "decision", "rule"],
@@ -258,7 +258,7 @@ $ curl -X POST http://localhost:3000/tools/search \
   "results": [
     {
       "id": "comp-AuthService",
-      "type": "component", 
+      "type": "component",
       "name": "Authentication Service",
       "score": 0.95,
       "snippet": "Handles user authentication and login flows...",
@@ -416,24 +416,29 @@ The server currently provides 10 broadcasted tools for repository operations, me
 This project follows a multi-layer architecture:
 
 - **Database Layer:**
+
   - KùzuDB graph database with Cypher queries
   - RepositoryFactory for centralized repository creation
   - RepositoryProvider for client-specific repository management
 
 - **Repository Layer:**
+
   - Thread-safe singleton repositories for each memory type
   - Client-aware repository instances
 
 - **Memory Operations Layer:**
+
   - Business logic for memory operations
   - Client project root validation
   - Refactored to use TypeScript types instead of Zod schemas
 
 - **Service Layer:**
+
   - Core orchestration through MemoryService
   - Client project awareness for database operations
 
 - **MCP Layer:**
+
   - Unified tool definitions, handlers, and server implementations
   - Consistent parameter patterns across all tools
   - Client project root propagation
