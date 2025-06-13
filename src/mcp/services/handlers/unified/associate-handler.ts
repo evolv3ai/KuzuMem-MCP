@@ -18,7 +18,7 @@ interface AssociateParams {
 export const associateHandler: SdkToolHandler = async (params, context, memoryService) => {
   // 1. Validate and extract parameters
   const validatedParams = params as AssociateParams;
-  
+
   // Basic validation
   if (!validatedParams.type) {
     throw new Error('type parameter is required');
@@ -26,7 +26,7 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
   if (!validatedParams.repository) {
     throw new Error('repository parameter is required');
   }
-  
+
   const { type, repository, branch = 'main' } = validatedParams;
 
   // 2. Get clientProjectRoot from session

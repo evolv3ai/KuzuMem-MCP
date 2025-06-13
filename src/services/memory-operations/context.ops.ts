@@ -67,9 +67,7 @@ export async function createContextOp(
 
   const repository = await repositoryRepo.findByName(repositoryName, branch);
   if (!repository || !repository.id) {
-    logger.warn(
-      `[context.ops.createContextOp] Repository not found: ${repositoryName}/${branch}`,
-    );
+    logger.warn(`[context.ops.createContextOp] Repository not found: ${repositoryName}/${branch}`);
     return null;
   }
 
@@ -125,9 +123,7 @@ export async function updateContextOp(
 
   const repository = await repositoryRepo.findByName(repositoryName, branch);
   if (!repository || !repository.id) {
-    logger.warn(
-      `[context.ops.updateContextOp] Repository not found: ${repositoryName}/${branch}`,
-    );
+    logger.warn(`[context.ops.updateContextOp] Repository not found: ${repositoryName}/${branch}`);
     return null;
   }
 
@@ -177,11 +173,7 @@ export async function updateContextOp(
 /**
  * Helper function to ensure context has repository and branch fields populated
  */
-function normalizeContext(
-  context: Context,
-  repositoryName: string,
-  branch: string,
-): Context {
+function normalizeContext(context: Context, repositoryName: string, branch: string): Context {
   return {
     ...context,
     repository: repositoryName,
