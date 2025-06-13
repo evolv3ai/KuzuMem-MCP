@@ -187,8 +187,8 @@ export class FileRepository {
     // Use PART_OF relationship and metadata JSON extraction to find the correct file
     const query = `
       MATCH (c:Component {graph_unique_id: $componentGraphUniqueId})
-      MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId})
-      MATCH (c)-[r:${safeRelType}]->(f)
+      MATCH (c)-[r:${safeRelType}]->(f:File)
+      MATCH (f)-[:PART_OF]->(repo:Repository {id: $repoNodeId})
       WHERE json_extract_string(f.metadata, '$.branch') = $branch
       RETURN f, repo
     `;
@@ -234,8 +234,8 @@ export class FileRepository {
     // This finds Files that are implemented by the Component, filtered by branch using metadata JSON
     const query = `
       MATCH (c:Component {graph_unique_id: $componentGraphUniqueId})
-      MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId})
-      MATCH (c)-[r:${safeRelType}]->(f)
+      MATCH (c)-[r:${safeRelType}]->(f:File)
+      MATCH (f)-[:PART_OF]->(repo:Repository {id: $repoNodeId})
       WHERE json_extract_string(f.metadata, '$.branch') = $branch
       RETURN f, repo
     `;
@@ -303,11 +303,9 @@ export class FileRepository {
     // This finds Components that implement the File, filtered by branch
     // Use proper JSON extraction instead of fragile CONTAINS on JSON string
     const query = `
-      MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId}),
-            (c:Component)-[r:${safeRelType}]->(f)
-      WHERE (c)-[:PART_OF]->(repo)
-        AND json_extract_string(f.metadata, '$.branch') = $branch
-        AND c.branch = $branch
+      MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId})
+      MATCH (c:Component)-[r:${safeRelType}]->(f)
+      WHERE c.branch = $branch
       RETURN c
     `;
     try {
