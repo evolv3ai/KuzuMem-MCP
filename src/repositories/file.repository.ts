@@ -184,16 +184,18 @@ export class FileRepository {
     relationshipType: string = 'IMPLEMENTS',
   ): Promise<boolean> {
     // Component schema: uses graph_unique_id as primary key (format: repo:branch:id)
-    // File schema: id, name, path, size_bytes, mime_type, created_at, updated_at, repository, branch
+    // File schema: stores repository and branch in metadata JSON field and uses PART_OF relationship
     const [repositoryName] = repoNodeId.split(':'); // Extract repository name from repoNodeId
     const componentGraphUniqueId = formatGraphUniqueId(repositoryName, branch, componentId);
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
 
     // Explicit direction: (Component)-[:IMPLEMENTS]->(File)
     // This means: Component implements functionality that is contained in File
+    // Use PART_OF relationship and metadata JSON extraction to find the correct file
     const query = `
       MATCH (c:Component {graph_unique_id: $componentGraphUniqueId}), 
-            (f:File {id: $fileId, repository: $repositoryName, branch: $branch})
+            (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId})
+      WHERE json_extract_string(f.metadata, '$.branch') = $branch
       MERGE (c)-[r:${safeRelType}]->(f)
       RETURN r
     `;
@@ -201,7 +203,7 @@ export class FileRepository {
       const result = await this.kuzuClient.executeQuery(query, {
         componentGraphUniqueId,
         fileId,
-        repositoryName,
+        repoNodeId,
         branch,
       });
       return result && result.length > 0;
@@ -229,16 +231,16 @@ export class FileRepository {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
 
     // Query expects: (Component)-[:IMPLEMENTS]->(File)
-    // This finds Files that are implemented by the Component, filtered by branch
+    // This finds Files that are implemented by the Component, filtered by branch using metadata JSON
     const query = `
-      MATCH (c:Component {graph_unique_id: $componentGraphUniqueId})-[r:${safeRelType}]->(f:File)
-      WHERE f.repository = $repositoryName AND f.branch = $branch
+      MATCH (c:Component {graph_unique_id: $componentGraphUniqueId})-[r:${safeRelType}]->(f:File)-[:PART_OF]->(repo:Repository {id: $repoNodeId})
+      WHERE json_extract_string(f.metadata, '$.branch') = $branch
       RETURN f
     `;
     try {
       const result = await this.kuzuClient.executeQuery(query, {
         componentGraphUniqueId,
-        repositoryName,
+        repoNodeId,
         branch,
       });
 
