@@ -11,17 +11,19 @@ Available algorithms:
 - pagerank: Identify critical/important components by analyzing dependency relationships. Higher score = more important
 - k-core: Find tightly coupled component clusters. Components in k-core have at least k connections to other components in the core
 - louvain: Community detection to discover natural modules/groupings in your architecture. Components in same community = closely related
+- shortest-path: Find the shortest path between two specific nodes in the graph. Useful for understanding relationships and dependencies
 
 Use cases:
 - PageRank: Find bottlenecks, prioritize testing, identify high-impact components
 - K-Core: Detect tightly coupled code that might need refactoring
-- Louvain: Discover microservice boundaries, understand system modules`,
+- Louvain: Discover microservice boundaries, understand system modules
+- Shortest-Path: Trace dependency chains, understand how components connect`,
   parameters: {
     type: 'object',
     properties: {
       type: {
         type: 'string',
-        enum: ['pagerank', 'k-core', 'louvain'],
+        enum: ['pagerank', 'k-core', 'louvain', 'shortest-path'],
         description: 'Analysis algorithm to execute',
       },
       clientProjectRoot: {
@@ -61,6 +63,14 @@ Use cases:
       k: {
         type: 'number',
         description: 'K value for k-core decomposition',
+      },
+      startNodeId: {
+        type: 'string',
+        description: 'Start node ID for shortest path analysis',
+      },
+      endNodeId: {
+        type: 'string',
+        description: 'End node ID for shortest path analysis',
       },
     },
     required: ['type', 'clientProjectRoot', 'repository'],

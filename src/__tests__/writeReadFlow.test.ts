@@ -78,7 +78,7 @@ describe('MemoryService end-to-end write/read flow', () => {
       id: 'file-src-ui-ts',
       name: 'ui.ts',
       path: 'src/ui.ts',
-      size_bytes: 120,
+      size: 120,
     } as any;
 
     const addFileRes = await memoryService.addFile(

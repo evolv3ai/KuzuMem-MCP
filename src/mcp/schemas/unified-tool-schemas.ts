@@ -231,49 +231,89 @@ export const ContextUpdateOutputSchema = z.object({
 // Query Tool Schemas
 // ============================================
 
-export const QueryInputSchema = z.object({
-  type: z.enum([
-    'context',
-    'entities',
-    'relationships',
-    'dependencies',
-    'governance',
-    'history',
-    'tags',
-  ]),
-  clientProjectRoot: z.string().optional(), // From session
-  repository: z.string(),
-  branch: z.string().default('main'),
+export const QueryInputSchema = z
+  .object({
+    type: z.enum([
+      'context',
+      'entities',
+      'relationships',
+      'dependencies',
+      'governance',
+      'history',
+      'tags',
+    ]),
+    clientProjectRoot: z.string().optional(), // From session
+    repository: z.string(),
+    branch: z.string().default('main'),
 
-  // Type-specific parameters
-  // For context query
-  latest: z.boolean().optional(),
-  limit: z.number().int().positive().optional(),
+    // Type-specific parameters
+    // For context query
+    latest: z.boolean().optional(),
+    limit: z.number().int().positive().optional(),
 
-  // For entities query
-  label: z.string().optional(),
-  offset: z.number().int().nonnegative().optional(),
+    // For entities query
+    label: z.string().optional(),
+    offset: z.number().int().nonnegative().optional(),
 
-  // For relationships query
-  startItemId: z.string().optional(),
-  depth: z.number().int().positive().optional(),
-  relationshipFilter: z.string().optional(),
-  targetNodeTypeFilter: z.string().optional(),
+    // For relationships query
+    startItemId: z.string().optional(),
+    depth: z.number().int().positive().optional(),
+    relationshipFilter: z.string().optional(),
+    targetNodeTypeFilter: z.string().optional(),
 
-  // For dependencies query
-  componentId: z.string().optional(),
-  direction: z.enum(['dependencies', 'dependents']).optional(),
+    // For dependencies query
+    componentId: z.string().optional(),
+    direction: z.enum(['dependencies', 'dependents']).optional(),
 
-  // For governance query (uses componentId)
+    // For governance query (uses componentId)
 
-  // For history query
-  itemId: z.string().optional(),
-  itemType: z.enum(['Component', 'Decision', 'Rule']).optional(),
+    // For history query
+    itemId: z.string().optional(),
+    itemType: z.enum(['Component', 'Decision', 'Rule']).optional(),
 
-  // For tags query
-  tagId: z.string().optional(),
-  entityType: z.string().optional(),
-});
+    // For tags query
+    tagId: z.string().optional(),
+    entityType: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      // Type-specific validation
+      switch (data.type) {
+        case 'entities':
+          return !!data.label;
+        case 'relationships':
+          return !!data.startItemId;
+        case 'dependencies':
+        case 'governance':
+          return !!data.componentId;
+        case 'history':
+          return !!data.itemId && !!data.itemType;
+        case 'tags':
+          return !!data.tagId;
+        case 'context':
+          return true; // No required fields
+        default:
+          return false;
+      }
+    },
+    {
+      message: 'Required fields missing for the specified query type',
+      path: [],
+    },
+  )
+  .refine(
+    (data) => {
+      // Additional validation for dependencies query
+      if (data.type === 'dependencies') {
+        return !!data.direction;
+      }
+      return true;
+    },
+    {
+      message: 'direction is required for dependencies query',
+      path: ['direction'],
+    },
+  );
 
 // Different output schemas for each query type
 export const ContextQueryOutputSchema = z.object({
@@ -407,28 +447,42 @@ export const AssociateOutputSchema = z.object({
 // Analyze Tool Schemas
 // ============================================
 
-export const AnalyzeInputSchema = z.object({
-  type: z.enum(['pagerank', 'k-core', 'louvain']),
-  clientProjectRoot: z.string().optional(), // From session
-  repository: z.string(),
-  branch: z.string().default('main'),
+export const AnalyzeInputSchema = z
+  .object({
+    type: z.enum(['pagerank', 'k-core', 'louvain', 'shortest-path']),
+    clientProjectRoot: z.string().optional(), // From session
+    repository: z.string(),
+    branch: z.string().default('main'),
 
-  // Common graph projection parameters
-  projectedGraphName: z.string(),
-  nodeTableNames: z.array(z.string()),
-  relationshipTableNames: z.array(z.string()),
+    // Common graph projection parameters
+    projectedGraphName: z.string(),
+    nodeTableNames: z.array(z.string()),
+    relationshipTableNames: z.array(z.string()),
 
-  // PageRank specific
-  damping: z.number().optional(),
-  maxIterations: z.number().optional(),
+    // PageRank specific
+    damping: z.number().optional(),
+    maxIterations: z.number().optional(),
 
-  // K-Core specific
-  k: z.number().int().positive().optional(),
+    // K-Core specific
+    k: z.number().int().positive().optional(),
 
-  // Shortest path specific (if needed for future use)
-  startNodeId: z.string().optional(),
-  endNodeId: z.string().optional(),
-});
+    // Shortest path specific - these are optional but required when type is 'shortest-path'
+    startNodeId: z.string().optional(),
+    endNodeId: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      // When type is 'shortest-path', startNodeId and endNodeId are required
+      if (data.type === 'shortest-path') {
+        return data.startNodeId && data.endNodeId;
+      }
+      return true;
+    },
+    {
+      message: "startNodeId and endNodeId are required when type is 'shortest-path'",
+      path: ['startNodeId', 'endNodeId'],
+    },
+  );
 
 // Different output schemas for each analysis type
 export const PageRankOutputSchema = z.object({
@@ -482,6 +536,7 @@ export const LouvainOutputSchema = z.object({
 // Union of all analyze outputs
 export const AnalyzeOutputSchema = z.union([
   PageRankOutputSchema,
+  ShortestPathOutputSchema,
   KCoreOutputSchema,
   LouvainOutputSchema,
 ]);

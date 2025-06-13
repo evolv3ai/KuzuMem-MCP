@@ -66,9 +66,8 @@ export class FileRepository {
         f.checksum = $checksum,
         f.metadata = $metadata
       WITH f, repo
-      FOREACH (r IN CASE WHEN repo IS NOT NULL THEN [repo] ELSE [] END |
-        MERGE (f)-[:PART_OF]->(r)
-      )
+      WHERE repo IS NOT NULL
+      MERGE (f)-[:PART_OF]->(repo)
       RETURN f
     `;
 

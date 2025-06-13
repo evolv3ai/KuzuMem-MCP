@@ -1605,10 +1605,10 @@ export class MemoryService {
       return {
         type: 'shortest-path',
         status: 'complete',
-        pathFound: algorithmResults.exists,
+        pathFound: algorithmResults.pathFound,
         path: algorithmResults.path,
-        pathLength: algorithmResults.distance,
-        message: algorithmResults.exists ? 'Shortest path found.' : 'Shortest path not found.',
+        pathLength: algorithmResults.pathLength,
+        message: algorithmResults.pathFound ? 'Shortest path found.' : 'Shortest path not found.',
       };
     } catch (error: any) {
       logger.error('[MemoryService.shortestPath] Error:', {

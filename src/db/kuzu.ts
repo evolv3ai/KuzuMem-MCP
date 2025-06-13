@@ -660,6 +660,8 @@ export async function initializeKuzuDBSchema(connection: any): Promise<void> {
         impact STRING[],
         tags STRING[],
         graph_unique_id STRING,
+        branch STRING,
+        repository STRING,
         created_at STRING,
         updated_at STRING,
         PRIMARY KEY (graph_unique_id)
@@ -676,6 +678,9 @@ export async function initializeKuzuDBSchema(connection: any): Promise<void> {
         category STRING,
         examples STRING[],
         graph_unique_id STRING,
+        branch STRING,
+        repository STRING,
+        status STRING,
         created_at STRING,
         updated_at STRING,
         PRIMARY KEY (graph_unique_id)

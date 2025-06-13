@@ -1,15 +1,9 @@
+import { AnalyzeInputSchema } from '../../../schemas/unified-tool-schemas';
 import { SdkToolHandler } from '../../../tool-handlers';
-import { 
-  AnalyzeInputSchema,
-  PageRankOutputSchema,
-  KCoreOutputSchema,
-  LouvainOutputSchema,
-} from '../../../schemas/unified-tool-schemas';
-import { z } from 'zod';
 
 /**
  * Analyze Handler
- * Handles system analysis algorithms across 3 different types: pagerank, k-core, louvain
+ * Handles system analysis algorithms across 4 different types: pagerank, k-core, louvain, shortest-path
  */
 export const analyzeHandler: SdkToolHandler = async (params, context, memoryService) => {
   // 1. Parse and validate parameters
@@ -35,6 +29,13 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
     case 'k-core':
       if (!validatedParams.k) {
         throw new Error('k parameter is required for k-core analysis');
+      }
+      break;
+    case 'shortest-path':
+      if (!validatedParams.startNodeId || !validatedParams.endNodeId) {
+        throw new Error(
+          'startNodeId and endNodeId parameters are required for shortest-path analysis',
+        );
       }
       break;
   }
@@ -115,6 +116,34 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
         await context.sendProgress({
           status: 'complete',
           message: `Community detection complete. Found ${result.nodes?.length || 0} nodes`,
+          percent: 100,
+          isFinal: true,
+        });
+
+        return result;
+      }
+
+      case 'shortest-path': {
+        await context.sendProgress({
+          status: 'in_progress',
+          message: `Finding shortest path from ${validatedParams.startNodeId} to ${validatedParams.endNodeId}...`,
+          percent: 50,
+        });
+
+        const result = await memoryService.shortestPath(context, clientProjectRoot, {
+          type: 'shortest-path',
+          repository,
+          branch,
+          startNodeId: validatedParams.startNodeId!,
+          endNodeId: validatedParams.endNodeId!,
+          projectedGraphName: validatedParams.projectedGraphName,
+          nodeTableNames: validatedParams.nodeTableNames,
+          relationshipTableNames: validatedParams.relationshipTableNames,
+        });
+
+        await context.sendProgress({
+          status: 'complete',
+          message: `Shortest path analysis complete. Path found: ${result.pathFound}`,
           percent: 100,
           isFinal: true,
         });
