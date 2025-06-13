@@ -56,8 +56,9 @@ export class TagRepository {
           t.repository = $repository,
           t.branch = $branch
         WITH t, repo
-        WHERE repo IS NOT NULL
+        FOREACH (ignoreMe IN CASE WHEN repo IS NOT NULL THEN [1] ELSE [] END |
           MERGE (t)-[:PART_OF]->(repo)
+        )
         RETURN t
       `;
       queryParams = {
