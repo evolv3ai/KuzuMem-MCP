@@ -121,7 +121,6 @@ export class ComponentRepository {
       relationshipTableNames?: string[];
     },
   ): Promise<{ path: Component[]; length: number; error?: string | null }> {
-    // Build relationship type string according to KuzuDB syntax
     let relTypeString = '';
     if (params?.relationshipTypes && params.relationshipTypes.length > 0) {
       const sanitizedTypes = params.relationshipTypes
@@ -131,8 +130,8 @@ export class ComponentRepository {
         relTypeString = ':' + sanitizedTypes.join('|');
       }
     } else {
-      // Default to DEPENDS_ON if no specific relationship types provided
-      relTypeString = ':DEPENDS_ON';
+      // If no relationship types are provided, traverse all relationship types by leaving the string empty.
+      relTypeString = '';
     }
 
     // Build direction arrows
