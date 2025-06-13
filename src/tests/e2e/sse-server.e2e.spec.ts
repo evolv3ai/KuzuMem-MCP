@@ -1,9 +1,9 @@
-import request from 'supertest'; // For HTTP requests
 import { ChildProcess, spawn } from 'child_process';
 import path from 'path';
+import request from 'supertest'; // For HTTP requests
 import { MEMORY_BANK_MCP_TOOLS } from '../../mcp/tools'; // Adjust path as needed
 import { Component, ComponentStatus } from '../../types'; // Adjust path
-import { setupTestDB, cleanupTestDB } from '../utils/test-db-setup'; // Removed dbPath import
+import { cleanupTestDB, setupTestDB } from '../utils/test-db-setup'; // Removed dbPath import
 
 // Increase Jest timeout
 jest.setTimeout(90000);
@@ -405,12 +405,7 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
         const sData = data.toString();
         output += sData;
         console.log(`SSE_SERVER_STDOUT: ${sData}`);
-        if (
-          !resolved &&
-          sData.includes(
-            `MCP HTTP Streaming Server running at http://${STREAM_HOST}:${STREAM_PORT}`,
-          )
-        ) {
+        if (!resolved && sData.includes(`MCP SSE Server listening on port ${STREAM_PORT}`)) {
           console.log('SSE Server ready.');
           if (startupTimeout) {
             clearTimeout(startupTimeout);
@@ -419,10 +414,19 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
           resolve();
         }
       });
+
       serverProcess.stderr?.on('data', (data) => {
         const sData = data.toString();
         output += sData;
         console.error(`SSE_SERVER_STDERR: ${sData}`);
+        if (!resolved && sData.includes(`MCP SSE Server listening on port ${STREAM_PORT}`)) {
+          console.log('SSE Server ready.');
+          if (startupTimeout) {
+            clearTimeout(startupTimeout);
+          }
+          resolved = true;
+          resolve();
+        }
         if (!resolved && (sData.includes('EADDRINUSE') || sData.toLowerCase().includes('error'))) {
           // If an error occurs before resolving, reject to prevent test timeout
           console.error('SSE Server failed to start due to an error');
@@ -477,8 +481,13 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
       id: 'init_e2e_http',
       method: 'tools/call',
       params: {
-        name: 'init-memory-bank',
-        arguments: { repository, branch, clientProjectRoot: clientProjectRootForTest },
+        name: 'memory-bank',
+        arguments: {
+          operation: 'init',
+          repository,
+          branch,
+          clientProjectRoot: clientProjectRootForTest,
+        },
       },
     };
     let httpResponse = await makeMcpRequest(initPayload);
@@ -488,6 +497,9 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
 
     // Parse the JSON result from the MCP SDK format
     const initResult = JSON.parse(httpResponse.body.result.content[0].text);
+    if (!initResult.success) {
+      console.error('Init failed with error:', initResult);
+    }
     expect(initResult.success).toBe(true);
     console.log('HTTP Stream E2E: Memory bank initialized.');
 
@@ -537,13 +549,29 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
         id: `add_comp_${comp.id}`,
         method: 'tools/call',
         params: {
-          name: 'add-component',
-          arguments: { repository, branch, ...comp, clientProjectRoot: clientProjectRootForTest },
+          name: 'entity',
+          arguments: {
+            operation: 'create',
+            entityType: 'component',
+            id: comp.id,
+            repository,
+            branch,
+            clientProjectRoot: clientProjectRootForTest,
+            data: {
+              name: comp.name,
+              kind: comp.kind,
+              status: comp.status,
+              depends_on: comp.depends_on || [],
+            },
+          },
         },
       };
       httpResponse = await makeMcpRequest(addCompPayload);
       expect(httpResponse.body.result?.content).toBeDefined();
       const compResult = JSON.parse(httpResponse.body.result.content[0].text);
+      if (!compResult.success) {
+        console.error('Component creation failed:', compResult);
+      }
       expect(compResult.success).toBe(true);
     }
     console.log(`${componentsToSeed.length} components seeded for HTTP E2E.`);
@@ -569,8 +597,9 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
         id: `update_ctx_${crypto.randomUUID()}`,
         method: 'tools/call',
         params: {
-          name: 'update-context',
+          name: 'context',
           arguments: {
+            operation: 'update',
             repository,
             branch,
             ...ctxData,
@@ -606,8 +635,21 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
         id: `add_dec_${dec.id}`,
         method: 'tools/call',
         params: {
-          name: 'add-decision',
-          arguments: { repository, branch, ...dec, clientProjectRoot: clientProjectRootForTest },
+          name: 'entity',
+          arguments: {
+            operation: 'create',
+            entityType: 'decision',
+            id: dec.id,
+            repository,
+            branch,
+            clientProjectRoot: clientProjectRootForTest,
+            data: {
+              title: dec.name,
+              dateCreated: dec.date,
+              rationale: dec.context,
+              status: 'active',
+            },
+          },
         },
       };
       httpResponse = await makeMcpRequest(addDecPayload);
@@ -641,8 +683,22 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
         id: `add_rule_${rule.id}`,
         method: 'tools/call',
         params: {
-          name: 'add-rule',
-          arguments: { repository, branch, ...rule, clientProjectRoot: clientProjectRootForTest },
+          name: 'entity',
+          arguments: {
+            operation: 'create',
+            entityType: 'rule',
+            id: rule.id,
+            repository,
+            branch,
+            clientProjectRoot: clientProjectRootForTest,
+            data: {
+              title: rule.name,
+              dateCreated: rule.created,
+              content: rule.content,
+              status: rule.status,
+              triggers: rule.triggers || [],
+            },
+          },
         },
       };
       httpResponse = await makeMcpRequest(addRulePayload);
@@ -717,8 +773,9 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
       id: 'update_meta_http',
       method: 'tools/call',
       params: {
-        name: 'update-metadata',
+        name: 'memory-bank',
         arguments: {
+          operation: 'update-metadata',
           repository: repoName,
           branch: 'main',
           metadata: metadataContent,

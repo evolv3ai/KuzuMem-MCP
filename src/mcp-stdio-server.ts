@@ -1,12 +1,25 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import {
+  CallToolRequestSchema,
+  InitializeRequestSchema,
+  ListToolsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import * as toolSchemas from './mcp/schemas/unified-tool-schemas';
 import { toolHandlers } from './mcp/tool-handlers';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools/index';
 import { McpProgressNotification } from './mcp/types/sdk-custom';
 import { MemoryService } from './services/memory.service';
+import {
+  createPerformanceLogger,
+  enforceStdioCompliance,
+  logError,
+  mcpStdioLogger,
+} from './utils/logger';
+
+// CRITICAL: Enforce stdio compliance immediately to prevent stdout pollution
+enforceStdioCompliance();
 
 // Determine Client Project Root at startup (for context only, not for DB initialization)
 const serverCwd = process.cwd();
@@ -15,16 +28,24 @@ const serverCwd = process.cwd();
 // );
 
 if (process.env.DB_PATH_OVERRIDE) {
-  console.warn(
-    '[MCP Stdio SDK Server] WARNING: DB_PATH_OVERRIDE environment variable is set.' +
-      " This will force all KuzuDBClient instances to use this single, globally overridden path ('${process.env.DB_PATH_OVERRIDE}')." +
-      ' This is intended for specific testing scenarios and will break multi-project isolation in a typical IDE setup.' +
-      ' Unset this variable for normal operation in IDE environments.',
+  mcpStdioLogger.warn(
+    {
+      dbPathOverride: process.env.DB_PATH_OVERRIDE,
+      warning: 'Global DB path override detected',
+    },
+    'DB_PATH_OVERRIDE environment variable is set. This will force all KuzuDBClient instances to use this single, globally overridden path. This is intended for specific testing scenarios and will break multi-project isolation in a typical IDE setup. Unset this variable for normal operation in IDE environments.',
   );
 }
 
-process.on('SIGINT', () => process.exit(0));
-process.on('SIGTERM', () => process.exit(0));
+process.on('SIGINT', () => {
+  mcpStdioLogger.info('Received SIGINT, shutting down gracefully');
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  mcpStdioLogger.info('Received SIGTERM, shutting down gracefully');
+  process.exit(0);
+});
 
 // console.log('MCP_STDIO_SERVER_READY_FOR_TESTING'); // Removed to avoid non-JSON output on stdout
 
@@ -35,6 +56,7 @@ const sessionStore = new Map<
   string,
   { clientProjectRoot?: string; repository?: string; branch?: string }
 >();
+let currentSessionId = 'default-session'; // Fallback session ID
 
 // Helper function to derive schema name for unified tools
 function getSchemaKeyForTool(toolName: string): keyof typeof toolSchemas | undefined {
@@ -49,7 +71,7 @@ function getSchemaKeyForTool(toolName: string): keyof typeof toolSchemas | undef
     analyze: 'AnalyzeInputSchema',
     detect: 'DetectInputSchema',
     'bulk-import': 'BulkImportInputSchema',
-    'semantic-search': 'SemanticSearchInputSchema',
+    search: 'SearchInputSchema',
   };
 
   const schemaKey = unifiedToolSchemas[toolName];
@@ -61,20 +83,20 @@ function getSchemaKeyForTool(toolName: string): keyof typeof toolSchemas | undef
 }
 
 async function main() {
-  console.error('[MCP Stdio SDK Server] Initializing...');
-  // Set up server-wide logger
-  const serverLogger = console; // Simple console logger for now
+  const perfLogger = createPerformanceLogger(mcpStdioLogger, 'mcp-stdio-server-startup');
+
+  mcpStdioLogger.info('MCP Stdio Server initializing...');
 
   // We no longer initialize a global MemoryService during startup
   // Each MCP tool handler will create or retrieve a MemoryService instance on-demand and specific to each clientProjectRoot
-  serverLogger.info(
-    '[MCP Stdio SDK Server] MemoryService initialization deferred until needed by tool handlers',
-  );
+  mcpStdioLogger.info('MemoryService initialization deferred until needed by tool handlers');
 
   const serverInfo = {
     name: packageJson.name,
     version: packageJson.version,
   };
+
+  mcpStdioLogger.debug({ serverInfo }, 'Server configuration');
 
   // Use low-level Server for full control
   const server = new Server(serverInfo, {
@@ -83,42 +105,70 @@ async function main() {
     },
   });
 
+  // Handle Initialize request to set up session
+  server.setRequestHandler(InitializeRequestSchema, async (request) => {
+    const sessionId = (request.params as any)?.sessionId || `session-${Date.now()}`;
+    currentSessionId = sessionId;
+    if (!sessionStore.has(currentSessionId)) {
+      sessionStore.set(currentSessionId, {});
+      mcpStdioLogger.info({ sessionId: currentSessionId }, 'New session initialized');
+    }
+    return {
+      protocolVersion: '1.0.0',
+      serverInfo,
+      sessionId: currentSessionId,
+    };
+  });
+
   // Set up tool list handler with full tool definitions including descriptions
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return {
-      tools: MEMORY_BANK_MCP_TOOLS.map((toolDef) => ({
+    const toolsPerfLogger = createPerformanceLogger(mcpStdioLogger, 'list-tools');
+
+    try {
+      const tools = MEMORY_BANK_MCP_TOOLS.map((toolDef) => ({
         name: toolDef.name,
         description: toolDef.description,
         inputSchema: toolDef.parameters,
-      })),
-    };
+      }));
+
+      toolsPerfLogger.complete({ toolCount: tools.length });
+
+      return { tools };
+    } catch (error) {
+      toolsPerfLogger.fail(error as Error);
+      throw error;
+    }
   });
 
   // Set up tool call handler
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const toolName = request.params.name;
+    const toolPerfLogger = createPerformanceLogger(mcpStdioLogger, `tool-${toolName}`);
+
+    const toolLogger = mcpStdioLogger.child({
+      tool: toolName,
+      requestId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      sessionId: currentSessionId,
+    });
+
     const toolDef = MEMORY_BANK_MCP_TOOLS.find((t) => t.name === toolName);
     const actualToolHandler = toolHandlers[toolName];
 
     if (!toolDef || !actualToolHandler) {
-      throw new Error(`Tool not found: ${toolName}`);
+      const error = new Error(`Tool not found: ${toolName}`);
+      toolPerfLogger.fail(error);
+      throw error;
     }
 
-    // console.error(`[DEBUG] MCP Stdio Server tool handler for ${toolName} ENTERED`);
-    // console.error(
-    //   `[Tool: ${toolName}] Received params:`,
-    //   JSON.stringify(request.params.arguments, null, 2),
-    // );
+    toolLogger.debug({ params: request.params.arguments }, 'Tool handler invoked');
 
     try {
       const validatedParams = request.params.arguments;
-      const sessionId = 'default-e2e-session-fallback'; // We'll need to get this from somewhere
+      const sessionId = currentSessionId; // Use the session ID from the initialize request
 
       let currentSessionData = sessionStore.get(sessionId);
       if (!currentSessionData) {
-        serverLogger.warn(
-          `[Tool: ${toolName}] No session data found for sessionId: ${sessionId}. Initializing new session data.`,
-        );
+        toolLogger.warn({ sessionId }, 'No session data found, initializing new session data');
         currentSessionData = {
           clientProjectRoot: undefined,
           repository: undefined,
@@ -149,8 +199,14 @@ async function main() {
         if (params.branch) {
           currentSessionData.branch = params.branch;
         }
-        serverLogger.info(
-          `[Tool: memory-bank] Attempting to set session data for ${sessionId}: CPR=${params.clientProjectRoot}, Repo=${params.repository}, Branch=${params.branch}`,
+        toolLogger.info(
+          {
+            sessionId,
+            clientProjectRoot: params.clientProjectRoot,
+            repository: params.repository,
+            branch: params.branch,
+          },
+          'Session data updated for memory-bank initialization',
         );
       }
       if (currentSessionData) {
@@ -160,21 +216,21 @@ async function main() {
       const enrichedContext: any = {
         sessionId: sessionId,
         session: currentSessionData || {},
-        logger: serverLogger,
+        logger: toolLogger, // Use structured logger instead of console
         sendProgress: async (progressData: McpProgressNotification) => {
-          serverLogger.info(`[Tool: ${toolName}] Sending Progress:`, progressData);
-          // Progress notifications would need to be handled differently in this approach
+          // Stdio server does not support progress notifications, this is a no-op
+          toolLogger.info({ progressData }, 'Progress notification received (no-op)');
         },
       };
 
       // Create a new MemoryService instance on-demand for each tool call
       let memoryServiceInstance: MemoryService;
       try {
-        serverLogger.info(`[MCP Tool ${toolName}] Creating MemoryService instance`);
+        toolLogger.debug('Creating MemoryService instance');
         memoryServiceInstance = await MemoryService.getInstance(enrichedContext);
-        serverLogger.info(`[MCP Tool ${toolName}] Successfully created MemoryService instance`);
+        toolLogger.debug('Successfully created MemoryService instance');
       } catch (error) {
-        serverLogger.error(`[MCP Tool ${toolName}] Error creating MemoryService:`, error);
+        logError(toolLogger, error as Error, { operation: 'create-memory-service' });
         throw new Error(
           `Failed to initialize memory service: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -185,6 +241,8 @@ async function main() {
         enrichedContext,
         memoryServiceInstance,
       );
+
+      toolPerfLogger.complete({ resultSize: JSON.stringify(result).length });
 
       // Return result in the expected format
       return {
@@ -197,12 +255,12 @@ async function main() {
       };
     } catch (error) {
       if (error instanceof z.ZodError) {
-        serverLogger.error(
-          `[Tool: ${toolName}] Zod validation error: ${JSON.stringify(error.issues)}`,
-        );
+        toolLogger.error({ zodIssues: error.issues }, 'Zod validation error');
+        toolPerfLogger.fail(error);
         throw error;
       }
-      serverLogger.error(`[Tool: ${toolName}] Error during execution:`, error);
+      logError(toolLogger, error as Error, { operation: 'tool-execution' });
+      toolPerfLogger.fail(error as Error);
       throw error;
     }
   });
@@ -210,11 +268,16 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  console.error('MCP Server (stdio) initialized and listening...'); // Use console.error so tests can detect on stderr
+  perfLogger.complete();
+  mcpStdioLogger.info('MCP Server (stdio) initialized and listening');
+
+  // EXPLICIT test detection message - required for E2E tests to detect server readiness
+  if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID !== undefined) {
+    console.error('MCP Server (stdio) initialized and listening');
+  }
 }
 
-main().catch((e) => {
-  const logger = console;
-  logger.error('Failed to start MCP server:', e);
+main().catch((error) => {
+  logError(mcpStdioLogger, error as Error, { operation: 'server-startup' });
   process.exit(1);
 });

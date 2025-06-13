@@ -1,3 +1,4 @@
+import { ContextInputSchema } from '../../../schemas/unified-tool-schemas';
 import { SdkToolHandler } from '../../../tool-handlers';
 
 // TypeScript interfaces for context parameters
@@ -30,27 +31,12 @@ interface ContextUpdateOutput {
 
 /**
  * Context Handler
- * Handles context update operations
+ * Handles context updates for session tracking
  */
 export const contextHandler: SdkToolHandler = async (params, context, memoryService) => {
-  // 1. Validate and extract parameters
-  const validatedParams = params as ContextParams;
-  
-  // Basic validation
-  if (!validatedParams.operation) {
-    throw new Error('operation parameter is required');
-  }
-  if (!validatedParams.repository) {
-    throw new Error('repository parameter is required');
-  }
-  if (!validatedParams.agent) {
-    throw new Error('agent parameter is required');
-  }
-  if (!validatedParams.summary) {
-    throw new Error('summary parameter is required');
-  }
-  
-  const { operation, repository, branch = 'main', agent, summary, observation } = validatedParams;
+  // 1. Parse and validate parameters
+  const validatedParams = ContextInputSchema.parse(params);
+  const { operation, repository } = validatedParams;
 
   // 2. Get clientProjectRoot from session
   const clientProjectRoot = context.session.clientProjectRoot as string | undefined;
@@ -61,91 +47,42 @@ export const contextHandler: SdkToolHandler = async (params, context, memoryServ
   // 3. Log the operation
   context.logger.info(`Executing context operation: ${operation}`, {
     repository,
-    branch,
-    agent,
     clientProjectRoot,
   });
 
-  try {
-    switch (operation) {
-      case 'update': {
-        await context.sendProgress({
-          status: 'in_progress',
-          message: 'Updating context...',
-          percent: 50,
-        });
-
-        // Call MemoryService updateContext method
-        const result = await memoryService.updateContext(context, clientProjectRoot, {
-          operation: 'update',
-          repository,
-          branch,
-          agent,
-          summary,
-          observation,
-        });
-
-        await context.sendProgress({
-          status: 'complete',
-          message: 'Context updated successfully',
-          percent: 100,
-          isFinal: true,
-        });
-
-        // Check if result is the success/context object format
-        if (!result || !('success' in result)) {
-          return {
-            success: false,
-            message: 'Failed to update context - unexpected response format',
-          } as ContextUpdateOutput;
-        }
-
-        if (!result.success || !result.context) {
-          return {
-            success: false,
-            message: result.message || 'Failed to update context',
-          } as ContextUpdateOutput;
-        }
-
-        // Map the context from UpdateContextOutputSchema to our schema
-        const contextData = result.context;
-        return {
-          success: true,
-          message: 'Context updated successfully',
-          context: {
-            id: contextData.id,
-            iso_date: contextData.iso_date,
-            agent: contextData.agent || agent,
-            summary: contextData.summary || summary,
-            observation: contextData.summary ? null : observation || null, // observation is in summary usually
-            repository: contextData.repository,
-            branch: contextData.branch,
-            created_at: contextData.created_at || null,
-            updated_at: contextData.updated_at || null,
-          },
-        } as ContextUpdateOutput;
+  // 4. Execute the operation
+  switch (operation) {
+    case 'update': {
+      // Validate required parameters for update
+      if (!validatedParams.agent) {
+        throw new Error('agent parameter is required for context update');
+      }
+      if (!validatedParams.summary) {
+        throw new Error('summary parameter is required for context update');
       }
 
-      default:
-        throw new Error(`Unknown context operation: ${operation}`);
+      // Send progress notification
+      await context.sendProgress({
+        status: 'in_progress',
+        message: 'Updating context...',
+        percent: 50,
+      });
+
+      // Call memory service to update context
+      const result = await memoryService.updateContext(context, clientProjectRoot, validatedParams);
+
+      // Send completion notification
+      await context.sendProgress({
+        status: 'complete',
+        message: 'Context updated successfully',
+        percent: 100,
+        isFinal: true,
+      });
+
+      return result;
     }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    context.logger.error(`Context operation failed: ${errorMessage}`, {
-      operation,
-      error,
-    });
 
-    await context.sendProgress({
-      status: 'error',
-      message: `Failed to ${operation} context: ${errorMessage}`,
-      percent: 100,
-      isFinal: true,
-    });
-
-    return {
-      success: false,
-      message: errorMessage,
-    } as ContextUpdateOutput;
+    default:
+      throw new Error(`Unknown context operation: ${operation}`);
   }
 };

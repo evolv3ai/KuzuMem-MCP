@@ -43,6 +43,7 @@ export class RepositoryRepository {
     const syntheticId = `${name}:${branch}`;
     const escapedId = this.escapeStr(syntheticId);
     const query = `MATCH (r:Repository {id: '${escapedId}'}) RETURN r LIMIT 1`;
+    const nowIso = new Date().toISOString();
 
     let result;
     try {
@@ -73,8 +74,8 @@ export class RepositoryRepository {
           name: node.name,
           branch: node.branch,
           id: node.id,
-          created_at: node.created_at,
-          updated_at: node.updated_at,
+          created_at: node.created_at ? new Date(node.created_at) : new Date(nowIso),
+          updated_at: node.updated_at ? new Date(node.updated_at) : new Date(nowIso),
         } as Repository)
       : null;
   }
@@ -94,14 +95,51 @@ export class RepositoryRepository {
     const escapedName = this.escapeStr(name);
     const escapedBranch = this.escapeStr(branch);
     const nowIso = new Date().toISOString();
-    const kuzuTimestamp = nowIso.replace('T', ' ').replace('Z', '');
 
-    const query = `CREATE (r:Repository {id: '${escapedId}', name: '${escapedName}', branch: '${escapedBranch}', created_at: timestamp('${kuzuTimestamp}'), updated_at: timestamp('${kuzuTimestamp}')}) RETURN r`;
+    // Use simple string values instead of timestamp function which might not be supported
+    const query = `CREATE (r:Repository {
+      id: '${escapedId}', 
+      name: '${escapedName}', 
+      branch: '${escapedBranch}', 
+      created_at: '${nowIso}', 
+      updated_at: '${nowIso}'
+    }) RETURN r`;
 
     try {
       const result = await this.kuzuClient.executeQuery(query);
-      const found = await this.findByName(name, branch);
-      return found;
+
+      // Extract repository directly from result if possible
+      if (result && Array.isArray(result) && result.length > 0) {
+        const node = result[0].r ?? result[0]['r'] ?? result[0];
+        if (node && node.id === syntheticId) {
+          return {
+            name: node.name,
+            branch: node.branch,
+            id: node.id,
+            created_at: node.created_at ? new Date(node.created_at) : new Date(nowIso),
+            updated_at: node.updated_at ? new Date(node.updated_at) : new Date(nowIso),
+          } as Repository;
+        }
+      }
+
+      // Fallback to findByName if direct extraction fails
+      try {
+        const found = await this.findByName(name, branch);
+        if (found) {
+          return found;
+        }
+      } catch (findError) {
+        console.error(`RepositoryRepository: Error during findByName after create:`, findError);
+      }
+
+      // Last resort: construct repository object manually
+      return {
+        name,
+        branch,
+        id: syntheticId,
+        created_at: new Date(nowIso),
+        updated_at: new Date(nowIso),
+      } as Repository;
     } catch (error) {
       console.error(`RepositoryRepository: Error during create:`, error);
       return null;
@@ -127,14 +165,15 @@ export class RepositoryRepository {
     if (result.length === 0) {
       return [];
     }
+    const nowIso = new Date().toISOString();
     return result.map((row: any) => {
       const node = row.r ?? row['r'] ?? row;
       return {
         name: node.name,
         branch: node.branch,
         id: node.id,
-        created_at: node.created_at,
-        updated_at: node.updated_at,
+        created_at: node.created_at ? new Date(node.created_at) : new Date(nowIso),
+        updated_at: node.updated_at ? new Date(node.updated_at) : new Date(nowIso),
       } as Repository;
     });
   }

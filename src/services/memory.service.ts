@@ -162,14 +162,10 @@ export class MemoryService {
     branch: string = 'main',
   ): Promise<z.infer<typeof toolSchemas.InitMemoryBankOutputSchema>> {
     const logger = mcpContext.logger || console;
-    console.error(
-      `[DEBUG] MemoryService.initMemoryBank ENTERED. Repo: ${repositoryName}:${branch}, CPR: ${clientProjectRoot}`,
-    );
     logger.info(
       `[MemoryService.initMemoryBank] ENTERED. Repo: ${repositoryName}:${branch}, CPR: ${clientProjectRoot}`,
     );
     clientProjectRoot = this.ensureAbsoluteRoot(clientProjectRoot);
-    console.error(`[DEBUG] MemoryService.initMemoryBank Absolute CPR: ${clientProjectRoot}`);
     logger.info(`[MemoryService.initMemoryBank] Absolute CPR: ${clientProjectRoot}`);
 
     // Send progress update for path validation
@@ -179,13 +175,7 @@ export class MemoryService {
       percent: 25,
     });
 
-    console.error(
-      `[DEBUG] MemoryService.initMemoryBank checking repositoryProvider: ${!!this.repositoryProvider}`,
-    );
     if (!this.repositoryProvider) {
-      console.error(
-        `[DEBUG] MemoryService.initMemoryBank CRITICAL: RepositoryProvider is NOT INITIALIZED`,
-      );
       logger.error(
         '[MemoryService.initMemoryBank] CRITICAL: RepositoryProvider is NOT INITIALIZED before getKuzuClient call.',
       );
@@ -194,9 +184,6 @@ export class MemoryService {
         message: 'Critical error: RepositoryProvider not initialized in MemoryService',
       };
     }
-    console.error(
-      `[DEBUG] MemoryService.initMemoryBank RepositoryProvider appears to be initialized. Proceeding.`,
-    );
     logger.info(
       '[MemoryService.initMemoryBank] RepositoryProvider appears to be initialized. Proceeding.',
     );
