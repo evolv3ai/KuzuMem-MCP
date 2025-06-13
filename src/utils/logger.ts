@@ -255,29 +255,24 @@ export function logError(logger: Logger, error: Error, context: Record<string, a
  * This should be called early in stdio server initialization
  */
 export function enforceStdioCompliance(): void {
-  const logger = getRootLogger();
+  // For MCP stdio servers, we need absolutely minimal output to stderr
+  // The sophisticated logging was causing protocol interference
 
-  // Redirect console.log to stderr via logger
+  // Simple redirection without structured logging to avoid pino-pretty interference
   const originalConsoleLog = console.log;
   console.log = (...args: unknown[]): void => {
-    logger.warn(
-      {
-        args: args.map((arg) => (typeof arg === 'object' ? JSON.stringify(arg) : String(arg))),
-        source: 'console.log',
-      },
-      'console.log called - should use logger instead',
-    );
+    // Direct stderr output without any formatting to avoid MCP protocol interference
+    console.error(...args);
   };
 
-  // Ensure console.error goes to stderr (already does by default)
-  // But add structured context when possible
+  // Keep console.error as-is for backward compatibility
   const originalConsoleError = console.error;
   console.error = (...args: unknown[]): void => {
-    // For backward compatibility, still call original console.error
     originalConsoleError(...args);
   };
 
-  logger.info('stdio compliance enforced - console.log redirected to stderr');
+  // Use a simple stderr message instead of structured logging to avoid pretty-printing
+  console.error('stdio compliance enforced - console.log redirected to stderr');
 }
 
 /**
