@@ -47,8 +47,17 @@ if (process.env.DB_PATH_OVERRIDE) {
   );
 }
 
+// Add a re-entrancy guard to prevent concurrent shutdown executions
+let isShuttingDown = false;
+
 // Graceful shutdown function
 async function gracefulShutdown(signal: string): Promise<void> {
+  if (isShuttingDown) {
+    mcpStdioLogger.debug({ signal }, 'Shutdown already in progress, ignoring subsequent signal.');
+    return;
+  }
+  isShuttingDown = true;
+
   mcpStdioLogger.info({ signal }, `Received ${signal}, starting graceful shutdown`);
 
   // For stdio servers, we need to gracefully close connections and clean up
@@ -87,8 +96,19 @@ async function gracefulShutdown(signal: string): Promise<void> {
   }
 }
 
-process.on('SIGINT', () => void gracefulShutdown('SIGINT'));
-process.on('SIGTERM', () => void gracefulShutdown('SIGTERM'));
+// Ensure unhandled promise rejections are caught and the process exits correctly.
+process.on('SIGINT', () => {
+  gracefulShutdown('SIGINT').catch((err) => {
+    logError(mcpStdioLogger, err as Error, { operation: 'unhandled-shutdown-error' });
+    process.exit(1);
+  });
+});
+process.on('SIGTERM', () => {
+  gracefulShutdown('SIGTERM').catch((err) => {
+    logError(mcpStdioLogger, err as Error, { operation: 'unhandled-shutdown-error' });
+    process.exit(1);
+  });
+});
 
 import packageJson from '../package.json';
 
