@@ -510,7 +510,7 @@ describe('MCP Stdio Server E2E Tests', () => {
         data: {
           name: 'Database',
           kind: 'datastore',
-          depends_on: [],
+          depends_on: ['comp-test-service'],
         },
       });
     });

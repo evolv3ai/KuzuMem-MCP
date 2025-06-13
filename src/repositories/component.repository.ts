@@ -121,28 +121,30 @@ export class ComponentRepository {
       relationshipTableNames?: string[];
     },
   ): Promise<{ path: Component[]; length: number; error?: string | null }> {
-    // Corrected return type
+    // Build relationship type string according to KuzuDB syntax
     let relTypeString = '';
     if (params?.relationshipTypes && params.relationshipTypes.length > 0) {
       const sanitizedTypes = params.relationshipTypes
         .map((rt) => rt.replace(/[^a-zA-Z0-9_]/g, ''))
         .filter((rt) => rt.length > 0);
       if (sanitizedTypes.length > 0) {
-        relTypeString = ':' + sanitizedTypes.join('|');
+        relTypeString = ':' + sanitizedTypes.join('|:');
       }
+    } else {
+      // Default to DEPENDS_ON if no specific relationship types provided
+      relTypeString = ':DEPENDS_ON';
     }
 
+    // Build direction arrows
     let arrowLeft = '-';
     let arrowRight = '->';
     if (params?.direction === 'INCOMING') {
-      arrowLeft = '<- '; // Added space for clarity in Cypher if needed
+      arrowLeft = '<-';
       arrowRight = '-';
     } else if (params?.direction === 'BOTH') {
       arrowLeft = '-';
       arrowRight = '-';
     }
-    // Kuzu's *shortest* path variant usually implies finding one path. Default hop [1..10] is reasonable.
-    const relationshipPattern = `[${relTypeString}* SHORTEST 1..10]`;
 
     const startGraphUniqueId = formatGraphUniqueId(repositoryName, startNodeBranch, startNodeId);
     const endGraphUniqueId = formatGraphUniqueId(repositoryName, startNodeBranch, endNodeId);
@@ -150,42 +152,56 @@ export class ComponentRepository {
     const escapedStartGraphUniqueId = this.escapeStr(startGraphUniqueId);
     const escapedEndGraphUniqueId = this.escapeStr(endGraphUniqueId);
 
-    // Standard Cypher for shortest path. Kuzu should support this.
-    // Using projectedGraphName here is tricky if it's not a Kuzu CALL algo(graphName)
-    // For now, assume the default graph contains the necessary data if projection isn't used by a CALL.
-    // If Kuzu's MATCH...RETURN path needs explicit graph context, this query would need to change significantly.
+    // Use KuzuDB shortest path syntax from official documentation
     const query = `
-      MATCH (startNode:Component {graph_unique_id: '${escapedStartGraphUniqueId}'}), 
-            (endNode:Component {graph_unique_id: '${escapedEndGraphUniqueId}'})
-      MATCH p = (startNode)${arrowLeft}${relationshipPattern}${arrowRight}(endNode)
-      RETURN p AS path ORDER BY length(p) LIMIT 1
-    `; // Added ORDER BY length(p) LIMIT 1 to ensure one shortest path
+      MATCH p = (startNode:Component)${arrowLeft}[${relTypeString}* SHORTEST]${arrowRight}(endNode:Component)
+      WHERE startNode.graph_unique_id = '${escapedStartGraphUniqueId}' AND endNode.graph_unique_id = '${escapedEndGraphUniqueId}'
+      RETURN p AS path, length(p) AS path_length
+    `;
 
     console.error(`DEBUG: ComponentRepository.findShortestPath query: ${query}`);
 
     try {
       const result = await this.kuzuClient.executeQuery(query);
-      if (!result || typeof result.getAll !== 'function') {
+      if (!result || !Array.isArray(result)) {
         console.warn(
           `Query for findShortestPath from ${startNodeId} to ${endNodeId} returned invalid result type.`,
         );
         return { path: [], length: 0, error: 'Query returned invalid result type.' };
       }
-      const rows = await result.getAll();
-      if (!rows || rows.length === 0 || !rows[0].path) {
+
+      if (!result || result.length === 0) {
         console.log(`DEBUG: No path found by query for ${startNodeId} -> ${endNodeId}`);
         return { path: [], length: 0, error: null }; // No path found is not an error, just empty result
       }
 
-      const kuzuPathObject = rows[0].path; // This is Kuzu's path structure
+      const row = result[0];
+      const kuzuPathObject = row.path; // This is Kuzu's path structure
+      const pathLength = row.path_length || 0;
 
-      const nodes: Component[] = (kuzuPathObject._nodes || []).map((node: any) => ({
-        ...(node._properties || node), // Kuzu node properties might be under _properties
-        id: (node._properties || node).id,
-        graph_unique_id: undefined,
-      }));
+      // Extract nodes from the KuzuDB path structure
+      let nodes: Component[] = [];
 
-      const pathLength = (kuzuPathObject._rels || []).length;
+      if (kuzuPathObject && kuzuPathObject._NODES) {
+        nodes = kuzuPathObject._NODES.map((node: any) => ({
+          ...node, // KuzuDB path nodes should have all properties directly
+          id: node.id,
+          graph_unique_id: undefined, // Don't expose internal IDs
+        }));
+      } else if (kuzuPathObject && kuzuPathObject.nodes) {
+        nodes = kuzuPathObject.nodes.map((node: any) => ({
+          ...node,
+          id: node.id,
+          graph_unique_id: undefined,
+        }));
+      } else if (Array.isArray(kuzuPathObject)) {
+        // Fallback: if path is returned as array of nodes
+        nodes = kuzuPathObject.map((node: any) => ({
+          ...node,
+          id: node.id,
+          graph_unique_id: undefined,
+        }));
+      }
 
       return { path: nodes, length: pathLength, error: null };
     } catch (error: any) {
