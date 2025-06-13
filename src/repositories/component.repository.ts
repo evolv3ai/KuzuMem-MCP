@@ -298,89 +298,85 @@ export class ComponentRepository {
     const now = new Date().toISOString();
 
     try {
-      await this.kuzuClient.executeQuery('BEGIN TRANSACTION');
+      const result = await this.kuzuClient.transaction(async (tx) => {
+        // Atomic MERGE query that includes PART_OF relationship creation
+        const upsertNodeQuery = `
+          MERGE (repo:Repository {id: $repository})
+          ON CREATE SET repo.name = $repository, repo.created_at = $now
+          MERGE (c:Component {id: $componentId, graph_unique_id: $graphUniqueId})
+          ON CREATE SET
+            c.name = $name,
+            c.kind = $kind,
+            c.status = $status,
+            c.branch = $branch,
+            c.repository = $repository,
+            c.created_at = $now,
+            c.updated_at = $now
+          ON MATCH SET
+            c.name = $name,
+            c.kind = $kind,
+            c.status = $status,
+            c.branch = $branch,
+            c.repository = $repository,
+            c.updated_at = $now
+          MERGE (c)-[:PART_OF]->(repo)
+        `;
+        await tx.executeQuery(upsertNodeQuery, {
+          graphUniqueId,
+          componentId,
+          name: component.name,
+          kind: component.kind || 'Unknown',
+          status: component.status || 'active',
+          branch: componentBranch,
+          repository: repositoryNodeId,
+          now,
+        });
 
-      // Atomic MERGE query that includes PART_OF relationship creation
-      const upsertNodeQuery = `
-        MERGE (repo:Repository {id: $repository})
-        ON CREATE SET repo.name = $repository, repo.created_at = $now
-        MERGE (c:Component {id: $componentId, graph_unique_id: $graphUniqueId})
-        ON CREATE SET
-          c.name = $name,
-          c.kind = $kind,
-          c.status = $status,
-          c.branch = $branch,
-          c.repository = $repository,
-          c.created_at = $now,
-          c.updated_at = $now
-        ON MATCH SET
-          c.name = $name,
-          c.kind = $kind,
-          c.status = $status,
-          c.branch = $branch,
-          c.repository = $repository,
-          c.updated_at = $now
-        MERGE (c)-[:PART_OF]->(repo)
-      `;
-      await this.kuzuClient.executeQuery(upsertNodeQuery, {
-        graphUniqueId,
-        componentId,
-        name: component.name,
-        kind: component.kind || 'Unknown',
-        status: component.status || 'active',
-        branch: componentBranch,
-        repository: repositoryNodeId,
-        now,
+        // Handle dependencies
+        if (component.depends_on && component.depends_on.length > 0) {
+          // First, delete existing dependencies for this component
+          await tx.executeQuery(
+            'MATCH (c:Component {graph_unique_id: $graphUniqueId})-[r:DEPENDS_ON]->() DELETE r',
+            { graphUniqueId },
+          );
+
+          for (const depId of component.depends_on) {
+            const depGraphUniqueId = formatGraphUniqueId(
+              logicalRepositoryName,
+              componentBranch,
+              depId,
+            );
+            // Ensure dependency node exists (as a placeholder if needed)
+            await tx.executeQuery(
+              `MERGE (dep:Component {graph_unique_id: $depGraphUniqueId}) ON CREATE SET dep.id = $depId, dep.name = $depName, dep.status = 'planned', dep.branch = $branch`,
+              {
+                depGraphUniqueId,
+                depId,
+                depName: `Placeholder for ${depId}`,
+                branch: componentBranch,
+              },
+            );
+
+            // Create the new dependency relationship
+            await tx.executeQuery(
+              'MATCH (c:Component {graph_unique_id: $cId}), (d:Component {graph_unique_id: $dId}) MERGE (c)-[:DEPENDS_ON]->(d)',
+              { cId: graphUniqueId, dId: depGraphUniqueId },
+            );
+          }
+        }
+
+        return true;
       });
 
-      // Handle dependencies
-      if (component.depends_on && component.depends_on.length > 0) {
-        // First, delete existing dependencies for this component
-        await this.kuzuClient.executeQuery(
-          'MATCH (c:Component {graph_unique_id: $graphUniqueId})-[r:DEPENDS_ON]->() DELETE r',
-          { graphUniqueId },
-        );
-
-        for (const depId of component.depends_on) {
-          const depGraphUniqueId = formatGraphUniqueId(
-            logicalRepositoryName,
-            componentBranch,
-            depId,
-          );
-          // Ensure dependency node exists (as a placeholder if needed)
-          await this.kuzuClient.executeQuery(
-            `MERGE (dep:Component {graph_unique_id: $depGraphUniqueId}) ON CREATE SET dep.id = $depId, dep.name = $depName, dep.status = 'planned', dep.branch = $branch`,
-            {
-              depGraphUniqueId,
-              depId,
-              depName: `Placeholder for ${depId}`,
-              branch: componentBranch,
-            },
-          );
-
-          // Create the new dependency relationship
-          await this.kuzuClient.executeQuery(
-            'MATCH (c:Component {graph_unique_id: $cId}), (d:Component {graph_unique_id: $dId}) MERGE (c)-[:DEPENDS_ON]->(d)',
-            { cId: graphUniqueId, dId: depGraphUniqueId },
-          );
-        }
+      if (result) {
+        return this.findByIdAndBranch(logicalRepositoryName, componentId, componentBranch);
       }
-
-      await this.kuzuClient.executeQuery('COMMIT');
-
-      return this.findByIdAndBranch(logicalRepositoryName, componentId, componentBranch);
+      return null;
     } catch (error: any) {
       logger.error(
         `[ComponentRepository] ERROR in upsertComponent for ${graphUniqueId}: ${error.message}`,
         { stack: error.stack },
       );
-      try {
-        await this.kuzuClient.executeQuery('ROLLBACK');
-      } catch (rollbackError: any) {
-        logger.error(
-          `[ComponentRepository] CRITICAL ERROR: Failed to ROLLBACK transaction for ${graphUniqueId}: ${rollbackError.message}`,
-        );
-      }
       throw error;
     }
   }
