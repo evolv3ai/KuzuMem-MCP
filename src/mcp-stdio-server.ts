@@ -30,19 +30,11 @@ import {
 // CRITICAL: Enforce stdio compliance immediately to prevent stdout pollution
 enforceStdioCompliance();
 
-// Create minimal logger for MCP stdio server to avoid protocol interference
-const minimalLog = (message: string, data?: any) => {
-  if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID !== undefined) {
-    // In test mode, use minimal console.error
-    console.error(message + (data ? ': ' + JSON.stringify(data) : ''));
-  }
-  // In production MCP mode, suppress all logs to avoid protocol interference
-};
-
 // Determine Client Project Root at startup (for context only, not for DB initialization)
 const serverCwd = process.cwd();
-// console.error(
-//   `MCP stdio server CWD (Current Working Directory): ${serverCwd}. Note: Actual memory bank paths are determined by 'memory-bank' tool calls per repository/branch.`,
+// mcpStdioLogger.debug(
+//   { cwd: serverCwd },
+//   'MCP stdio server CWD (Current Working Directory): Note: Actual memory bank paths are determined by \'memory-bank\' tool calls per repository/branch.',
 // );
 
 if (process.env.DB_PATH_OVERRIDE) {
@@ -64,8 +56,6 @@ process.on('SIGTERM', () => {
   mcpStdioLogger.info('Received SIGTERM, shutting down gracefully');
   process.exit(0);
 });
-
-// console.log('MCP_STDIO_SERVER_READY_FOR_TESTING'); // Removed to avoid non-JSON output on stdout
 
 import packageJson from '../package.json';
 
@@ -101,18 +91,18 @@ function getSchemaKeyForTool(toolName: string): keyof typeof toolSchemas | undef
 }
 
 async function main() {
-  minimalLog('MCP Stdio Server initializing...');
+  mcpStdioLogger.info('MCP Stdio Server initializing...');
 
   // We no longer initialize a global MemoryService during startup
   // Each MCP tool handler will create or retrieve a MemoryService instance on-demand and specific to each clientProjectRoot
-  minimalLog('MemoryService initialization deferred until needed by tool handlers');
+  mcpStdioLogger.debug('MemoryService initialization deferred until needed by tool handlers');
 
   const serverInfo = {
     name: packageJson.name,
     version: packageJson.version,
   };
 
-  minimalLog('Server configuration', serverInfo);
+  mcpStdioLogger.debug({ serverInfo }, 'Server configuration');
 
   // Use low-level Server for full control
   const server = new Server(serverInfo, {
@@ -284,15 +274,17 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  minimalLog('MCP Server (stdio) initialized and listening');
+  mcpStdioLogger.info('MCP Server (stdio) initialized and listening');
 
   // EXPLICIT test detection message - required for E2E tests to detect server readiness
+  // In test mode, we still need to output to stderr for test detection
   if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID !== undefined) {
-    console.error('MCP Server (stdio) initialized and listening');
+    // Use stderr for test detection to avoid stdout pollution
+    process.stderr.write('MCP Server (stdio) initialized and listening\n');
   }
 }
 
 main().catch((error) => {
-  minimalLog('Server startup failed', { error: error.message });
+  logError(mcpStdioLogger, error as Error, { operation: 'server-startup' });
   process.exit(1);
 });

@@ -5,13 +5,17 @@ import { Rule } from '../types'; // Import Rule type
 import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
 import fs from 'fs/promises';
 import path from 'path';
+import { loggers, logError } from '../utils/logger';
 
 const program = new Command();
 let memoryService: MemoryService;
 
+// Create CLI-specific logger
+const cliLogger = loggers.controller().child({ component: 'CLI' });
+
 function createMockContext(): EnrichedRequestHandlerExtra {
   return {
-    logger: console,
+    logger: cliLogger,
     session: {},
     sendProgress: async () => {},
     memoryService: null as any, // Will be set after initialization
@@ -26,9 +30,9 @@ async function initializeMemoryServiceInstance(): Promise<void> {
   if (!memoryService) {
     try {
       memoryService = await MemoryService.getInstance();
-      console.log('CLI: Memory service singleton instance obtained.');
+      cliLogger.info('Memory service singleton instance obtained');
     } catch (error) {
-      console.error('CLI: Failed to initialize memory service:', error);
+      logError(cliLogger, error as Error, { operation: 'memory-service-initialization' });
       process.exit(1);
     }
   }
@@ -62,11 +66,16 @@ program
       const clientProjectRoot = getEffectiveProjectRoot();
       const mockContext = createMockContext();
       await memoryService.initMemoryBank(mockContext, clientProjectRoot, repositoryName, branch);
-      console.log(
+      cliLogger.info(
+        { repositoryName, branch, clientProjectRoot },
         `✅ Memory bank initialized for repository: ${repositoryName} (branch: ${branch})`,
       );
     } catch (error) {
-      console.error('❌ Failed to initialize memory bank:', error);
+      logError(cliLogger, error as Error, {
+        operation: 'init-memory-bank',
+        repositoryName,
+        branch,
+      });
       process.exit(1);
     }
   });
@@ -98,11 +107,17 @@ program
     try {
       const mockContext = createMockContext();
       await memoryService.updateContext(mockContext, clientProjectRoot, contextParams);
-      console.log(
+      cliLogger.info(
+        { repositoryName, branch, contextParams },
         `✅ Added to today's context for repository: ${repositoryName} (branch: ${branch})`,
       );
     } catch (error) {
-      console.error('❌ Failed to add to context:', error);
+      logError(cliLogger, error as Error, {
+        operation: 'add-context',
+        repositoryName,
+        branch,
+        contextParams,
+      });
       process.exit(1);
     }
   });
@@ -137,9 +152,18 @@ program
         branch,
         componentDataForService,
       );
-      console.log(`✅ Component ${id} added to repository: ${repositoryName} (branch: ${branch})`);
+      cliLogger.info(
+        { repositoryName, branch, componentId: id, componentData: componentDataForService },
+        `✅ Component ${id} added to repository: ${repositoryName} (branch: ${branch})`,
+      );
     } catch (error) {
-      console.error('❌ Failed to add component:', error);
+      logError(cliLogger, error as Error, {
+        operation: 'add-component',
+        repositoryName,
+        branch,
+        componentId: id,
+        componentData: componentDataForService,
+      });
       process.exit(1);
     }
   });
@@ -172,9 +196,18 @@ program
         branch,
         decisionDataForService,
       );
-      console.log(`✅ Decision ${id} added to repository: ${repositoryName} (branch: ${branch})`);
+      cliLogger.info(
+        { repositoryName, branch, decisionId: id, decisionData: decisionDataForService },
+        `✅ Decision ${id} added to repository: ${repositoryName} (branch: ${branch})`,
+      );
     } catch (error) {
-      console.error('❌ Failed to add decision:', error);
+      logError(cliLogger, error as Error, {
+        operation: 'add-decision',
+        repositoryName,
+        branch,
+        decisionId: id,
+        decisionData: decisionDataForService,
+      });
       process.exit(1);
     }
   });
@@ -211,9 +244,18 @@ program
         ruleDataForService,
         branch,
       );
-      console.log(`✅ Rule ${id} added to repository: ${repositoryName} (branch: ${branch})`);
+      cliLogger.info(
+        { repositoryName, branch, ruleId: id, ruleData: ruleDataForService },
+        `✅ Rule ${id} added to repository: ${repositoryName} (branch: ${branch})`,
+      );
     } catch (error) {
-      console.error('❌ Failed to add rule:', error);
+      logError(cliLogger, error as Error, {
+        operation: 'add-rule',
+        repositoryName,
+        branch,
+        ruleId: id,
+        ruleData: ruleDataForService,
+      });
       process.exit(1);
     }
   });
