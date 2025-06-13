@@ -1,4 +1,8 @@
-console.log(
+import { loggers } from './utils/logger';
+
+const mainLogger = loggers.controller().child({ component: 'Main' });
+
+mainLogger.info(
   'This is the main index.ts. Previously, this started the default HTTP server (src/app.ts), which has been removed. \n' +
     'Please use specific commands to start servers, e.g.: \n' +
     '  - For STDIN/STDOUT SDK server: npm run start:stdio \n' +

@@ -19,6 +19,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { toolHandlers as sdkToolHandlers } from './mcp/tool-handlers';
 import { MemoryService } from './services/memory.service';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
+import { loggers, createPerformanceLogger, logError } from './utils/logger';
 
 // Load environment variables
 dotenv.config();
@@ -27,22 +28,8 @@ dotenv.config();
 const port = parseInt(process.env.HTTP_STREAM_PORT || '3001', 10);
 const host = process.env.HOST || 'localhost';
 
-// Debug logging
-const DEBUG_LEVEL = parseInt(process.env.DEBUG || '0', 10);
-
-function debugLog(level: number, message: string, data?: any): void {
-  if (DEBUG_LEVEL >= level) {
-    const timestamp = new Date().toISOString();
-    const logEntry = {
-      timestamp,
-      level: level === 0 ? 'ERROR' : level === 1 ? 'WARN' : level === 2 ? 'INFO' : 'DEBUG',
-      message,
-      component: 'mcp-httpstream-server',
-      data: DEBUG_LEVEL >= 3 ? data : undefined,
-    };
-    console.log(JSON.stringify(logEntry));
-  }
-}
+// Create HTTP stream specific logger
+const httpStreamLogger = loggers.mcpHttp();
 
 // Map to store clientProjectRoot for each repository and branch
 const repositoryRootMap = new Map<string, string>();
@@ -92,14 +79,14 @@ function createZodSchema(tool: any) {
 
 // Register all our tools with the MCP server
 function registerTools() {
-  debugLog(2, 'Registering MCP tools...');
+  httpStreamLogger.info('Registering MCP tools...');
 
   // Add the initialize method handler (this is handled automatically by McpServer)
   // Just logging for debugging
-  debugLog(2, 'MCP server will handle initialization automatically');
+  httpStreamLogger.debug('MCP server will handle initialization automatically');
 
   for (const tool of MEMORY_BANK_MCP_TOOLS) {
-    debugLog(3, `Registering tool: ${tool.name}`);
+    httpStreamLogger.debug({ toolName: tool.name }, `Registering tool: ${tool.name}`);
 
     const schema = createZodSchema(tool);
 
@@ -108,81 +95,94 @@ function registerTools() {
       tool.description,
       schema as any, // Type assertion to bypass complex inference
       async (args, context): Promise<CallToolResult> => {
-        debugLog(3, `Executing tool: ${tool.name}`, args);
+        const toolPerfLogger = createPerformanceLogger(httpStreamLogger, `tool-${tool.name}`);
+        const toolLogger = httpStreamLogger.child({
+          tool: tool.name,
+          requestId: context.requestId || randomUUID(),
+        });
 
-        // Handle clientProjectRoot storage for memory-bank init operations
-        if (tool.name === 'memory-bank' && args.operation === 'init') {
-          const repoBranchKey = `${args.repository}:${args.branch}`;
-          repositoryRootMap.set(repoBranchKey, args.clientProjectRoot);
-          debugLog(3, `Stored clientProjectRoot for ${repoBranchKey}: ${args.clientProjectRoot}`);
-        }
+        toolLogger.debug({ args }, `Executing tool: ${tool.name}`);
 
-        // Get clientProjectRoot from stored map or args
-        let effectiveClientProjectRoot = args.clientProjectRoot;
-        if (!effectiveClientProjectRoot && args.repository && args.branch) {
-          const repoBranchKey = `${args.repository}:${args.branch}`;
-          effectiveClientProjectRoot = repositoryRootMap.get(repoBranchKey);
-        }
+        try {
+          // Handle clientProjectRoot storage for memory-bank init operations
+          if (tool.name === 'memory-bank' && args.operation === 'init') {
+            const repoBranchKey = `${args.repository}:${args.branch}`;
+            repositoryRootMap.set(repoBranchKey, args.clientProjectRoot);
+            toolLogger.debug(
+              { repoBranchKey, clientProjectRoot: args.clientProjectRoot },
+              `Stored clientProjectRoot for ${repoBranchKey}`,
+            );
+          }
 
-        if (!effectiveClientProjectRoot) {
-          throw new Error(
-            `ClientProjectRoot not established for tool '${tool.name}'. Initialize memory bank first.`,
-          );
-        }
+          // Get clientProjectRoot from stored map or args
+          let effectiveClientProjectRoot = args.clientProjectRoot;
+          if (!effectiveClientProjectRoot && args.repository && args.branch) {
+            const repoBranchKey = `${args.repository}:${args.branch}`;
+            effectiveClientProjectRoot = repositoryRootMap.get(repoBranchKey);
+          }
 
-        // Get the SDK handler
-        const handler = sdkToolHandlers[tool.name];
-        if (!handler) {
-          throw new Error(`Tool handler not found: ${tool.name}`);
-        }
+          if (!effectiveClientProjectRoot) {
+            throw new Error(
+              `ClientProjectRoot not established for tool '${tool.name}'. Initialize memory bank first.`,
+            );
+          }
 
-        // Create enriched context
-        const memoryService = await MemoryService.getInstance();
-        const enrichedContext = {
-          ...context,
-          logger: {
-            debug: (msg: string, data?: any) => debugLog(3, `[${tool.name}] ${msg}`, data),
-            info: (msg: string, data?: any) => debugLog(2, `[${tool.name}] ${msg}`, data),
-            warn: (msg: string, data?: any) => debugLog(1, `[${tool.name}] ${msg}`, data),
-            error: (msg: string, data?: any) => debugLog(0, `[${tool.name}] ${msg}`, data),
-          },
-          session: {
-            clientProjectRoot: effectiveClientProjectRoot,
-            repository: args.repository,
-            branch: args.branch,
-          },
-          sendProgress: async (progressData: any) => {
-            // Send progress notifications through MCP
-            await context.sendNotification({
-              method: 'notifications/progress',
-              params: {
-                progressToken: context.requestId || randomUUID(),
-                ...progressData,
-              },
-            });
-          },
-          memoryService,
-        };
+          // Get the SDK handler
+          const handler = sdkToolHandlers[tool.name];
+          if (!handler) {
+            throw new Error(`Tool handler not found: ${tool.name}`);
+          }
 
-        // Add clientProjectRoot to args
-        const enhancedArgs = { ...args, clientProjectRoot: effectiveClientProjectRoot };
-
-        const result = await handler(enhancedArgs, enrichedContext, memoryService);
-        debugLog(3, `Tool ${tool.name} completed`, { success: !!result });
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(result),
+          // Create enriched context
+          const memoryService = await MemoryService.getInstance();
+          const enrichedContext = {
+            ...context,
+            logger: toolLogger, // Use structured logger instead of custom debug function
+            session: {
+              clientProjectRoot: effectiveClientProjectRoot,
+              repository: args.repository,
+              branch: args.branch,
             },
-          ],
-        };
+            sendProgress: async (progressData: any) => {
+              // Send progress notifications through MCP
+              await context.sendNotification({
+                method: 'notifications/progress',
+                params: {
+                  progressToken: context.requestId || randomUUID(),
+                  ...progressData,
+                },
+              });
+            },
+            memoryService,
+          };
+
+          // Add clientProjectRoot to args
+          const enhancedArgs = { ...args, clientProjectRoot: effectiveClientProjectRoot };
+
+          const result = await handler(enhancedArgs, enrichedContext, memoryService);
+          toolPerfLogger.complete({ success: !!result });
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(result),
+              },
+            ],
+          };
+        } catch (error) {
+          toolPerfLogger.fail(error as Error);
+          logError(toolLogger, error as Error, { operation: 'tool-execution' });
+          throw error;
+        }
       },
     );
   }
 
-  debugLog(2, `Registered ${MEMORY_BANK_MCP_TOOLS.length} tools`);
+  httpStreamLogger.info(
+    { toolCount: MEMORY_BANK_MCP_TOOLS.length },
+    `Registered ${MEMORY_BANK_MCP_TOOLS.length} tools`,
+  );
 }
 
 // Server variables
@@ -190,7 +190,7 @@ let server: Server;
 let transport: StreamableHTTPServerTransport;
 
 async function startServer(): Promise<void> {
-  debugLog(2, 'Starting MCP HTTP Stream server...');
+  httpStreamLogger.info('Starting MCP HTTP Stream server...');
 
   // Register all tools
   registerTools();
@@ -203,24 +203,33 @@ async function startServer(): Promise<void> {
 
   // Connect the transport to the MCP server
   await mcpServer.connect(transport);
-  debugLog(3, 'MCP server connected to transport');
+  httpStreamLogger.debug('MCP server connected to transport');
 
   // Create simple HTTP server - delegate everything to the transport
   server = createServer(async (req, res) => {
+    const requestLogger = httpStreamLogger.child({
+      requestId: randomUUID(),
+      method: req.method,
+      url: req.url,
+    });
+
     try {
-      debugLog(3, `HTTP ${req.method} ${req.url}`, {
-        headers: req.headers,
-        method: req.method,
-        url: req.url,
-      });
+      requestLogger.debug(
+        {
+          headers: req.headers,
+          method: req.method,
+          url: req.url,
+        },
+        `HTTP ${req.method} ${req.url}`,
+      );
 
       // Let the official transport handle all requests
       await transport.handleRequest(req, res);
     } catch (error) {
-      debugLog(0, 'Error handling HTTP request', {
-        error: error instanceof Error ? error.message : String(error),
+      logError(requestLogger, error as Error, {
         method: req.method,
         url: req.url,
+        operation: 'http-request-handling',
       });
 
       if (!res.headersSent) {
@@ -239,29 +248,31 @@ async function startServer(): Promise<void> {
 
   // Start listening
   server.listen(port, host, () => {
-    debugLog(2, `MCP HTTP Streaming Server running at http://${host}:${port}`);
-    console.log(`MCP HTTP Streaming Server running at http://${host}:${port}`);
+    httpStreamLogger.info(
+      { port, host, url: `http://${host}:${port}` },
+      `MCP HTTP Streaming Server running at http://${host}:${port}`,
+    );
   });
 
   // Handle server errors
   server.on('error', (err: Error) => {
-    debugLog(0, `HTTP server error: ${err.message}`, { stack: err.stack });
+    logError(httpStreamLogger, err, { operation: 'http-server-error' });
     process.exit(1);
   });
 }
 
 // Graceful shutdown
 function gracefulShutdown(signal: string): void {
-  debugLog(2, `Received ${signal}, starting graceful shutdown`);
+  httpStreamLogger.info({ signal }, `Received ${signal}, starting graceful shutdown`);
 
   if (server) {
     server.close(() => {
-      debugLog(2, 'HTTP server closed');
+      httpStreamLogger.info('HTTP server closed');
       process.exit(0);
     });
 
     setTimeout(() => {
-      debugLog(0, 'Graceful shutdown timed out, forcing exit');
+      httpStreamLogger.error('Graceful shutdown timed out, forcing exit');
       process.exit(1);
     }, 30000);
   } else {
@@ -277,7 +288,7 @@ if (require.main === module) {
 
   // Start the server
   startServer().catch((error) => {
-    debugLog(0, `Failed to start server: ${error.message}`, { stack: error.stack });
+    logError(httpStreamLogger, error as Error, { operation: 'server-startup' });
     process.exit(1);
   });
 }

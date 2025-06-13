@@ -63,21 +63,23 @@ export class MemoryService {
   }
 
   /**
-   * Get a KuzuDBClient for the given client project root
-   * Also initializes all repositories for this client if not already initialized
-   *
-   * @param clientProjectRoot The absolute path to the client project root
+   * Get or create KuzuDB client for a project root
+   * Uses singleton pattern to prevent multiple connections to the same database
+   * @param mcpContext MCP context for progress notifications and logging
+   * @param clientProjectRoot Client project root directory for database isolation
    * @returns Initialized KuzuDBClient instance
    */
   public async getKuzuClient(
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
   ): Promise<KuzuDBClient> {
-    // Write debug information to stderr to avoid interfering with MCP JSON communication on stdout.
-    process.stderr.write(
-      `[DEBUG] MemoryService.getKuzuClient ENTERED with CPR: ${clientProjectRoot}\n`,
-    );
     const logger = mcpContext.logger || console; // Fallback for safety, though context should always have logger
+
+    // Write debug information using structured logging
+    logger.debug(
+      { clientProjectRoot },
+      'MemoryService.getKuzuClient ENTERED with clientProjectRoot',
+    );
 
     // Validate clientProjectRoot - this is critical for correct operation
     if (!clientProjectRoot) {
@@ -189,7 +191,7 @@ export class MemoryService {
     );
 
     try {
-      console.error(`[DEBUG] MemoryService.initMemoryBank ENTERING TRY BLOCK`);
+      logger.debug('MemoryService.initMemoryBank ENTERING TRY BLOCK');
       logger.info(
         `[MemoryService.initMemoryBank] Attempting to call this.getKuzuClient for CPR: ${clientProjectRoot}`,
       );
@@ -201,9 +203,12 @@ export class MemoryService {
         percent: 45,
       });
 
-      console.error(`[DEBUG] MemoryService.initMemoryBank ABOUT TO CALL getKuzuClient`);
+      logger.debug('MemoryService.initMemoryBank ABOUT TO CALL getKuzuClient');
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-      console.error(`[DEBUG] MemoryService.initMemoryBank getKuzuClient RETURNED:`, !!kuzuClient);
+      logger.debug(
+        { kuzuClientExists: !!kuzuClient },
+        'MemoryService.initMemoryBank getKuzuClient RETURNED',
+      );
       logger.info(
         `[MemoryService.initMemoryBank] Successfully RETURNED from this.getKuzuClient for CPR: ${clientProjectRoot}`,
       );
@@ -303,7 +308,10 @@ export class MemoryService {
         path: clientProjectRoot, // Changed from dbPath to path
       };
     } catch (error: any) {
-      console.error(`[DEBUG] MemoryService.initMemoryBank CAUGHT EXCEPTION:`, error);
+      logger.error(
+        { error: error.message, stack: error.stack },
+        'MemoryService.initMemoryBank CAUGHT EXCEPTION',
+      );
       logger.error(`Error in initMemoryBank for ${repositoryName}:${branch}: ${error.message}`, {
         error: error.toString(),
         stack: error.stack,
