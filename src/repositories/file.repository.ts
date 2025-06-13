@@ -96,6 +96,9 @@ export class FileRepository {
           console.warn(`[FileRepository] Failed to parse metadata for file ${createdNode.id}`);
         }
 
+        // Extract repository name for consistency with other methods
+        const [repositoryName] = repoNodeId.split(':');
+
         // Return a File object that matches our interface
         return {
           id: createdNode.id?.toString(),
@@ -105,7 +108,7 @@ export class FileRepository {
           mime_type: (parsedMetadata as any).mime_type,
           content: (parsedMetadata as any).content,
           metrics: (parsedMetadata as any).metrics,
-          repository: repoNodeId,
+          repository: repositoryName,
           branch: branch,
           created_at: new Date(createdNode.lastModified),
           updated_at: new Date(createdNode.lastModified),
@@ -145,6 +148,9 @@ export class FileRepository {
           return null;
         }
 
+        // Extract repository name for consistency with other methods
+        const [repositoryName] = repoNodeId.split(':');
+
         // Return a File object that matches our interface
         return {
           id: foundNode.id?.toString(),
@@ -154,7 +160,7 @@ export class FileRepository {
           mime_type: (parsedMetadata as any).mime_type,
           content: (parsedMetadata as any).content,
           metrics: (parsedMetadata as any).metrics,
-          repository: repoNodeId,
+          repository: repositoryName,
           branch: (parsedMetadata as any).branch || branch,
           created_at: new Date(foundNode.lastModified),
           updated_at: new Date(foundNode.lastModified),
