@@ -43,8 +43,9 @@ export class FileRepository {
         f.path = $path,
         f.size = $size,
         f.mime_type = $mime_type,
+        f.branch = $branch,
         f.created_at = $created_at,
-        f.updated_at = $created_at,
+        f.updated_at = $updated_at,
         f.content = $content,
         f.metrics = $metrics
       ON MATCH SET
@@ -52,6 +53,7 @@ export class FileRepository {
         f.path = $path,
         f.size = $size,
         f.mime_type = $mime_type,
+        f.branch = $branch,
         f.updated_at = $updated_at,
         f.content = $content,
         f.metrics = $metrics
@@ -67,6 +69,7 @@ export class FileRepository {
         path: fileNodeProps.path,
         size: fileNodeProps.size,
         mime_type: fileNodeProps.mime_type,
+        branch: fileNodeProps.branch,
         created_at: fileNodeProps.created_at,
         updated_at: fileNodeProps.updated_at,
         content: fileData.content || null,
@@ -85,11 +88,11 @@ export class FileRepository {
 
   async findFileById(repoNodeId: string, branch: string, fileId: string): Promise<File | null> {
     const query = `
-      MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId}) 
+      MATCH (f:File {id: $fileId, branch: $branch})-[:PART_OF]->(repo:Repository {id: $repoNodeId}) 
       RETURN f
     `;
     try {
-      const result = await this.kuzuClient.executeQuery(query, { fileId, repoNodeId });
+      const result = await this.kuzuClient.executeQuery(query, { fileId, repoNodeId, branch });
       if (result && result.length > 0) {
         const foundNode = result[0].f.properties || result[0].f;
         return { ...foundNode, id: foundNode.id?.toString() } as File;
@@ -117,11 +120,10 @@ export class FileRepository {
     relationshipType: string = 'COMPONENT_IMPLEMENTS_FILE',
   ): Promise<boolean> {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
-    // Component has branch property, File does not have repository or branch properties
-    // Instead, we'll match files via PART_OF relationship to the same repository
+    // Both Component and File have branch properties for proper scoping
     const query = `
       MATCH (c:Component {id: $componentId, branch: $branch})-[:PART_OF]->(repo:Repository {id: $repoNodeId}), 
-            (f:File {id: $fileId})-[:PART_OF]->(repo)
+            (f:File {id: $fileId, branch: $branch})-[:PART_OF]->(repo)
       MERGE (c)-[r:${safeRelType}]->(f)
       RETURN r
     `;
@@ -154,7 +156,7 @@ export class FileRepository {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
     const query = `
       MATCH (c:Component {id: $componentId, branch: $branch})-[:PART_OF]->(repo:Repository {id: $repoNodeId}),
-            (c)-[r:${safeRelType}]->(f:File)-[:PART_OF]->(repo)
+            (c)-[r:${safeRelType}]->(f:File {branch: $branch})-[:PART_OF]->(repo)
       RETURN f
     `;
     try {

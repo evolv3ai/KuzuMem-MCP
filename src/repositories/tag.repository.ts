@@ -25,6 +25,7 @@ export class TagRepository {
       name: string;
       repository?: string;
       branch?: string;
+      category?: string;
     },
   ): Promise<Tag | null> {
     const now = new Date();
@@ -53,12 +54,17 @@ export class TagRepository {
           t.name = $name, 
           t.color = $color, 
           t.description = $description,
-          t.category = $category
+          t.category = $category,
+          t.repository = $repository,
+          t.branch = $branch,
+          t.created_at = $created_at
         ON MATCH SET 
           t.name = $name, 
           t.color = $color, 
           t.description = $description,
-          t.category = $category
+          t.category = $category,
+          t.repository = $repository,
+          t.branch = $branch
         MERGE (t)-[:PART_OF]->(repo)
         RETURN t
       `;
@@ -68,7 +74,9 @@ export class TagRepository {
         color: tagNodeProps.color,
         description: tagNodeProps.description,
         repository: tagNodeProps.repository,
+        branch: tagNodeProps.branch,
         category: tagData.category || 'general',
+        created_at: now,
       };
     } else {
       // Create global tag without repository relationship
@@ -78,12 +86,15 @@ export class TagRepository {
           t.name = $name, 
           t.color = $color, 
           t.description = $description,
-          t.category = $category
+          t.category = $category,
+          t.branch = $branch,
+          t.created_at = $created_at
         ON MATCH SET 
           t.name = $name, 
           t.color = $color, 
           t.description = $description,
-          t.category = $category
+          t.category = $category,
+          t.branch = $branch
         RETURN t
       `;
       queryParams = {
@@ -91,7 +102,9 @@ export class TagRepository {
         name: tagNodeProps.name,
         color: tagNodeProps.color,
         description: tagNodeProps.description,
+        branch: tagNodeProps.branch,
         category: tagData.category || 'general',
+        created_at: now,
       };
     }
 
