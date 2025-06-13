@@ -47,7 +47,6 @@ export class FileRepository {
     // Query that creates/updates the File node and optionally establishes PART_OF relationship
     // Uses OPTIONAL MATCH to allow file creation even if repository doesn't exist yet
     const query = `
-      OPTIONAL MATCH (repo:Repository {id: $repository})
       MERGE (f:File {id: $id})
       ON CREATE SET
         f.name = $name,
@@ -65,10 +64,12 @@ export class FileRepository {
         f.lastModified = $lastModified,
         f.checksum = $checksum,
         f.metadata = $metadata
-      WITH f, repo
-      WHERE repo IS NOT NULL
-      MERGE (f)-[:PART_OF]->(repo)
-      RETURN f
+      WITH f
+      OPTIONAL MATCH (repo:Repository {id: $repository})
+      FOREACH (ignoreMe IN CASE WHEN repo IS NOT NULL THEN [1] ELSE [] END |
+        MERGE (f)-[:PART_OF]->(repo)
+      )
+      RETURN f, repo
     `;
 
     try {
@@ -86,17 +87,9 @@ export class FileRepository {
 
       if (result && result.length > 0) {
         const createdNode = result[0].f.properties || result[0].f;
-
-        // Parse metadata back to individual properties for the return object
-        let parsedMetadata = {};
-        try {
-          parsedMetadata = JSON.parse(createdNode.metadata || '{}');
-        } catch (e) {
-          console.warn(`[FileRepository] Failed to parse metadata for file ${createdNode.id}`);
-        }
-
-        // Extract repository name for consistency with other methods
-        const [repositoryName] = repoNodeId.split(':');
+        const repoNode = result[0].repo ? result[0].repo.properties || result[0].repo : null;
+        const parsedMetadata = this._parseFileMetadata(createdNode.metadata, createdNode.id);
+        const repositoryName = repoNode ? repoNode.name : repoNodeId.split(':')[0];
 
         // Return a File object that matches our interface
         return {
@@ -104,10 +97,10 @@ export class FileRepository {
           name: createdNode.name,
           path: createdNode.path,
           size: createdNode.size,
-          mime_type: (parsedMetadata as any).mime_type,
-          content: (parsedMetadata as any).content,
-          metrics: (parsedMetadata as any).metrics,
-          repository: repositoryName,
+          mime_type: parsedMetadata.mime_type,
+          content: parsedMetadata.content,
+          metrics: parsedMetadata.metrics,
+          repository: repositoryName, // Consistent repository name extraction
           branch: branch,
           created_at: new Date(createdNode.lastModified),
           updated_at: new Date(createdNode.lastModified),
@@ -124,31 +117,22 @@ export class FileRepository {
     const query = `
       MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId}) 
       WHERE json_extract_string(f.metadata, '$.branch') = $branch
-      RETURN f
+      RETURN f, repo
     `;
     try {
       const result = await this.kuzuClient.executeQuery(query, { fileId, repoNodeId, branch });
       if (result && result.length > 0) {
         const foundNode = result[0].f.properties || result[0].f;
-
-        // Parse metadata back to individual properties
-        let parsedMetadata = {};
-        try {
-          parsedMetadata = JSON.parse(foundNode.metadata || '{}');
-        } catch (e) {
-          console.warn(`[FileRepository] Failed to parse metadata for file ${foundNode.id}`);
-        }
+        const repoNode = result[0].repo.properties || result[0].repo;
+        const parsedMetadata = this._parseFileMetadata(foundNode.metadata, foundNode.id);
 
         // Verify branch matches (additional safety check)
-        if ((parsedMetadata as any).branch !== branch) {
+        if (parsedMetadata.branch !== branch) {
           console.warn(
-            `[FileRepository] Branch mismatch for file ${fileId}: expected ${branch}, got ${(parsedMetadata as any).branch}`,
+            `[FileRepository] Branch mismatch for file ${fileId}: expected ${branch}, got ${parsedMetadata.branch}`,
           );
           return null;
         }
-
-        // Extract repository name for consistency with other methods
-        const [repositoryName] = repoNodeId.split(':');
 
         // Return a File object that matches our interface
         return {
@@ -156,11 +140,11 @@ export class FileRepository {
           name: foundNode.name,
           path: foundNode.path,
           size: foundNode.size,
-          mime_type: (parsedMetadata as any).mime_type,
-          content: (parsedMetadata as any).content,
-          metrics: (parsedMetadata as any).metrics,
-          repository: repositoryName,
-          branch: (parsedMetadata as any).branch || branch,
+          mime_type: parsedMetadata.mime_type,
+          content: parsedMetadata.content,
+          metrics: parsedMetadata.metrics,
+          repository: repoNode.name, // Use the actual repository name from the graph
+          branch: parsedMetadata.branch || branch,
           created_at: new Date(foundNode.lastModified),
           updated_at: new Date(foundNode.lastModified),
         } as File;
@@ -190,9 +174,16 @@ export class FileRepository {
   ): Promise<boolean> {
     // Component schema: uses graph_unique_id as primary key (format: repo:branch:id)
     // File schema: stores repository and branch in metadata JSON field and uses PART_OF relationship
-    const [repositoryName] = repoNodeId.split(':'); // Extract repository name from repoNodeId
+    const repositoryName = repoNodeId.split(':')[0]; // Consistent repository name extraction
     const componentGraphUniqueId = formatGraphUniqueId(repositoryName, branch, componentId);
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
+
+    if (!safeRelType) {
+      console.error(
+        `[FileRepository] Invalid relationshipType: "${relationshipType}". Sanitized version is empty.`,
+      );
+      return false;
+    }
 
     // Explicit direction: (Component)-[:IMPLEMENTS]->(File)
     // This means: Component implements functionality that is contained in File
@@ -231,16 +222,23 @@ export class FileRepository {
     componentId: string,
     relationshipType: string = 'IMPLEMENTS',
   ): Promise<File[]> {
-    const [repositoryName] = repoNodeId.split(':'); // Extract repository name from repoNodeId
+    const repositoryName = repoNodeId.split(':')[0]; // Consistent repository name extraction
     const componentGraphUniqueId = formatGraphUniqueId(repositoryName, branch, componentId);
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
+
+    if (!safeRelType) {
+      console.error(
+        `[FileRepository] Invalid relationshipType: "${relationshipType}". Sanitized version is empty.`,
+      );
+      return [];
+    }
 
     // Query expects: (Component)-[:IMPLEMENTS]->(File)
     // This finds Files that are implemented by the Component, filtered by branch using metadata JSON
     const query = `
       MATCH (c:Component {graph_unique_id: $componentGraphUniqueId})-[r:${safeRelType}]->(f:File)-[:PART_OF]->(repo:Repository {id: $repoNodeId})
       WHERE json_extract_string(f.metadata, '$.branch') = $branch
-      RETURN f
+      RETURN f, repo
     `;
     try {
       const result = await this.kuzuClient.executeQuery(query, {
@@ -252,17 +250,11 @@ export class FileRepository {
       return result
         .map((row: any) => {
           const fileNode = row.f.properties || row.f;
-
-          // Parse metadata back to individual properties
-          let parsedMetadata = {};
-          try {
-            parsedMetadata = JSON.parse(fileNode.metadata || '{}');
-          } catch (e) {
-            console.warn(`[FileRepository] Failed to parse metadata for file ${fileNode.id}`);
-          }
+          const repoNode = row.repo.properties || row.repo;
+          const parsedMetadata = this._parseFileMetadata(fileNode.metadata, fileNode.id);
 
           // Verify branch matches (additional safety check)
-          if ((parsedMetadata as any).branch !== branch) {
+          if (parsedMetadata.branch !== branch) {
             return null;
           }
 
@@ -271,11 +263,11 @@ export class FileRepository {
             name: fileNode.name,
             path: fileNode.path,
             size: fileNode.size,
-            mime_type: (parsedMetadata as any).mime_type,
-            content: (parsedMetadata as any).content,
-            metrics: (parsedMetadata as any).metrics,
-            repository: repositoryName,
-            branch: (parsedMetadata as any).branch || branch,
+            mime_type: parsedMetadata.mime_type,
+            content: parsedMetadata.content,
+            metrics: parsedMetadata.metrics,
+            repository: repoNode.name, // Use the actual repository name from the graph
+            branch: parsedMetadata.branch || branch,
             created_at: new Date(fileNode.lastModified),
             updated_at: new Date(fileNode.lastModified),
           } as File;
@@ -301,6 +293,13 @@ export class FileRepository {
     relationshipType: string = 'IMPLEMENTS',
   ): Promise<any[]> {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
+
+    if (!safeRelType) {
+      console.error(
+        `[FileRepository] Invalid relationshipType: "${relationshipType}". Sanitized version is empty.`,
+      );
+      return [];
+    }
     // Query expects: (Component)-[:IMPLEMENTS]->(File)
     // This finds Components that implement the File, filtered by branch
     // Use proper JSON extraction instead of fragile CONTAINS on JSON string
@@ -342,4 +341,39 @@ export class FileRepository {
   }
 
   // Add other methods like updateFileNode, deleteFileNode as needed.
+
+  /**
+   * Safely parses the metadata JSON string from a File node.
+   * @param metadataString The raw metadata JSON string.
+   * @param fileId The ID of the file for logging purposes.
+   * @returns A structured object with metadata properties.
+   */
+  private _parseFileMetadata(
+    metadataString: string | undefined,
+    fileId: string,
+  ): {
+    branch: string | null;
+    content: string | null;
+    metrics: any | null;
+    mime_type: string | null;
+  } {
+    const defaults = {
+      branch: null,
+      content: null,
+      metrics: null,
+      mime_type: null,
+    };
+
+    if (!metadataString) {
+      return defaults;
+    }
+
+    try {
+      const parsed = JSON.parse(metadataString);
+      return { ...defaults, ...parsed };
+    } catch (e) {
+      console.warn(`[FileRepository] Failed to parse metadata for file ${fileId}`);
+      return defaults;
+    }
+  }
 }
