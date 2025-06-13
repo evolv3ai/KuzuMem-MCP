@@ -28,36 +28,22 @@ export class TagRepository {
     },
   ): Promise<Tag | null> {
     const now = new Date();
-    const tagNodeProps = {
-      ...tagData,
-      id: tagData.id, // Kuzu PK for Tag table
-      name: tagData.name,
-      color: tagData.color || null,
-      description: tagData.description || null,
-      repository: tagData.repository || null,
-      branch: tagData.branch || 'main',
-      created_at: now, // Set created_at on initial creation
-      // updated_at: now, // Kuzu MERGE ON MATCH can handle updates if needed
-    };
-
-    // MERGE is good for upserting based on a unique property (id for Tag)
+    
     // KuzuDB doesn't support setting properties from a map parameter, so we set them individually
     const query = `
       MERGE (t:Tag {id: $id})
-      ON CREATE SET t.id = $id, t.name = $name, t.color = $color, t.description = $description, t.repository = $repository, t.branch = $branch, t.created_at = $created_at
+      ON CREATE SET t.id = $id, t.name = $name, t.color = $color, t.description = $description, t.created_at = $created_at
       ON MATCH SET t.name = $name, t.color = $color, t.description = $description
       RETURN t
     `;
 
     try {
       const result = await this.kuzuClient.executeQuery(query, {
-        id: tagNodeProps.id,
-        name: tagNodeProps.name,
-        color: tagNodeProps.color,
-        description: tagNodeProps.description,
-        repository: tagNodeProps.repository,
-        branch: tagNodeProps.branch,
-        created_at: tagNodeProps.created_at,
+        id: tagData.id,
+        name: tagData.name,
+        color: tagData.color || null,
+        description: tagData.description || null,
+        created_at: now,
       });
       if (result && result.length > 0) {
         const node = result[0].t.properties || result[0].t;
@@ -119,7 +105,6 @@ export class TagRepository {
     tagId: string,
     relationshipType: string, // e.g., TAGGED_COMPONENT, TAGGED_FILE - construct this carefully
   ): Promise<boolean> {
-    const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
     const safeItemLabel = itemLabel.replace(/[^a-zA-Z0-9_]/g, '');
 
     // Schema-aware matching: Component and File have different properties
@@ -138,19 +123,14 @@ export class TagRepository {
       matchClause = `(item:\`${safeItemLabel}\` {id: $itemId, repository: $repoNodeId, branch: $branch})`;
     }
 
+    // Use the correct relationship table name from schema
     const query = `
       MATCH ${matchClause},
              (tag:Tag {id: $tagId})
-      MERGE (item)-[r:${safeRelType}]->(tag)
+      MERGE (item)-[r:TAGGED_WITH]->(tag)
       RETURN r
     `;
-    // If tags are global and item's repo/branch context is sufficient:
-    // const query = \`
-    //   MATCH (item:\\\`${safeItemLabel}\\\` {id: $itemId, repository: $repoNodeId, branch: $branch}),
-    //         (tag:Tag {id: $tagId})
-    //   MERGE (item)-[:IS_TAGGED_WITH]->(tag) // Using a single generic relationship type
-    //   RETURN r
-    // \`;
+
     try {
       // Only pass parameters that are used in the query
       const params: Record<string, any> = {
@@ -168,7 +148,7 @@ export class TagRepository {
       return result && result.length > 0;
     } catch (error) {
       console.error(
-        `[TagRepository] Error tagging ${itemLabel} ${itemId} with Tag ${tagId} via ${safeRelType}:`,
+        `[TagRepository] Error tagging ${itemLabel} ${itemId} with Tag ${tagId} via TAGGED_WITH:`,
         error,
       );
       return false;
@@ -190,12 +170,12 @@ export class TagRepository {
     // Use pattern to match any relationship that starts with "TAGGED_"
     const query = `
       MATCH ${matchClause}-[r]->(t:Tag {id: $tagId})
-      WHERE item.branch = $branch AND startsWith(type(r), 'TAGGED_')
+      WHERE item.branch = $branch AND starts_with(type(r), 'TAGGED_')
       RETURN item.id AS id, labels(item)[0] AS type, item AS properties
     `;
 
     try {
-      const result = await this.kuzuClient.executeQuery(query, { tagId, repoNodeId, branch });
+      const result = await this.kuzuClient.executeQuery(query, { tagId, branch });
       if (Array.isArray(result)) {
         return result.map((row: any) => {
           const props = row.properties.properties || row.properties;
