@@ -646,7 +646,7 @@ export async function initializeKuzuDBSchema(connection: any): Promise<void> {
         repository STRING,
         created_at STRING,
         updated_at STRING,
-        PRIMARY KEY (id)
+        PRIMARY KEY (graph_unique_id)
       );
     `);
 
@@ -662,7 +662,7 @@ export async function initializeKuzuDBSchema(connection: any): Promise<void> {
         graph_unique_id STRING,
         created_at STRING,
         updated_at STRING,
-        PRIMARY KEY (id)
+        PRIMARY KEY (graph_unique_id)
       );
     `);
 
@@ -678,7 +678,7 @@ export async function initializeKuzuDBSchema(connection: any): Promise<void> {
         graph_unique_id STRING,
         created_at STRING,
         updated_at STRING,
-        PRIMARY KEY (id)
+        PRIMARY KEY (graph_unique_id)
       );
     `);
 
@@ -687,11 +687,12 @@ export async function initializeKuzuDBSchema(connection: any): Promise<void> {
         id STRING,
         name STRING,
         path STRING,
-        type STRING,
-        size INT64,
-        lastModified STRING,
-        checksum STRING,
-        metadata STRING,
+        size_bytes INT64,
+        mime_type STRING,
+        created_at STRING,
+        updated_at STRING,
+        repository STRING,
+        branch STRING,
         PRIMARY KEY (id)
       );
     `);
@@ -703,6 +704,10 @@ export async function initializeKuzuDBSchema(connection: any): Promise<void> {
         category STRING,
         description STRING,
         color STRING,
+        repository STRING,
+        branch STRING,
+        created_at STRING,
+        updated_at STRING,
         PRIMARY KEY (id)
       );
     `);
@@ -719,7 +724,7 @@ export async function initializeKuzuDBSchema(connection: any): Promise<void> {
         graph_unique_id STRING,
         created_at STRING,
         updated_at STRING,
-        PRIMARY KEY (id)
+        PRIMARY KEY (graph_unique_id)
       );
     `);
 

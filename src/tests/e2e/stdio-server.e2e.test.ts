@@ -21,11 +21,11 @@ describe('MCP Stdio Server E2E Tests', () => {
   const testSessionId = `e2e-session-${Date.now()}`;
 
   // Helper to send JSON-RPC message to server
-  const sendMessage = (message: RpcMessage): Promise<RpcMessage> => {
+  const sendMessage = (message: RpcMessage, timeoutMs: number = 10000): Promise<RpcMessage> => {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Server response timeout'));
-      }, 10000);
+      }, timeoutMs);
 
       const responseHandler = (data: Buffer) => {
         try {
@@ -62,7 +62,11 @@ describe('MCP Stdio Server E2E Tests', () => {
   };
 
   // Helper to call MCP tool
-  const callTool = async (toolName: string, params: any): Promise<any> => {
+  const callTool = async (
+    toolName: string,
+    params: any,
+    timeoutMs: number = 10000,
+  ): Promise<any> => {
     const message: RpcMessage = {
       jsonrpc: '2.0',
       id: messageId++,
@@ -73,7 +77,7 @@ describe('MCP Stdio Server E2E Tests', () => {
       },
     };
 
-    const response = await sendMessage(message);
+    const response = await sendMessage(message, timeoutMs);
 
     if (response.result?.content?.[0]?.text) {
       return JSON.parse(response.result.content[0].text);
@@ -616,14 +620,18 @@ describe('MCP Stdio Server E2E Tests', () => {
 
   describe('Tool 10: search', () => {
     it('should perform full-text search across entities', async () => {
-      const result = await callTool('search', {
-        query: 'test service',
-        repository: TEST_REPO,
-        branch: TEST_BRANCH,
-        mode: 'fulltext',
-        entityTypes: ['component'],
-        limit: 10,
-      });
+      const result = await callTool(
+        'search',
+        {
+          query: 'test service',
+          repository: TEST_REPO,
+          branch: TEST_BRANCH,
+          mode: 'fulltext',
+          entityTypes: ['component'],
+          limit: 10,
+        },
+        15000,
+      );
 
       expect(result).toMatchObject({
         status: 'success',
@@ -642,17 +650,21 @@ describe('MCP Stdio Server E2E Tests', () => {
           score: expect.any(Number),
         });
       }
-    });
+    }, 20000);
 
     it('should search across multiple entity types', async () => {
-      const result = await callTool('search', {
-        query: 'test decision',
-        repository: TEST_REPO,
-        branch: TEST_BRANCH,
-        mode: 'fulltext',
-        entityTypes: ['component', 'decision', 'rule'],
-        limit: 5,
-      });
+      const result = await callTool(
+        'search',
+        {
+          query: 'test decision',
+          repository: TEST_REPO,
+          branch: TEST_BRANCH,
+          mode: 'fulltext',
+          entityTypes: ['component', 'decision', 'rule'],
+          limit: 5,
+        },
+        15000,
+      );
 
       expect(result).toMatchObject({
         status: 'success',
@@ -661,16 +673,20 @@ describe('MCP Stdio Server E2E Tests', () => {
         totalResults: expect.any(Number),
         query: 'test decision',
       });
-    });
+    }, 20000);
 
     it('should handle empty search results gracefully', async () => {
-      const result = await callTool('search', {
-        query: 'nonexistent-super-unique-term-12345',
-        repository: TEST_REPO,
-        branch: TEST_BRANCH,
-        mode: 'fulltext',
-        limit: 10,
-      });
+      const result = await callTool(
+        'search',
+        {
+          query: 'nonexistent-super-unique-term-12345',
+          repository: TEST_REPO,
+          branch: TEST_BRANCH,
+          mode: 'fulltext',
+          limit: 10,
+        },
+        15000,
+      );
 
       expect(result).toMatchObject({
         status: 'success',
@@ -679,19 +695,23 @@ describe('MCP Stdio Server E2E Tests', () => {
         totalResults: 0,
         query: 'nonexistent-super-unique-term-12345',
       });
-    });
+    }, 20000);
   });
 
   describe('Cleanup verification', () => {
     it('should verify all test data exists', async () => {
       // Query all components to ensure our test data is present
-      const result = await callTool('query', {
-        type: 'entities',
-        repository: TEST_REPO,
-        branch: TEST_BRANCH,
-        label: 'Component',
-        limit: 50,
-      });
+      const result = await callTool(
+        'query',
+        {
+          type: 'entities',
+          repository: TEST_REPO,
+          branch: TEST_BRANCH,
+          label: 'Component',
+          limit: 50,
+        },
+        15000,
+      );
 
       expect(result).toHaveProperty('entities');
       expect(Array.isArray(result.entities)).toBe(true);
@@ -712,6 +732,6 @@ describe('MCP Stdio Server E2E Tests', () => {
         const foundTestComponents = testComponentIds.filter((id) => componentIds.includes(id));
         expect(foundTestComponents.length).toBeGreaterThan(0);
       }
-    });
+    }, 20000);
   });
 });

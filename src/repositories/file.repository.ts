@@ -1,5 +1,6 @@
 import { KuzuDBClient } from '../db/kuzu'; // Corrected path
 import { File } from '../types'; // Internal domain types
+import { formatGraphUniqueId } from '../utils/id.utils'; // Add missing import
 import { RepositoryRepository } from './repository.repository'; // For context/scoping if needed
 
 export class FileRepository {
@@ -112,20 +113,21 @@ export class FileRepository {
     branch: string,
     componentId: string,
     fileId: string,
-    relationshipType: string = 'COMPONENT_IMPLEMENTS_FILE',
+    relationshipType: string = 'IMPLEMENTS',
   ): Promise<boolean> {
-    const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
-    // Component schema: graph_unique_id, id, name, kind, status, branch, created_at, updated_at
-    // File schema: id, graph_unique_id, name, path, language, metrics, content_hash, mime_type, size_bytes, created_at, updated_at, repository, branch
+    // Component schema: uses graph_unique_id as primary key (format: repo:branch:id)
+    // File schema: id, name, path, size_bytes, mime_type, created_at, updated_at, repository, branch
+    const [repositoryName] = repoNodeId.split(':'); // Extract repository name from repoNodeId
+    const componentGraphUniqueId = formatGraphUniqueId(repositoryName, branch, componentId);
     const query = `
-      MATCH (c:Component {id: $componentId, branch: $branch}), 
+      MATCH (c:Component {graph_unique_id: $componentGraphUniqueId}), 
             (f:File {id: $fileId, repository: $repoNodeId, branch: $branch})
-      MERGE (c)-[r:${safeRelType}]->(f)
+      MERGE (c)-[r:${relationshipType}]->(f)
       RETURN r
     `;
     try {
       const result = await this.kuzuClient.executeQuery(query, {
-        componentId,
+        componentGraphUniqueId,
         fileId,
         repoNodeId,
         branch,
@@ -133,7 +135,7 @@ export class FileRepository {
       return result && result.length > 0;
     } catch (error) {
       console.error(
-        `[FileRepository] Error linking C:${componentId} to F:${fileId} via ${safeRelType}:`,
+        `[FileRepository] Error linking C:${componentId} to F:${fileId} via ${relationshipType}:`,
         error,
       );
       return false;
@@ -147,23 +149,28 @@ export class FileRepository {
     repoNodeId: string,
     branch: string,
     componentId: string,
-    relationshipType: string = 'COMPONENT_IMPLEMENTS_FILE',
+    relationshipType: string = 'IMPLEMENTS',
   ): Promise<File[]> {
-    const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
+    const [repositoryName] = repoNodeId.split(':'); // Extract repository name from repoNodeId
+    const componentGraphUniqueId = formatGraphUniqueId(repositoryName, branch, componentId);
     const query = `
-      MATCH (c:Component {id: $componentId, branch: $branch})-[r:${safeRelType}]->(f:File)
+      MATCH (c:Component {graph_unique_id: $componentGraphUniqueId})-[r:${relationshipType}]->(f:File)
       WHERE f.repository = $repoNodeId AND f.branch = $branch
       RETURN f
     `;
     try {
-      const result = await this.kuzuClient.executeQuery(query, { componentId, repoNodeId, branch });
+      const result = await this.kuzuClient.executeQuery(query, {
+        componentGraphUniqueId,
+        repoNodeId,
+        branch,
+      });
       return result.map((row: any) => {
         const fileNode = row.f.properties || row.f;
         return { ...fileNode, id: fileNode.id?.toString() } as File;
       });
     } catch (error) {
       console.error(
-        `[FileRepository] Error finding files for C:${componentId} via ${safeRelType}:`,
+        `[FileRepository] Error finding files for C:${componentId} via ${relationshipType}:`,
         error,
       );
       return [];
