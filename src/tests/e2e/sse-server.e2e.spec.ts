@@ -378,6 +378,7 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
         DEBUG: '3', // Increase debug level for more verbose logging
         DEBUG_LEVEL: '3', // SSE server uses DEBUG_LEVEL instead of DEBUG
         DB_FILENAME: dbPathForTest,
+        LOG_LEVEL: 'info',
         NODE_ENV: 'test',
         ...envVars,
       };
