@@ -577,6 +577,47 @@ export class KuzuDBClient {
     this.lastValidationTime = null;
     this.isConnectionValid = false;
   }
+
+  /**
+   * Executes a series of queries within a transaction.
+   * @param transactionBlock A function that receives the transaction context and executes queries.
+   * @returns The result of the last query in the transaction block.
+   */
+  async transaction<T>(
+    transactionBlock: (tx: {
+      executeQuery: (query: string, params?: Record<string, any>) => Promise<any>;
+    }) => Promise<T>,
+  ): Promise<T> {
+    if (!this.connection) {
+      await this.initialize();
+    }
+    const logger = kuzuLogger.child({ operation: 'transaction', dbPath: this.dbPath });
+    logger.debug('Beginning transaction');
+
+    try {
+      await this.connection.query('BEGIN TRANSACTION');
+
+      const txContext = {
+        executeQuery: (query: string, params?: Record<string, any>): Promise<any> => {
+          logger.debug({ query, params }, 'Executing query in transaction');
+          return this.connection.query(query, params);
+        },
+      };
+
+      const result = await transactionBlock(txContext);
+      await this.connection.query('COMMIT');
+      logger.debug('Transaction committed successfully');
+      return result;
+    } catch (error) {
+      logger.error({ error }, 'Transaction failed, rolling back');
+      try {
+        await this.connection.query('ROLLBACK');
+      } catch (rollbackError) {
+        logger.error({ rollbackError }, 'Failed to rollback transaction');
+      }
+      throw error;
+    }
+  }
 }
 
 export async function initializeKuzuDBSchema(connection: any): Promise<void> {
@@ -660,6 +701,8 @@ export async function initializeKuzuDBSchema(connection: any): Promise<void> {
         impact STRING[],
         tags STRING[],
         graph_unique_id STRING,
+        branch STRING,
+        repository STRING,
         created_at STRING,
         updated_at STRING,
         PRIMARY KEY (graph_unique_id)
@@ -676,6 +719,9 @@ export async function initializeKuzuDBSchema(connection: any): Promise<void> {
         category STRING,
         examples STRING[],
         graph_unique_id STRING,
+        branch STRING,
+        repository STRING,
+        status STRING,
         created_at STRING,
         updated_at STRING,
         PRIMARY KEY (graph_unique_id)

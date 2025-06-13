@@ -1,3 +1,4 @@
+import { QueryInputSchema } from '../../../schemas/unified-tool-schemas';
 import { SdkToolHandler } from '../../../tool-handlers';
 
 // TypeScript interfaces for query parameters
@@ -32,16 +33,8 @@ interface QueryParams {
  * Handles all search and query operations across 7 different query types
  */
 export const queryHandler: SdkToolHandler = async (params, context, memoryService) => {
-  // 1. Validate and extract parameters
-  const validatedParams = params as QueryParams;
-
-  // Basic validation
-  if (!validatedParams.type) {
-    throw new Error('type parameter is required');
-  }
-  if (!validatedParams.repository) {
-    throw new Error('repository parameter is required');
-  }
+  // 1. Parse and validate parameters using Zod (includes all type-specific validation)
+  const validatedParams = QueryInputSchema.parse(params);
 
   const { type, repository, branch = 'main' } = validatedParams;
 
@@ -57,40 +50,6 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
     branch,
     clientProjectRoot,
   });
-
-  // 4. Validate type-specific required parameters
-  switch (type) {
-    case 'entities':
-      if (!validatedParams.label) {
-        throw new Error('Label is required for entities query');
-      }
-      break;
-    case 'relationships':
-      if (!validatedParams.startItemId) {
-        throw new Error('startItemId is required for relationships query');
-      }
-      break;
-    case 'dependencies':
-      if (!validatedParams.componentId || !validatedParams.direction) {
-        throw new Error('componentId and direction are required for dependencies query');
-      }
-      break;
-    case 'governance':
-      if (!validatedParams.componentId) {
-        throw new Error('componentId is required for governance query');
-      }
-      break;
-    case 'history':
-      if (!validatedParams.itemId || !validatedParams.itemType) {
-        throw new Error('itemId and itemType are required for history query');
-      }
-      break;
-    case 'tags':
-      if (!validatedParams.tagId) {
-        throw new Error('tagId is required for tags query');
-      }
-      break;
-  }
 
   try {
     switch (type) {

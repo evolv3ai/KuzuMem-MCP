@@ -26,36 +26,116 @@ export class TagRepository {
       name: string;
       repository?: string;
       branch?: string;
+      category?: string;
     },
   ): Promise<Tag | null> {
     const now = new Date();
 
-    // KuzuDB doesn't support setting properties from a map parameter, so we set them individually
-    const query = `
-      MERGE (t:Tag {id: $id})
-      ON CREATE SET t.id = $id, t.name = $name, t.color = $color, t.description = $description, t.repository = $repository, t.branch = $branch, t.created_at = $created_at
-      ON MATCH SET t.name = $name, t.color = $color, t.description = $description, t.repository = $repository, t.branch = $branch
-      RETURN t
-    `;
+    if (tagData.repository) {
+      // KuzuDB does not support the Neo4j FOREACH hack for conditional linking.
+      // We use a transaction to perform two steps atomically:
+      // 1. MERGE the Tag node.
+      // 2. Conditionally MATCH the repository and MERGE the relationship.
+      const upsertTagQuery = `
+        MERGE (t:Tag {id: $id})
+        ON CREATE SET
+          t.name = $name,
+          t.color = $color,
+          t.description = $description,
+          t.category = $category,
+          t.repository = $repository,
+          t.branch = $branch,
+          t.created_at = $created_at
+        ON MATCH SET
+          t.name = $name,
+          t.color = $color,
+          t.description = $description,
+          t.category = $category,
+          t.repository = $repository,
+          t.branch = $branch
+      `;
+      const linkRepoQuery = `
+        MATCH (t:Tag {id: $id}), (repo:Repository {id: $repository})
+        MERGE (t)-[:PART_OF]->(repo)
+      `;
+      const getTagQuery = `
+        MATCH (t:Tag {id: $id})
+        RETURN t
+      `;
 
-    try {
-      const result = await this.kuzuClient.executeQuery(query, {
+      const queryParams = {
         id: tagData.id,
         name: tagData.name,
         color: tagData.color || null,
         description: tagData.description || null,
-        repository: tagData.repository || null,
+        repository: tagData.repository,
         branch: tagData.branch || 'main',
+        category: tagData.category || 'general',
         created_at: now,
-      });
-      if (result && result.length > 0) {
-        const node = result[0].t.properties || result[0].t;
-        return { ...node, id: node.id?.toString() } as Tag;
+      };
+
+      try {
+        const result = await this.kuzuClient.transaction(async (tx) => {
+          await tx.executeQuery(upsertTagQuery, queryParams);
+          await tx.executeQuery(linkRepoQuery, {
+            id: tagData.id,
+            repository: tagData.repository!,
+          });
+          return tx.executeQuery(getTagQuery, { id: tagData.id });
+        });
+
+        if (result && result.length > 0) {
+          const node = result[0].t.properties || result[0].t;
+          return { ...node, id: node.id?.toString() } as Tag;
+        }
+        return null;
+      } catch (error) {
+        console.error(
+          `[TagRepository] Error upserting Tag node ${tagData.id} with repository link:`,
+          error,
+        );
+        return null;
       }
-      return null;
-    } catch (error) {
-      console.error(`[TagRepository] Error upserting Tag node ${tagData.id}:`, error);
-      return null;
+    } else {
+      // Create global tag without repository relationship
+      const query = `
+        MERGE (t:Tag {id: $id})
+        ON CREATE SET 
+          t.name = $name, 
+          t.color = $color, 
+          t.description = $description,
+          t.category = $category,
+          t.branch = $branch,
+          t.created_at = $created_at
+        ON MATCH SET 
+          t.name = $name, 
+          t.color = $color, 
+          t.description = $description,
+          t.category = $category,
+          t.branch = $branch
+        RETURN t
+      `;
+      const queryParams = {
+        id: tagData.id,
+        name: tagData.name,
+        color: tagData.color || null,
+        description: tagData.description || null,
+        branch: tagData.branch || 'main',
+        category: tagData.category || 'general',
+        created_at: now,
+      };
+
+      try {
+        const result = await this.kuzuClient.executeQuery(query, queryParams);
+        if (result && result.length > 0) {
+          const node = result[0].t.properties || result[0].t;
+          return { ...node, id: node.id?.toString() } as Tag;
+        }
+        return null;
+      } catch (error) {
+        console.error(`[TagRepository] Error upserting Tag node ${tagData.id}:`, error);
+        return null;
+      }
     }
   }
 

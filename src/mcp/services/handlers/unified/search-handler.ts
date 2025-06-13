@@ -285,7 +285,7 @@ async function executeSimpleFallbackSearch(
     try {
       const tableName = entityType.charAt(0).toUpperCase() + entityType.slice(1);
       const searchableProps = getSearchableProperties(entityType);
-      
+
       // Build WHERE clause for simple string matching
       const whereConditions = searchableProps
         .map((prop) => `LOWER(n.${prop}) CONTAINS LOWER($query)`)
@@ -333,7 +333,7 @@ async function ensureExtensionsAndFtsIndex(
 ) {
   const cacheKey = `${clientProjectRoot}:${repository}:${branch}`;
   let cacheEntry = initializationCache.get(cacheKey);
-  
+
   if (!cacheEntry) {
     cacheEntry = {
       extensionsLoaded: false,
@@ -394,7 +394,7 @@ async function ensureExtensionsAndFtsIndex(
         );
         context.logger.info(`Created FTS index for ${tableName}`, { indexName, searchableProps });
       }
-      
+
       cacheEntry.indexesCreated.add(indexKey);
     } catch (error) {
       context.logger.warn(`Could not ensure FTS index for ${tableName}`, {
@@ -436,7 +436,7 @@ function getSearchableProperties(entityType: string): string[] {
     case 'decision':
       return ['title', 'rationale'];
     case 'rule':
-      return ['name', 'description'];
+      return ['title', 'description'];
     case 'file':
       return ['name', 'path'];
     case 'context':
