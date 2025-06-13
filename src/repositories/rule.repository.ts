@@ -103,7 +103,8 @@ export class RuleRepository {
     const now = new Date().toISOString();
 
     const query = `
-      MATCH (repo:Repository {id: $repositoryNodeId})
+      MERGE (repo:Repository {id: $repositoryNodeId})
+      ON CREATE SET repo.name = $repositoryNodeId, repo.created_at = $now
       MERGE (r:Rule {id: $id, graph_unique_id: $graphUniqueId})
       ON CREATE SET
         r.title = $name,
