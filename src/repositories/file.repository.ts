@@ -1,5 +1,6 @@
 import { KuzuDBClient } from '../db/kuzu'; // Corrected path
 import { File } from '../types'; // Internal domain types
+import { formatGraphUniqueId } from '../utils/id.utils'; // Add missing import
 import { RepositoryRepository } from './repository.repository'; // For context/scoping if needed
 
 export class FileRepository {
@@ -116,11 +117,12 @@ export class FileRepository {
   ): Promise<boolean> {
     // Component schema: uses graph_unique_id as primary key (format: repo:branch:id)
     // File schema: id, name, path, size_bytes, mime_type, created_at, updated_at, repository, branch
-    const componentGraphUniqueId = `${repoNodeId}:${branch}:${componentId}`;
+    const [repositoryName] = repoNodeId.split(':'); // Extract repository name from repoNodeId
+    const componentGraphUniqueId = formatGraphUniqueId(repositoryName, branch, componentId);
     const query = `
       MATCH (c:Component {graph_unique_id: $componentGraphUniqueId}), 
             (f:File {id: $fileId, repository: $repoNodeId, branch: $branch})
-      MERGE (c)-[r:IMPLEMENTS]->(f)
+      MERGE (c)-[r:${relationshipType}]->(f)
       RETURN r
     `;
     try {
@@ -133,7 +135,7 @@ export class FileRepository {
       return result && result.length > 0;
     } catch (error) {
       console.error(
-        `[FileRepository] Error linking C:${componentId} to F:${fileId} via IMPLEMENTS:`,
+        `[FileRepository] Error linking C:${componentId} to F:${fileId} via ${relationshipType}:`,
         error,
       );
       return false;
@@ -149,9 +151,10 @@ export class FileRepository {
     componentId: string,
     relationshipType: string = 'IMPLEMENTS',
   ): Promise<File[]> {
-    const componentGraphUniqueId = `${repoNodeId}:${branch}:${componentId}`;
+    const [repositoryName] = repoNodeId.split(':'); // Extract repository name from repoNodeId
+    const componentGraphUniqueId = formatGraphUniqueId(repositoryName, branch, componentId);
     const query = `
-      MATCH (c:Component {graph_unique_id: $componentGraphUniqueId})-[r:IMPLEMENTS]->(f:File)
+      MATCH (c:Component {graph_unique_id: $componentGraphUniqueId})-[r:${relationshipType}]->(f:File)
       WHERE f.repository = $repoNodeId AND f.branch = $branch
       RETURN f
     `;
@@ -167,7 +170,7 @@ export class FileRepository {
       });
     } catch (error) {
       console.error(
-        `[FileRepository] Error finding files for C:${componentId} via IMPLEMENTS:`,
+        `[FileRepository] Error finding files for C:${componentId} via ${relationshipType}:`,
         error,
       );
       return [];
