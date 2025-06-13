@@ -40,33 +40,63 @@ export class TagRepository {
       // updated_at: now, // Kuzu MERGE ON MATCH can handle updates if needed
     };
 
-    // Atomic query that creates the Tag node and establishes PART_OF relationship
-    const query = `
-      MATCH (repo:Repository {id: $repository})
-      MERGE (t:Tag {id: $id})
-      ON CREATE SET 
-        t.name = $name, 
-        t.color = $color, 
-        t.description = $description,
-        t.category = $category
-      ON MATCH SET 
-        t.name = $name, 
-        t.color = $color, 
-        t.description = $description,
-        t.category = $category
-      MERGE (t)-[:PART_OF]->(repo)
-      RETURN t
-    `;
+    // Build query conditionally based on whether repository is provided
+    let query: string;
+    let queryParams: Record<string, any>;
 
-    try {
-      const result = await this.kuzuClient.executeQuery(query, {
+    if (tagNodeProps.repository) {
+      // Atomic query that creates the Tag node and establishes PART_OF relationship
+      query = `
+        MATCH (repo:Repository {id: $repository})
+        MERGE (t:Tag {id: $id})
+        ON CREATE SET 
+          t.name = $name, 
+          t.color = $color, 
+          t.description = $description,
+          t.category = $category
+        ON MATCH SET 
+          t.name = $name, 
+          t.color = $color, 
+          t.description = $description,
+          t.category = $category
+        MERGE (t)-[:PART_OF]->(repo)
+        RETURN t
+      `;
+      queryParams = {
         id: tagNodeProps.id,
         name: tagNodeProps.name,
         color: tagNodeProps.color,
         description: tagNodeProps.description,
         repository: tagNodeProps.repository,
         category: tagData.category || 'general',
-      });
+      };
+    } else {
+      // Create global tag without repository relationship
+      query = `
+        MERGE (t:Tag {id: $id})
+        ON CREATE SET 
+          t.name = $name, 
+          t.color = $color, 
+          t.description = $description,
+          t.category = $category
+        ON MATCH SET 
+          t.name = $name, 
+          t.color = $color, 
+          t.description = $description,
+          t.category = $category
+        RETURN t
+      `;
+      queryParams = {
+        id: tagNodeProps.id,
+        name: tagNodeProps.name,
+        color: tagNodeProps.color,
+        description: tagNodeProps.description,
+        category: tagData.category || 'general',
+      };
+    }
+
+    try {
+      const result = await this.kuzuClient.executeQuery(query, queryParams);
       if (result && result.length > 0) {
         const node = result[0].t.properties || result[0].t;
         return { ...node, id: node.id?.toString() } as Tag;

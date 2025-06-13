@@ -32,11 +32,6 @@ export class FileRepository {
       branch: branch,
       created_at: now,
       updated_at: now,
-      // Use properties that actually exist in File interface
-      name: fileData.name,
-      path: fileData.path,
-      size: fileData.size || null,
-      mime_type: fileData.mime_type || null,
     };
 
     // Atomic query that creates the File node and establishes PART_OF relationship
@@ -46,18 +41,20 @@ export class FileRepository {
       ON CREATE SET
         f.name = $name,
         f.path = $path,
-        f.size = $size_bytes,
-        f.type = $mime_type,
-        f.lastModified = $created_at,
-        f.checksum = $checksum,
-        f.metadata = $metadata
+        f.size = $size,
+        f.mime_type = $mime_type,
+        f.created_at = $created_at,
+        f.updated_at = $created_at,
+        f.content = $content,
+        f.metrics = $metrics
       ON MATCH SET
         f.name = $name,
         f.path = $path,
-        f.size = $size_bytes,
-        f.type = $mime_type,
-        f.lastModified = $updated_at,
-        f.metadata = $metadata
+        f.size = $size,
+        f.mime_type = $mime_type,
+        f.updated_at = $updated_at,
+        f.content = $content,
+        f.metrics = $metrics
       MERGE (f)-[:PART_OF]->(repo)
       RETURN f
     `;
@@ -68,12 +65,12 @@ export class FileRepository {
         repository: fileNodeProps.repository,
         name: fileNodeProps.name,
         path: fileNodeProps.path,
-        size_bytes: fileNodeProps.size,
+        size: fileNodeProps.size,
         mime_type: fileNodeProps.mime_type,
         created_at: fileNodeProps.created_at,
         updated_at: fileNodeProps.updated_at,
-        checksum: '',
-        metadata: '',
+        content: fileData.content || null,
+        metrics: fileData.metrics || {},
       });
       if (result && result.length > 0) {
         const createdNode = result[0].f.properties || result[0].f; // Kuzu specific result access
@@ -87,9 +84,12 @@ export class FileRepository {
   }
 
   async findFileById(repoNodeId: string, branch: string, fileId: string): Promise<File | null> {
-    const query = `MATCH (f:File {id: $fileId, repository: $repoNodeId, branch: $branch}) RETURN f;`;
+    const query = `
+      MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId}) 
+      RETURN f
+    `;
     try {
-      const result = await this.kuzuClient.executeQuery(query, { fileId, repoNodeId, branch });
+      const result = await this.kuzuClient.executeQuery(query, { fileId, repoNodeId });
       if (result && result.length > 0) {
         const foundNode = result[0].f.properties || result[0].f;
         return { ...foundNode, id: foundNode.id?.toString() } as File;
@@ -153,8 +153,8 @@ export class FileRepository {
   ): Promise<File[]> {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
     const query = `
-      MATCH (c:Component {id: $componentId, branch: $branch})-[r:${safeRelType}]->(f:File)
-      WHERE f.repository = $repoNodeId AND f.branch = $branch
+      MATCH (c:Component {id: $componentId, branch: $branch})-[:PART_OF]->(repo:Repository {id: $repoNodeId}),
+            (c)-[r:${safeRelType}]->(f:File)-[:PART_OF]->(repo)
       RETURN f
     `;
     try {
