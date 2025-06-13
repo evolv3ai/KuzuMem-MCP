@@ -158,11 +158,12 @@ export class FileRepository {
 
   /**
    * Creates a relationship between a Component and a File.
+   * Direction: (Component)-[:IMPLEMENTS]->(File) - Component implements functionality in File
    * @param repoNodeId PK of the repository node
    * @param branch Branch name
    * @param componentId Logical ID of the Component
    * @param fileId Logical ID of the File
-   * @param relationshipType e.g., COMPONENT_IMPLEMENTS_FILE
+   * @param relationshipType e.g., IMPLEMENTS (default)
    */
   async linkComponentToFile(
     repoNodeId: string,
@@ -172,11 +173,12 @@ export class FileRepository {
     relationshipType: string = 'IMPLEMENTS',
   ): Promise<boolean> {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
-    // Updated query to work with actual database schema
+    // Explicit direction: (Component)-[:IMPLEMENTS]->(File)
+    // This means: Component implements functionality that is contained in File
     const query = `
       MATCH (c:Component {id: $componentId})-[:PART_OF]->(repo:Repository {id: $repoNodeId}), 
             (f:File {id: $fileId})-[:PART_OF]->(repo)
-      MERGE (f)-[r:${safeRelType}]->(c)
+      MERGE (c)-[r:${safeRelType}]->(f)
       RETURN r
     `;
     try {
@@ -197,6 +199,7 @@ export class FileRepository {
 
   /**
    * Finds files associated with a component via a specific relationship type.
+   * Direction: (Component)-[:IMPLEMENTS]->(File) - Component implements functionality in File
    */
   async findFilesByComponent(
     repoNodeId: string,
@@ -205,9 +208,11 @@ export class FileRepository {
     relationshipType: string = 'IMPLEMENTS',
   ): Promise<File[]> {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
+    // Query expects: (Component)-[:IMPLEMENTS]->(File)
+    // This finds Files that are implemented by the Component
     const query = `
       MATCH (c:Component {id: $componentId})-[:PART_OF]->(repo:Repository {id: $repoNodeId}),
-            (f:File)-[r:${safeRelType}]->(c)
+            (c)-[r:${safeRelType}]->(f:File)
       WHERE (f)-[:PART_OF]->(repo)
       RETURN f
     `;
@@ -247,5 +252,49 @@ export class FileRepository {
     }
   }
 
-  // Add other methods like findComponentsByFile, updateFileNode, deleteFileNode as needed.
+  /**
+   * Finds components that implement a specific file via a relationship type.
+   * Direction: (Component)-[:IMPLEMENTS]->(File) - Component implements functionality in File
+   */
+  async findComponentsByFile(
+    repoNodeId: string,
+    branch: string,
+    fileId: string,
+    relationshipType: string = 'IMPLEMENTS',
+  ): Promise<any[]> {
+    const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
+    // Query expects: (Component)-[:IMPLEMENTS]->(File)
+    // This finds Components that implement the File
+    const query = `
+      MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId}),
+            (c:Component)-[r:${safeRelType}]->(f)
+      WHERE (c)-[:PART_OF]->(repo)
+      RETURN c
+    `;
+    try {
+      const result = await this.kuzuClient.executeQuery(query, { fileId, repoNodeId });
+      return result.map((row: any) => {
+        const componentNode = row.c.properties || row.c;
+        return {
+          id: componentNode.id?.toString(),
+          name: componentNode.name,
+          kind: componentNode.kind,
+          status: componentNode.status,
+          branch: componentNode.branch || branch,
+          repository: repoNodeId,
+          depends_on: componentNode.depends_on || [],
+          created_at: new Date(componentNode.created_at || Date.now()),
+          updated_at: new Date(componentNode.updated_at || Date.now()),
+        };
+      });
+    } catch (error) {
+      console.error(
+        `[FileRepository] Error finding components for F:${fileId} via ${safeRelType}:`,
+        error,
+      );
+      return [];
+    }
+  }
+
+  // Add other methods like updateFileNode, deleteFileNode as needed.
 }

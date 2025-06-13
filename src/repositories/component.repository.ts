@@ -278,7 +278,8 @@ export class ComponentRepository {
 
       // Atomic MERGE query that includes PART_OF relationship creation
       const upsertNodeQuery = `
-        MATCH (repo:Repository {id: $repository})
+        MERGE (repo:Repository {id: $repository})
+        ON CREATE SET repo.name = $repository, repo.created_at = $now
         MERGE (c:Component {id: $componentId, graph_unique_id: $graphUniqueId})
         ON CREATE SET
           c.name = $name,
@@ -1194,7 +1195,8 @@ export class ComponentRepository {
     const escapedComponentBranch = this.escapeStr(componentBranch);
 
     const upsertNodeQuery = `
-        MATCH (repo:Repository {id: '${this.escapeStr(repositoryNodeId)}'}) 
+        MERGE (repo:Repository {id: '${this.escapeStr(repositoryNodeId)}'})
+        ON CREATE SET repo.name = '${this.escapeStr(repositoryNodeId)}', repo.created_at = timestamp('${kuzuTimestamp}')
         MERGE (c:Component {graph_unique_id: '${escapedGraphUniqueId}'})
         ON CREATE SET 
             c.id = '${escapedLogicalId}',
@@ -1236,7 +1238,8 @@ export class ComponentRepository {
         const escapedDepGraphUniqueId = this.escapeStr(depGraphUniqueId);
 
         const ensureDepNodeQuery = `
-            MATCH (repoDep:Repository {id: $repositoryNodeId})
+            MERGE (repoDep:Repository {id: $repositoryNodeId})
+            ON CREATE SET repoDep.name = $repositoryNodeId, repoDep.created_at = $depCreatedAt
             MERGE (dep:Component {graph_unique_id: $depGraphUniqueId})
             ON CREATE SET dep.id = $depId, dep.branch = $depBranch, dep.name = $depName, dep.kind = $depKind, dep.status = $depStatus, dep.repository = $repositoryNodeId, dep.created_at = $depCreatedAt, dep.updated_at = $depUpdatedAt
             MERGE (dep)-[:PART_OF]->(repoDep)`;
