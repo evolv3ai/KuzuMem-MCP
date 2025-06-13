@@ -1,7 +1,6 @@
-import { SdkToolHandler } from '../../../mcp/tool-handlers';
 import { entityHandler } from '../../../mcp/services/handlers/unified/entity-handler';
-import { MemoryService } from '../../../services/memory.service';
 import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { MemoryService } from '../../../services/memory.service';
 
 describe('entity tool handler', () => {
   let mockContext: EnrichedRequestHandlerExtra;
