@@ -120,10 +120,11 @@ export class FileRepository {
   async findFileById(repoNodeId: string, branch: string, fileId: string): Promise<File | null> {
     const query = `
       MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId}) 
+      WHERE json_extract_string(f.metadata, '$.branch') = $branch
       RETURN f
     `;
     try {
-      const result = await this.kuzuClient.executeQuery(query, { fileId, repoNodeId });
+      const result = await this.kuzuClient.executeQuery(query, { fileId, repoNodeId, branch });
       if (result && result.length > 0) {
         const foundNode = result[0].f.properties || result[0].f;
 
@@ -133,6 +134,14 @@ export class FileRepository {
           parsedMetadata = JSON.parse(foundNode.metadata || '{}');
         } catch (e) {
           console.warn(`[FileRepository] Failed to parse metadata for file ${foundNode.id}`);
+        }
+
+        // Verify branch matches (additional safety check)
+        if ((parsedMetadata as any).branch !== branch) {
+          console.warn(
+            `[FileRepository] Branch mismatch for file ${fileId}: expected ${branch}, got ${(parsedMetadata as any).branch}`,
+          );
+          return null;
         }
 
         // Return a File object that matches our interface
@@ -211,18 +220,19 @@ export class FileRepository {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
     // Query expects: (Component)-[:IMPLEMENTS]->(File)
     // This finds Files that are implemented by the Component, filtered by branch
+    // Use proper JSON extraction instead of fragile CONTAINS on JSON string
     const query = `
       MATCH (c:Component {id: $componentId})-[:PART_OF]->(repo:Repository {id: $repoNodeId}),
             (c)-[r:${safeRelType}]->(f:File)
       WHERE (f)-[:PART_OF]->(repo)
-        AND f.metadata CONTAINS $branch
+        AND json_extract_string(f.metadata, '$.branch') = $branch
       RETURN f
     `;
     try {
       const result = await this.kuzuClient.executeQuery(query, {
         componentId,
         repoNodeId,
-        branch: `"branch":"${branch}"`,
+        branch,
       });
       return result
         .map((row: any) => {
@@ -278,11 +288,12 @@ export class FileRepository {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
     // Query expects: (Component)-[:IMPLEMENTS]->(File)
     // This finds Components that implement the File, filtered by branch
+    // Use proper JSON extraction instead of fragile CONTAINS on JSON string
     const query = `
       MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId}),
             (c:Component)-[r:${safeRelType}]->(f)
       WHERE (c)-[:PART_OF]->(repo)
-        AND f.metadata CONTAINS $branch
+        AND json_extract_string(f.metadata, '$.branch') = $branch
         AND c.branch = $branch
       RETURN c
     `;
@@ -290,7 +301,7 @@ export class FileRepository {
       const result = await this.kuzuClient.executeQuery(query, {
         fileId,
         repoNodeId,
-        branch: `"branch":"${branch}"`,
+        branch,
       });
       return result.map((row: any) => {
         const componentNode = row.c.properties || row.c;

@@ -63,6 +63,10 @@ function mapDataToEntity(entityType: string, id: string, data: any): EntityData 
         mime_type: data.mime_type,
         content: data.content,
         metrics: data.metrics,
+        language: data.language, // Include language property expected by tools
+        content_hash: data.content_hash, // Include content_hash property expected by tools
+        // Note: BaseEntity properties like repository, branch, created_at, updated_at
+        // are handled by the service layer, not in this mapping function
       } as FileRecord;
 
     case 'tag':
