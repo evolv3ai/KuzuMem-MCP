@@ -57,7 +57,7 @@ Create a `.env` file in the root directory:
 
 ```env
 # Database Configuration
-DB_FILENAME="memory-bank.kuzu" 
+DB_FILENAME="memory-bank.kuzu"
 
 # Server Configuration
 HTTP_STREAM_PORT=3001

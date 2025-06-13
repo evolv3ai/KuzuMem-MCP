@@ -102,11 +102,7 @@ export async function getActiveDecisionsOp(
 /**
  * Helper function to ensure decision has repository and branch fields populated
  */
-function normalizeDecision(
-  decision: Decision,
-  repositoryName: string,
-  branch: string,
-): Decision {
+function normalizeDecision(decision: Decision, repositoryName: string, branch: string): Decision {
   return {
     ...decision,
     repository: repositoryName,

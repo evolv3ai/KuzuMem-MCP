@@ -50,7 +50,7 @@ interface IndexesOutput {
 export const introspectHandler: SdkToolHandler = async (params, context, memoryService) => {
   // 1. Validate and extract parameters
   const validatedParams = params as IntrospectParams;
-  
+
   // Basic validation
   if (!validatedParams.query) {
     throw new Error('query parameter is required');
@@ -58,7 +58,7 @@ export const introspectHandler: SdkToolHandler = async (params, context, memoryS
   if (!validatedParams.repository) {
     throw new Error('repository parameter is required');
   }
-  
+
   const { query, repository, branch = 'main', target } = validatedParams;
 
   // 2. Get clientProjectRoot from session
