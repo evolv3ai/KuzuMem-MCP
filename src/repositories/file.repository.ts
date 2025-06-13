@@ -188,6 +188,8 @@ export class FileRepository {
     const query = `
       MATCH (c:Component {id: $componentId})-[:PART_OF]->(repo:Repository {id: $repoNodeId}), 
             (f:File {id: $fileId})-[:PART_OF]->(repo)
+      WHERE c.branch = $branch
+        AND json_extract_string(f.metadata, '$.branch') = $branch
       MERGE (c)-[r:${safeRelType}]->(f)
       RETURN r
     `;
@@ -196,6 +198,7 @@ export class FileRepository {
         componentId,
         fileId,
         repoNodeId,
+        branch,
       });
       return result && result.length > 0;
     } catch (error) {
@@ -226,6 +229,7 @@ export class FileRepository {
             (c)-[r:${safeRelType}]->(f:File)
       WHERE (f)-[:PART_OF]->(repo)
         AND json_extract_string(f.metadata, '$.branch') = $branch
+        AND c.branch = $branch
       RETURN f
     `;
     try {
