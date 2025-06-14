@@ -73,17 +73,18 @@ Add to your IDE's MCP configuration:
 {
   "mcpServers": {
     "KuzuMem-MCP": {
-      "command": "node",
+      "command": "npx",
       "args": [
-        "/absolute/path/to/kuzumem-mcp/dist/src/mcp-stdio-server.js" // or "mcp-httpstream-server.js" or "mcp-sse-server.js"
+        "-y",
+        "ts-node",
+        "/absolute/path/to/kuzumem-mcp/src/mcp-stdio-server.ts"
       ],
       "env": {
         "PORT": "3000",
         "HOST": "localhost",
         "DB_FILENAME": "memory-bank.kuzu",
         "HTTP_STREAM_PORT": "3001"
-      },
-      "protocol": "stdio" // or "httpstream" or "sse"
+      }
     }
   }
 }
