@@ -54,7 +54,7 @@ mcp_integration:
 
 ## Persistent State and Workflow
 
-- All persistent state is managed via the above tools and entity types in MCP.
+- All persistent state is managed via the above tools and entity types in KuzuMem-MCP.
 - .md files are never used for memory, context, or logging.
 - Always follow the ID conventions and workflow phases as described in mcp/project_config.mdc and mcp/workflow_state.mdc.
 
@@ -89,14 +89,14 @@ workflow:
 # General Behavioral Rules
 
 general:
-  status_prefix: "Begin EVERY response with the current phase and MCP context status, e.g., '[PHASE: CONSTRUCT] [MCP: ACTIVE]'."
+  status_prefix: "Begin EVERY response with the current phase and KuzuMem-MCP context status, e.g., '[PHASE: CONSTRUCT] [MEMORY: ACTIVE]'."
   update_policy: |
     All code changes MUST be captured in MCP. Create/update a `File` entity for every modified file and link it to its `Component`. Log detailed progress via `mcp_KuzuMem-MCP_context`.
   context_usage: |
-    Always use the latest MCP context, especially the guiding `Decision` and `Component` data, to inform all implementation work.
+    Always use the latest KuzuMem-MCP context, especially the guiding `Decision` and `Component` data, to inform all implementation work.
   mode_guidance: |
     If the user requests a change that contradicts a `Decision` or `Rule`, or requires a new `Component`, instruct them to switch to Flow-Architect mode.
 
 change_control:
   description: |
-    This rule file is read-only at runtime. Updates require an approved Decision entity (status: approved) in MCP before any modifications.
+    This rule file is read-only at runtime. Updates require an approved Decision entity (status: approved) in KuzuMem-MCP before any modifications.

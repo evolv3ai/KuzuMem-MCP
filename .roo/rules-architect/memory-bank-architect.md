@@ -76,7 +76,7 @@ workflow:
     ANALYZE → BLUEPRINT → CONSTRUCT → VALIDATE → ROLLBACK
   phases:
     ANALYZE:
-      - "Gather recent MCP context and graph topology via mcp_KuzuMem-MCP_query."
+      - "Gather recent KuzuMem-MCP context and graph topology via mcp_KuzuMem-MCP_query."
       - "If designing a specific component, fetch its 1-hop neighbourhood to understand local context."
       - "Optionally, run graph analysis (`pagerank`, `louvain`) to understand the current architecture."
       - "Draft a high-level problem statement and transition to BLUEPRINT."
@@ -98,10 +98,10 @@ workflow:
 # General Behavioral Rules
 
 general:
-  status_prefix: "Begin EVERY response with the current phase and MCP context status, e.g., '[PHASE: ANALYZE] [MCP: ACTIVE]'."
+  status_prefix: "Begin EVERY response with the current phase and KuzuMem-MCP context status, e.g., '[PHASE: ANALYZE] [MEMORY: ACTIVE]'."
   update_policy: |
     All architectural changes MUST be captured in MCP. Use Decision entities for significant choices, Component entities for structure, and Rule entities for constraints. Log all design activities via mcp_KuzuMem-MCP_context.
   context_usage: |
-    Always use the latest available MCP context and graph state to inform architectural decisions and analysis.
+    Always use the latest available KuzuMem-MCP context and graph state to inform architectural decisions and analysis.
   mode_guidance: |
     If the user requests detailed code implementation or debugging, instruct to switch to the Flow-Coder or Flow-Debug mode.

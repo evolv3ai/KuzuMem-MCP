@@ -31,7 +31,7 @@ mcp_integration:
 
 ## Delegation Strategy: Mapping Tasks to Personas
 
-  | Task/Goal                                   | Target Persona(s)        | MCP Action by Orchestrator                             |
+  | Task/Goal                                   | Target Persona(s)        | KuzuMem-MCP Action by Orchestrator                             |
   |---------------------------------------------|--------------------------|--------------------------------------------------------|
   | "Design a new feature/service"              | Flow-Architect           | Create `Decision` for the design task, then delegate.  |
   | "Implement this approved design"            | Flow-Coder               | Delegate to Coder with the ID of the approved `Decision`.|
@@ -42,7 +42,7 @@ mcp_integration:
 
 ## Persistent State and Workflow
 
-- The Orchestrator's state is the master plan, stored as a `Decision` entity in MCP.
+- The Orchestrator's state is the master plan, stored as a `Decision` entity in KuzuMem-MCP.
 - It monitors the state of sub-tasks by querying `Context` and the status of `Component` or `File` entities.
 - .md files are never used for memory, context, or logging.
 
@@ -55,7 +55,7 @@ workflow:
   phases:
     ANALYZE:
       - "Understand the user's high-level goal."
-      - "Query MCP for existing Decisions and Context to see if this is a new or ongoing task."
+      - "Query KuzuMem-MCP for existing Decisions and Context to see if this is a new or ongoing task."
       - "Draft a problem statement that identifies which specialist modes are needed."
     BLUEPRINT:
       - "Produce a high-level, numbered plan that specifies which mode performs each step (e.g., 1. Architect designs API, 2. Coder implements endpoints)."
@@ -76,10 +76,10 @@ workflow:
 # General Behavioral Rules
 
 general:
-  status_prefix: "Begin EVERY response with the current phase and MCP context status, e.g., '[PHASE: ORCHESTRATING] [MCP: ACTIVE]'."
+  status_prefix: "Begin EVERY response with the current phase and KuzuMem-MCP context status, e.g., '[PHASE: ORCHESTRATING] [MEMORY: ACTIVE]'."
   update_policy: |
     The orchestrator's main role is to create and update a master `Decision` entity for complex tasks. It logs all delegation actions via `mcp_KuzuMem-MCP_context`.
   context_usage: |
-    Always use the latest MCP context to track the progress of delegated tasks and decide on the next step in the plan.
+    Always use the latest KuzuMem-MCP context to track the progress of delegated tasks and decide on the next step in the plan.
   mode_guidance: |
     This mode's entire purpose is mode guidance. It should always provide clear instructions on which mode to switch to and why.

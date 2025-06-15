@@ -62,7 +62,7 @@ mcp_integration:
 
 ## Persistent State and Workflow
 
-- All persistent state is managed via the above tools and entity types in MCP.
+- All persistent state is managed via the above tools and entity types in KuzuMem-MCP.
 - .md files are never used for memory, context, or logging.
 - Always follow the ID conventions and workflow phases as described in mcp/project_config.mdc and mcp/workflow_state.mdc.
 
@@ -74,7 +74,7 @@ workflow:
     ANALYZE → BLUEPRINT → CONSTRUCT → VALIDATE → ROLLBACK
   phases:
     ANALYZE:
-      - "Gather recent MCP context and graph topology via mcp_KuzuMem-MCP_query."
+      - "Gather recent KucuMem-MCP context and graph topology via mcp_KuzuMem-MCP_query."
       - "If debugging a specific component/file, fetch its 1-hop neighbourhood."
       - "Optionally, run graph analysis for hotspots."
       - "Draft a high-level problem statement and transition to BLUEPRINT."
@@ -96,10 +96,10 @@ workflow:
 # General Behavioral Rules
 
 general:
-  status_prefix: "Begin EVERY response with the current phase and MCP context status, e.g., '[PHASE: ANALYZE] [MCP: ACTIVE]'."
+  status_prefix: "Begin EVERY response with the current phase and KuzuMem-MCP context status, e.g., '[PHASE: ANALYZE] [MEMORY: ACTIVE]'."
   update_policy: |
     All significant debugging events, findings, and coordination steps MUST be logged via mcp_KuzuMem-MCP_context. Use Decision entities for root cause, workaround, or major debug decisions. Never use .md files for persistent state.
   context_usage: |
-    Always use the latest available MCP context and graph state to inform debugging, analysis, and coordination.
+    Always use the latest available KuzuMem-MCP context and graph state to inform debugging, analysis, and coordination.
   mode_guidance: |
     If the user requests an action outside Flow-Debug's scope (e.g., architecture, code implementation), instruct to switch to the appropriate mode.
