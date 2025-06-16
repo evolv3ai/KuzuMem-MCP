@@ -1477,10 +1477,7 @@ export class MemoryService {
         type: 'strongly-connected' as const, // Fix type literal
         status: 'complete',
         projectedGraphName: params.projectedGraphName,
-        components: algorithmResults.components.map((c) => ({
-          componentId: c.componentId,
-          nodes: [], // TODO: populate nodes array
-        })),
+        components: this.groupComponentsByComponentId(algorithmResults.components),
         totalComponents: algorithmResults.components.length,
         message: 'Strongly Connected Components found successfully',
       };
@@ -1547,10 +1544,7 @@ export class MemoryService {
         type: 'weakly-connected' as const, // Fix type literal
         status: 'complete',
         projectedGraphName: params.projectedGraphName,
-        components: algorithmResults.components.map((c) => ({
-          componentId: c.componentId,
-          nodes: [], // TODO: populate nodes array
-        })),
+        components: this.groupComponentsByComponentId(algorithmResults.components),
         totalComponents: algorithmResults.components.length,
         message: 'Weakly Connected Components found successfully',
       };
@@ -2748,6 +2742,25 @@ export class MemoryService {
       logger.error('[MemoryService.shutdown] Error during shutdown:', error);
       throw error;
     }
+  }
+
+  /**
+   * Groups algorithm results by componentId to create proper node arrays
+   */
+  private groupComponentsByComponentId(components: Array<{ nodeId: string; componentId: number }>): Array<{ componentId: number; nodes: string[] }> {
+    const grouped = new Map<number, string[]>();
+
+    for (const component of components) {
+      if (!grouped.has(component.componentId)) {
+        grouped.set(component.componentId, []);
+      }
+      grouped.get(component.componentId)!.push(component.nodeId);
+    }
+
+    return Array.from(grouped.entries()).map(([componentId, nodes]) => ({
+      componentId,
+      nodes,
+    }));
   }
 }
 

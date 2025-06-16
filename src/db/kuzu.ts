@@ -648,6 +648,27 @@ export async function initializeKuzuDBSchema(connection: any): Promise<void> {
   logger.info('Attempting DDL setup...');
 
   try {
+    // Install and load JSON extension for JSON functions
+    try {
+      logger.info('Installing JSON extension...');
+      await execute('INSTALL JSON;');
+      logger.info('Loading JSON extension...');
+      await execute('LOAD JSON;');
+      logger.info('JSON extension installed and loaded');
+    } catch (e: any) {
+      // If the error is that the extension is already installed, that's fine
+      if (
+        e.message &&
+        (e.message.includes('already installed') || e.message.includes('already loaded'))
+      ) {
+        logger.info('JSON extension was already installed and loaded');
+      } else {
+        logger.warn('Failed to install/load JSON extension, JSON functions may not work', {
+          error: e.message,
+        });
+      }
+    }
+
     // Install and load ALGO extension for graph algorithms
     try {
       logger.info('Installing ALGO extension...');
