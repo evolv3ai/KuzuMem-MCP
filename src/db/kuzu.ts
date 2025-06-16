@@ -850,6 +850,11 @@ export async function initializeKuzuDBSchema(connection: any): Promise<void> {
       CREATE REL TABLE IF NOT EXISTS PART_OF (FROM Component TO Repository, FROM Decision TO Repository, FROM Rule TO Repository, FROM File TO Repository, FROM Tag TO Repository, FROM Context TO Repository);
     `);
 
+    // Note: KuzuDB doesn't support traditional CREATE INDEX syntax
+    // Primary keys already provide indexing, and KuzuDB automatically optimizes queries
+    // Additional indexes would need to be created using KuzuDB-specific syntax if needed
+    logger.info('Database schema creation completed (KuzuDB uses automatic query optimization)');
+
     perfLogger.complete();
     logger.info('DDL setup finished for the provided connection');
   } catch (error) {
