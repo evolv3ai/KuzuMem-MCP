@@ -8,6 +8,7 @@ import {
   RuleRepository,
 } from '../repositories';
 import { Mutex } from '../utils/mutex';
+import { loggers } from '../utils/logger';
 
 /**
  * RepositoryFactory - Manages creation of repository instances
@@ -22,6 +23,7 @@ import { Mutex } from '../utils/mutex';
 export class RepositoryFactory {
   private static instance: RepositoryFactory;
   private static initializationLock = new Mutex();
+  private static logger = loggers.repository();
 
   // Cache maps to store repositories by database path
   private repositoryRepoCache: Map<string, RepositoryRepository> = new Map();
@@ -35,7 +37,7 @@ export class RepositoryFactory {
    * Private constructor to enforce Singleton pattern
    */
   private constructor() {
-    console.log('RepositoryFactory: initialized');
+    RepositoryFactory.logger.info('RepositoryFactory initialized');
   }
 
   /**
@@ -49,7 +51,7 @@ export class RepositoryFactory {
       try {
         if (!RepositoryFactory.instance) {
           RepositoryFactory.instance = new RepositoryFactory();
-          console.log('RepositoryFactory: Singleton instance created');
+          RepositoryFactory.logger.info('RepositoryFactory singleton instance created');
         }
       } finally {
         release();
