@@ -743,8 +743,11 @@ export async function initializeKuzuDBSchema(connection: any): Promise<void> {
         id STRING,
         name STRING,
         path STRING,
-        size_bytes INT64,
+        size INT64,
         mime_type STRING,
+        lastModified STRING,
+        checksum STRING,
+        metadata STRING,
         created_at STRING,
         updated_at STRING,
         repository STRING,
@@ -803,7 +806,7 @@ export async function initializeKuzuDBSchema(connection: any): Promise<void> {
     `);
 
     await execute(`
-      CREATE REL TABLE IF NOT EXISTS IMPLEMENTS (FROM File TO Component);
+      CREATE REL TABLE IF NOT EXISTS IMPLEMENTS (FROM Component TO File);
     `);
 
     await execute(`

@@ -160,7 +160,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
               resolve(false);
             }
 
-            if (output.includes('MCP HTTP Streaming Server running at')) {
+            if (output.includes('MCP HTTP stream server listening at')) {
               clearTimeout(timeout);
               serverProcess.stderr!.off('data', handleData);
               serverProcess.stdout!.off('data', handleData);

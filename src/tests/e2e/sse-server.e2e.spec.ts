@@ -423,7 +423,7 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
         const sData = data.toString();
         output += sData;
         console.error(`SSE_SERVER_STDERR: ${sData}`);
-        if (!resolved && sData.includes(`MCP SSE Server listening on port ${STREAM_PORT}`)) {
+        if (!resolved && sData.includes(`MCP SSE server listening on http://localhost:${STREAM_PORT}`)) {
           console.log('SSE Server ready.');
           if (startupTimeout) {
             clearTimeout(startupTimeout);
