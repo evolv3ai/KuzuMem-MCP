@@ -154,12 +154,16 @@ export class ComponentRepository {
     const escapedStartGraphUniqueId = this.escapeStr(startGraphUniqueId);
     const escapedEndGraphUniqueId = this.escapeStr(endGraphUniqueId);
 
-    // Use KuzuDB shortest path syntax. A variable for the relationship (e.g., 'e')
-    // can only be used when specific relationship types are provided.
+    // Optimized shortest path query with indexed lookups
     const query = `
       MATCH p = (startNode:Component)${arrowLeft}${relationshipPattern}${arrowRight}(endNode:Component)
-      WHERE startNode.graph_unique_id = '${escapedStartGraphUniqueId}' AND endNode.graph_unique_id = '${escapedEndGraphUniqueId}'
+      WHERE startNode.graph_unique_id = '${escapedStartGraphUniqueId}'
+        AND endNode.graph_unique_id = '${escapedEndGraphUniqueId}'
+        AND startNode.branch = '${this.escapeStr(startNodeBranch)}'
+        AND endNode.branch = '${this.escapeStr(startNodeBranch)}'
       RETURN p AS path, length(p) AS path_length
+      ORDER BY path_length ASC
+      LIMIT 1
     `;
 
     console.error(`DEBUG: ComponentRepository.findShortestPath query: ${query}`);
@@ -1096,16 +1100,15 @@ export class ComponentRepository {
         return [];
     }
 
-    // Query needs to find the Repository node that matches repositoryName and itemBranch (if repo branches are a thing)
-    // Then find Contexts linked to THAT repo, on the itemBranch, then linked to the item.
-    // Simplification: graph_unique_id of item is the primary point. Contexts are filtered by branch.
-    // The HAS_CONTEXT implies a repository, but which one? Assume all contexts share branch with item.
+    // Optimized context query with proper indexing and filtering
     const query = `
-      MATCH ${itemMatchClause} 
-      MATCH (ctx:Context {branch: '${escapedItemBranch}'}) 
+      MATCH ${itemMatchClause}
+      MATCH (ctx:Context)
+      WHERE ctx.branch = '${escapedItemBranch}' AND ctx.repository = '${this.escapeStr(repositoryName)}'
       MATCH ${relationshipMatchClause}
       RETURN DISTINCT ctx
       ORDER BY ctx.created_at DESC
+      LIMIT 100
     `;
     // graph_unique_id attaches this query to specific repository and branch
     try {
