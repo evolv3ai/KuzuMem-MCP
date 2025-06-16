@@ -1,7 +1,10 @@
 import { MemoryService } from '../../../services/memory.service';
 import { ProgressHandler } from '../progress-handler';
+import { loggers } from '../../../utils/logger';
 
 export class SimpleEchoOperation {
+  private static logger = loggers.mcpStdio();
+
   public static async execute(
     clientProjectRoot: string,
     repositoryName: string,
@@ -10,7 +13,7 @@ export class SimpleEchoOperation {
     memoryService?: MemoryService, // Optional for this simple tool
     progressHandler?: ProgressHandler,
   ): Promise<any> {
-    console.log('[SimpleEchoOperation] Executing with args:', args);
+    SimpleEchoOperation.logger.info('[SimpleEchoOperation] Executing with args:', args);
     if (progressHandler) {
       progressHandler.progress({
         status: 'initializing',
