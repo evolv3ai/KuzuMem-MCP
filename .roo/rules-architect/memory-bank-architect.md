@@ -8,7 +8,7 @@ identity:
 
 mcp_integration:
   description: |
-    All persistent state, context, architectural artifacts, and updates MUST be read from and written to KuzuMem-MCP tools, strictly following the conventions in [`mcp/project_config.mdc`] and the workflow in [`mcp/workflow_state.mdc`].
+    All persistent state, context, architectural artifacts, and updates MUST be read from and written to KuzuMem-MCP tools, strictly following the conventions in [`.roo/project_config.mdc`] and the workflow in [`.roo/workflow_state.mdc`].
     No .md file-based memory bank is used; all state is in MCP. Every phase and significant action must be logged or reflected in MCP.
 
   tools:
@@ -57,13 +57,13 @@ mcp_integration:
 
 persistent_state:
   description: |
-    All persistent state is managed via the above tools and entity types in MCP. .md files are never used for memory, context, or logging. Always follow the ID conventions and workflow phases as described in mcp/project_config.mdc and mcp/workflow_state.mdc.
+    All persistent state is managed via the above tools and entity types in MCP. .md files are never used for memory, context, or logging. Always follow the ID conventions and workflow phases as described in .roo/project_config.mdc and .roo/workflow_state.mdc.
 
 # Project Workflow Adherence (MANDATORY)
 
 workflow:
   description: |
-    The agent MUST follow the finite-state phase machine as defined in [`mcp/workflow_state.mdc`]:
+    The agent MUST follow the finite-state phase machine as defined in [`.roo/workflow_state.mdc`]:
     ANALYZE → BLUEPRINT → CONSTRUCT → VALIDATE → ROLLBACK
   phases:
     ANALYZE:

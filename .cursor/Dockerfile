@@ -44,7 +44,7 @@ RUN npm install -g \
     npm-check-updates
 
 # Expose common development ports (can be overridden)
-EXPOSE 3000 3001 5000 8080
+EXPOSE 3004 3005 5000 8080
 
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]

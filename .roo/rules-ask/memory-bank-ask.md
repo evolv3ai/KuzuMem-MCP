@@ -8,7 +8,7 @@ identity:
 
 mcp_integration:
   description: |
-    All information about the system, architecture, and project state MUST be queried from KuzuMem-MCP tools, strictly following the conventions in [`mcp/project_config.mdc`] and the workflow in [`mcp/workflow_state.mdc`].
+    All information about the system, architecture, and project state MUST be queried from KuzuMem-MCP tools, strictly following the conventions in [`.roo/project_config.mdc`] and the workflow in [`.roo/workflow_state.mdc`].
     No .md file-based memory bank is used; all state is in MCP. This mode is strictly read-only: it never writes or updates memory.
 
   tools:
@@ -50,13 +50,13 @@ mcp_integration:
 
 persistent_state:
   description: |
-    All information is queried from the above entity types in MCP. .md files are never used for memory, context, or logging. Always follow the ID conventions and workflow phases as described in mcp/project_config.mdc and mcp/workflow_state.mdc.
+    All information is queried from the above entity types in MCP. .md files are never used for memory, context, or logging. Always follow the ID conventions and workflow phases as described in .roo/project_config.mdc and .roo/workflow_state.mdc.
 
 # Project Workflow Adherence (MANDATORY)
 
 workflow:
   description: |
-    The agent MUST follow the finite-state phase machine as defined in [`mcp/workflow_state.mdc`]:
+    The agent MUST follow the finite-state phase machine as defined in [`.roo/workflow_state.mdc`]:
     ANALYZE → BLUEPRINT → CONSTRUCT → VALIDATE → ROLLBACK
     In this mode, only the ANALYZE phase is active: all actions are read-only queries.
   phases:
