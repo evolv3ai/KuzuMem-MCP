@@ -2,11 +2,13 @@ import { KuzuDBClient } from '../db/kuzu';
 import { Tag } from '../types'; // Assuming all these types can be tagged
 import { formatGraphUniqueId } from '../utils/id.utils';
 import { RepositoryRepository } from './repository.repository';
+import { loggers } from '../utils/logger';
 
 // Define a union type for all items that can be tagged, based on schema_evolution.md and TagItemInputSchema
 export type TaggableItemType = 'Component' | 'Rule' | 'Context' | 'File' | 'Decision'; // Added Decision
 
 export class TagRepository {
+  private logger = loggers.repository();
   private kuzuClient: KuzuDBClient;
   private repositoryRepo: RepositoryRepository; // For context, if tags are ever repo-scoped or queries need it
 
@@ -90,7 +92,7 @@ export class TagRepository {
         }
         return null;
       } catch (error) {
-        console.error(
+        this.logger.error(
           `[TagRepository] Error upserting Tag node ${tagData.id} with repository link:`,
           error,
         );
@@ -133,7 +135,7 @@ export class TagRepository {
         }
         return null;
       } catch (error) {
-        console.error(`[TagRepository] Error upserting Tag node ${tagData.id}:`, error);
+        this.logger.error(`[TagRepository] Error upserting Tag node ${tagData.id}:`, error);
         return null;
       }
     }
@@ -149,7 +151,7 @@ export class TagRepository {
       }
       return null;
     } catch (error) {
-      console.error(`[TagRepository] Error finding Tag node by ID ${tagId}:`, error);
+      this.logger.error(`[TagRepository] Error finding Tag node by ID ${tagId}:`, error);
       return null;
     }
   }
@@ -165,7 +167,7 @@ export class TagRepository {
       }
       return null;
     } catch (error) {
-      console.error(`[TagRepository] Error finding Tag node by name ${tagName}:`, error);
+      this.logger.error(`[TagRepository] Error finding Tag node by name ${tagName}:`, error);
       return null;
     }
   }
@@ -234,7 +236,7 @@ export class TagRepository {
       const result = await this.kuzuClient.executeQuery(query, params);
       return result && result.length > 0;
     } catch (error) {
-      console.error(
+      this.logger.error(
         `[TagRepository] Error tagging ${itemLabel} ${itemId} with Tag ${tagId} via TAGGED_WITH:`,
         error,
       );
@@ -290,7 +292,7 @@ export class TagRepository {
       }
       return [];
     } catch (error) {
-      console.error(`[TagRepository] Error finding items for Tag ${tagId}:`, error);
+      this.logger.error(`[TagRepository] Error finding items for Tag ${tagId}:`, error);
       return [];
     }
   }

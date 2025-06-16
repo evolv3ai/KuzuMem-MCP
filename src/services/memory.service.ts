@@ -24,6 +24,7 @@ import * as graphOps from './memory-operations/graph.ops';
 import * as metadataOps from './memory-operations/metadata.ops';
 import * as ruleOps from './memory-operations/rule.ops';
 import * as tagOps from './memory-operations/tag.ops';
+import { loggers } from '../utils/logger';
 
 // Type definitions (temporary until proper types are created)
 type FileRecord = any;
@@ -36,6 +37,7 @@ type Tag = any;
  * Refactored to use RepositoryProvider for repository management
  */
 export class MemoryService {
+  private logger = loggers.memoryService();
   private static instance: MemoryService;
   private static lock = new Mutex();
 

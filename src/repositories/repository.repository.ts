@@ -1,11 +1,13 @@
 import { KuzuDBClient } from '../db/kuzu';
 import { Repository } from '../types';
+import { loggers } from '../utils/logger';
 
 /**
  * Repository pattern for Repository nodes in KuzuDB.
  * Each instance is now tied to a specific KuzuDBClient (and thus, a specific database).
  */
 export class RepositoryRepository {
+  private logger = loggers.repository();
   private kuzuClient: KuzuDBClient;
 
   /**
@@ -36,7 +38,7 @@ export class RepositoryRepository {
    * id = name + ':' + branch
    */
   async findByName(name: string, branch: string = 'main'): Promise<Repository | null> {
-    // console.error( // Temporarily disable for cleaner logs during this refactor phase
+    // this.logger.error( // Temporarily disable for cleaner logs during this refactor phase
     //   `RepositoryRepository (${this.kuzuClient.dbPath}): findByName CALLED with name: '${name}', branch: '${branch}'`,
     // );
 
@@ -49,7 +51,7 @@ export class RepositoryRepository {
     try {
       result = await this.kuzuClient.executeQuery(query);
     } catch (e) {
-      console.error(
+      this.logger.error(
         `RepositoryRepository (${this.kuzuClient.dbPath}): executeQuery FAILED for query: ${query}`,
         e,
       );
@@ -129,7 +131,7 @@ export class RepositoryRepository {
           return found;
         }
       } catch (findError) {
-        console.error(`RepositoryRepository: Error during findByName after create:`, findError);
+        this.logger.error(`RepositoryRepository: Error during findByName after create:`, findError);
       }
 
       // Last resort: construct repository object manually
@@ -141,7 +143,7 @@ export class RepositoryRepository {
         updated_at: new Date(nowIso),
       } as Repository;
     } catch (error) {
-      console.error(`RepositoryRepository: Error during create:`, error);
+      this.logger.error(`RepositoryRepository: Error during create:`, error);
       return null;
     }
   }
@@ -202,7 +204,7 @@ export class RepositoryRepository {
     try {
       await this.kuzuClient.executeQuery(query);
     } catch (error) {
-      console.error(`RepositoryRepository: Error during update of ${repositoryId}:`, error);
+      this.logger.error(`RepositoryRepository: Error during update of ${repositoryId}:`, error);
       throw error;
     }
   }
@@ -216,7 +218,7 @@ export class RepositoryRepository {
     try {
       await this.kuzuClient.executeQuery(query);
     } catch (error) {
-      console.error(`RepositoryRepository: Error during delete of ${id}:`, error);
+      this.logger.error(`RepositoryRepository: Error during delete of ${id}:`, error);
       throw error;
     }
   }

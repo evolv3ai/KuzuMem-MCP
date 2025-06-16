@@ -2,11 +2,13 @@ import { KuzuDBClient } from '../db/kuzu';
 import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
 import { Metadata } from '../types';
 import { RepositoryRepository } from './repository.repository';
+import { loggers } from '../utils/logger';
 /**
  * Repository for Metadata, using KuzuDB and Cypher queries.
  * Each instance is now tied to a specific KuzuDBClient.
  */
 export class MetadataRepository {
+  private logger = loggers.repository();
   private kuzuClient: KuzuDBClient; // Instance-specific client
   private repositoryRepo: RepositoryRepository; // Added private member
 
@@ -39,7 +41,7 @@ export class MetadataRepository {
       const jsonString = JSON.stringify(value);
       return `'${this.escapeStr(jsonString)}'`;
     } catch (e) {
-      console.error('Failed to stringify JSON for escapeJsonProp', value, e);
+      this.logger.error('Failed to stringify JSON for escapeJsonProp', value, e);
       return 'null';
     }
   }
