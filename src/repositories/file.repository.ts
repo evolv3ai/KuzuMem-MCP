@@ -113,7 +113,7 @@ export class FileRepository {
   async findFileById(repoNodeId: string, branch: string, fileId: string): Promise<File | null> {
     const query = `
       MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId}) 
-      WHERE json_extract_string(f.metadata, '$.branch') = $branch
+      WHERE json_extract(f.metadata, 'branch') = $branch
       RETURN f, repo
     `;
     try {
@@ -188,7 +188,7 @@ export class FileRepository {
     const query = `
       MATCH (c:Component {graph_unique_id: $componentGraphUniqueId})
       MATCH (f:File {id: $fileId})-[:PART_OF]->(repo:Repository {id: $repoNodeId})
-      WHERE json_extract_string(f.metadata, '$.branch') = $branch
+      WHERE json_extract(f.metadata, 'branch') = $branch
       MERGE (c)-[r:${safeRelType}]->(f)
       RETURN r
     `;
@@ -236,7 +236,7 @@ export class FileRepository {
       MATCH (c:Component {graph_unique_id: $componentGraphUniqueId})
       MATCH (c)-[r:${safeRelType}]->(f:File)
       MATCH (f)-[:PART_OF]->(repo:Repository {id: $repoNodeId})
-      WHERE json_extract_string(f.metadata, '$.branch') = $branch
+      WHERE json_extract(f.metadata, 'branch') = $branch
       RETURN f, repo
     `;
     try {
