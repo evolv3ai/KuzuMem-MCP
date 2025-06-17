@@ -6,7 +6,8 @@
 
 import dotenv from 'dotenv';
 import { randomUUID } from 'node:crypto';
-import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { type Logger } from 'pino';
 import { z } from 'zod';
 
 // Official MCP SDK imports
@@ -18,7 +19,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { toolHandlers as sdkToolHandlers } from './mcp/tool-handlers';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
 import { MemoryService } from './services/memory.service';
-import { createPerformanceLogger, logError, loggers, type Logger } from './utils/logger';
+import { createPerformanceLogger, logError, loggers } from './utils/logger';
 
 // Load environment variables
 dotenv.config();
@@ -219,7 +220,7 @@ async function handlePostRequest(
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       enableJsonResponse: true, // Support both JSON and SSE
-      onSessionInitialized: (sessionId) => {
+      onsessioninitialized: (sessionId: string) => {
         // Store the transport by session ID
         transports[sessionId] = transport;
         requestLogger.debug({ sessionId }, 'New session initialized');
