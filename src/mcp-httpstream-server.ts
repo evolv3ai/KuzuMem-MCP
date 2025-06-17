@@ -213,7 +213,7 @@ async function handlePostRequest(req: any, res: any, requestLogger: any): Promis
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       enableJsonResponse: true, // Support both JSON and SSE
-      onsessioninitialized: (sessionId) => {
+      onSessionInitialized: (sessionId) => {
         // Store the transport by session ID
         transports[sessionId] = transport;
         requestLogger.debug({ sessionId }, 'New session initialized');
