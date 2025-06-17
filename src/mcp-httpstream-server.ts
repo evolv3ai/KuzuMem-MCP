@@ -204,88 +204,31 @@ async function handlePostRequest(req: any, res: any, requestLogger: any): Promis
     transport = transports[sessionId];
     requestLogger.debug({ sessionId }, 'Reusing existing transport');
   } else if (!sessionId) {
-    // Check if this is an initialization request
-    let body = '';
-    req.on('data', (chunk: Buffer) => {
-      body += chunk.toString();
-    });
-
-    await new Promise((resolve, reject) => {
-      req.on('end', resolve);
-      req.on('error', (error: Error) => {
-        requestLogger.debug({ error: error.message }, 'Request stream error during body reading');
-        reject(error);
-      });
-    }).catch((error) => {
-      // Handle client abort or other request stream errors
-      if (!res.headersSent) {
-        res.writeHead(502, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          jsonrpc: '2.0',
-          error: {
-            code: -32000,
-            message: 'Bad Gateway: Request stream error',
-          },
-          id: null,
-        }));
+    // Create new transport for initialization request
+    transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+      enableJsonResponse: true, // Support both JSON and SSE
+      onsessioninitialized: (sessionId) => {
+        // Store the transport by session ID
+        transports[sessionId] = transport;
+        requestLogger.debug({ sessionId }, 'New session initialized');
       }
-      return; // Exit early on error
     });
 
-    let requestBody;
-    try {
-      requestBody = JSON.parse(body);
-    } catch (error) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        jsonrpc: '2.0',
-        error: {
-          code: -32700,
-          message: 'Parse error',
-        },
-        id: null,
-      }));
-      return;
-    }
+    // Clean up transport when closed
+    transport.onclose = () => {
+      if (transport.sessionId) {
+        delete transports[transport.sessionId];
+        requestLogger.debug({ sessionId: transport.sessionId }, 'Session transport cleaned up');
+      }
+    };
 
-    if (requestBody.method === 'initialize') {
-      // New initialization request
-      transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => randomUUID(),
-        enableJsonResponse: true, // Support both JSON and SSE
-        onsessioninitialized: (sessionId) => {
-          // Store the transport by session ID
-          transports[sessionId] = transport;
-          requestLogger.debug({ sessionId }, 'New session initialized');
-        }
-      });
+    // Connect to the MCP server
+    await mcpServer.connect(transport);
+    requestLogger.debug('MCP server connected to new transport');
 
-      // Clean up transport when closed
-      transport.onclose = () => {
-        if (transport.sessionId) {
-          delete transports[transport.sessionId];
-          requestLogger.debug({ sessionId: transport.sessionId }, 'Session transport cleaned up');
-        }
-      };
-
-      // Connect to the MCP server
-      await mcpServer.connect(transport);
-      requestLogger.debug('MCP server connected to new transport');
-
-      // Handle the request with the parsed body
-      await transport.handleRequest(req, res, requestBody);
-    } else {
-      // Invalid request without session ID
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        jsonrpc: '2.0',
-        error: {
-          code: -32000,
-          message: 'Bad Request: No valid session ID provided',
-        },
-        id: null,
-      }));
-    }
+    // Let the transport handle the request and parse the body internally
+    await transport.handleRequest(req, res);
     return;
   } else {
     // Invalid request
