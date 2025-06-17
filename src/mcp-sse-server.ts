@@ -6,7 +6,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { CallToolResult, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { createServer, Server as HttpServer } from 'http';
 import { randomUUID } from 'node:crypto';
 import path from 'path';
@@ -27,9 +27,6 @@ const host = process.env.HOST || 'localhost';
 // Create SSE-specific logger
 const sseLogger = loggers.mcpSSE();
 
-// Debug level for backward compatibility with existing debug patterns
-const debugLevel = parseInt(process.env.DEBUG_LEVEL || '0', 10);
-
 // Map to store clientProjectRoot by repository:branch
 const repositoryRootMap = new Map<string, string>();
 
@@ -41,7 +38,7 @@ const mcpServer = new McpServer(
   },
   {
     capabilities: {
-      tools: { list: true, call: true },
+      tools: { list: true, call: true, listChanged: true },
       resources: {},
       prompts: {},
     },
@@ -93,7 +90,9 @@ function createZodSchema(tool: any) {
     }
   }
 
-  return shape;
+  return Object.keys(shape).length === 0
+    ? z.object({}).passthrough() // accept anything for param-less tools
+    : z.object(shape);
 }
 
 /**
@@ -291,7 +290,7 @@ function gracefulShutdown(signal: string): void {
       // Close transport
       if (transport) {
         try {
-          transport.close();
+          await transport.close();
           sseLogger.debug('Transport closed');
         } catch (error) {
           logError(sseLogger, error as Error, { operation: 'transport-close' });
