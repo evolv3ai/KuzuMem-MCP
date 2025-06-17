@@ -210,8 +210,26 @@ async function handlePostRequest(req: any, res: any, requestLogger: any): Promis
       body += chunk.toString();
     });
 
-    await new Promise((resolve) => {
+    await new Promise((resolve, reject) => {
       req.on('end', resolve);
+      req.on('error', (error: Error) => {
+        requestLogger.debug({ error: error.message }, 'Request stream error during body reading');
+        reject(error);
+      });
+    }).catch((error) => {
+      // Handle client abort or other request stream errors
+      if (!res.headersSent) {
+        res.writeHead(502, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          jsonrpc: '2.0',
+          error: {
+            code: -32000,
+            message: 'Bad Gateway: Request stream error',
+          },
+          id: null,
+        }));
+      }
+      return; // Exit early on error
     });
 
     let requestBody;
