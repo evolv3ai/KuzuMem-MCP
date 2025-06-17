@@ -143,6 +143,14 @@ function getSchemaKeyForTool(toolName: string): keyof typeof toolSchemas | undef
   return undefined;
 }
 
+/**
+ * Initializes and starts the MCP stdio server, setting up request handlers for session management, tool listing, and tool invocation.
+ *
+ * The server advertises capabilities for listing tools, calling tools, and notifying when the tool list changes. It manages per-session state, validates and dispatches tool requests, and creates memory service instances on demand for each tool call. The server is designed for robust operation, including structured logging, error handling, and explicit readiness signaling for test environments.
+ *
+ * @remark
+ * In test environments, a readiness message is written to stderr to facilitate end-to-end test detection.
+ */
 async function main() {
   mcpStdioLogger.info('MCP Stdio Server initializing...');
 
