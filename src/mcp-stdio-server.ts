@@ -112,6 +112,15 @@ import packageJson from '../package.json';
 // Map to store clientProjectRoot by repository:branch (similar to HTTP server)
 const repositoryRootMap = new Map<string, string>();
 
+/**
+ * Helper function to create consistent repository:branch keys for repositoryRootMap.
+ * Ensures that undefined or missing branch values default to "main" to prevent key mismatches.
+ */
+function createRepositoryBranchKey(repository: string, branch?: string): string {
+  const normalizedBranch = branch || 'main';
+  return `${repository}:${normalizedBranch}`;
+}
+
 // Create the MCP server using high-level API (consistent with HTTP server)
 const mcpServer = new McpServer(
   {
@@ -156,7 +165,7 @@ function registerTools(): void {
 
           // Handle clientProjectRoot storage for memory-bank init operations
           if (tool.name === 'memory-bank' && args.operation === 'init') {
-            const repoBranchKey = `${args.repository}:${args.branch}`;
+            const repoBranchKey = createRepositoryBranchKey(args.repository, args.branch);
             repositoryRootMap.set(repoBranchKey, args.clientProjectRoot);
             toolLogger.debug(
               { repoBranchKey, clientProjectRoot: args.clientProjectRoot },
@@ -166,7 +175,7 @@ function registerTools(): void {
 
           // Determine effective clientProjectRoot
           const effectiveClientProjectRoot =
-            args.clientProjectRoot || repositoryRootMap.get(`${args.repository}:${args.branch}`);
+            args.clientProjectRoot || repositoryRootMap.get(createRepositoryBranchKey(args.repository, args.branch));
 
           if (!effectiveClientProjectRoot) {
             throw new Error(

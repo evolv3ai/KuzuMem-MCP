@@ -35,6 +35,15 @@ const httpStreamLogger = loggers.mcpHttp();
 // Map to store clientProjectRoot for each repository and branch
 const repositoryRootMap = new Map<string, string>();
 
+/**
+ * Helper function to create consistent repository:branch keys for repositoryRootMap.
+ * Ensures that undefined or missing branch values default to "main" to prevent key mismatches.
+ */
+function createRepositoryBranchKey(repository: string, branch?: string): string {
+  const normalizedBranch = branch || 'main';
+  return `${repository}:${normalizedBranch}`;
+}
+
 // Create the official MCP server with proper capabilities
 const mcpServer = new McpServer(
   { name: 'KuzuMem-MCP-HTTPStream', version: '3.0.0' },
@@ -118,7 +127,7 @@ function registerTools() {
         try {
           // Handle clientProjectRoot storage for memory-bank init operations
           if (tool.name === 'memory-bank' && args.operation === 'init') {
-            const repoBranchKey = `${args.repository}:${args.branch}`;
+            const repoBranchKey = createRepositoryBranchKey(args.repository, args.branch);
             repositoryRootMap.set(repoBranchKey, args.clientProjectRoot);
             toolLogger.debug(
               { repoBranchKey, clientProjectRoot: args.clientProjectRoot },
@@ -128,8 +137,8 @@ function registerTools() {
 
           // Get clientProjectRoot from stored map or args
           let effectiveClientProjectRoot = args.clientProjectRoot;
-          if (!effectiveClientProjectRoot && args.repository && args.branch) {
-            const repoBranchKey = `${args.repository}:${args.branch}`;
+          if (!effectiveClientProjectRoot && args.repository) {
+            const repoBranchKey = createRepositoryBranchKey(args.repository, args.branch);
             effectiveClientProjectRoot = repositoryRootMap.get(repoBranchKey);
           }
 
