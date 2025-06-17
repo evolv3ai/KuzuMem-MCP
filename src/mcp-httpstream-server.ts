@@ -6,7 +6,7 @@
 
 import dotenv from 'dotenv';
 import { randomUUID } from 'node:crypto';
-import { createServer, type Server } from 'node:http';
+import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 import { z } from 'zod';
 
 // Official MCP SDK imports
@@ -18,7 +18,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { toolHandlers as sdkToolHandlers } from './mcp/tool-handlers';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
 import { MemoryService } from './services/memory.service';
-import { createPerformanceLogger, logError, loggers } from './utils/logger';
+import { createPerformanceLogger, logError, loggers, type Logger } from './utils/logger';
 
 // Load environment variables
 dotenv.config();
@@ -197,7 +197,11 @@ let server: Server;
 const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
 // Helper function to handle POST requests
-async function handlePostRequest(req: any, res: any, requestLogger: any): Promise<void> {
+async function handlePostRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  requestLogger: Logger,
+): Promise<void> {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
   if (sessionId && transports[sessionId]) {
@@ -219,7 +223,7 @@ async function handlePostRequest(req: any, res: any, requestLogger: any): Promis
         // Store the transport by session ID
         transports[sessionId] = transport;
         requestLogger.debug({ sessionId }, 'New session initialized');
-      }
+      },
     });
 
     // Clean up transport when closed
@@ -241,30 +245,38 @@ async function handlePostRequest(req: any, res: any, requestLogger: any): Promis
 
   // Invalid request - session ID provided but not found
   res.writeHead(400, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({
-    jsonrpc: '2.0',
-    error: {
-      code: -32000,
-      message: 'Bad Request: Invalid session ID',
-    },
-    id: null,
-  }));
+  res.end(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      error: {
+        code: -32000,
+        message: 'Bad Request: Invalid session ID',
+      },
+      id: null,
+    }),
+  );
 }
 
 // Helper function to handle GET requests (for SSE streams)
-async function handleGetRequest(req: any, res: any, requestLogger: any): Promise<void> {
+async function handleGetRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  requestLogger: Logger,
+): Promise<void> {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
   if (!sessionId || !transports[sessionId]) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      jsonrpc: '2.0',
-      error: {
-        code: -32000,
-        message: 'Bad Request: Invalid or missing session ID',
-      },
-      id: null,
-    }));
+    res.end(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: 'Bad Request: Invalid or missing session ID',
+        },
+        id: null,
+      }),
+    );
     return;
   }
 
@@ -273,19 +285,25 @@ async function handleGetRequest(req: any, res: any, requestLogger: any): Promise
 }
 
 // Helper function to handle DELETE requests (for session termination)
-async function handleDeleteRequest(req: any, res: any, requestLogger: any): Promise<void> {
+async function handleDeleteRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  requestLogger: Logger,
+): Promise<void> {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
   if (!sessionId || !transports[sessionId]) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      jsonrpc: '2.0',
-      error: {
-        code: -32000,
-        message: 'Bad Request: Invalid or missing session ID',
-      },
-      id: null,
-    }));
+    res.end(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: 'Bad Request: Invalid or missing session ID',
+        },
+        id: null,
+      }),
+    );
     return;
   }
 
@@ -297,21 +315,25 @@ async function handleDeleteRequest(req: any, res: any, requestLogger: any): Prom
     requestLogger.debug({ sessionId }, 'Session terminated');
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      jsonrpc: '2.0',
-      result: { success: true },
-      id: null,
-    }));
+    res.end(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        result: { success: true },
+        id: null,
+      }),
+    );
   } catch (error) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      jsonrpc: '2.0',
-      error: {
-        code: -32603,
-        message: 'Internal error during session termination',
-      },
-      id: null,
-    }));
+    res.end(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          code: -32603,
+          message: 'Internal error during session termination',
+        },
+        id: null,
+      }),
+    );
   }
 }
 
@@ -348,14 +370,16 @@ async function startServer(): Promise<void> {
         await handleDeleteRequest(req, res, requestLogger);
       } else {
         res.writeHead(405, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          jsonrpc: '2.0',
-          error: {
-            code: -32000,
-            message: 'Method not allowed',
-          },
-          id: null,
-        }));
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            error: {
+              code: -32000,
+              message: 'Method not allowed',
+            },
+            id: null,
+          }),
+        );
       }
     } catch (error) {
       logError(requestLogger, error as Error, {
