@@ -95,17 +95,29 @@ const collectStreamEvents = async (sseResponseEmitter: any): Promise<CollectedSs
           }
           const eventPayload = { type: eventType, id: eventId, data: parsedData };
           events.push(eventPayload);
-          console.log(`[collectStreamEvents] Received event:`, eventPayload);
-
-          if (eventType === 'mcpNotification' && parsedData.method === 'tools/progress') {
-            progressEventsCount++;
-            console.log(`[collectStreamEvents] Progress event count: ${progressEventsCount}`);
+          if (process.env.DEBUG_SSE_TESTS) {
+            console.log(`[collectStreamEvents] Received event:`, eventPayload);
           }
-          if (eventType === 'mcpResponse') {
+
+          // More robust progress detection - handle various progress notification formats
+          if (eventType === 'message' && parsedData.method &&
+              (parsedData.method === 'notifications/progress' ||
+               parsedData.method === 'progress' ||
+               parsedData.method === 'tool/progress')) {
+            progressEventsCount++;
+            if (process.env.DEBUG_SSE_TESTS) {
+              console.log(`[collectStreamEvents] Progress event count: ${progressEventsCount}`);
+            }
+          }
+          // More robust final response detection - handle both success and error responses
+          if (eventType === 'message' && parsedData.id &&
+              (parsedData.result !== undefined || parsedData.error !== undefined)) {
             finalResponseEvent = eventPayload;
-            console.log(
-              '[collectStreamEvents] Final mcpResponse event received. Resolving promise.',
-            );
+            if (process.env.DEBUG_SSE_TESTS) {
+              console.log(
+                '[collectStreamEvents] Final response event received. Resolving promise.',
+              );
+            }
             settlePromise(resolve, { events, progressEventsCount, finalResponseEvent, errorEvent });
             return;
           }
@@ -149,8 +161,13 @@ const collectStreamEvents = async (sseResponseEmitter: any): Promise<CollectedSs
         if (promiseSettled) {
           return;
         }
-        buffer += chunk.toString();
-        console.log(`[collectStreamEvents] Data chunk received (${chunk.length} bytes)`);
+        const chunkStr = chunk.toString();
+        buffer += chunkStr;
+        if (process.env.DEBUG_SSE_TESTS) {
+          console.log(`[collectStreamEvents] Data chunk received (${chunk.length} bytes)`);
+          console.log(`[collectStreamEvents] Raw chunk data:`, JSON.stringify(chunkStr));
+          console.log(`[collectStreamEvents] Current buffer:`, JSON.stringify(buffer));
+        }
         processBuffer();
       });
       sseResponseEmitter.on('end', () => {
@@ -331,6 +348,11 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
               return;
             }
 
+            // Debug: Log all events received
+            if (process.env.DEBUG_SSE_TESTS) {
+              console.log('All events received:', JSON.stringify(events, null, 2));
+            }
+
             // For initialize, look for the message event with id 'initialize'
             const initializeEvent = events.find(
               (event: any) =>
@@ -341,16 +363,22 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
             );
 
             if (!initializeEvent) {
+              console.log(
+                'Available events:',
+                events.map((e) => ({ type: e.type, id: e.data?.id, hasResult: !!e.data?.result })),
+              );
               reject(new Error('No initialize response event received'));
               return;
             }
 
-            console.log('Initialize response event:', JSON.stringify(initializeEvent, null, 2));
+            if (process.env.DEBUG_SSE_TESTS) {
+              console.log('Initialize response event:', JSON.stringify(initializeEvent, null, 2));
+            }
 
             // Validate the initialize response
             expect(initializeEvent.data.result).toBeDefined();
             expect(initializeEvent.data.result.capabilities.tools).toBeDefined();
-            expect(initializeEvent.data.result.serverInfo.name).toBe('KuzuMem-MCP-HTTPStream');
+            expect(initializeEvent.data.result.serverInfo.name).toBe('KuzuMem-MCP-SSE');
             expect(mcpSessionId).toBeDefined();
 
             console.log(`MCP session initialized successfully: ${mcpSessionId}`);
@@ -820,35 +848,35 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
     expect(toolResult.success).toBe(true);
   });
 
-  it.skip('T_HTTPSTREAM_004: /mcp tools/call (SSE) should stream progress for get-component-dependencies', (done) => {
+  it('T_HTTPSTREAM_004: /mcp tools/call (SSE) should stream progress for component dependencies query', (done) => {
     // Ensure dependentComponentId and testComponentId are seeded from beforeAll
     expect(dependentComponentId).toBeDefined();
     expect(testComponentId).toBeDefined();
     expect(mcpSessionId).toBeDefined();
 
     const toolArgs = {
+      type: 'dependencies',
       repository: testRepository,
       branch: testBranch,
       componentId: dependentComponentId,
-      depth: 1, // Keep depth 1 for simpler expected output for now
+      direction: 'dependencies',
       clientProjectRoot: clientProjectRootForTest,
     };
     const payload = {
       jsonrpc: '2.0',
       id: 'sse_get_deps_http',
       method: 'tools/call',
-      params: { name: 'get-component-dependencies', arguments: toolArgs },
+      params: { name: 'query', arguments: toolArgs },
     };
 
     const sseRequest = request(BASE_URL)
       .post('/mcp')
       .set('Origin', 'http://localhost')
       .set('mcp-session-id', mcpSessionId) // Use the session ID
-      .set('Accept', 'text/event-stream')
+      .set('Accept', 'application/json, text/event-stream')
       .send(payload);
 
-    // Note: The official MCP SDK may not support SSE streaming for HTTP transport
-    // This test may need to be updated based on the actual SDK capabilities
+    // Test SSE streaming for query tool with progress notifications
     sseRequest
       .expect(200) // Expect initial 200 OK for SSE stream connection
       .parse(async (res: any, callback: any) => {
@@ -863,21 +891,27 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
           // Basic checks
           expect(errorEvent).toBeNull(); // Should be no protocol/transport errors
 
-          // For SSE, we should at least get some events
+          // Should get multiple events (progress + final result)
           expect(events.length).toBeGreaterThan(0);
 
-          // Look for any message event (the SSE connection is working)
-          const messageEvent = events.find((event: any) => event.type === 'message');
+          // Should have progress events
+          expect(progressEventsCount).toBeGreaterThan(0);
 
-          // If we get a message event, the SSE functionality is working
-          // The specific tool response format may vary with the official SDK
-          if (messageEvent) {
-            expect(messageEvent.type).toBe('message');
-            // SSE functionality is confirmed working
-          } else {
-            // If no message events, at least verify we got the SSE connection
-            expect(events.length).toBeGreaterThanOrEqual(0);
-          }
+          // Should have a final response event
+          expect(finalResponseEvent).not.toBeNull();
+          expect(finalResponseEvent?.data).toHaveProperty('result');
+          expect(finalResponseEvent?.data.result).toHaveProperty('content');
+
+          // Parse the final result
+          const resultContent = finalResponseEvent?.data.result.content[0];
+          expect(resultContent).toBeDefined();
+          const toolResult = JSON.parse(resultContent.text);
+
+          // Verify the dependencies query result structure
+          expect(toolResult.type).toBe('dependencies');
+          expect(toolResult.componentId).toBe(dependentComponentId);
+          expect(toolResult.direction).toBe('dependencies');
+          expect(Array.isArray(toolResult.components)).toBe(true);
 
           callback(null, null);
         } catch (assertionError) {

@@ -1,19 +1,16 @@
 /**
- * MCP HTTP Streaming Server
- * Implements the Model Context Protocol using the official TypeScript SDK
+ * MCP SSE Server
+ * Implements the Model Context Protocol using the official TypeScript SDK with SSE support
  * Based on the official TypeScript SDK: https://github.com/modelcontextprotocol/typescript-sdk
  */
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import {
-  CallToolRequestSchema,
-  InitializeRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { createServer, Server as HttpServer } from 'http';
 import { randomUUID } from 'node:crypto';
 import path from 'path';
+import { z } from 'zod';
 import { toolHandlers } from './mcp/tool-handlers';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
 import { MemoryService } from './services/memory.service';
@@ -30,195 +27,159 @@ const host = process.env.HOST || 'localhost';
 // Create SSE-specific logger
 const sseLogger = loggers.mcpSSE();
 
-// Debug level for backward compatibility with existing debug patterns
-const debugLevel = parseInt(process.env.DEBUG_LEVEL || '0', 10);
-
 // Map to store clientProjectRoot by repository:branch
 const repositoryRootMap = new Map<string, string>();
 
-// Session store
-const sessionStore = new Map<
-  string,
-  { clientProjectRoot?: string; repository?: string; branch?: string }
->();
-let currentSessionId = 'default-session';
-
-// Create the low-level server
-const server = new Server(
+// Create the MCP server using high-level API
+const mcpServer = new McpServer(
   {
-    name: 'KuzuMem-MCP-HTTPStream',
+    name: 'KuzuMem-MCP-SSE',
     version: '3.0.0',
   },
   {
     capabilities: {
-      tools: {},
+      tools: { list: true, call: true, listChanged: true },
       resources: {},
       prompts: {},
     },
   },
 );
 
-// Handle initialization
-server.setRequestHandler(InitializeRequestSchema, async (request) => {
-  const sessionId = (request.params as any)?.sessionId || `session-${Date.now()}`;
-  currentSessionId = sessionId;
-  if (!sessionStore.has(currentSessionId)) {
-    sessionStore.set(currentSessionId, {});
-    sseLogger.debug({ sessionId: currentSessionId }, 'New session initialized');
-  }
-  return {
-    protocolVersion: '2025-03-26',
-    serverInfo: {
-      name: 'KuzuMem-MCP-HTTPStream',
-      version: '3.0.0',
-    },
-    capabilities: {
-      tools: { listChanged: true },
-    },
-    resources: {},
-    prompts: {},
-    sessionId: currentSessionId,
-  };
-});
+// Create tool schema helper
+function createZodSchema(tool: any) {
+  const shape: Record<string, z.ZodTypeAny> = {};
 
-// Handle list tools
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  sseLogger.debug('Listing tools');
-  const tools = MEMORY_BANK_MCP_TOOLS.map((toolDef) => ({
-    name: toolDef.name,
-    description: toolDef.description,
-    inputSchema: toolDef.parameters,
-  }));
-  return { tools };
-});
+  if (tool.parameters?.properties) {
+    for (const [propName, propDef] of Object.entries(tool.parameters.properties)) {
+      const prop = propDef as any;
+      let zodType: z.ZodTypeAny;
 
-// Handle tool calls
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const toolName = request.params.name;
-  const toolPerfLogger = createPerformanceLogger(sseLogger, `tool-${toolName}`);
+      switch (prop.type) {
+        case 'string':
+          zodType = z.string();
+          break;
+        case 'number':
+          zodType = z.number();
+          break;
+        case 'boolean':
+          zodType = z.boolean();
+          break;
+        case 'array':
+          zodType = z.array(z.any());
+          break;
+        case 'object':
+          zodType = z.object({}).passthrough();
+          break;
+        default:
+          zodType = z.any();
+      }
 
-  sseLogger.debug({ toolName }, `Executing tool: ${toolName}`);
+      // Handle optional fields
+      if (!tool.parameters.required?.includes(propName)) {
+        zodType = zodType.optional();
+      }
 
-  const toolDef = MEMORY_BANK_MCP_TOOLS.find((t) => t.name === toolName);
-  const actualToolHandler = toolHandlers[toolName];
-
-  if (!toolDef || !actualToolHandler) {
-    const error = new Error(`Tool not found: ${toolName}`);
-    toolPerfLogger.fail(error);
-    throw error;
+      shape[propName] = zodType;
+    }
   }
 
-  try {
-    const validatedParams = request.params.arguments;
-    const sessionId = currentSessionId;
+  return Object.keys(shape).length === 0
+    ? z.object({}).passthrough() // accept anything for param-less tools
+    : z.object(shape);
+}
 
-    const toolLogger = sseLogger.child({
-      tool: toolName,
-      sessionId: sessionId,
-      requestId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    });
+// Register all our tools with the MCP server
+function registerTools() {
+  sseLogger.info('Registering MCP tools...');
 
-    toolLogger.debug({ params: validatedParams }, 'Tool arguments received');
-    toolLogger.debug({ operation: validatedParams?.operation }, 'Tool operation');
-    toolLogger.debug(
-      { clientProjectRoot: validatedParams?.clientProjectRoot },
-      'Client project root',
-    );
+  for (const tool of MEMORY_BANK_MCP_TOOLS) {
+    sseLogger.debug({ toolName: tool.name }, `Registering tool: ${tool.name}`);
 
-    let currentSessionData = sessionStore.get(sessionId);
-    if (!currentSessionData) {
-      toolLogger.debug({ sessionId }, 'No session data found, initializing new session data');
-      currentSessionData = {
-        clientProjectRoot: undefined,
-        repository: undefined,
-        branch: undefined,
-      };
-    }
+    const schema = createZodSchema(tool);
 
-    // Handle memory-bank init to store clientProjectRoot
-    if (
-      toolName === 'memory-bank' &&
-      validatedParams &&
-      typeof validatedParams === 'object' &&
-      validatedParams.operation === 'init'
-    ) {
-      if (!currentSessionData) {
-        currentSessionData = {
-          clientProjectRoot: undefined,
-          repository: undefined,
-          branch: undefined,
-        };
-      }
-      if (validatedParams.clientProjectRoot) {
-        currentSessionData.clientProjectRoot = String(validatedParams.clientProjectRoot);
-      }
-      if (validatedParams.repository) {
-        currentSessionData.repository = String(validatedParams.repository);
-      }
-      if (validatedParams.branch) {
-        currentSessionData.branch = String(validatedParams.branch);
-      }
+    mcpServer.tool(
+      tool.name,
+      tool.description,
+      schema as any, // Type assertion to bypass complex inference
+      async (args, context): Promise<CallToolResult> => {
+        const toolPerfLogger = createPerformanceLogger(sseLogger, `tool-${tool.name}`);
+        const toolLogger = sseLogger.child({
+          tool: tool.name,
+          requestId: context.requestId || randomUUID(),
+        });
 
-      // Also store in repositoryRootMap for backward compatibility
-      const repoBranchKey = `${validatedParams.repository}:${validatedParams.branch}`;
-      repositoryRootMap.set(repoBranchKey, String(validatedParams.clientProjectRoot));
+        toolLogger.debug({ args }, `Executing tool: ${tool.name}`);
 
-      toolLogger.info(
-        {
-          sessionId,
-          clientProjectRoot: validatedParams.clientProjectRoot,
-          repository: validatedParams.repository,
-          branch: validatedParams.branch,
-        },
-        'Session data updated for memory-bank initialization',
-      );
-    }
+        try {
+          const handler = toolHandlers[tool.name];
+          if (!handler) {
+            throw new Error(`Tool handler not found: ${tool.name}`);
+          }
 
-    if (currentSessionData) {
-      sessionStore.set(sessionId, currentSessionData);
-    }
+          // Handle clientProjectRoot resolution
+          let effectiveClientProjectRoot = args.clientProjectRoot;
+          if (!effectiveClientProjectRoot && args.repository && args.branch) {
+            const repoBranchKey = `${args.repository}:${args.branch}`;
+            effectiveClientProjectRoot = repositoryRootMap.get(repoBranchKey);
+          }
 
-    const enrichedContext: any = {
-      sessionId: sessionId,
-      session: currentSessionData || {},
-      logger: toolLogger, // Use the structured logger instead of the ad-hoc debug logger
-      sendProgress: async (progressData: any) => {
-        // SSE/HTTP Stream server could support progress notifications
-        toolLogger.debug({ progressData }, 'Progress notification');
+          // Store clientProjectRoot for future use
+          if (effectiveClientProjectRoot && args.repository && args.branch) {
+            const repoBranchKey = `${args.repository}:${args.branch}`;
+            repositoryRootMap.set(repoBranchKey, effectiveClientProjectRoot);
+          }
+
+          // Create enriched context
+          const memoryService = await MemoryService.getInstance();
+          const enrichedContext = {
+            ...context,
+            logger: toolLogger, // Use structured logger instead of custom debug function
+            session: {
+              clientProjectRoot: effectiveClientProjectRoot,
+              repository: args.repository,
+              branch: args.branch,
+            },
+            sendProgress: async (progressData: any) => {
+              // Send progress notifications through MCP
+              await context.sendNotification({
+                method: 'notifications/progress',
+                params: {
+                  progressToken: context.requestId || randomUUID(),
+                  ...progressData,
+                },
+              });
+            },
+            memoryService,
+          };
+
+          // Add clientProjectRoot to args
+          const enhancedArgs = { ...args, clientProjectRoot: effectiveClientProjectRoot };
+
+          const result = await handler(enhancedArgs, enrichedContext, memoryService);
+          toolPerfLogger.complete({ success: !!result });
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(result),
+              },
+            ],
+          };
+        } catch (error) {
+          toolPerfLogger.fail(error as Error);
+          logError(toolLogger, error as Error, { operation: 'tool-execution' });
+          throw error;
+        }
       },
-    };
-
-    // Create a new MemoryService instance on-demand
-    let memoryServiceInstance: MemoryService;
-    try {
-      toolLogger.debug('Creating MemoryService instance');
-      memoryServiceInstance = await MemoryService.getInstance(enrichedContext);
-      toolLogger.debug('Successfully created MemoryService instance');
-    } catch (error) {
-      logError(toolLogger, error as Error, { operation: 'memory-service-initialization' });
-      throw new Error(
-        `Failed to initialize memory service: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-
-    const result = await actualToolHandler(validatedParams, enrichedContext, memoryServiceInstance);
-
-    toolPerfLogger.complete({ success: !!result });
-
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    logError(sseLogger, error as Error, { toolName, operation: 'tool-execution' });
-    toolPerfLogger.fail(error as Error);
-    throw error;
+    );
   }
-});
+
+  sseLogger.info(
+    { toolCount: MEMORY_BANK_MCP_TOOLS.length },
+    `Registered ${MEMORY_BANK_MCP_TOOLS.length} tools`,
+  );
+}
 
 // Server variables
 let httpServer: HttpServer;
@@ -227,20 +188,23 @@ let transport: StreamableHTTPServerTransport;
 async function startServer(): Promise<void> {
   sseLogger.info('Starting MCP SSE server...');
 
-  // Create the streamable HTTP transport
+  // Register all tools
+  registerTools();
+
+  // Create the streamable HTTP transport with proper configuration for SSE
   transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),
-    enableJsonResponse: false, // Use SSE by default
+    enableJsonResponse: false, // Prefer SSE format for SSE server
   });
 
-  // Connect the transport to the server
-  await server.connect(transport);
+  // Connect the transport to the MCP server
+  await mcpServer.connect(transport);
   sseLogger.debug('MCP server connected to transport');
 
   // Create simple HTTP server - delegate everything to the transport
   httpServer = createServer(async (req, res) => {
     const requestLogger = sseLogger.child({
-      requestId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      requestId: randomUUID(),
       method: req.method,
       url: req.url,
     });
@@ -298,6 +262,16 @@ function gracefulShutdown(signal: string): void {
     httpServer.close(async () => {
       sseLogger.info('HTTP server closed');
 
+      // Close transport
+      if (transport) {
+        try {
+          await transport.close();
+          sseLogger.debug('Transport closed');
+        } catch (error) {
+          logError(sseLogger, error as Error, { operation: 'transport-close' });
+        }
+      }
+
       // Get MemoryService instance and shut it down
       try {
         const memoryService = await MemoryService.getInstance();
@@ -319,6 +293,10 @@ function gracefulShutdown(signal: string): void {
   }
 }
 
+// Handle shutdown signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
 // Start the server only if the script is executed directly
 if (require.main === module) {
   startServer().catch((error) => {
@@ -327,4 +305,4 @@ if (require.main === module) {
   });
 }
 
-export { server, transport };
+export { mcpServer, transport };

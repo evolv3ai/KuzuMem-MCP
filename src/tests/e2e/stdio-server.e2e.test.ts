@@ -20,6 +20,9 @@ describe('MCP Stdio Server E2E Tests', () => {
   const TEST_BRANCH = 'main';
   const testSessionId = `e2e-session-${Date.now()}`;
 
+  // Store the initialization response to avoid duplicate initialize calls
+  let initializationResponse: any;
+
   // Helper to send JSON-RPC message to server
   const sendMessage = (message: RpcMessage, timeoutMs: number = 10000): Promise<RpcMessage> => {
     return new Promise((resolve, reject) => {
@@ -124,13 +127,13 @@ describe('MCP Stdio Server E2E Tests', () => {
       serverProcess.stderr!.on('data', readyHandler);
     });
 
-    // Initialize the connection
-    await sendMessage({
+    // Initialize the connection and store the response for reuse
+    initializationResponse = await sendMessage({
       jsonrpc: '2.0',
       id: messageId++,
       method: 'initialize',
       params: {
-        protocolVersion: '1.0.0',
+        protocolVersion: '2025-03-26',
         sessionId: testSessionId,
         capabilities: {},
         clientInfo: {
@@ -157,6 +160,58 @@ describe('MCP Stdio Server E2E Tests', () => {
     } catch (error) {
       console.error(`Failed to clean up test directory: ${error}`);
     }
+  });
+
+  describe('MCP Protocol Compliance', () => {
+    it('T_STDIO_001: should return proper MCP initialize response', async () => {
+      // Use the initialization response from beforeAll to avoid duplicate initialize calls
+      // This respects the MCP protocol which expects only one initialize per connection
+      expect(initializationResponse).toBeDefined();
+
+      // Verify MCP compliance using the stored initialization response
+      expect(initializationResponse).toMatchObject({
+        jsonrpc: '2.0',
+        result: {
+          protocolVersion: '2025-03-26',
+          capabilities: {
+            tools: {
+              list: true,
+              call: true,
+              listChanged: true,
+            },
+          },
+          serverInfo: {
+            name: expect.any(String),
+            version: expect.any(String),
+          },
+        },
+      });
+
+      // Verify tools list
+      const toolsResponse = await sendMessage({
+        jsonrpc: '2.0',
+        id: 'test-tools',
+        method: 'tools/list',
+        params: {},
+      });
+
+      expect(toolsResponse).toMatchObject({
+        jsonrpc: '2.0',
+        id: 'test-tools',
+        result: {
+          tools: expect.arrayContaining([
+            expect.objectContaining({
+              name: expect.any(String),
+              description: expect.any(String),
+              inputSchema: expect.any(Object),
+            }),
+          ]),
+        },
+      });
+
+      // Should have at least 1 tool (resilient to build variations and refactors)
+      expect(toolsResponse.result?.tools.length).toBeGreaterThan(0);
+    });
   });
 
   describe('Tool 1: memory-bank', () => {

@@ -6,7 +6,7 @@
 
 import dotenv from 'dotenv';
 import { randomUUID } from 'node:crypto';
-import { createServer, type Server } from 'node:http';
+import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 import { z } from 'zod';
 
 // Official MCP SDK imports
@@ -18,7 +18,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { toolHandlers as sdkToolHandlers } from './mcp/tool-handlers';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
 import { MemoryService } from './services/memory.service';
-import { createPerformanceLogger, logError, loggers } from './utils/logger';
+import { createPerformanceLogger, logError, loggers, type Logger } from './utils/logger';
 
 // Load environment variables
 dotenv.config();
@@ -35,10 +35,10 @@ const repositoryRootMap = new Map<string, string>();
 
 // Create the official MCP server
 const mcpServer = new McpServer(
-  { name: 'KuzuMem-MCP-HTTPStream', version: '2025-03-26' },
+  { name: 'KuzuMem-MCP-HTTPStream', version: '3.0.0' },
   {
     capabilities: {
-      tools: { list: true, call: true },
+      tools: { list: true, call: true, listChanged: true },
       resources: {},
       prompts: {},
     },
@@ -79,7 +79,9 @@ function createZodSchema(tool: any) {
     }
   }
 
-  return shape;
+  return Object.keys(shape).length === 0
+    ? z.object({}).passthrough() // accept anything for param-less tools
+    : z.object(shape);
 }
 
 // Register all our tools with the MCP server
@@ -192,7 +194,148 @@ function registerTools() {
 
 // Server variables
 let server: Server;
-let transport: StreamableHTTPServerTransport;
+const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
+
+// Helper function to handle POST requests
+async function handlePostRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  requestLogger: Logger,
+): Promise<void> {
+  const sessionId = req.headers['mcp-session-id'] as string | undefined;
+
+  if (sessionId && transports[sessionId]) {
+    // Reuse existing transport
+    const transport = transports[sessionId];
+    requestLogger.debug({ sessionId }, 'Reusing existing transport');
+
+    // Handle the request with existing transport
+    await transport.handleRequest(req, res);
+    return;
+  }
+
+  if (!sessionId) {
+    // Create new transport for initialization request
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+      enableJsonResponse: true, // Support both JSON and SSE
+      onSessionInitialized: (sessionId) => {
+        // Store the transport by session ID
+        transports[sessionId] = transport;
+        requestLogger.debug({ sessionId }, 'New session initialized');
+      },
+    });
+
+    // Clean up transport when closed
+    transport.onclose = () => {
+      if (transport.sessionId) {
+        delete transports[transport.sessionId];
+        requestLogger.debug({ sessionId: transport.sessionId }, 'Session transport cleaned up');
+      }
+    };
+
+    // Connect to the MCP server
+    await mcpServer.connect(transport);
+    requestLogger.debug('MCP server connected to new transport');
+
+    // Let the transport handle the request and parse the body internally
+    await transport.handleRequest(req, res);
+    return;
+  }
+
+  // Invalid request - session ID provided but not found
+  res.writeHead(400, { 'Content-Type': 'application/json' });
+  res.end(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      error: {
+        code: -32000,
+        message: 'Bad Request: Invalid session ID',
+      },
+      id: null,
+    }),
+  );
+}
+
+// Helper function to handle GET requests (for SSE streams)
+async function handleGetRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  requestLogger: Logger,
+): Promise<void> {
+  const sessionId = req.headers['mcp-session-id'] as string | undefined;
+
+  if (!sessionId || !transports[sessionId]) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: 'Bad Request: Invalid or missing session ID',
+        },
+        id: null,
+      }),
+    );
+    return;
+  }
+
+  const transport = transports[sessionId];
+  await transport.handleRequest(req, res);
+}
+
+// Helper function to handle DELETE requests (for session termination)
+async function handleDeleteRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  requestLogger: Logger,
+): Promise<void> {
+  const sessionId = req.headers['mcp-session-id'] as string | undefined;
+
+  if (!sessionId || !transports[sessionId]) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: 'Bad Request: Invalid or missing session ID',
+        },
+        id: null,
+      }),
+    );
+    return;
+  }
+
+  const transport = transports[sessionId];
+
+  try {
+    await transport.close();
+    delete transports[sessionId];
+    requestLogger.debug({ sessionId }, 'Session terminated');
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        result: { success: true },
+        id: null,
+      }),
+    );
+  } catch (error) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          code: -32603,
+          message: 'Internal error during session termination',
+        },
+        id: null,
+      }),
+    );
+  }
+}
 
 async function startServer(): Promise<void> {
   httpStreamLogger.info('Starting MCP HTTP Stream server...');
@@ -200,17 +343,7 @@ async function startServer(): Promise<void> {
   // Register all tools
   registerTools();
 
-  // Create the streamable HTTP transport
-  transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => randomUUID(),
-    enableJsonResponse: false, // Use SSE by default
-  });
-
-  // Connect the transport to the MCP server
-  await mcpServer.connect(transport);
-  httpStreamLogger.debug('MCP server connected to transport');
-
-  // Create simple HTTP server - delegate everything to the transport
+  // Create simple HTTP server with proper session management
   server = createServer(async (req, res) => {
     const requestLogger = httpStreamLogger.child({
       requestId: randomUUID(),
@@ -228,8 +361,26 @@ async function startServer(): Promise<void> {
         `HTTP ${req.method} ${req.url}`,
       );
 
-      // Let the official transport handle all requests
-      await transport.handleRequest(req, res);
+      // Handle different HTTP methods
+      if (req.method === 'POST') {
+        await handlePostRequest(req, res, requestLogger);
+      } else if (req.method === 'GET') {
+        await handleGetRequest(req, res, requestLogger);
+      } else if (req.method === 'DELETE') {
+        await handleDeleteRequest(req, res, requestLogger);
+      } else {
+        res.writeHead(405, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            error: {
+              code: -32000,
+              message: 'Method not allowed',
+            },
+            id: null,
+          }),
+        );
+      }
     } catch (error) {
       logError(requestLogger, error as Error, {
         method: req.method,
@@ -271,15 +422,50 @@ function gracefulShutdown(signal: string): void {
   httpStreamLogger.info({ signal }, `Received ${signal}, starting graceful shutdown`);
 
   if (server) {
-    server.close(() => {
-      httpStreamLogger.info('HTTP server closed');
-      process.exit(0);
-    });
-
-    setTimeout(() => {
+    // Start the shutdown timer immediately to ensure it's not blocked by async operations
+    const shutdownTimer = setTimeout(() => {
       httpStreamLogger.error('Graceful shutdown timed out, forcing exit');
       process.exit(1);
     }, 30000);
+
+    // Perform async shutdown tasks independently to avoid blocking the server.close() callback
+    const performAsyncShutdown = async () => {
+      try {
+        // Close all transports
+        for (const [sessionId, transport] of Object.entries(transports)) {
+          try {
+            await transport.close();
+            httpStreamLogger.debug({ sessionId }, 'Transport closed');
+          } catch (error) {
+            logError(httpStreamLogger, error as Error, { sessionId, operation: 'transport-close' });
+          }
+        }
+
+        // Get MemoryService instance and shut it down
+        try {
+          const memoryService = await MemoryService.getInstance();
+          await memoryService.shutdown();
+          httpStreamLogger.info('MemoryService shutdown completed');
+        } catch (error) {
+          logError(httpStreamLogger, error as Error, { operation: 'memory-service-shutdown' });
+        }
+
+        httpStreamLogger.info('Async shutdown tasks completed');
+      } catch (error) {
+        logError(httpStreamLogger, error as Error, { operation: 'async-shutdown' });
+      } finally {
+        // Clear the timer and exit
+        clearTimeout(shutdownTimer);
+        process.exit(0);
+      }
+    };
+
+    // Close the server and start async shutdown
+    server.close(() => {
+      httpStreamLogger.info('HTTP server closed');
+      // Don't await here - let the callback resolve immediately
+      performAsyncShutdown();
+    });
   } else {
     process.exit(0);
   }
@@ -298,4 +484,4 @@ if (require.main === module) {
   });
 }
 
-export { mcpServer, transport };
+export { mcpServer, transports };
