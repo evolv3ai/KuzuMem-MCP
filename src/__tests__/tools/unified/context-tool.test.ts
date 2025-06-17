@@ -184,7 +184,7 @@ describe('context tool handler', () => {
 
       expect(result).toEqual({
         success: false,
-        message: 'No active session. Use memory-bank tool with operation "init" first.',
+        message: 'No active session for context tool. Use memory-bank tool with operation "init" first.',
       });
     });
 

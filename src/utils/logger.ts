@@ -18,13 +18,16 @@ function createSimpleLogger(): Logger {
   // Allow info level in test mode for server startup messages
   const level = isTest ? 'info' : 'info';
 
-  return pino({
-    level,
-    formatters: {
-      level: (label: string) => ({ level: label }),
+  return pino(
+    {
+      level,
+      formatters: {
+        level: (label: string) => ({ level: label }),
+      },
+      redact: ['password', 'token', 'secret', 'apiKey', 'authorization'],
     },
-    redact: ['password', 'token', 'secret', 'apiKey', 'authorization'],
-  }, process.stderr);
+    process.stderr,
+  );
 }
 
 /**
@@ -100,9 +103,9 @@ export class PerformanceLogger {
         operation: this.operation,
         duration,
         error: error.message,
-        ...context
+        ...context,
       },
-      'Operation failed'
+      'Operation failed',
     );
   }
 

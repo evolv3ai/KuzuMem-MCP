@@ -10,7 +10,7 @@ export async function handleToolError(
   type?: string,
 ): Promise<void> {
   const errorMessage = error instanceof Error ? error.message : String(error);
-  
+
   context.logger.error(`${operation} failed: ${errorMessage}`, {
     type,
     error: errorMessage,
@@ -30,7 +30,7 @@ export async function handleToolError(
 export function validateSession(context: ToolHandlerContext, toolName: string): string {
   const clientProjectRoot = context.session.clientProjectRoot;
   if (!clientProjectRoot) {
-    throw new Error(`No active session. Use memory-bank tool with operation "init" first.`);
+    throw new Error(`No active session for ${toolName} tool. Use memory-bank tool with operation "init" first.`);
   }
   return clientProjectRoot;
 }

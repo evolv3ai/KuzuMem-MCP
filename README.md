@@ -172,7 +172,7 @@ npm run test:all
 
 KuzuMem-MCP follows **official MCP TypeScript SDK patterns** with clean architecture:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                    MCP Protocol Layer                       │
 ├─────────────────────────────────────────────────────────────┤

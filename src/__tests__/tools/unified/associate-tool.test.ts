@@ -82,7 +82,7 @@ describe('Associate Tool Tests', () => {
           mockContext,
           mockMemoryService,
         ),
-      ).rejects.toThrow('fileId and componentId are required for file-component association');
+      ).rejects.toThrow('Required fields missing for association type');
     });
 
     it('should throw error if componentId is missing', async () => {
@@ -96,7 +96,7 @@ describe('Associate Tool Tests', () => {
           mockContext,
           mockMemoryService,
         ),
-      ).rejects.toThrow('fileId and componentId are required for file-component association');
+      ).rejects.toThrow('Required fields missing for association type');
     });
   });
 
@@ -107,9 +107,9 @@ describe('Associate Tool Tests', () => {
         success: true,
         message: 'Component tagged successfully',
         association: {
-          from: 'tag-security',
-          to: 'comp-AuthService',
-          relationship: 'TAGS',
+          from: 'comp-AuthService',
+          to: 'tag-security',
+          relationship: 'TAGGED_WITH',
         },
       };
       mockMemoryService.tagItem.mockResolvedValue(mockResult);
@@ -154,7 +154,7 @@ describe('Associate Tool Tests', () => {
           mockContext,
           mockMemoryService,
         ),
-      ).rejects.toThrow('itemId and tagId are required for tag-item association');
+      ).rejects.toThrow(); // Zod validation error
     });
 
     it('should throw error if tagId is missing', async () => {
@@ -168,7 +168,7 @@ describe('Associate Tool Tests', () => {
           mockContext,
           mockMemoryService,
         ),
-      ).rejects.toThrow('itemId and tagId are required for tag-item association');
+      ).rejects.toThrow(); // Zod validation error
     });
 
     it('should throw error if entityType is missing', async () => {
@@ -183,7 +183,7 @@ describe('Associate Tool Tests', () => {
           mockContext,
           mockMemoryService,
         ),
-      ).rejects.toThrow('entityType is required for tag-item association');
+      ).rejects.toThrow(); // Zod validation error
     });
   });
 

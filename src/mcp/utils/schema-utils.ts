@@ -35,7 +35,16 @@ function createZodTypeFromProperty(prop: any): z.ZodTypeAny {
         return z.array(z.any());
       }
     case 'object':
-      return z.object({}).passthrough();
+      // Handle nested object properties recursively if available
+      if (prop.properties) {
+        const nestedShape: Record<string, z.ZodTypeAny> = {};
+        for (const [nestedPropName, nestedPropDef] of Object.entries(prop.properties)) {
+          nestedShape[nestedPropName] = createZodTypeFromProperty(nestedPropDef as any);
+        }
+        return z.object(nestedShape).passthrough();
+      } else {
+        return z.object({}).passthrough();
+      }
     default:
       return z.any();
   }
@@ -43,9 +52,9 @@ function createZodTypeFromProperty(prop: any): z.ZodTypeAny {
 
 /**
  * Creates a Zod raw shape object for a tool's parameters based on its JSON schema definition.
- * 
+ *
  * This function converts JSON schema properties to Zod types for use with the MCP SDK's tool() method.
- * 
+ *
  * @param tool - The tool definition containing a JSON schema for parameters
  * @returns An object mapping parameter names to Zod types for schema validation
  */

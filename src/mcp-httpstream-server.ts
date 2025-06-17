@@ -21,6 +21,7 @@ import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
 import { MemoryService } from './services/memory.service';
 import { createPerformanceLogger, logError, loggers } from './utils/logger';
 import { createZodRawShape } from './mcp/utils/schema-utils';
+import { createRepositoryBranchKey } from './mcp/utils/repository-utils';
 
 // Load environment variables
 dotenv.config();
@@ -35,14 +36,7 @@ const httpStreamLogger = loggers.mcpHttp();
 // Map to store clientProjectRoot for each repository and branch
 const repositoryRootMap = new Map<string, string>();
 
-/**
- * Helper function to create consistent repository:branch keys for repositoryRootMap.
- * Ensures that undefined or missing branch values default to "main" to prevent key mismatches.
- */
-function createRepositoryBranchKey(repository: string, branch?: string): string {
-  const normalizedBranch = branch || 'main';
-  return `${repository}:${normalizedBranch}`;
-}
+
 
 // Create the official MCP server with proper capabilities
 const mcpServer = new McpServer(
@@ -155,7 +149,12 @@ function registerTools() {
           const enhancedArgs = { ...args, clientProjectRoot: effectiveClientProjectRoot };
 
           // Execute tool logic directly using the official SDK approach
-          const result = await executeToolDirectly(tool.name, enhancedArgs, memoryService, toolLogger);
+          const result = await executeToolDirectly(
+            tool.name,
+            enhancedArgs,
+            memoryService,
+            toolLogger,
+          );
           toolPerfLogger.complete({ success: !!result });
 
           return {
@@ -205,15 +204,17 @@ async function handlePostRequest(
   } catch (error) {
     requestLogger.error({ error }, 'Failed to parse request body');
     res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      jsonrpc: '2.0',
-      error: {
-        code: -32700,
-        message: 'Parse error',
-        data: String(error)
-      },
-      id: null
-    }));
+    res.end(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          code: -32700,
+          message: 'Parse error',
+          data: String(error),
+        },
+        id: null,
+      }),
+    );
     return;
   }
 

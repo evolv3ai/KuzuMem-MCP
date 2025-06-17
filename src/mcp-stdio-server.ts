@@ -11,12 +11,12 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'node:crypto';
-import { z } from 'zod';
 import { toolHandlers } from './mcp/tool-handlers';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools/index';
 import { ToolHandlerContext } from './mcp/types/sdk-custom';
 import { MemoryService } from './services/memory.service';
 import { createZodRawShape } from './mcp/utils/schema-utils';
+import { createRepositoryBranchKey } from './mcp/utils/repository-utils';
 import {
   createPerformanceLogger,
   enforceStdioCompliance,
@@ -112,14 +112,7 @@ import packageJson from '../package.json';
 // Map to store clientProjectRoot by repository:branch (similar to HTTP server)
 const repositoryRootMap = new Map<string, string>();
 
-/**
- * Helper function to create consistent repository:branch keys for repositoryRootMap.
- * Ensures that undefined or missing branch values default to "main" to prevent key mismatches.
- */
-function createRepositoryBranchKey(repository: string, branch?: string): string {
-  const normalizedBranch = branch || 'main';
-  return `${repository}:${normalizedBranch}`;
-}
+
 
 // Create the MCP server using high-level API (consistent with HTTP server)
 const mcpServer = new McpServer(
@@ -175,7 +168,8 @@ function registerTools(): void {
 
           // Determine effective clientProjectRoot
           const effectiveClientProjectRoot =
-            args.clientProjectRoot || repositoryRootMap.get(createRepositoryBranchKey(args.repository, args.branch));
+            args.clientProjectRoot ||
+            repositoryRootMap.get(createRepositoryBranchKey(args.repository, args.branch));
 
           if (!effectiveClientProjectRoot) {
             throw new Error(

@@ -33,7 +33,9 @@ export class MemoryController {
       this.memoryService = await MemoryService.getInstance();
       MemoryController.logger.info('MemoryService initialized in MemoryController constructor');
     } catch (error) {
-      MemoryController.logger.error('Failed to initialize MemoryService in MemoryController', { error });
+      MemoryController.logger.error('Failed to initialize MemoryService in MemoryController', {
+        error,
+      });
       // Propagate or handle critical failure
       throw new Error('MemoryService initialization failed');
     } finally {

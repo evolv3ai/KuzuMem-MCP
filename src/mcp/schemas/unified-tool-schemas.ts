@@ -417,21 +417,39 @@ export const QueryOutputSchema = z.union([
 // Associate Tool Schemas
 // ============================================
 
-export const AssociateInputSchema = z.object({
-  type: z.enum(['file-component', 'tag-item']),
-  clientProjectRoot: z.string().optional(), // From session
-  repository: z.string(),
-  branch: z.string().default('main'),
+export const AssociateInputSchema = z
+  .object({
+    type: z.enum(['file-component', 'tag-item']),
+    clientProjectRoot: z.string().optional(), // From session
+    repository: z.string(),
+    branch: z.string().default('main'),
 
-  // For file-component association
-  fileId: z.string().optional(),
-  componentId: z.string().optional(),
+    // For file-component association
+    fileId: z.string().optional(),
+    componentId: z.string().optional(),
 
-  // For tag-item association
-  itemId: z.string().optional(),
-  tagId: z.string().optional(),
-  entityType: z.enum(['Component', 'Decision', 'Rule', 'File', 'Context']).optional(), // Required for tag-item
-});
+    // For tag-item association
+    itemId: z.string().optional(),
+    tagId: z.string().optional(),
+    entityType: z.enum(['Component', 'Decision', 'Rule', 'File', 'Context']).optional(), // Required for tag-item
+  })
+  .refine(
+    (data) => {
+      // When type is 'file-component', fileId and componentId are required
+      if (data.type === 'file-component') {
+        return data.fileId && data.componentId;
+      }
+      // When type is 'tag-item', itemId, tagId, and entityType are required
+      if (data.type === 'tag-item') {
+        return data.itemId && data.tagId && data.entityType;
+      }
+      return true;
+    },
+    {
+      message: 'Required fields missing for association type',
+      path: ['type'],
+    },
+  );
 
 export const AssociateOutputSchema = z.object({
   type: z.enum(['file-component', 'tag-item']),

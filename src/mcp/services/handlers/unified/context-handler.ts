@@ -46,20 +46,13 @@ export const contextHandler: SdkToolHandler = async (params, context, memoryServ
     // 3. Log the operation
     logToolExecution(context, `context operation: ${operation}`, {
       repository,
+      branch: validatedParams.branch ?? 'main',
       clientProjectRoot,
     });
 
     // 4. Execute the operation
     switch (operation) {
       case 'update': {
-        // Validate required parameters for update
-        if (!validatedParams.agent) {
-          throw new Error('agent parameter is required for context update');
-        }
-        if (!validatedParams.summary) {
-          throw new Error('summary parameter is required for context update');
-        }
-
         // Send progress notification
         await context.sendProgress({
           status: 'in_progress',
@@ -68,7 +61,11 @@ export const contextHandler: SdkToolHandler = async (params, context, memoryServ
         });
 
         // Call memory service to update context
-        const result = await memoryService.updateContext(context, clientProjectRoot, validatedParams);
+        const result = await memoryService.updateContext(
+          context,
+          clientProjectRoot,
+          validatedParams,
+        );
 
         // Send completion notification
         await context.sendProgress({
@@ -81,8 +78,7 @@ export const contextHandler: SdkToolHandler = async (params, context, memoryServ
         return result;
       }
 
-      default:
-        throw new Error(`Unknown context operation: ${operation}`);
+      // Note: default case is unreachable since Zod schema only allows 'update'
     }
   } catch (error) {
     await handleToolError(error, context, 'context update', 'context');

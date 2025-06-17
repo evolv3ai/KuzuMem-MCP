@@ -2749,7 +2749,9 @@ export class MemoryService {
   /**
    * Groups algorithm results by componentId to create proper node arrays
    */
-  private groupComponentsByComponentId(components: Array<{ nodeId: string; componentId: number }>): Array<{ componentId: number; nodes: string[] }> {
+  private groupComponentsByComponentId(
+    components: Array<{ nodeId: string; componentId: number }>,
+  ): Array<{ componentId: number; nodes: string[] }> {
     const grouped = new Map<number, string[]>();
 
     for (const component of components) {

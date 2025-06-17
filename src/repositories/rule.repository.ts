@@ -178,7 +178,10 @@ export class RuleRepository {
       }
       return null;
     } catch (error) {
-      this.logger.error(`[RuleRepository] Error in findByIdAndBranch for GID ${graphUniqueId}:`, error);
+      this.logger.error(
+        `[RuleRepository] Error in findByIdAndBranch for GID ${graphUniqueId}:`,
+        error,
+      );
       return null;
     }
   }

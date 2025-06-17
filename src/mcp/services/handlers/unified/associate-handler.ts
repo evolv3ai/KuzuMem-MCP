@@ -1,5 +1,6 @@
 import { SdkToolHandler } from '../../../tool-handlers';
 import { handleToolError, validateSession, logToolExecution } from '../../../utils/error-utils';
+import { AssociateInputSchema } from '../../../schemas/unified-tool-schemas';
 
 // TypeScript interfaces for associate parameters
 interface AssociateParams {
@@ -18,16 +19,8 @@ interface AssociateParams {
  * Handles relationship creation between entities
  */
 export const associateHandler: SdkToolHandler = async (params, context, memoryService) => {
-  // 1. Validate and extract parameters
-  const validatedParams = params as AssociateParams;
-
-  // Basic validation
-  if (!validatedParams.type) {
-    throw new Error('type parameter is required');
-  }
-  if (!validatedParams.repository) {
-    throw new Error('repository parameter is required');
-  }
+  // 1. Validate and extract parameters using Zod schema
+  const validatedParams = AssociateInputSchema.parse(params) as AssociateParams;
 
   const { type, repository, branch = 'main' } = validatedParams;
 
@@ -41,22 +34,7 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
     clientProjectRoot,
   });
 
-  // 4. Validate type-specific required parameters
-  switch (type) {
-    case 'file-component':
-      if (!validatedParams.fileId || !validatedParams.componentId) {
-        throw new Error('fileId and componentId are required for file-component association');
-      }
-      break;
-    case 'tag-item':
-      if (!validatedParams.itemId || !validatedParams.tagId) {
-        throw new Error('itemId and tagId are required for tag-item association');
-      }
-      if (!validatedParams.entityType) {
-        throw new Error('entityType is required for tag-item association');
-      }
-      break;
-  }
+  // 4. Type-specific validation is now handled by the Zod schema
 
   try {
     switch (type) {
