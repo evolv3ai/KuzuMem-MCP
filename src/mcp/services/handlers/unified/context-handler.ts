@@ -86,6 +86,11 @@ export const contextHandler: SdkToolHandler = async (params, context, memoryServ
     }
   } catch (error) {
     await handleToolError(error, context, 'context update', 'context');
-    throw error;
+
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      success: false,
+      message: errorMessage,
+    };
   }
 };
