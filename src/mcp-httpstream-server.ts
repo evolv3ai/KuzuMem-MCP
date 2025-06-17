@@ -6,13 +6,14 @@
 
 import dotenv from 'dotenv';
 import { randomUUID } from 'node:crypto';
-import { createServer, type Server } from 'node:http';
+import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
+import { type Logger } from 'pino';
 import { z } from 'zod';
 
 // Official MCP SDK imports
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { CallToolResult, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 // Our tool handlers and services
 import { toolHandlers as sdkToolHandlers } from './mcp/tool-handlers';
@@ -79,7 +80,9 @@ function createZodSchema(tool: any) {
     }
   }
 
-  return shape;
+  return Object.keys(shape).length === 0
+    ? z.object({}).passthrough() // accept anything for param-less tools
+    : z.object(shape);
 }
 
 // Register all our tools with the MCP server
@@ -194,129 +197,87 @@ function registerTools() {
 let server: Server;
 const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
-/**
- * Handles HTTP POST requests for the MCP streaming server, managing session initialization and routing requests to the appropriate transport.
- *
- * If a valid `mcp-session-id` header is present and matches an active session, the request is delegated to the corresponding transport. If no session ID is provided, the function checks for an `initialize` method in the request body to create a new session and transport. Invalid or missing session IDs result in a JSON-RPC error response.
- *
- * @param req - The incoming HTTP request.
- * @param res - The HTTP response object.
- * @param requestLogger - Logger instance for request-specific logging.
- */
-async function handlePostRequest(req: any, res: any, requestLogger: any): Promise<void> {
+// Helper function to handle POST requests
+async function handlePostRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  requestLogger: Logger,
+): Promise<void> {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
-  let transport: StreamableHTTPServerTransport;
 
   if (sessionId && transports[sessionId]) {
     // Reuse existing transport
-    transport = transports[sessionId];
+    const transport = transports[sessionId];
     requestLogger.debug({ sessionId }, 'Reusing existing transport');
-  } else if (!sessionId) {
-    // Check if this is an initialization request
-    let body = '';
-    req.on('data', (chunk: Buffer) => {
-      body += chunk.toString();
-    });
 
-    await new Promise((resolve) => {
-      req.on('end', resolve);
-    });
-
-    let requestBody;
-    try {
-      requestBody = JSON.parse(body);
-    } catch (error) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        jsonrpc: '2.0',
-        error: {
-          code: -32700,
-          message: 'Parse error',
-        },
-        id: null,
-      }));
-      return;
-    }
-
-    if (requestBody.method === 'initialize') {
-      // New initialization request
-      transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => randomUUID(),
-        enableJsonResponse: true, // Support both JSON and SSE
-        onsessioninitialized: (sessionId) => {
-          // Store the transport by session ID
-          transports[sessionId] = transport;
-          requestLogger.debug({ sessionId }, 'New session initialized');
-        }
-      });
-
-      // Clean up transport when closed
-      transport.onclose = () => {
-        if (transport.sessionId) {
-          delete transports[transport.sessionId];
-          requestLogger.debug({ sessionId: transport.sessionId }, 'Session transport cleaned up');
-        }
-      };
-
-      // Connect to the MCP server
-      await mcpServer.connect(transport);
-      requestLogger.debug('MCP server connected to new transport');
-
-      // Handle the request with the parsed body
-      await transport.handleRequest(req, res, requestBody);
-    } else {
-      // Invalid request without session ID
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        jsonrpc: '2.0',
-        error: {
-          code: -32000,
-          message: 'Bad Request: No valid session ID provided',
-        },
-        id: null,
-      }));
-    }
+    // Handle the request with existing transport
+    await transport.handleRequest(req, res);
     return;
-  } else {
-    // Invalid request
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
+  }
+
+  if (!sessionId) {
+    // Create new transport for initialization request
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+      enableJsonResponse: true, // Support both JSON and SSE
+      onsessioninitialized: (sessionId: string) => {
+        // Store the transport by session ID
+        transports[sessionId] = transport;
+        requestLogger.debug({ sessionId }, 'New session initialized');
+      },
+    });
+
+    // Clean up transport when closed
+    transport.onclose = () => {
+      if (transport.sessionId) {
+        delete transports[transport.sessionId];
+        requestLogger.debug({ sessionId: transport.sessionId }, 'Session transport cleaned up');
+      }
+    };
+
+    // Connect to the MCP server
+    await mcpServer.connect(transport);
+    requestLogger.debug('MCP server connected to new transport');
+
+    // Let the transport handle the request and parse the body internally
+    await transport.handleRequest(req, res);
+    return;
+  }
+
+  // Invalid request - session ID provided but not found
+  res.writeHead(400, { 'Content-Type': 'application/json' });
+  res.end(
+    JSON.stringify({
       jsonrpc: '2.0',
       error: {
         code: -32000,
         message: 'Bad Request: Invalid session ID',
       },
       id: null,
-    }));
-    return;
-  }
-
-  // Handle the request with existing transport
-  await transport.handleRequest(req, res);
+    }),
+  );
 }
 
-/**
- * Handles HTTP GET requests for Server-Sent Events (SSE) streams associated with an MCP session.
- *
- * Validates the presence and validity of the `mcp-session-id` header. If valid, delegates the request to the corresponding session transport; otherwise, responds with a JSON-RPC error.
- *
- * @param req - The incoming HTTP request.
- * @param res - The HTTP response object.
- * @param requestLogger - Logger for the current request.
- */
-async function handleGetRequest(req: any, res: any, requestLogger: any): Promise<void> {
+// Helper function to handle GET requests (for SSE streams)
+async function handleGetRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  requestLogger: Logger,
+): Promise<void> {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
   if (!sessionId || !transports[sessionId]) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      jsonrpc: '2.0',
-      error: {
-        code: -32000,
-        message: 'Bad Request: Invalid or missing session ID',
-      },
-      id: null,
-    }));
+    res.end(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: 'Bad Request: Invalid or missing session ID',
+        },
+        id: null,
+      }),
+    );
     return;
   }
 
@@ -324,50 +285,56 @@ async function handleGetRequest(req: any, res: any, requestLogger: any): Promise
   await transport.handleRequest(req, res);
 }
 
-/**
- * Handles HTTP DELETE requests to terminate an active MCP streaming session.
- *
- * Validates the presence and validity of the `mcp-session-id` header. If valid, closes the associated transport, removes it from the session map, and responds with a JSON-RPC success message. Responds with an error if the session ID is missing, invalid, or if an error occurs during termination.
- */
-async function handleDeleteRequest(req: any, res: any, requestLogger: any): Promise<void> {
+// Helper function to handle DELETE requests (for session termination)
+async function handleDeleteRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  requestLogger: Logger,
+): Promise<void> {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
   if (!sessionId || !transports[sessionId]) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      jsonrpc: '2.0',
-      error: {
-        code: -32000,
-        message: 'Bad Request: Invalid or missing session ID',
-      },
-      id: null,
-    }));
+    res.end(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: 'Bad Request: Invalid or missing session ID',
+        },
+        id: null,
+      }),
+    );
     return;
   }
 
   const transport = transports[sessionId];
 
   try {
-    transport.close();
+    await transport.close();
     delete transports[sessionId];
     requestLogger.debug({ sessionId }, 'Session terminated');
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      jsonrpc: '2.0',
-      result: { success: true },
-      id: null,
-    }));
+    res.end(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        result: { success: true },
+        id: null,
+      }),
+    );
   } catch (error) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      jsonrpc: '2.0',
-      error: {
-        code: -32603,
-        message: 'Internal error during session termination',
-      },
-      id: null,
-    }));
+    res.end(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          code: -32603,
+          message: 'Internal error during session termination',
+        },
+        id: null,
+      }),
+    );
   }
 }
 
@@ -412,14 +379,16 @@ async function startServer(): Promise<void> {
         await handleDeleteRequest(req, res, requestLogger);
       } else {
         res.writeHead(405, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          jsonrpc: '2.0',
-          error: {
-            code: -32000,
-            message: 'Method not allowed',
-          },
-          id: null,
-        }));
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            error: {
+              code: -32000,
+              message: 'Method not allowed',
+            },
+            id: null,
+          }),
+        );
       }
     } catch (error) {
       logError(requestLogger, error as Error, {
@@ -468,35 +437,50 @@ function gracefulShutdown(signal: string): void {
   httpStreamLogger.info({ signal }, `Received ${signal}, starting graceful shutdown`);
 
   if (server) {
-    server.close(async () => {
-      httpStreamLogger.info('HTTP server closed');
-
-      // Close all transports
-      for (const [sessionId, transport] of Object.entries(transports)) {
-        try {
-          transport.close();
-          httpStreamLogger.debug({ sessionId }, 'Transport closed');
-        } catch (error) {
-          logError(httpStreamLogger, error as Error, { sessionId, operation: 'transport-close' });
-        }
-      }
-
-      // Get MemoryService instance and shut it down
-      try {
-        const memoryService = await MemoryService.getInstance();
-        await memoryService.shutdown();
-        httpStreamLogger.info('MemoryService shutdown completed');
-      } catch (error) {
-        logError(httpStreamLogger, error as Error, { operation: 'memory-service-shutdown' });
-      }
-
-      process.exit(0);
-    });
-
-    setTimeout(() => {
+    // Start the shutdown timer immediately to ensure it's not blocked by async operations
+    const shutdownTimer = setTimeout(() => {
       httpStreamLogger.error('Graceful shutdown timed out, forcing exit');
       process.exit(1);
     }, 30000);
+
+    // Perform async shutdown tasks independently to avoid blocking the server.close() callback
+    const performAsyncShutdown = async () => {
+      try {
+        // Close all transports
+        for (const [sessionId, transport] of Object.entries(transports)) {
+          try {
+            await transport.close();
+            httpStreamLogger.debug({ sessionId }, 'Transport closed');
+          } catch (error) {
+            logError(httpStreamLogger, error as Error, { sessionId, operation: 'transport-close' });
+          }
+        }
+
+        // Get MemoryService instance and shut it down
+        try {
+          const memoryService = await MemoryService.getInstance();
+          await memoryService.shutdown();
+          httpStreamLogger.info('MemoryService shutdown completed');
+        } catch (error) {
+          logError(httpStreamLogger, error as Error, { operation: 'memory-service-shutdown' });
+        }
+
+        httpStreamLogger.info('Async shutdown tasks completed');
+      } catch (error) {
+        logError(httpStreamLogger, error as Error, { operation: 'async-shutdown' });
+      } finally {
+        // Clear the timer and exit
+        clearTimeout(shutdownTimer);
+        process.exit(0);
+      }
+    };
+
+    // Close the server and start async shutdown
+    server.close(() => {
+      httpStreamLogger.info('HTTP server closed');
+      // Don't await here - let the callback resolve immediately
+      performAsyncShutdown();
+    });
   } else {
     process.exit(0);
   }
