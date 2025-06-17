@@ -328,7 +328,7 @@ async function handleDeleteRequest(req: any, res: any, requestLogger: any): Prom
   const transport = transports[sessionId];
 
   try {
-    transport.close();
+    await transport.close();
     delete transports[sessionId];
     requestLogger.debug({ sessionId }, 'Session terminated');
 
