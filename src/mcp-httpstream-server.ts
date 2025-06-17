@@ -7,6 +7,7 @@
 import dotenv from 'dotenv';
 import { randomUUID } from 'node:crypto';
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
+import { type Logger } from 'pino';
 import { z } from 'zod';
 
 // Official MCP SDK imports
@@ -18,7 +19,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { toolHandlers as sdkToolHandlers } from './mcp/tool-handlers';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
 import { MemoryService } from './services/memory.service';
-import { createPerformanceLogger, logError, loggers, type Logger } from './utils/logger';
+import { createPerformanceLogger, logError, loggers } from './utils/logger';
 
 // Load environment variables
 dotenv.config();
@@ -219,7 +220,7 @@ async function handlePostRequest(
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       enableJsonResponse: true, // Support both JSON and SSE
-      onSessionInitialized: (sessionId) => {
+      onsessioninitialized: (sessionId: string) => {
         // Store the transport by session ID
         transports[sessionId] = transport;
         requestLogger.debug({ sessionId }, 'New session initialized');
@@ -337,6 +338,14 @@ async function handleDeleteRequest(
   }
 }
 
+/**
+ * Starts the MCP HTTP streaming server and begins listening for incoming requests.
+ *
+ * Initializes tool registration, sets up an HTTP server with session-aware routing for POST, GET, and DELETE methods, and handles server lifecycle events including error handling.
+ *
+ * @remark
+ * The server manages multiple concurrent streaming sessions using session IDs and supports JSON-RPC over HTTP and Server-Sent Events (SSE).
+ */
 async function startServer(): Promise<void> {
   httpStreamLogger.info('Starting MCP HTTP Stream server...');
 
@@ -417,7 +426,13 @@ async function startServer(): Promise<void> {
   });
 }
 
-// Graceful shutdown
+/**
+ * Performs a graceful shutdown of the HTTP streaming server and all active session transports.
+ *
+ * Closes the HTTP server, terminates all active session transports, and shuts down the {@link MemoryService} instance before exiting the process. If shutdown does not complete within 30 seconds, the process exits forcefully.
+ *
+ * @param signal - The termination signal that triggered the shutdown (e.g., "SIGTERM" or "SIGINT").
+ */
 function gracefulShutdown(signal: string): void {
   httpStreamLogger.info({ signal }, `Received ${signal}, starting graceful shutdown`);
 
