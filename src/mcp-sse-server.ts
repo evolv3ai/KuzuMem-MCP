@@ -45,7 +45,14 @@ const mcpServer = new McpServer(
   },
 );
 
-// Create tool schema helper
+/**
+ * Generates a Zod schema shape object for a tool's parameters based on its JSON schema definition.
+ *
+ * Maps each parameter property to an appropriate Zod type, marking fields as optional if not required.
+ *
+ * @param tool - The tool definition containing a JSON schema for parameters.
+ * @returns An object mapping parameter names to Zod types for schema validation.
+ */
 function createZodSchema(tool: any) {
   const shape: Record<string, z.ZodTypeAny> = {};
 
@@ -88,7 +95,14 @@ function createZodSchema(tool: any) {
     : z.object(shape);
 }
 
-// Register all our tools with the MCP server
+/**
+ * Registers all memory bank tools with the MCP server, enabling parameter validation and dynamic handler execution.
+ *
+ * For each tool, constructs a Zod schema from its parameter definition, registers it with the MCP server, and provides an asynchronous handler that enriches the execution context with logging, session information, progress notifications, and memory service access.
+ *
+ * @remark
+ * The handler resolves and persists `clientProjectRoot` values per repository and branch, and sends progress updates via MCP notifications.
+ */
 function registerTools() {
   sseLogger.info('Registering MCP tools...');
 
@@ -185,6 +199,11 @@ function registerTools() {
 let httpServer: HttpServer;
 let transport: StreamableHTTPServerTransport;
 
+/**
+ * Starts the MCP SSE server, registering tools, initializing the SSE transport, and handling HTTP requests.
+ *
+ * Sets up the server to listen for incoming connections, delegates all HTTP requests to the MCP SSE transport, and logs server activity and errors.
+ */
 async function startServer(): Promise<void> {
   sseLogger.info('Starting MCP SSE server...');
 
@@ -254,7 +273,13 @@ async function startServer(): Promise<void> {
   });
 }
 
-// Graceful shutdown
+/**
+ * Performs a graceful shutdown of the server and related resources upon receiving a termination signal.
+ *
+ * Initiates closure of the HTTP server, MCP transport, and the MemoryService. If shutdown does not complete within 30 seconds, the process exits with an error code.
+ *
+ * @param signal - The termination signal that triggered the shutdown (e.g., 'SIGTERM', 'SIGINT').
+ */
 function gracefulShutdown(signal: string): void {
   sseLogger.info({ signal }, `Received ${signal}, starting graceful shutdown`);
 
