@@ -227,7 +227,7 @@ describe('Bulk Import Tool Tests', () => {
           contextNoSession,
           mockMemoryService,
         ),
-      ).rejects.toThrow('No active session');
+      ).rejects.toThrow('No active session for bulk-import tool');
     });
 
     it('should throw error if no data provided', async () => {

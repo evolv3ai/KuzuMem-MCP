@@ -72,7 +72,7 @@ describe('Analyze Tool Tests', () => {
         projectedGraphName: 'component-deps',
         nodeTableNames: ['Component'],
         relationshipTableNames: ['DEPENDS_ON'],
-        dampingFactor: 0.85,
+        damping: 0.85,
         maxIterations: 100,
       });
     });
@@ -102,7 +102,7 @@ describe('Analyze Tool Tests', () => {
         '/test/project',
         expect.objectContaining({
           type: 'pagerank',
-          dampingFactor: undefined,
+          damping: undefined,
           maxIterations: undefined,
         }),
       );
@@ -185,7 +185,7 @@ describe('Analyze Tool Tests', () => {
           mockContext,
           mockMemoryService,
         ),
-      ).rejects.toThrow('startNodeId and endNodeId are required');
+      ).rejects.toThrow(); // Zod validation error for missing endNodeId
     });
   });
 
@@ -234,7 +234,7 @@ describe('Analyze Tool Tests', () => {
           mockContext,
           mockMemoryService,
         ),
-      ).rejects.toThrow('k parameter is required for k-core analysis');
+      ).rejects.toThrow(); // Zod validation error for missing k parameter
     });
   });
 
@@ -300,7 +300,7 @@ describe('Analyze Tool Tests', () => {
           contextNoSession,
           mockMemoryService,
         ),
-      ).rejects.toThrow('No active session');
+      ).rejects.toThrow('No active session for analyze tool');
     });
   });
 

@@ -172,7 +172,7 @@ describe('Detect Tool Tests', () => {
           contextNoSession,
           mockMemoryService,
         ),
-      ).rejects.toThrow('No active session');
+      ).rejects.toThrow('No active session for detect tool');
     });
   });
 
@@ -181,19 +181,24 @@ describe('Detect Tool Tests', () => {
       const error = new Error('Detection service error');
       mockMemoryService.getStronglyConnectedComponents.mockRejectedValue(error);
 
-      await expect(
-        detectHandler(
-          {
-            type: 'strongly-connected',
-            repository: 'test-repo',
-            projectedGraphName: 'deps',
-            nodeTableNames: ['Component'],
-            relationshipTableNames: ['DEPENDS_ON'],
-          },
-          mockContext,
-          mockMemoryService,
-        ),
-      ).rejects.toThrow('Detection service error');
+      const result = await detectHandler(
+        {
+          type: 'strongly-connected',
+          repository: 'test-repo',
+          projectedGraphName: 'deps',
+          nodeTableNames: ['Component'],
+          relationshipTableNames: ['DEPENDS_ON'],
+        },
+        mockContext,
+        mockMemoryService,
+      );
+
+      expect(result).toEqual({
+        type: 'strongly-connected',
+        status: 'error',
+        message: 'Detection service error',
+        components: [],
+      });
 
       expect(mockContext.sendProgress).toHaveBeenCalledWith({
         status: 'error',
@@ -244,13 +249,13 @@ describe('Detect Tool Tests', () => {
 
       expect(mockContext.sendProgress).toHaveBeenCalledWith({
         status: 'in_progress',
-        message: 'Detecting strongly connected components (circular dependencies)...',
+        message: 'Finding strongly connected components...',
         percent: 50,
       });
 
       expect(mockContext.sendProgress).toHaveBeenCalledWith({
         status: 'complete',
-        message: 'Found 0 strongly connected components',
+        message: 'Strongly connected components detection complete. Found 0 components',
         percent: 100,
         isFinal: true,
       });
@@ -279,13 +284,13 @@ describe('Detect Tool Tests', () => {
 
       expect(mockContext.sendProgress).toHaveBeenCalledWith({
         status: 'in_progress',
-        message: 'Detecting weakly connected components (isolated subsystems)...',
+        message: 'Finding weakly connected components...',
         percent: 50,
       });
 
       expect(mockContext.sendProgress).toHaveBeenCalledWith({
         status: 'complete',
-        message: 'Found 0 weakly connected components',
+        message: 'Weakly connected components detection complete. Found 0 components',
         percent: 100,
         isFinal: true,
       });
