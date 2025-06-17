@@ -2,12 +2,14 @@ import { KuzuDBClient } from '../db/kuzu';
 import { Decision } from '../types';
 import { formatGraphUniqueId } from '../utils/id.utils';
 import { RepositoryRepository } from './repository.repository';
+import { loggers } from '../utils/logger';
 
 /**
  * Repository for Decision, using KuzuDB and Cypher queries.
  * Each instance is now tied to a specific KuzuDBClient.
  */
 export class DecisionRepository {
+  private logger = loggers.repository();
   private kuzuClient: KuzuDBClient;
   private repositoryRepo: RepositoryRepository;
 
@@ -91,7 +93,7 @@ export class DecisionRepository {
         this.formatKuzuRowToDecision(row.d, repoNameFromNodeId, decisionBranch),
       );
     } catch (error) {
-      console.error(
+      this.logger.error(
         `[DecisionRepository] Error in getDecisionsByDateRange for ${repositoryNodeId}, branch ${decisionBranch}:`,
         error,
       );
@@ -182,7 +184,7 @@ export class DecisionRepository {
       }
       return null;
     } catch (error) {
-      console.error(
+      this.logger.error(
         `[DecisionRepository] Error in findByIdAndBranch for GID ${graphUniqueId}:`,
         error,
       );
@@ -210,7 +212,7 @@ export class DecisionRepository {
         this.formatKuzuRowToDecision(row.d, repoNameFromNodeId, decisionBranch),
       );
     } catch (error) {
-      console.error(
+      this.logger.error(
         `[DecisionRepository] Error in getAllDecisions for ${repositoryNodeId}, branch ${decisionBranch}:`,
         error,
       );

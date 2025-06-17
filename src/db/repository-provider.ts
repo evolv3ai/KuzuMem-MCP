@@ -10,6 +10,7 @@ import {
   FileRepository,
   TagRepository,
 } from '../repositories';
+import { loggers } from '../utils/logger';
 import * as path from 'path';
 import { Mutex } from '../utils/mutex';
 
@@ -25,6 +26,7 @@ import { Mutex } from '../utils/mutex';
 export class RepositoryProvider {
   private static instance: RepositoryProvider;
   private static lock = new Mutex();
+  private static logger = loggers.repository();
   private repositoryFactory: RepositoryFactory;
   private initialized: boolean = false;
 
@@ -41,7 +43,7 @@ export class RepositoryProvider {
   private constructor(repositoryFactory: RepositoryFactory) {
     this.repositoryFactory = repositoryFactory;
     this.initialized = true;
-    console.log('RepositoryProvider: Instance created.');
+    RepositoryProvider.logger.info('RepositoryProvider instance created');
   }
 
   /**
@@ -54,7 +56,7 @@ export class RepositoryProvider {
       if (!RepositoryProvider.instance) {
         const factory = await RepositoryFactory.getInstance();
         RepositoryProvider.instance = new RepositoryProvider(factory);
-        console.log('RepositoryProvider: Singleton instance created');
+        RepositoryProvider.logger.info('RepositoryProvider singleton instance created');
       }
       return RepositoryProvider.instance;
     } finally {
@@ -79,7 +81,7 @@ export class RepositoryProvider {
     }
 
     if (!this.repositoryRepositories.has(clientProjectRoot)) {
-      console.log(`RepositoryProvider: Initializing repositories for root: ${clientProjectRoot}`);
+      RepositoryProvider.logger.info(`Initializing repositories for root: ${clientProjectRoot}`);
       const repoRepo = new RepositoryRepository(kuzuClient);
       this.repositoryRepositories.set(clientProjectRoot, repoRepo);
       this.metadataRepositories.set(
@@ -99,12 +101,12 @@ export class RepositoryProvider {
       // Initialize new repositories
       this.fileRepositories.set(clientProjectRoot, new FileRepository(kuzuClient, repoRepo));
       this.tagRepositories.set(clientProjectRoot, new TagRepository(kuzuClient, repoRepo));
-      console.log(
-        `RepositoryProvider: Repositories initialized and cached for root: ${clientProjectRoot}`,
+      RepositoryProvider.logger.info(
+        `Repositories initialized and cached for root: ${clientProjectRoot}`,
       );
     } else {
-      console.log(
-        `RepositoryProvider: Repositories already initialized for root: ${clientProjectRoot}`,
+      RepositoryProvider.logger.info(
+        `Repositories already initialized for root: ${clientProjectRoot}`,
       );
     }
   }
@@ -168,13 +170,13 @@ export class RepositoryProvider {
    * @returns RepositoryRepository instance
    */
   public getRepositoryRepository(clientProjectRoot: string): RepositoryRepository {
-    console.log(`RepositoryProvider: Getting RepositoryRepository for ${clientProjectRoot}`);
+    RepositoryProvider.logger.debug(`Getting RepositoryRepository for ${clientProjectRoot}`);
     if (!path.isAbsolute(clientProjectRoot)) {
       clientProjectRoot = path.resolve(clientProjectRoot);
     }
-    console.log(`RepositoryProvider: Resolved path: ${clientProjectRoot}`);
-    console.log(
-      `RepositoryProvider: Has repository? ${this.repositoryRepositories.has(clientProjectRoot)}`,
+    RepositoryProvider.logger.debug(`Resolved path: ${clientProjectRoot}`);
+    RepositoryProvider.logger.debug(
+      `Has repository? ${this.repositoryRepositories.has(clientProjectRoot)}`,
     );
     return this.getRepositories(clientProjectRoot).repositoryRepo;
   }
@@ -298,7 +300,7 @@ export class RepositoryProvider {
     this.ruleRepositories.delete(clientProjectRoot);
     this.fileRepositories.delete(clientProjectRoot);
     this.tagRepositories.delete(clientProjectRoot);
-    console.log(`RepositoryProvider: Cleared repositories for client: ${clientProjectRoot}`);
+    RepositoryProvider.logger.info(`Cleared repositories for client: ${clientProjectRoot}`);
   }
 
   /**
@@ -314,6 +316,6 @@ export class RepositoryProvider {
     this.ruleRepositories.clear();
     this.fileRepositories.clear();
     this.tagRepositories.clear();
-    console.log('RepositoryProvider: All repository caches cleared');
+    RepositoryProvider.logger.info('All repository caches cleared');
   }
 }

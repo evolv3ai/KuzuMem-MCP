@@ -3,6 +3,7 @@ import { MemoryService } from '../services/memory.service';
 import { metadataSchema, contextSchema, Rule } from '../types';
 import { Mutex } from '../utils/mutex';
 import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
+import { loggers } from '../utils/logger';
 
 /**
  * Controller for memory bank operations
@@ -11,6 +12,7 @@ import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
 export class MemoryController {
   private static instance: MemoryController;
   private static lock = new Mutex();
+  private static logger = loggers.controller();
   private memoryService!: MemoryService;
   private serviceInitializationLock = false; // Simple lock
 
@@ -29,9 +31,9 @@ export class MemoryController {
     this.serviceInitializationLock = true;
     try {
       this.memoryService = await MemoryService.getInstance();
-      console.log('MemoryService initialized in MemoryController constructor.');
+      MemoryController.logger.info('MemoryService initialized in MemoryController constructor');
     } catch (error) {
-      console.error('Failed to initialize MemoryService in MemoryController:', error);
+      MemoryController.logger.error('Failed to initialize MemoryService in MemoryController', { error });
       // Propagate or handle critical failure
       throw new Error('MemoryService initialization failed');
     } finally {
@@ -61,7 +63,7 @@ export class MemoryController {
   private asyncHandler = (fn: (req: Request, res: Response, next?: any) => Promise<void>) => {
     return (req: Request, res: Response, next?: any) => {
       Promise.resolve(fn(req, res, next)).catch((err) => {
-        console.error('Error in controller method:', err);
+        MemoryController.logger.error('Error in controller method', { error: err });
         res.status(500).json({ error: 'Internal server error' });
       });
     };
@@ -469,7 +471,7 @@ export class MemoryController {
 
       res.status(200).json(rules);
     } catch (error) {
-      console.error('Error getting active rules:', error);
+      MemoryController.logger.error('Error getting active rules', { error });
       res.status(500).json({ error: 'Failed to get active rules' });
     }
   });
@@ -548,7 +550,7 @@ export class MemoryController {
   // Helper to ensure service is initialized
   private async ensureService(): Promise<void> {
     if (!this.memoryService) {
-      console.warn('MemoryService not yet available, attempting to initialize...');
+      MemoryController.logger.warn('MemoryService not yet available, attempting to initialize...');
       await this.initializeService(); // Re-attempt initialization
       if (!this.memoryService) {
         // Check again after attempt
