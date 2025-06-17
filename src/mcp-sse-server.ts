@@ -27,9 +27,6 @@ const host = process.env.HOST || 'localhost';
 // Create SSE-specific logger
 const sseLogger = loggers.mcpSSE();
 
-// Debug level for backward compatibility with existing debug patterns
-const debugLevel = parseInt(process.env.DEBUG_LEVEL || '0', 10);
-
 // Map to store clientProjectRoot by repository:branch
 const repositoryRootMap = new Map<string, string>();
 
@@ -86,7 +83,9 @@ function createZodSchema(tool: any) {
     }
   }
 
-  return z.object(shape);
+  return Object.keys(shape).length === 0
+    ? z.object({}).passthrough() // accept anything for param-less tools
+    : z.object(shape);
 }
 
 // Register all our tools with the MCP server
