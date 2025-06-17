@@ -79,7 +79,9 @@ function createZodSchema(tool: any) {
     }
   }
 
-  return z.object(shape);
+  return Object.keys(shape).length === 0
+    ? z.object({}).passthrough() // accept anything for param-less tools
+    : z.object(shape);
 }
 
 // Register all our tools with the MCP server
