@@ -79,7 +79,7 @@ function createZodSchema(tool: any) {
     }
   }
 
-  return shape;
+  return z.object(shape);
 }
 
 // Register all our tools with the MCP server
