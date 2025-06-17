@@ -194,7 +194,15 @@ function registerTools() {
 let server: Server;
 const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
-// Helper function to handle POST requests
+/**
+ * Handles HTTP POST requests for the MCP streaming server, managing session initialization and routing requests to the appropriate transport.
+ *
+ * If a valid `mcp-session-id` header is present and matches an active session, the request is delegated to the corresponding transport. If no session ID is provided, the function checks for an `initialize` method in the request body to create a new session and transport. Invalid or missing session IDs result in a JSON-RPC error response.
+ *
+ * @param req - The incoming HTTP request.
+ * @param res - The HTTP response object.
+ * @param requestLogger - Logger instance for request-specific logging.
+ */
 async function handlePostRequest(req: any, res: any, requestLogger: any): Promise<void> {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
   let transport: StreamableHTTPServerTransport;
@@ -287,7 +295,15 @@ async function handlePostRequest(req: any, res: any, requestLogger: any): Promis
   await transport.handleRequest(req, res);
 }
 
-// Helper function to handle GET requests (for SSE streams)
+/**
+ * Handles HTTP GET requests for Server-Sent Events (SSE) streams associated with an MCP session.
+ *
+ * Validates the presence and validity of the `mcp-session-id` header. If valid, delegates the request to the corresponding session transport; otherwise, responds with a JSON-RPC error.
+ *
+ * @param req - The incoming HTTP request.
+ * @param res - The HTTP response object.
+ * @param requestLogger - Logger for the current request.
+ */
 async function handleGetRequest(req: any, res: any, requestLogger: any): Promise<void> {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
@@ -308,7 +324,11 @@ async function handleGetRequest(req: any, res: any, requestLogger: any): Promise
   await transport.handleRequest(req, res);
 }
 
-// Helper function to handle DELETE requests (for session termination)
+/**
+ * Handles HTTP DELETE requests to terminate an active MCP streaming session.
+ *
+ * Validates the presence and validity of the `mcp-session-id` header. If valid, closes the associated transport, removes it from the session map, and responds with a JSON-RPC success message. Responds with an error if the session ID is missing, invalid, or if an error occurs during termination.
+ */
 async function handleDeleteRequest(req: any, res: any, requestLogger: any): Promise<void> {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
@@ -351,6 +371,14 @@ async function handleDeleteRequest(req: any, res: any, requestLogger: any): Prom
   }
 }
 
+/**
+ * Starts the MCP HTTP streaming server and begins listening for incoming requests.
+ *
+ * Initializes tool registration, sets up an HTTP server with session-aware routing for POST, GET, and DELETE methods, and handles server lifecycle events including error handling.
+ *
+ * @remark
+ * The server manages multiple concurrent streaming sessions using session IDs and supports JSON-RPC over HTTP and Server-Sent Events (SSE).
+ */
 async function startServer(): Promise<void> {
   httpStreamLogger.info('Starting MCP HTTP Stream server...');
 
@@ -429,7 +457,13 @@ async function startServer(): Promise<void> {
   });
 }
 
-// Graceful shutdown
+/**
+ * Performs a graceful shutdown of the HTTP streaming server and all active session transports.
+ *
+ * Closes the HTTP server, terminates all active session transports, and shuts down the {@link MemoryService} instance before exiting the process. If shutdown does not complete within 30 seconds, the process exits forcefully.
+ *
+ * @param signal - The termination signal that triggered the shutdown (e.g., "SIGTERM" or "SIGINT").
+ */
 function gracefulShutdown(signal: string): void {
   httpStreamLogger.info({ signal }, `Received ${signal}, starting graceful shutdown`);
 
