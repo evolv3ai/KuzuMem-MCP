@@ -197,15 +197,20 @@ const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 // Helper function to handle POST requests
 async function handlePostRequest(req: any, res: any, requestLogger: any): Promise<void> {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
-  let transport: StreamableHTTPServerTransport;
 
   if (sessionId && transports[sessionId]) {
     // Reuse existing transport
-    transport = transports[sessionId];
+    const transport = transports[sessionId];
     requestLogger.debug({ sessionId }, 'Reusing existing transport');
-  } else if (!sessionId) {
+
+    // Handle the request with existing transport
+    await transport.handleRequest(req, res);
+    return;
+  }
+
+  if (!sessionId) {
     // Create new transport for initialization request
-    transport = new StreamableHTTPServerTransport({
+    const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       enableJsonResponse: true, // Support both JSON and SSE
       onsessioninitialized: (sessionId) => {
@@ -230,22 +235,18 @@ async function handlePostRequest(req: any, res: any, requestLogger: any): Promis
     // Let the transport handle the request and parse the body internally
     await transport.handleRequest(req, res);
     return;
-  } else {
-    // Invalid request
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      jsonrpc: '2.0',
-      error: {
-        code: -32000,
-        message: 'Bad Request: Invalid session ID',
-      },
-      id: null,
-    }));
-    return;
   }
 
-  // Handle the request with existing transport
-  await transport.handleRequest(req, res);
+  // Invalid request - session ID provided but not found
+  res.writeHead(400, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({
+    jsonrpc: '2.0',
+    error: {
+      code: -32000,
+      message: 'Bad Request: Invalid session ID',
+    },
+    id: null,
+  }));
 }
 
 // Helper function to handle GET requests (for SSE streams)
