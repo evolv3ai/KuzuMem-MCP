@@ -430,6 +430,7 @@ export const AssociateInputSchema = z.object({
   // For tag-item association
   itemId: z.string().optional(),
   tagId: z.string().optional(),
+  entityType: z.enum(['Component', 'Decision', 'Rule', 'File', 'Context']).optional(), // Required for tag-item
 });
 
 export const AssociateOutputSchema = z.object({

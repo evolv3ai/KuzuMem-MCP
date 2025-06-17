@@ -35,52 +35,57 @@ interface ContextUpdateOutput {
  * Handles context updates for session tracking
  */
 export const contextHandler: SdkToolHandler = async (params, context, memoryService) => {
-  // 1. Parse and validate parameters
-  const validatedParams = ContextInputSchema.parse(params);
-  const { operation, repository } = validatedParams;
+  try {
+    // 1. Parse and validate parameters
+    const validatedParams = ContextInputSchema.parse(params);
+    const { operation, repository } = validatedParams;
 
-  // 2. Validate session and get clientProjectRoot
-  const clientProjectRoot = validateSession(context, 'context');
+    // 2. Validate session and get clientProjectRoot
+    const clientProjectRoot = validateSession(context, 'context');
 
-  // 3. Log the operation
-  logToolExecution(context, `context operation: ${operation}`, {
-    repository,
-    clientProjectRoot,
-  });
+    // 3. Log the operation
+    logToolExecution(context, `context operation: ${operation}`, {
+      repository,
+      clientProjectRoot,
+    });
 
-  // 4. Execute the operation
-  switch (operation) {
-    case 'update': {
-      // Validate required parameters for update
-      if (!validatedParams.agent) {
-        throw new Error('agent parameter is required for context update');
+    // 4. Execute the operation
+    switch (operation) {
+      case 'update': {
+        // Validate required parameters for update
+        if (!validatedParams.agent) {
+          throw new Error('agent parameter is required for context update');
+        }
+        if (!validatedParams.summary) {
+          throw new Error('summary parameter is required for context update');
+        }
+
+        // Send progress notification
+        await context.sendProgress({
+          status: 'in_progress',
+          message: 'Updating context...',
+          percent: 50,
+        });
+
+        // Call memory service to update context
+        const result = await memoryService.updateContext(context, clientProjectRoot, validatedParams);
+
+        // Send completion notification
+        await context.sendProgress({
+          status: 'complete',
+          message: 'Context updated successfully',
+          percent: 100,
+          isFinal: true,
+        });
+
+        return result;
       }
-      if (!validatedParams.summary) {
-        throw new Error('summary parameter is required for context update');
-      }
 
-      // Send progress notification
-      await context.sendProgress({
-        status: 'in_progress',
-        message: 'Updating context...',
-        percent: 50,
-      });
-
-      // Call memory service to update context
-      const result = await memoryService.updateContext(context, clientProjectRoot, validatedParams);
-
-      // Send completion notification
-      await context.sendProgress({
-        status: 'complete',
-        message: 'Context updated successfully',
-        percent: 100,
-        isFinal: true,
-      });
-
-      return result;
+      default:
+        throw new Error(`Unknown context operation: ${operation}`);
     }
-
-    default:
-      throw new Error(`Unknown context operation: ${operation}`);
+  } catch (error) {
+    await handleToolError(error, context, 'context update', 'context');
+    throw error;
   }
 };

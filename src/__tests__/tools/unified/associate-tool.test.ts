@@ -121,6 +121,7 @@ describe('Associate Tool Tests', () => {
           branch: 'main',
           itemId: 'comp-AuthService',
           tagId: 'tag-security',
+          entityType: 'Component',
         },
         mockContext,
         mockMemoryService,
@@ -137,7 +138,7 @@ describe('Associate Tool Tests', () => {
         'test-repo',
         'main',
         'comp-AuthService',
-        'Component', // Default item type
+        'Component',
         'tag-security',
       );
     });
@@ -168,6 +169,21 @@ describe('Associate Tool Tests', () => {
           mockMemoryService,
         ),
       ).rejects.toThrow('itemId and tagId are required for tag-item association');
+    });
+
+    it('should throw error if entityType is missing', async () => {
+      await expect(
+        associateHandler(
+          {
+            type: 'tag-item',
+            repository: 'test-repo',
+            itemId: 'comp-AuthService',
+            tagId: 'tag-security',
+          },
+          mockContext,
+          mockMemoryService,
+        ),
+      ).rejects.toThrow('entityType is required for tag-item association');
     });
   });
 
@@ -222,7 +238,7 @@ describe('Associate Tool Tests', () => {
 
       expect(mockContext.sendProgress).toHaveBeenCalledWith({
         status: 'error',
-        message: 'Failed to create file-component association: Service error',
+        message: 'Failed to execute file-component association: Service error',
         percent: 100,
         isFinal: true,
       });
@@ -239,6 +255,7 @@ describe('Associate Tool Tests', () => {
             repository: 'test-repo',
             itemId: 'comp-1',
             tagId: 'tag-1',
+            entityType: 'Component',
           },
           mockContext,
           mockMemoryService,
@@ -247,7 +264,7 @@ describe('Associate Tool Tests', () => {
 
       expect(mockContext.sendProgress).toHaveBeenCalledWith({
         status: 'error',
-        message: 'Failed to create tag-item association: Tag service error',
+        message: 'Failed to execute tag-item association: Tag service error',
         percent: 100,
         isFinal: true,
       });
@@ -323,6 +340,7 @@ describe('Associate Tool Tests', () => {
           repository: 'test-repo',
           itemId: 'comp-1',
           tagId: 'tag-1',
+          entityType: 'Component',
         },
         mockContext,
         mockMemoryService,
@@ -330,7 +348,7 @@ describe('Associate Tool Tests', () => {
 
       expect(mockContext.sendProgress).toHaveBeenCalledWith({
         status: 'in_progress',
-        message: 'Tagging item comp-1 with tag tag-1...',
+        message: 'Tagging Component comp-1 with tag tag-1...',
         percent: 50,
       });
 

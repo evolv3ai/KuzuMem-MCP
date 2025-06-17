@@ -10,6 +10,7 @@ interface AssociateParams {
   componentId?: string;
   itemId?: string;
   tagId?: string;
+  entityType?: 'Component' | 'Decision' | 'Rule' | 'File' | 'Context';
 }
 
 /**
@@ -50,6 +51,9 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
     case 'tag-item':
       if (!validatedParams.itemId || !validatedParams.tagId) {
         throw new Error('itemId and tagId are required for tag-item association');
+      }
+      if (!validatedParams.entityType) {
+        throw new Error('entityType is required for tag-item association');
       }
       break;
   }
@@ -95,11 +99,11 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
       }
 
       case 'tag-item': {
-        const { itemId, tagId } = validatedParams;
+        const { itemId, tagId, entityType } = validatedParams;
 
         await context.sendProgress({
           status: 'in_progress',
-          message: `Tagging item ${itemId} with tag ${tagId}...`,
+          message: `Tagging ${entityType} ${itemId} with tag ${tagId}...`,
           percent: 50,
         });
 
@@ -110,7 +114,7 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
           repository,
           branch,
           itemId!,
-          'Component',
+          entityType!,
           tagId!,
         );
 
@@ -124,7 +128,7 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
         return {
           type: 'tag-item' as const,
           success: true,
-          message: `Successfully tagged item ${itemId} with tag ${tagId}`,
+          message: `Successfully tagged ${entityType} ${itemId} with tag ${tagId}`,
           association: {
             from: itemId!,
             to: tagId!,
