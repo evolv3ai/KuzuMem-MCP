@@ -12,7 +12,7 @@ import { z } from 'zod';
 // Official MCP SDK imports
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { CallToolResult, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 // Our tool handlers and services
 import { toolHandlers as sdkToolHandlers } from './mcp/tool-handlers';
