@@ -50,9 +50,6 @@ export const searchHandler: SdkToolHandler = async (params, context, memoryServi
     limit = 10,
     conjunctive = false,
     threshold = 0.5,
-    clientProjectRoot = context.session?.clientProjectRoot ||
-      process.env.CLIENT_PROJECT_ROOT ||
-      '/tmp',
   } = params as SearchParams;
 
   // Validate required parameters
@@ -62,6 +59,9 @@ export const searchHandler: SdkToolHandler = async (params, context, memoryServi
   if (!repository) {
     throw new Error('Repository parameter is required');
   }
+
+  // 2. Validate session and get clientProjectRoot
+  const clientProjectRoot = validateSession(context, 'search');
 
   // Validate limit range
   if (limit < 1 || limit > 50) {
@@ -73,7 +73,7 @@ export const searchHandler: SdkToolHandler = async (params, context, memoryServi
     throw new Error('threshold must be between 0.0 and 1.0');
   }
 
-  // 2. Log the operation
+  // 3. Log the operation
   logToolExecution(context, `search operation: ${mode}`, {
     repository,
     branch,
@@ -82,14 +82,14 @@ export const searchHandler: SdkToolHandler = async (params, context, memoryServi
     query,
   });
 
-  // 3. Send progress update
+  // 4. Send progress update
   await context.sendProgress({
     status: 'in_progress',
     message: `Searching for "${query}" in ${repository}:${branch}...`,
     percent: 10,
   });
 
-  // 4. Execute search based on mode
+  // 5. Execute search based on mode
   let results: SearchResult[] = [];
 
   try {
