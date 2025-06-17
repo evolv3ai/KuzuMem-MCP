@@ -41,7 +41,7 @@ const mcpServer = new McpServer(
   },
   {
     capabilities: {
-      tools: { list: true, call: true },
+      tools: { list: true, call: true, listChanged: true },
       resources: {},
       prompts: {},
     },
