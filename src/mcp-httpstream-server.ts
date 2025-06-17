@@ -6,7 +6,7 @@
 
 import dotenv from 'dotenv';
 import { randomUUID } from 'node:crypto';
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 import { type Logger } from 'pino';
 import { z } from 'zod';
 
