@@ -2,12 +2,14 @@ import { KuzuDBClient } from '../db/kuzu';
 import { Rule } from '../types';
 import { formatGraphUniqueId } from '../utils/id.utils';
 import { RepositoryRepository } from './repository.repository';
+import { loggers } from '../utils/logger';
 
 /**
  * Repository for Rule, using KuzuDB and Cypher queries.
  * Each instance is now tied to a specific KuzuDBClient.
  */
 export class RuleRepository {
+  private logger = loggers.repository();
   private kuzuClient: KuzuDBClient;
   private repositoryRepo: RepositoryRepository;
 
@@ -80,7 +82,7 @@ export class RuleRepository {
         this.formatKuzuRowToRule(row.r, repoNameFromNodeId, ruleBranch),
       );
     } catch (error) {
-      console.error(
+      this.logger.error(
         `[RuleRepository] Error in getActiveRules for ${repositoryNodeId}, branch ${ruleBranch}:`,
         error,
       );
@@ -176,7 +178,7 @@ export class RuleRepository {
       }
       return null;
     } catch (error) {
-      console.error(`[RuleRepository] Error in findByIdAndBranch for GID ${graphUniqueId}:`, error);
+      this.logger.error(`[RuleRepository] Error in findByIdAndBranch for GID ${graphUniqueId}:`, error);
       return null;
     }
   }
@@ -201,7 +203,7 @@ export class RuleRepository {
         this.formatKuzuRowToRule(row.r, repoNameFromNodeId, ruleBranch),
       );
     } catch (error) {
-      console.error(
+      this.logger.error(
         `[RuleRepository] Error in getAllRules for ${repositoryNodeId}, branch ${ruleBranch}:`,
         error,
       );

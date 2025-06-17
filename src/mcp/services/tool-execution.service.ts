@@ -1,11 +1,13 @@
 import { ToolHandler } from '../types';
 import { MemoryService } from '../../services/memory.service';
 import { ProgressHandler } from '../streaming/progress-handler';
+import { loggers } from '../../utils/logger';
 
 /**
  * Singleton service for executing tools with progress support
  */
 export class ToolExecutionService {
+  private logger = loggers.tools();
   private static instance: ToolExecutionService;
   private memoryService: MemoryService | null = null;
 
@@ -72,7 +74,7 @@ export class ToolExecutionService {
       if (debugLog) {
         debugLog(0, errorMsg, err.stack);
       } else {
-        console.error(errorMsg, err.stack);
+        this.logger.error(errorMsg, err.stack);
       }
 
       if (progressHandler) {

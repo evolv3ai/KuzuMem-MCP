@@ -8,6 +8,7 @@ import {
   RuleRepository,
 } from '../repositories';
 import { Mutex } from '../utils/mutex';
+import { loggers } from '../utils/logger';
 
 /**
  * RepositoryFactory - Manages creation of repository instances
@@ -22,6 +23,7 @@ import { Mutex } from '../utils/mutex';
 export class RepositoryFactory {
   private static instance: RepositoryFactory;
   private static initializationLock = new Mutex();
+  private static logger = loggers.repository();
 
   // Cache maps to store repositories by database path
   private repositoryRepoCache: Map<string, RepositoryRepository> = new Map();
@@ -35,7 +37,7 @@ export class RepositoryFactory {
    * Private constructor to enforce Singleton pattern
    */
   private constructor() {
-    console.log('RepositoryFactory: initialized');
+    RepositoryFactory.logger.info('RepositoryFactory initialized');
   }
 
   /**
@@ -49,7 +51,7 @@ export class RepositoryFactory {
       try {
         if (!RepositoryFactory.instance) {
           RepositoryFactory.instance = new RepositoryFactory();
-          console.log('RepositoryFactory: Singleton instance created');
+          RepositoryFactory.logger.info('RepositoryFactory singleton instance created');
         }
       } finally {
         release();
@@ -68,7 +70,7 @@ export class RepositoryFactory {
   getRepositoryRepository(kuzuClient: KuzuDBClient): RepositoryRepository {
     const dbPath = kuzuClient.dbPath;
     if (!this.repositoryRepoCache.has(dbPath)) {
-      console.log(`RepositoryFactory: Creating new RepositoryRepository for ${dbPath}`);
+      RepositoryFactory.logger.info(`Creating new RepositoryRepository for ${dbPath}`);
       this.repositoryRepoCache.set(dbPath, new RepositoryRepository(kuzuClient));
     }
     return this.repositoryRepoCache.get(dbPath)!;
@@ -84,7 +86,7 @@ export class RepositoryFactory {
   getMetadataRepository(kuzuClient: KuzuDBClient): MetadataRepository {
     const dbPath = kuzuClient.dbPath;
     if (!this.metadataRepoCache.has(dbPath)) {
-      console.log(`RepositoryFactory: Creating new MetadataRepository for ${dbPath}`);
+      RepositoryFactory.logger.info(`Creating new MetadataRepository for ${dbPath}`);
       const repositoryRepo = this.getRepositoryRepository(kuzuClient);
       this.metadataRepoCache.set(dbPath, new MetadataRepository(kuzuClient, repositoryRepo));
     }
@@ -101,7 +103,7 @@ export class RepositoryFactory {
   getContextRepository(kuzuClient: KuzuDBClient): ContextRepository {
     const dbPath = kuzuClient.dbPath;
     if (!this.contextRepoCache.has(dbPath)) {
-      console.log(`RepositoryFactory: Creating new ContextRepository for ${dbPath}`);
+      RepositoryFactory.logger.info(`Creating new ContextRepository for ${dbPath}`);
       const repositoryRepo = this.getRepositoryRepository(kuzuClient);
       this.contextRepoCache.set(dbPath, new ContextRepository(kuzuClient, repositoryRepo));
     }
@@ -118,7 +120,7 @@ export class RepositoryFactory {
   getComponentRepository(kuzuClient: KuzuDBClient): ComponentRepository {
     const dbPath = kuzuClient.dbPath;
     if (!this.componentRepoCache.has(dbPath)) {
-      console.log(`RepositoryFactory: Creating new ComponentRepository for ${dbPath}`);
+      RepositoryFactory.logger.info(`Creating new ComponentRepository for ${dbPath}`);
       const repositoryRepo = this.getRepositoryRepository(kuzuClient);
       this.componentRepoCache.set(dbPath, new ComponentRepository(kuzuClient, repositoryRepo));
     }
@@ -135,7 +137,7 @@ export class RepositoryFactory {
   getDecisionRepository(kuzuClient: KuzuDBClient): DecisionRepository {
     const dbPath = kuzuClient.dbPath;
     if (!this.decisionRepoCache.has(dbPath)) {
-      console.log(`RepositoryFactory: Creating new DecisionRepository for ${dbPath}`);
+      RepositoryFactory.logger.info(`Creating new DecisionRepository for ${dbPath}`);
       const repositoryRepo = this.getRepositoryRepository(kuzuClient);
       this.decisionRepoCache.set(dbPath, new DecisionRepository(kuzuClient, repositoryRepo));
     }
@@ -152,7 +154,7 @@ export class RepositoryFactory {
   getRuleRepository(kuzuClient: KuzuDBClient): RuleRepository {
     const dbPath = kuzuClient.dbPath;
     if (!this.ruleRepoCache.has(dbPath)) {
-      console.log(`RepositoryFactory: Creating new RuleRepository for ${dbPath}`);
+      RepositoryFactory.logger.info(`Creating new RuleRepository for ${dbPath}`);
       const repositoryRepo = this.getRepositoryRepository(kuzuClient);
       this.ruleRepoCache.set(dbPath, new RuleRepository(kuzuClient, repositoryRepo));
     }
@@ -195,6 +197,6 @@ export class RepositoryFactory {
     this.componentRepoCache.clear();
     this.decisionRepoCache.clear();
     this.ruleRepoCache.clear();
-    console.log('RepositoryFactory: All repository caches cleared');
+    RepositoryFactory.logger.info('All repository caches cleared');
   }
 }

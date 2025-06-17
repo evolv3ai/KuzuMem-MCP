@@ -281,6 +281,19 @@ async function executeSimpleFallbackSearch(
   const results: SearchResult[] = [];
   const kuzuClient = await memoryService.getKuzuClient(context, clientProjectRoot);
 
+  // KuzuDB has issues with UNION queries returning nodes, so use individual queries
+  // This is more reliable than trying to use UNION with node types
+
+  // Fix: Handle edge cases in limit calculation
+  if (entityTypes.length === 0) {
+    context.logger.warn('No entity types provided for search');
+    return results;
+  }
+
+  // Calculate per-entity limit with proper minimum handling
+  // Ensure each entity type gets at least 1 result if limit > 0
+  const perEntityLimit = Math.max(1, Math.floor(limit / entityTypes.length));
+
   for (const entityType of entityTypes) {
     try {
       const tableName = entityType.charAt(0).toUpperCase() + entityType.slice(1);
@@ -296,7 +309,7 @@ async function executeSimpleFallbackSearch(
         MATCH (n:${tableName})
         WHERE n.branch = $branch AND (${whereConditions})
         RETURN n
-        LIMIT ${limit}
+        LIMIT ${perEntityLimit}
         `,
         { query, branch },
         { timeout: 2000 },

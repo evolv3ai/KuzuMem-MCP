@@ -2,8 +2,10 @@ import { KuzuDBClient } from '../db/kuzu'; // Corrected path
 import { File } from '../types'; // Internal domain types
 import { formatGraphUniqueId } from '../utils/id.utils'; // Add missing import
 import { RepositoryRepository } from './repository.repository'; // For context/scoping if needed
+import { loggers } from '../utils/logger';
 
 export class FileRepository {
+  private logger = loggers.repository();
   private kuzuClient: KuzuDBClient;
   private repositoryRepo: RepositoryRepository; // Optional, for complex scoping or validation
 
@@ -105,7 +107,7 @@ export class FileRepository {
       }
       return null;
     } catch (error) {
-      console.error(`[FileRepository] Error creating File node ${fileData.id}:`, error);
+      this.logger.error(`[FileRepository] Error creating File node ${fileData.id}:`, error);
       return null;
     }
   }
@@ -125,7 +127,7 @@ export class FileRepository {
 
         // Verify branch matches (additional safety check)
         if (parsedMetadata.branch !== branch) {
-          console.warn(
+          this.logger.warn(
             `[FileRepository] Branch mismatch for file ${fileId}: expected ${branch}, got ${parsedMetadata.branch}`,
           );
           return null;
@@ -148,7 +150,7 @@ export class FileRepository {
       }
       return null;
     } catch (error) {
-      console.error(`[FileRepository] Error finding File node ${fileId}:`, error);
+      this.logger.error(`[FileRepository] Error finding File node ${fileId}:`, error);
       return null;
     }
   }
@@ -176,7 +178,7 @@ export class FileRepository {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
 
     if (!safeRelType) {
-      console.error(
+      this.logger.error(
         `[FileRepository] Invalid relationshipType: "${relationshipType}". Sanitized version is empty.`,
       );
       return false;
@@ -201,7 +203,7 @@ export class FileRepository {
       });
       return result && result.length > 0;
     } catch (error) {
-      console.error(
+      this.logger.error(
         `[FileRepository] Error linking C:${componentId} to F:${fileId} via ${relationshipType}:`,
         error,
       );
@@ -224,7 +226,7 @@ export class FileRepository {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
 
     if (!safeRelType) {
-      console.error(
+      this.logger.error(
         `[FileRepository] Invalid relationshipType: "${relationshipType}". Sanitized version is empty.`,
       );
       return [];
@@ -273,7 +275,7 @@ export class FileRepository {
         })
         .filter(Boolean); // Filter out null results from branch mismatch
     } catch (error) {
-      console.error(
+      this.logger.error(
         `[FileRepository] Error finding files for C:${componentId} via ${relationshipType}:`,
         error,
       );
@@ -294,7 +296,7 @@ export class FileRepository {
     const safeRelType = relationshipType.replace(/[^a-zA-Z0-9_]/g, '');
 
     if (!safeRelType) {
-      console.error(
+      this.logger.error(
         `[FileRepository] Invalid relationshipType: "${relationshipType}". Sanitized version is empty.`,
       );
       return [];
@@ -329,7 +331,7 @@ export class FileRepository {
         };
       });
     } catch (error) {
-      console.error(
+      this.logger.error(
         `[FileRepository] Error finding components for F:${fileId} via ${safeRelType}:`,
         error,
       );
@@ -369,7 +371,7 @@ export class FileRepository {
       const parsed = JSON.parse(metadataString);
       return { ...defaults, ...parsed };
     } catch (e) {
-      console.warn(`[FileRepository] Failed to parse metadata for file ${fileId}`);
+      this.logger.warn(`[FileRepository] Failed to parse metadata for file ${fileId}`);
       return defaults;
     }
   }
