@@ -1,5 +1,6 @@
 import { ContextInputSchema } from '../../../schemas/unified-tool-schemas';
 import { SdkToolHandler } from '../../../tool-handlers';
+import { handleToolError, validateSession, logToolExecution } from '../../../utils/error-utils';
 
 // TypeScript interfaces for context parameters
 interface ContextParams {
@@ -38,14 +39,11 @@ export const contextHandler: SdkToolHandler = async (params, context, memoryServ
   const validatedParams = ContextInputSchema.parse(params);
   const { operation, repository } = validatedParams;
 
-  // 2. Get clientProjectRoot from session
-  const clientProjectRoot = context.session.clientProjectRoot as string | undefined;
-  if (!clientProjectRoot) {
-    throw new Error('No active session. Use memory-bank tool with operation "init" first.');
-  }
+  // 2. Validate session and get clientProjectRoot
+  const clientProjectRoot = validateSession(context, 'context');
 
   // 3. Log the operation
-  context.logger.info(`Executing context operation: ${operation}`, {
+  logToolExecution(context, `context operation: ${operation}`, {
     repository,
     clientProjectRoot,
   });

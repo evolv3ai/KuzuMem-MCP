@@ -1,6 +1,7 @@
 import { MemoryService } from '../../../../services/memory.service';
 import { SdkToolHandler } from '../../../tool-handlers';
-import { EnrichedRequestHandlerExtra } from '../../../types/sdk-custom';
+import { ToolHandlerContext } from '../../../types/sdk-custom';
+import { handleToolError, validateSession, logToolExecution } from '../../../utils/error-utils';
 
 // Cache for tracking initialized extensions and indexes per client
 const initializationCache = new Map<
@@ -73,9 +74,10 @@ export const searchHandler: SdkToolHandler = async (params, context, memoryServi
   }
 
   // 2. Log the operation
-  context.logger.info(`Executing search operation: ${mode}`, {
+  logToolExecution(context, `search operation: ${mode}`, {
     repository,
     branch,
+    clientProjectRoot,
     entityTypes,
     query,
   });
@@ -163,22 +165,16 @@ export const searchHandler: SdkToolHandler = async (params, context, memoryServi
       message: `${mode} search completed successfully`,
     };
   } catch (error) {
-    context.logger.error('Search operation failed', { error: (error as Error).message });
+    await handleToolError(error, context, `${mode} search`, mode);
 
-    await context.sendProgress({
-      status: 'error',
-      message: `Search failed: ${(error as Error).message}`,
-      percent: 100,
-      isFinal: true,
-    });
-
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       status: 'error',
       results: [],
       totalResults: 0,
       query,
       mode,
-      message: `Search failed: ${(error as Error).message}`,
+      message: `Search failed: ${errorMessage}`,
     };
   }
 };
@@ -195,7 +191,7 @@ async function executeFullTextSearch(
   limit: number,
   conjunctive: boolean,
   memoryService: MemoryService,
-  context: EnrichedRequestHandlerExtra,
+  context: ToolHandlerContext,
 ): Promise<SearchResult[]> {
   // In test environment, use simple fallback search to avoid FTS timeout issues
   if (process.env.NODE_ENV === 'test') {
@@ -276,7 +272,7 @@ async function executeSimpleFallbackSearch(
   clientProjectRoot: string,
   limit: number,
   memoryService: MemoryService,
-  context: EnrichedRequestHandlerExtra,
+  context: ToolHandlerContext,
 ): Promise<SearchResult[]> {
   const results: SearchResult[] = [];
   const kuzuClient = await memoryService.getKuzuClient(context, clientProjectRoot);
@@ -337,7 +333,7 @@ async function executeSimpleFallbackSearch(
 }
 
 async function ensureExtensionsAndFtsIndex(
-  context: EnrichedRequestHandlerExtra,
+  context: ToolHandlerContext,
   memoryService: MemoryService,
   clientProjectRoot: string,
   repository: string,

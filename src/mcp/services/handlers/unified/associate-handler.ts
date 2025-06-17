@@ -1,4 +1,5 @@
 import { SdkToolHandler } from '../../../tool-handlers';
+import { handleToolError, validateSession, logToolExecution } from '../../../utils/error-utils';
 
 // TypeScript interfaces for associate parameters
 interface AssociateParams {
@@ -29,14 +30,11 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
 
   const { type, repository, branch = 'main' } = validatedParams;
 
-  // 2. Get clientProjectRoot from session
-  const clientProjectRoot = context.session.clientProjectRoot as string | undefined;
-  if (!clientProjectRoot) {
-    throw new Error('No active session. Use memory-bank tool with operation "init" first.');
-  }
+  // 2. Validate session and get clientProjectRoot
+  const clientProjectRoot = validateSession(context, 'associate');
 
   // 3. Log the operation
-  context.logger.info(`Creating association: ${type}`, {
+  logToolExecution(context, `association: ${type}`, {
     repository,
     branch,
     clientProjectRoot,
@@ -139,19 +137,7 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
         throw new Error(`Unknown association type: ${type}`);
     }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    context.logger.error(`Association failed: ${errorMessage}`, {
-      type,
-      error,
-    });
-
-    await context.sendProgress({
-      status: 'error',
-      message: `Failed to create ${type} association: ${errorMessage}`,
-      percent: 100,
-      isFinal: true,
-    });
-
+    await handleToolError(error, context, `${type} association`, type);
     throw error;
   }
 };

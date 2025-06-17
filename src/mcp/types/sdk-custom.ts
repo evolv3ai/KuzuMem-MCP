@@ -1,11 +1,10 @@
-import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import type { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 import type { MemoryService } from '../../services/memory.service';
 
 /**
- * Represents a progress notification payload, typically used with sendProgress.
+ * Simplified progress notification payload for tool handlers.
+ * This replaces the complex MCP-specific progress handling with a simple interface.
  */
-export interface McpProgressNotification {
+export interface ProgressNotification {
   status: string; // e.g., 'initializing', 'in-progress', 'component-found', 'processing', 'complete', 'error'
   message?: string;
   percent?: number;
@@ -21,14 +20,26 @@ export interface McpProgressNotification {
 }
 
 /**
- * Represents the context object passed to MCP tool handlers, augmented with
- * properties like logger, session, and sendProgress that are expected to be
- * available at runtime.
+ * Simplified context object for tool handlers.
+ * This replaces the complex EnrichedRequestHandlerExtra with a minimal interface
+ * that works with the official SDK approach.
  */
-export interface EnrichedRequestHandlerExtra
-  extends RequestHandlerExtra<ServerRequest, ServerNotification> {
+export interface ToolHandlerContext {
   logger: Pick<Console, 'debug' | 'info' | 'warn' | 'error'>;
-  session: Record<string, any>;
-  sendProgress: (progress: McpProgressNotification) => Promise<void>;
-  memoryService: MemoryService;
+  session: {
+    clientProjectRoot?: string;
+    repository?: string;
+    branch?: string;
+  };
+  sendProgress: (progress: ProgressNotification) => Promise<void>;
+  // Minimal required properties for compatibility
+  signal?: AbortSignal;
+  requestId?: string;
 }
+
+// Legacy aliases for backward compatibility during transition
+/** @deprecated Use ProgressNotification instead */
+export type McpProgressNotification = ProgressNotification;
+
+/** @deprecated Use ToolHandlerContext instead */
+export type EnrichedRequestHandlerExtra = ToolHandlerContext;

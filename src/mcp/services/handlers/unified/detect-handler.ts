@@ -1,5 +1,6 @@
 import { DetectInputSchema } from '../../../schemas/unified-tool-schemas';
 import { SdkToolHandler } from '../../../tool-handlers';
+import { handleToolError, validateSession, logToolExecution } from '../../../utils/error-utils';
 
 /**
  * Detect Handler
@@ -10,14 +11,11 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
   const validatedParams = DetectInputSchema.parse(params);
   const { type, repository, branch = 'main' } = validatedParams;
 
-  // 2. Get clientProjectRoot from session
-  const clientProjectRoot = context.session.clientProjectRoot as string | undefined;
-  if (!clientProjectRoot) {
-    throw new Error('No active session. Use memory-bank tool with operation "init" first.');
-  }
+  // 2. Validate session and get clientProjectRoot
+  const clientProjectRoot = validateSession(context, 'detect');
 
   // 3. Log the operation
-  context.logger.info(`Executing pattern detection: ${type}`, {
+  logToolExecution(context, `pattern detection: ${type}`, {
     repository,
     branch,
     clientProjectRoot,
@@ -199,20 +197,10 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
         throw new Error(`Unknown detection type: ${type}`);
     }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    context.logger.error(`Detection failed: ${errorMessage}`, {
-      type,
-      error,
-    });
-
-    await context.sendProgress({
-      status: 'error',
-      message: `Failed to execute ${type} detection: ${errorMessage}`,
-      percent: 100,
-      isFinal: true,
-    });
+    await handleToolError(error, context, `${type} detection`, type);
 
     // Return a minimal error result that still matches the expected output schema
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       type,
       status: 'error',

@@ -166,18 +166,43 @@ npm run test:e2e:httpstream
 npm run test:all
 ```
 
-**Note**: Some tests may fail due to the recent refactoring, but the project builds successfully and core functionality is operational.
+**Note**: All core functionality is operational with the consolidated server implementations following official SDK patterns.
 
 ## Architecture
 
-The project follows clean architecture with clear separation of concerns:
+KuzuMem-MCP follows **official MCP TypeScript SDK patterns** with clean architecture:
 
-- **Database Layer** - KùzuDB embedded graph database
-- **Repository Layer** - Thread-safe singletons for each entity type
-- **Memory Operations Layer** - Business logic for memory operations (refactored to remove Zod dependencies)
-- **Service Layer** - Core orchestration and repository management
-- **MCP Layer** - Unified tool definitions, handlers, and server implementations
-- **CLI Layer** - Command-line interface
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    MCP Protocol Layer                       │
+├─────────────────────────────────────────────────────────────┤
+│     HTTP Stream Server     │      Stdio Server             │
+│   (StreamableHTTPTransport) │   (StdioTransport)            │
+├─────────────────────────────────────────────────────────────┤
+│                    Tool Handlers                            │
+├─────────────────────────────────────────────────────────────┤
+│                   Memory Service                            │
+├─────────────────────────────────────────────────────────────┤
+│                   Repository Layer                          │
+├─────────────────────────────────────────────────────────────┤
+│                    KuzuDB Client                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Key Components
+
+- **MCP Servers**: Official SDK implementations using `McpServer` with HTTP Stream and Stdio transports
+- **Tool Handlers**: Business logic for each MCP tool with simplified context handling
+- **Memory Service**: Core orchestration and repository management
+- **Repository Layer**: Thread-safe singletons for each entity type
+- **Database Layer**: KùzuDB embedded graph database
+
+### Official SDK Compliance
+
+✅ **Session Management**: Uses built-in SDK session handling
+✅ **Tool Registration**: Uses official `tool()` method with Zod validation
+✅ **Transport Handling**: Leverages SDK transport implementations
+✅ **Error Handling**: Follows SDK error patterns and best practices
 
 For detailed architecture information, see [Extended Documentation](docs/README2.md).
 

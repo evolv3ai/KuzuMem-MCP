@@ -32,7 +32,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
 
     // Add session ID header if we have one
     if (sessionId) {
-      headers['Mcp-Session-Id'] = sessionId;
+      headers['mcp-session-id'] = sessionId;
     }
 
     const response = await fetch(SERVER_URL, {
@@ -180,7 +180,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       }
 
       // Extract session ID from response headers
-      const newSessionId = initResponse.headers.get('Mcp-Session-Id');
+      const newSessionId = initResponse.headers.get('mcp-session-id');
       if (newSessionId) {
         sessionId = newSessionId;
         console.log('Session reinitialized with ID:', sessionId);
@@ -257,6 +257,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
 
           const handleData = (data: Buffer) => {
             const output = data.toString();
+
             if (output.includes('EADDRINUSE')) {
               // Port in use – abort and retry
               clearTimeout(timeout);
@@ -326,7 +327,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     }
 
     // Extract session ID from response headers
-    sessionId = initResponse.headers.get('Mcp-Session-Id') || 'test-session';
+    sessionId = initResponse.headers.get('mcp-session-id') || 'test-session';
 
     // Handle SSE or JSON response
     const contentType = initResponse.headers.get('content-type');
@@ -424,7 +425,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       expect(initResponse.ok).toBe(true);
 
       // Extract session ID from response headers
-      const testSessionId = initResponse.headers.get('Mcp-Session-Id');
+      const testSessionId = initResponse.headers.get('mcp-session-id');
       expect(testSessionId).toBeDefined();
       expect(testSessionId).toMatch(/^[a-f0-9-]{36}$/); // UUID format
 

@@ -1,5 +1,5 @@
 import { MemoryService } from '../services/memory.service';
-import { EnrichedRequestHandlerExtra } from './types/sdk-custom';
+import { ToolHandlerContext } from './types/sdk-custom';
 
 // Import unified tool handlers
 import { analyzeHandler } from './services/handlers/unified/analyze-handler';
@@ -13,10 +13,10 @@ import { memoryBankHandler } from './services/handlers/unified/memory-bank-handl
 import { queryHandler } from './services/handlers/unified/query-handler';
 import { searchHandler } from './services/handlers/unified/search-handler';
 
-// New Handler Type based on SDK
+// Simplified Handler Type for Official SDK Approach
 export type SdkToolHandler = (
   params: any,
-  context: EnrichedRequestHandlerExtra,
+  context: ToolHandlerContext,
   memoryService: MemoryService,
 ) => Promise<any>;
 

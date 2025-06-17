@@ -76,12 +76,9 @@ export class MemoryController {
     return {
       signal: new AbortController().signal,
       requestId: 'controller-mock-request',
-      sendNotification: async () => {},
-      sendRequest: async () => ({ id: 'mock' }) as any,
       logger: console,
       session: {},
       sendProgress: async () => {},
-      memoryService: this.memoryService,
     };
   }
 

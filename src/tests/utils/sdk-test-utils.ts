@@ -235,10 +235,4 @@ export function parseSdkResponseContent<T = unknown>(toolResult: any | null | un
   return toolResult as T;
 }
 
-// Old utility functions like collectSdkStreamEvents and their specific helper types
-// (e.g., JSONRPCErrorWithName, McpProgressNotificationWithName, MyJSONRPCErrorResponse)
-// are no longer needed with the new handleTransportEvents approach and should be removed.
-
-// Ensure StreamableHTTPClientTransport is imported, e.g.:
-// import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/dist/client/transport/http'; // Path might vary
-// Make sure this file does not have conflicting definitions if SDK types are globally available or imported elsewhere.
+// SDK test utilities for MCP transport handling

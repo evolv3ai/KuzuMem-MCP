@@ -1,4 +1,5 @@
 import { SdkToolHandler } from '../../../tool-handlers';
+import { handleToolError, validateSession, logToolExecution } from '../../../utils/error-utils';
 
 // TypeScript interfaces for entity input parameters
 interface EntityParams {
@@ -110,18 +111,15 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
     throw new Error(`id parameter is required for ${operation} operation`);
   }
 
-  // 2. Get clientProjectRoot from session
-  const clientProjectRoot = context.session.clientProjectRoot as string | undefined;
-  if (!clientProjectRoot) {
-    throw new Error('No active session. Use memory-bank tool with operation "init" first.');
-  }
+  // 2. Validate session and get clientProjectRoot
+  const clientProjectRoot = validateSession(context, 'entity');
 
   // 3. Log the operation
-  context.logger.info(`Executing entity operation: ${operation} ${entityType}`, {
+  logToolExecution(context, `entity operation: ${operation} ${entityType}`, {
     repository,
     branch,
-    id,
     clientProjectRoot,
+    id,
   });
 
   try {
@@ -463,21 +461,9 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
         };
     }
   } catch (error) {
+    await handleToolError(error, context, `${operation} ${entityType}`, entityType);
+
     const errorMessage = error instanceof Error ? error.message : String(error);
-    context.logger.error(`Entity operation failed: ${errorMessage}`, {
-      operation,
-      entityType,
-      id,
-      error,
-    });
-
-    await context.sendProgress({
-      status: 'error',
-      message: `Failed to ${operation} ${entityType}: ${errorMessage}`,
-      percent: 100,
-      isFinal: true,
-    });
-
     return {
       success: false,
       message: `Failed to ${operation} ${entityType}: ${errorMessage}`,

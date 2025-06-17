@@ -15,11 +15,12 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-// Our tool handlers and services
-import { toolHandlers as sdkToolHandlers } from './mcp/tool-handlers';
+// Our tool definitions and services
+import { toolHandlers } from './mcp/tool-handlers';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
 import { MemoryService } from './services/memory.service';
 import { createPerformanceLogger, logError, loggers } from './utils/logger';
+import { createZodRawShape } from './mcp/utils/schema-utils';
 
 // Load environment variables
 dotenv.config();
@@ -34,7 +35,7 @@ const httpStreamLogger = loggers.mcpHttp();
 // Map to store clientProjectRoot for each repository and branch
 const repositoryRootMap = new Map<string, string>();
 
-// Create the official MCP server
+// Create the official MCP server with proper capabilities
 const mcpServer = new McpServer(
   { name: 'KuzuMem-MCP-HTTPStream', version: '3.0.0' },
   {
@@ -46,43 +47,45 @@ const mcpServer = new McpServer(
   },
 );
 
-// Create tool schema helper
-function createZodSchema(tool: any) {
-  const shape: Record<string, z.ZodTypeAny> = {};
+// Schema creation is now handled by shared utility
 
-  if (tool.parameters && tool.parameters.properties) {
-    for (const [propName, propDef] of Object.entries(tool.parameters.properties)) {
-      const prop = propDef as any;
-      let zodType: z.ZodTypeAny = z.string(); // Default to string
+/**
+ * Execute tool logic using existing handlers with official SDK approach.
+ * This follows the pure official SDK pattern while reusing existing business logic.
+ */
+async function executeToolDirectly(
+  toolName: string,
+  args: any,
+  memoryService: MemoryService,
+  logger: any,
+): Promise<any> {
+  logger.debug({ toolName, args }, 'Executing tool using existing handlers');
 
-      if (prop.type === 'string') {
-        zodType = z.string();
-      } else if (prop.type === 'number') {
-        zodType = z.number();
-      } else if (prop.type === 'boolean') {
-        zodType = z.boolean();
-      } else if (prop.type === 'array') {
-        zodType = z.array(z.string()); // Assume string array
-      } else if (prop.type === 'object') {
-        zodType = z.object({}).passthrough(); // Allow any object
-      }
-
-      if (prop.description) {
-        zodType = zodType.describe(prop.description);
-      }
-
-      // Handle optional fields
-      if (!tool.parameters.required?.includes(propName)) {
-        zodType = zodType.optional();
-      }
-
-      shape[propName] = zodType;
-    }
+  // Get the handler for this tool
+  const handler = toolHandlers[toolName];
+  if (!handler) {
+    throw new Error(`No handler found for tool: ${toolName}`);
   }
 
-  return Object.keys(shape).length === 0
-    ? z.object({}).passthrough() // accept anything for param-less tools
-    : z.object(shape);
+  // Create a minimal context object for the handler
+  const handlerContext = {
+    logger,
+    session: {
+      clientProjectRoot: args.clientProjectRoot,
+      repository: args.repository,
+      branch: args.branch,
+    },
+    sendProgress: async (progressData: any) => {
+      // Log progress since we don't have transport context in pure SDK approach
+      logger.info({ progressData }, 'Progress notification');
+    },
+    // Add minimal required properties for handler compatibility
+    signal: new AbortController().signal,
+    requestId: randomUUID(),
+  };
+
+  // Call the existing handler with the context
+  return await handler(args, handlerContext as any, memoryService);
 }
 
 // Register all our tools with the MCP server
@@ -96,17 +99,18 @@ function registerTools() {
   for (const tool of MEMORY_BANK_MCP_TOOLS) {
     httpStreamLogger.debug({ toolName: tool.name }, `Registering tool: ${tool.name}`);
 
-    const schema = createZodSchema(tool);
+    const zodRawShape = createZodRawShape(tool);
 
+    // Use the simpler tool() method instead of registerTool()
     mcpServer.tool(
       tool.name,
       tool.description,
-      schema as any, // Type assertion to bypass complex inference
-      async (args, context): Promise<CallToolResult> => {
+      zodRawShape,
+      async (args): Promise<CallToolResult> => {
         const toolPerfLogger = createPerformanceLogger(httpStreamLogger, `tool-${tool.name}`);
         const toolLogger = httpStreamLogger.child({
           tool: tool.name,
-          requestId: context.requestId || randomUUID(),
+          requestId: randomUUID(), // Generate our own request ID
         });
 
         toolLogger.debug({ args }, `Executing tool: ${tool.name}`);
@@ -135,39 +139,14 @@ function registerTools() {
             );
           }
 
-          // Get the SDK handler
-          const handler = sdkToolHandlers[tool.name];
-          if (!handler) {
-            throw new Error(`Tool handler not found: ${tool.name}`);
-          }
-
-          // Create enriched context
+          // Get memory service instance
           const memoryService = await MemoryService.getInstance();
-          const enrichedContext = {
-            ...context,
-            logger: toolLogger, // Use structured logger instead of custom debug function
-            session: {
-              clientProjectRoot: effectiveClientProjectRoot,
-              repository: args.repository,
-              branch: args.branch,
-            },
-            sendProgress: async (progressData: any) => {
-              // Send progress notifications through MCP
-              await context.sendNotification({
-                method: 'notifications/progress',
-                params: {
-                  progressToken: context.requestId || randomUUID(),
-                  ...progressData,
-                },
-              });
-            },
-            memoryService,
-          };
 
           // Add clientProjectRoot to args
           const enhancedArgs = { ...args, clientProjectRoot: effectiveClientProjectRoot };
 
-          const result = await handler(enhancedArgs, enrichedContext, memoryService);
+          // Execute tool logic directly using the official SDK approach
+          const result = await executeToolDirectly(tool.name, enhancedArgs, memoryService, toolLogger);
           toolPerfLogger.complete({ success: !!result });
 
           return {
@@ -205,13 +184,37 @@ async function handlePostRequest(
 ): Promise<void> {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
+  // Parse the request body first - this is critical for proper transport handling
+  let parsedBody: unknown;
+  try {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) {
+      chunks.push(chunk);
+    }
+    const body = Buffer.concat(chunks).toString();
+    parsedBody = JSON.parse(body);
+  } catch (error) {
+    requestLogger.error({ error }, 'Failed to parse request body');
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      jsonrpc: '2.0',
+      error: {
+        code: -32700,
+        message: 'Parse error',
+        data: String(error)
+      },
+      id: null
+    }));
+    return;
+  }
+
   if (sessionId && transports[sessionId]) {
     // Reuse existing transport
     const transport = transports[sessionId];
     requestLogger.debug({ sessionId }, 'Reusing existing transport');
 
-    // Handle the request with existing transport
-    await transport.handleRequest(req, res);
+    // Handle the request with existing transport - CRITICAL: include parsed body
+    await transport.handleRequest(req, res, parsedBody);
     return;
   }
 
@@ -235,12 +238,13 @@ async function handlePostRequest(
       }
     };
 
-    // Connect to the MCP server
+    // Connect the transport to the shared MCP server instance
+    // This is the key fix - reuse the same server instance for all transports
     await mcpServer.connect(transport);
     requestLogger.debug('MCP server connected to new transport');
 
-    // Let the transport handle the request and parse the body internally
-    await transport.handleRequest(req, res);
+    // Let the transport handle the request with the parsed body - CRITICAL: include parsed body
+    await transport.handleRequest(req, res, parsedBody);
     return;
   }
 
@@ -282,7 +286,8 @@ async function handleGetRequest(
   }
 
   const transport = transports[sessionId];
-  await transport.handleRequest(req, res);
+  // GET requests don't have a body, so pass undefined for parsedBody
+  await transport.handleRequest(req, res, undefined);
 }
 
 // Helper function to handle DELETE requests (for session termination)
@@ -413,10 +418,14 @@ async function startServer(): Promise<void> {
 
   // Start listening
   server.listen(port, host, () => {
-    httpStreamLogger.info(
-      { host, port },
-      `MCP HTTP stream server listening at http://${host}:${port}`,
-    );
+    const message = `MCP HTTP stream server listening at http://${host}:${port}`;
+    httpStreamLogger.info({ host, port }, message);
+
+    // EXPLICIT test detection message - required for E2E tests to detect server readiness
+    if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID !== undefined) {
+      // Use stderr for test detection to avoid stdout pollution
+      process.stderr.write(message + '\n');
+    }
   });
 
   // Handle server errors

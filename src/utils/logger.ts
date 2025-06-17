@@ -1,86 +1,30 @@
-import pino, { Logger, LoggerOptions } from 'pino';
+import pino, { Logger } from 'pino';
 
 /**
- * Base context interface for structured logging
+ * Simplified logging context for basic structured logging
  */
-export interface BaseLogContext {
-  component?: string; // 'KuzuDB' | 'MemoryService' | 'Controller' | 'MCP'
-  repository?: string; // Repository name
-  branch?: string; // Git branch
-  operation?: string; // Current operation
-  requestId?: string; // Correlation ID for request tracking
-  duration?: number; // Operation duration in ms
-  clientProjectRoot?: string; // Client project root path
-}
-
-/**
- * Logger configuration interface
- */
-export interface LoggerConfig {
-  level: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
-  format: 'json' | 'pretty';
-  redaction: string[];
-  performance: boolean;
+export interface LogContext {
   component?: string;
+  operation?: string;
+  requestId?: string;
+  [key: string]: any; // Allow additional context
 }
 
 /**
- * Default logger configuration based on environment
+ * Simple logger configuration
  */
-function getDefaultConfig(): LoggerConfig {
-  const isDevelopment = process.env.NODE_ENV !== 'production';
+function createSimpleLogger(): Logger {
   const isTest = process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID !== undefined;
-  const shouldUsePretty = process.env.PINO_PRETTY === 'true' || (isDevelopment && !isTest);
+  // Allow info level in test mode for server startup messages
+  const level = isTest ? 'info' : 'info';
 
-  return {
-    level:
-      (process.env.LOG_LEVEL as LoggerConfig['level']) ||
-      (isTest ? 'error' : isDevelopment ? 'debug' : 'info'),
-    format: shouldUsePretty ? 'pretty' : 'json',
-    redaction: ['password', 'token', 'secret', 'apiKey', 'authorization', 'cookie', 'sessionId'],
-    performance: process.env.LOG_PERFORMANCE === 'true' || (isDevelopment && !isTest),
-  };
-}
-
-/**
- * Create Pino logger options with stdio-safe configuration
- */
-function createLoggerOptions(config: LoggerConfig): LoggerOptions {
-  const baseOptions: LoggerOptions = {
-    level: config.level,
-    timestamp: pino.stdTimeFunctions.isoTime,
-    redact: {
-      paths: config.redaction,
-      censor: '[REDACTED]',
-    },
+  return pino({
+    level,
     formatters: {
-      level: (label) => ({ level: label }),
+      level: (label: string) => ({ level: label }),
     },
-    base: {
-      pid: process.pid,
-      hostname: undefined, // Remove hostname for cleaner logs
-    },
-  };
-
-  // SIMPLIFIED: Always write to stderr, use simple JSON format to avoid transport issues
-  // The pino-pretty transport was causing server startup hangs in tests
-  if (config.format === 'pretty' && process.env.NODE_ENV !== 'test') {
-    // Only use pretty format in non-test environments to avoid startup issues
-    baseOptions.transport = {
-      target: 'pino-pretty',
-      options: {
-        colorize: true,
-        translateTime: 'HH:MM:ss.l',
-        ignore: 'pid,hostname',
-        messageFormat: config.component ? `[${config.component}] {msg}` : '{msg}',
-        destination: 2, // stderr - CRITICAL for MCP stdio compliance
-      },
-    };
-  }
-  // For production JSON format or test mode, pino will use default output
-  // We handle stderr redirection through process.stderr in the createLogger call
-
-  return baseOptions;
+    redact: ['password', 'token', 'secret', 'apiKey', 'authorization'],
+  }, process.stderr);
 }
 
 /**
@@ -93,15 +37,7 @@ let rootLogger: Logger;
  */
 export function getRootLogger(): Logger {
   if (!rootLogger) {
-    const config = getDefaultConfig();
-    const options = createLoggerOptions(config);
-
-    // Create logger with explicit stderr destination for JSON mode
-    if (config.format !== 'pretty' || process.env.NODE_ENV === 'test') {
-      rootLogger = pino(options, process.stderr);
-    } else {
-      rootLogger = pino(options);
-    }
+    rootLogger = createSimpleLogger();
   }
   return rootLogger;
 }
@@ -109,15 +45,9 @@ export function getRootLogger(): Logger {
 /**
  * Create a child logger with component-specific context
  */
-export function createLogger(componentName: string, baseContext: BaseLogContext = {}): Logger {
+export function createLogger(componentName: string, baseContext: LogContext = {}): Logger {
   const root = getRootLogger();
-
-  const context = {
-    component: componentName,
-    ...baseContext,
-  };
-
-  return root.child(context);
+  return root.child({ component: componentName, ...baseContext });
 }
 
 /**
@@ -126,41 +56,26 @@ export function createLogger(componentName: string, baseContext: BaseLogContext 
 export function createRequestLogger(
   componentName: string,
   requestId: string,
-  baseContext: BaseLogContext = {},
+  baseContext: LogContext = {},
 ): Logger {
-  return createLogger(componentName, {
-    ...baseContext,
-    requestId,
-  });
+  return createLogger(componentName, { ...baseContext, requestId });
 }
 
 /**
- * Component-specific logger factories
+ * Component-specific logger factories (simplified)
  */
 export const loggers = {
-  // Core components
   kuzudb: () => createLogger('KuzuDB'),
   memoryService: () => createLogger('MemoryService'),
   controller: () => createLogger('Controller'),
-
-  // MCP servers
   mcpStdio: () => createLogger('MCP-Stdio'),
-  mcpSSE: () => createLogger('MCP-SSE'),
   mcpHttp: () => createLogger('MCP-HTTP'),
-
-  // Repositories
   repository: () => createLogger('Repository'),
-
-  // Tools and handlers
-  tools: () => createLogger('Tools'),
-  handlers: () => createLogger('Handlers'),
-
-  // Search functionality
   search: () => createLogger('Search'),
 } as const;
 
 /**
- * Performance logging utility
+ * Simplified performance logging utility
  */
 export class PerformanceLogger {
   private logger: Logger;
@@ -171,58 +86,29 @@ export class PerformanceLogger {
     this.logger = logger;
     this.operation = operation;
     this.startTime = Date.now();
-
-    this.logger.debug({ operation }, 'Operation started');
   }
 
-  /**
-   * Log completion with duration
-   */
   complete(context: Record<string, any> = {}): void {
     const duration = Date.now() - this.startTime;
-    this.logger.info(
-      {
-        operation: this.operation,
-        duration,
-        ...context,
-      },
-      'Operation completed',
-    );
+    this.logger.info({ operation: this.operation, duration, ...context }, 'Operation completed');
   }
 
-  /**
-   * Log failure with duration
-   */
   fail(error: Error, context: Record<string, any> = {}): void {
     const duration = Date.now() - this.startTime;
     this.logger.error(
       {
         operation: this.operation,
         duration,
-        error: {
-          message: error.message,
-          stack: error.stack,
-          type: error.constructor.name,
-        },
-        ...context,
+        error: error.message,
+        ...context
       },
-      'Operation failed',
+      'Operation failed'
     );
   }
 
-  /**
-   * Log intermediate checkpoint
-   */
   checkpoint(message: string, context: Record<string, any> = {}): void {
     const elapsed = Date.now() - this.startTime;
-    this.logger.debug(
-      {
-        operation: this.operation,
-        elapsed,
-        ...context,
-      },
-      message,
-    );
+    this.logger.debug({ operation: this.operation, elapsed, ...context }, message);
   }
 }
 
@@ -234,20 +120,10 @@ export function createPerformanceLogger(logger: Logger, operation: string): Perf
 }
 
 /**
- * Utility to safely log errors with full context
+ * Simplified error logging utility
  */
 export function logError(logger: Logger, error: Error, context: Record<string, any> = {}): void {
-  logger.error(
-    {
-      error: {
-        message: error.message,
-        stack: error.stack,
-        type: error.constructor.name,
-      },
-      ...context,
-    },
-    'Error occurred',
-  );
+  logger.error({ error: error.message, stack: error.stack, ...context }, 'Error occurred');
 }
 
 /**
