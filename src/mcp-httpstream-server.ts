@@ -440,7 +440,7 @@ function gracefulShutdown(signal: string): void {
       // Close all transports
       for (const [sessionId, transport] of Object.entries(transports)) {
         try {
-          transport.close();
+          await transport.close();
           httpStreamLogger.debug({ sessionId }, 'Transport closed');
         } catch (error) {
           logError(httpStreamLogger, error as Error, { sessionId, operation: 'transport-close' });
