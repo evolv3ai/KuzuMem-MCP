@@ -130,7 +130,7 @@ describe('MCP Stdio Server E2E Tests', () => {
       id: messageId++,
       method: 'initialize',
       params: {
-        protocolVersion: '1.0.0',
+        protocolVersion: '2025-03-26',
         sessionId: testSessionId,
         capabilities: {},
         clientInfo: {
@@ -157,6 +157,70 @@ describe('MCP Stdio Server E2E Tests', () => {
     } catch (error) {
       console.error(`Failed to clean up test directory: ${error}`);
     }
+  });
+
+  describe('MCP Protocol Compliance', () => {
+    it('T_STDIO_001: should return proper MCP initialize response', async () => {
+      // Send initialize request
+      const initResponse = await sendMessage({
+        jsonrpc: '2.0',
+        id: 'test-init',
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-03-26',
+          capabilities: {},
+          clientInfo: {
+            name: 'Test Client',
+            version: '1.0.0',
+          },
+        },
+      });
+
+      // Verify MCP compliance
+      expect(initResponse).toMatchObject({
+        jsonrpc: '2.0',
+        id: 'test-init',
+        result: {
+          protocolVersion: '2025-03-26',
+          capabilities: {
+            tools: {
+              list: true,
+              call: true,
+              listChanged: true,
+            },
+          },
+          serverInfo: {
+            name: expect.any(String),
+            version: expect.any(String),
+          },
+        },
+      });
+
+      // Verify tools list
+      const toolsResponse = await sendMessage({
+        jsonrpc: '2.0',
+        id: 'test-tools',
+        method: 'tools/list',
+        params: {},
+      });
+
+      expect(toolsResponse).toMatchObject({
+        jsonrpc: '2.0',
+        id: 'test-tools',
+        result: {
+          tools: expect.arrayContaining([
+            expect.objectContaining({
+              name: expect.any(String),
+              description: expect.any(String),
+              inputSchema: expect.any(Object),
+            }),
+          ]),
+        },
+      });
+
+      // Should have exactly 10 tools
+      expect(toolsResponse.result?.tools).toHaveLength(10);
+    });
   });
 
   describe('Tool 1: memory-bank', () => {

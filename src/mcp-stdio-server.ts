@@ -160,7 +160,7 @@ async function main() {
   // Use low-level Server for full control
   const server = new Server(serverInfo, {
     capabilities: {
-      tools: {},
+      tools: { list: true, call: true, listChanged: true },
     },
   });
 
@@ -176,7 +176,7 @@ async function main() {
       protocolVersion: '2025-03-26',
       serverInfo,
       sessionId: currentSessionId,
-      capabilities: { tools: { listChanged: true } },
+      capabilities: { tools: { list: true, call: true, listChanged: true } },
       resources: {},
       prompts: {},
     };
