@@ -396,35 +396,50 @@ function gracefulShutdown(signal: string): void {
   httpStreamLogger.info({ signal }, `Received ${signal}, starting graceful shutdown`);
 
   if (server) {
-    server.close(async () => {
-      httpStreamLogger.info('HTTP server closed');
-
-      // Close all transports
-      for (const [sessionId, transport] of Object.entries(transports)) {
-        try {
-          await transport.close();
-          httpStreamLogger.debug({ sessionId }, 'Transport closed');
-        } catch (error) {
-          logError(httpStreamLogger, error as Error, { sessionId, operation: 'transport-close' });
-        }
-      }
-
-      // Get MemoryService instance and shut it down
-      try {
-        const memoryService = await MemoryService.getInstance();
-        await memoryService.shutdown();
-        httpStreamLogger.info('MemoryService shutdown completed');
-      } catch (error) {
-        logError(httpStreamLogger, error as Error, { operation: 'memory-service-shutdown' });
-      }
-
-      process.exit(0);
-    });
-
-    setTimeout(() => {
+    // Start the shutdown timer immediately to ensure it's not blocked by async operations
+    const shutdownTimer = setTimeout(() => {
       httpStreamLogger.error('Graceful shutdown timed out, forcing exit');
       process.exit(1);
     }, 30000);
+
+    // Perform async shutdown tasks independently to avoid blocking the server.close() callback
+    const performAsyncShutdown = async () => {
+      try {
+        // Close all transports
+        for (const [sessionId, transport] of Object.entries(transports)) {
+          try {
+            await transport.close();
+            httpStreamLogger.debug({ sessionId }, 'Transport closed');
+          } catch (error) {
+            logError(httpStreamLogger, error as Error, { sessionId, operation: 'transport-close' });
+          }
+        }
+
+        // Get MemoryService instance and shut it down
+        try {
+          const memoryService = await MemoryService.getInstance();
+          await memoryService.shutdown();
+          httpStreamLogger.info('MemoryService shutdown completed');
+        } catch (error) {
+          logError(httpStreamLogger, error as Error, { operation: 'memory-service-shutdown' });
+        }
+
+        httpStreamLogger.info('Async shutdown tasks completed');
+      } catch (error) {
+        logError(httpStreamLogger, error as Error, { operation: 'async-shutdown' });
+      } finally {
+        // Clear the timer and exit
+        clearTimeout(shutdownTimer);
+        process.exit(0);
+      }
+    };
+
+    // Close the server and start async shutdown
+    server.close(() => {
+      httpStreamLogger.info('HTTP server closed');
+      // Don't await here - let the callback resolve immediately
+      performAsyncShutdown();
+    });
   } else {
     process.exit(0);
   }
