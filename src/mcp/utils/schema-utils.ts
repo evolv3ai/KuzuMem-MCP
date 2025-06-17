@@ -5,6 +5,43 @@
 import { z } from 'zod';
 
 /**
+ * Helper function to create a Zod type from a JSON schema property definition.
+ * This is used for recursive processing of array items and nested objects.
+ *
+ * @param prop - The property definition from JSON schema
+ * @returns A Zod type for the property
+ */
+function createZodTypeFromProperty(prop: any): z.ZodTypeAny {
+  // Check for enum first, as it can apply to any type
+  if (prop.enum && Array.isArray(prop.enum)) {
+    return z.enum(prop.enum as [string, ...string[]]);
+  }
+
+  switch (prop.type) {
+    case 'string':
+      return z.string();
+    case 'number':
+      return z.number();
+    case 'integer':
+      return z.number().int();
+    case 'boolean':
+      return z.boolean();
+    case 'array':
+      // Handle array items recursively if available
+      if (prop.items) {
+        const itemSchema = createZodTypeFromProperty(prop.items);
+        return z.array(itemSchema);
+      } else {
+        return z.array(z.any());
+      }
+    case 'object':
+      return z.object({}).passthrough();
+    default:
+      return z.any();
+  }
+}
+
+/**
  * Creates a Zod raw shape object for a tool's parameters based on its JSON schema definition.
  * 
  * This function converts JSON schema properties to Zod types for use with the MCP SDK's tool() method.
@@ -20,25 +57,8 @@ export function createZodRawShape(tool: any): Record<string, z.ZodTypeAny> {
       const prop = propDef as any;
       let zodType: z.ZodTypeAny;
 
-      switch (prop.type) {
-        case 'string':
-          zodType = z.string();
-          break;
-        case 'number':
-          zodType = z.number();
-          break;
-        case 'boolean':
-          zodType = z.boolean();
-          break;
-        case 'array':
-          zodType = z.array(z.any());
-          break;
-        case 'object':
-          zodType = z.object({}).passthrough();
-          break;
-        default:
-          zodType = z.any();
-      }
+      // Use the helper function to create the Zod type
+      zodType = createZodTypeFromProperty(prop);
 
       // Add description if available
       if (prop.description) {
