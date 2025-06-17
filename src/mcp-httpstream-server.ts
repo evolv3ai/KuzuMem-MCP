@@ -338,6 +338,14 @@ async function handleDeleteRequest(
   }
 }
 
+/**
+ * Starts the MCP HTTP streaming server and begins listening for incoming requests.
+ *
+ * Initializes tool registration, sets up an HTTP server with session-aware routing for POST, GET, and DELETE methods, and handles server lifecycle events including error handling.
+ *
+ * @remark
+ * The server manages multiple concurrent streaming sessions using session IDs and supports JSON-RPC over HTTP and Server-Sent Events (SSE).
+ */
 async function startServer(): Promise<void> {
   httpStreamLogger.info('Starting MCP HTTP Stream server...');
 
@@ -418,7 +426,13 @@ async function startServer(): Promise<void> {
   });
 }
 
-// Graceful shutdown
+/**
+ * Performs a graceful shutdown of the HTTP streaming server and all active session transports.
+ *
+ * Closes the HTTP server, terminates all active session transports, and shuts down the {@link MemoryService} instance before exiting the process. If shutdown does not complete within 30 seconds, the process exits forcefully.
+ *
+ * @param signal - The termination signal that triggered the shutdown (e.g., "SIGTERM" or "SIGINT").
+ */
 function gracefulShutdown(signal: string): void {
   httpStreamLogger.info({ signal }, `Received ${signal}, starting graceful shutdown`);
 
