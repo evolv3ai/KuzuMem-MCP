@@ -86,7 +86,7 @@ function createZodSchema(tool: any) {
     }
   }
 
-  return shape;
+  return z.object(shape);
 }
 
 // Register all our tools with the MCP server
@@ -266,7 +266,7 @@ function gracefulShutdown(signal: string): void {
       // Close transport
       if (transport) {
         try {
-          transport.close();
+          await transport.close();
           sseLogger.debug('Transport closed');
         } catch (error) {
           logError(sseLogger, error as Error, { operation: 'transport-close' });
