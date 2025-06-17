@@ -220,8 +220,13 @@ Contributions are welcome! Please ensure:
 
 ## Future Improvements
 
-- **Full-Text Search** - Native keyword-based search using KùzuDB's FTS extension
 - **Vector Embeddings** - Semantic similarity search (pending KuzuDB vector column updates)
 - **Advanced Graph Algorithms** - Additional analysis capabilities
 - **Graph Schema Updates** - Based on how well the automated development loop works, the graph schema may need to be updated to support new features
 - **Complete Semantic Search** - Implementation of the semantic-search tool (currently placeholder - KuzuDB Vector Indexes are immutable and would make developing this feature difficult since updating memories wouldn't update the vector indexes)
+
+## MCP Review
+
+This MCP is verified by MCP Review
+
+<https://mcpreview.com/mcp-servers/Jakedismo/KuzuMem-MCP>
