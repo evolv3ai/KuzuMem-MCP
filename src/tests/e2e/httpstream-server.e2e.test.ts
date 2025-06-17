@@ -60,37 +60,72 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       console.log('Raw SSE response:', text);
 
       let foundResponse = null;
+      let accumulatedData = '';
+
       for (const line of lines) {
         if (line.startsWith('data: ')) {
-          try {
-            const dataContent = line.substring(6).trim();
-            if (dataContent === '') continue; // Skip empty data lines
+          const dataContent = line.substring(6);
+          if (dataContent.trim() === '') {
+            // Empty data line indicates end of event - try to parse accumulated data
+            if (accumulatedData.trim()) {
+              try {
+                const data = JSON.parse(accumulatedData);
+                console.log('Parsed SSE data:', data);
 
-            const data = JSON.parse(dataContent);
-            console.log('Parsed SSE data:', data);
+                // Look for response with matching ID or any valid response for this request
+                if (data.jsonrpc === '2.0' && (data.id === currentMessageId || data.id === null)) {
+                  if (data.error) {
+                    throw new Error(`RPC Error: ${JSON.stringify(data.error)}`);
+                  }
+                  if (data.result !== undefined) {
+                    foundResponse = data;
+                    break;
+                  }
+                }
 
-            // Look for response with matching ID or any valid response for this request
-            if (data.jsonrpc === '2.0' && (data.id === currentMessageId || data.id === null)) {
-              if (data.error) {
-                throw new Error(`RPC Error: ${JSON.stringify(data.error)}`);
+                // Also check for error responses without specific ID
+                if (data.error && data.jsonrpc === '2.0') {
+                  console.log('Found error response:', data.error);
+                  throw new Error(`RPC Error: ${JSON.stringify(data.error)}`);
+                }
+              } catch (e) {
+                if (e instanceof Error && e.message.startsWith('RPC Error:')) {
+                  throw e;
+                }
+                console.log('Failed to parse accumulated SSE data:', accumulatedData, 'Error:', e);
               }
-              if (data.result !== undefined) {
-                foundResponse = data;
-                break;
-              }
+              accumulatedData = ''; // Reset for next event
             }
+          } else {
+            // Accumulate data lines (handling multi-line JSON)
+            if (accumulatedData) {
+              accumulatedData += '\n' + dataContent;
+            } else {
+              accumulatedData = dataContent;
+            }
+          }
+        }
+      }
 
-            // Also check for error responses without specific ID
-            if (data.error && data.jsonrpc === '2.0') {
-              console.log('Found error response:', data.error);
+      // Handle case where there's no empty line at the end
+      if (accumulatedData.trim() && !foundResponse) {
+        try {
+          const data = JSON.parse(accumulatedData);
+          console.log('Parsed final SSE data:', data);
+
+          if (data.jsonrpc === '2.0' && (data.id === currentMessageId || data.id === null)) {
+            if (data.error) {
               throw new Error(`RPC Error: ${JSON.stringify(data.error)}`);
             }
-          } catch (e) {
-            if (e instanceof Error && e.message.startsWith('RPC Error:')) {
-              throw e;
+            if (data.result !== undefined) {
+              foundResponse = data;
             }
-            console.log('Failed to parse SSE line:', line, 'Error:', e);
           }
+        } catch (e) {
+          if (e instanceof Error && e.message.startsWith('RPC Error:')) {
+            throw e;
+          }
+          console.log('Failed to parse final accumulated SSE data:', accumulatedData, 'Error:', e);
         }
       }
 
@@ -139,6 +174,8 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       });
 
       if (!initResponse.ok) {
+        // Consume the response body to avoid resource leaks
+        await initResponse.text();
         throw new Error(`HTTP error! status: ${initResponse.status}`);
       }
 
@@ -147,7 +184,11 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       if (newSessionId) {
         sessionId = newSessionId;
         console.log('Session reinitialized with ID:', sessionId);
+        // Consume the response body to avoid TCP connection leaks
+        await initResponse.text();
       } else {
+        // Consume the response body to avoid resource leaks
+        await initResponse.text();
         throw new Error('Failed to get session ID from reinitialization');
       }
     }
@@ -400,7 +441,9 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
           if (line.startsWith('data: ')) {
             try {
               const dataContent = line.substring(6);
-              if (dataContent.trim() === '') continue;
+              if (dataContent.trim() === '') {
+                continue;
+              }
 
               const data = JSON.parse(dataContent);
               if (data.jsonrpc === '2.0' && data.result) {
