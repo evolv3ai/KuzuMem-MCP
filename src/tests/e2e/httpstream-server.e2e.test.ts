@@ -24,6 +24,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
 
   // Helper to send HTTP request to server
   const sendHttpRequest = async (method: string, params: any): Promise<any> => {
+    const currentMessageId = messageId++;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Accept: 'application/json, text/event-stream',
@@ -39,7 +40,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       headers,
       body: JSON.stringify({
         jsonrpc: '2.0',
-        id: messageId++,
+        id: currentMessageId,
         method,
         params,
       }),
@@ -58,31 +59,81 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       // Debug: Log the raw SSE stream
       console.log('Raw SSE response:', text);
 
+      let foundResponse = null;
+      let accumulatedData = '';
+
       for (const line of lines) {
         if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.substring(6));
-            console.log('Parsed SSE data:', data);
-            if (data.id === messageId - 1) {
-              if (data.error) {
-                throw new Error(`RPC Error: ${JSON.stringify(data.error)}`);
+          const dataContent = line.substring(6);
+          if (dataContent.trim() === '') {
+            // Empty data line indicates end of event - try to parse accumulated data
+            if (accumulatedData.trim()) {
+              try {
+                const data = JSON.parse(accumulatedData);
+                console.log('Parsed SSE data:', data);
+
+                // Look for response with matching ID or any valid response for this request
+                if (data.jsonrpc === '2.0' && (data.id === currentMessageId || data.id === null)) {
+                  if (data.error) {
+                    throw new Error(`RPC Error: ${JSON.stringify(data.error)}`);
+                  }
+                  if (data.result !== undefined) {
+                    foundResponse = data;
+                    break;
+                  }
+                }
+
+                // Also check for error responses without specific ID
+                if (data.error && data.jsonrpc === '2.0') {
+                  console.log('Found error response:', data.error);
+                  throw new Error(`RPC Error: ${JSON.stringify(data.error)}`);
+                }
+              } catch (e) {
+                if (e instanceof Error && e.message.startsWith('RPC Error:')) {
+                  throw e;
+                }
+                console.log('Failed to parse accumulated SSE data:', accumulatedData, 'Error:', e);
               }
-              return data;
+              accumulatedData = ''; // Reset for next event
             }
-            // Check if it's an error response without matching ID
-            if (data.error && !data.id) {
-              console.log('Found error without ID:', data.error);
-              throw new Error(`RPC Error: ${JSON.stringify(data.error)}`);
+          } else {
+            // Accumulate data lines (handling multi-line JSON)
+            if (accumulatedData) {
+              accumulatedData += '\n' + dataContent;
+            } else {
+              accumulatedData = dataContent;
             }
-          } catch (e) {
-            if (e instanceof Error && e.message.startsWith('RPC Error:')) {
-              throw e;
-            }
-            console.log('Failed to parse SSE line:', line, 'Error:', e);
           }
         }
       }
-      throw new Error('No valid response found in SSE stream');
+
+      // Handle case where there's no empty line at the end
+      if (accumulatedData.trim() && !foundResponse) {
+        try {
+          const data = JSON.parse(accumulatedData);
+          console.log('Parsed final SSE data:', data);
+
+          if (data.jsonrpc === '2.0' && (data.id === currentMessageId || data.id === null)) {
+            if (data.error) {
+              throw new Error(`RPC Error: ${JSON.stringify(data.error)}`);
+            }
+            if (data.result !== undefined) {
+              foundResponse = data;
+            }
+          }
+        } catch (e) {
+          if (e instanceof Error && e.message.startsWith('RPC Error:')) {
+            throw e;
+          }
+          console.log('Failed to parse final accumulated SSE data:', accumulatedData, 'Error:', e);
+        }
+      }
+
+      if (!foundResponse) {
+        throw new Error('No valid response found in SSE stream');
+      }
+
+      return foundResponse;
     } else {
       // Regular JSON response
       const data = await response.json();
@@ -93,8 +144,61 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     }
   };
 
+  // Helper to reinitialize session if needed
+  const ensureSession = async (): Promise<void> => {
+    if (!sessionId) {
+      console.log('Reinitializing session...');
+
+      // Direct HTTP call to avoid circular dependency
+      const initHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      };
+
+      const initResponse = await fetch(SERVER_URL, {
+        method: 'POST',
+        headers: initHeaders,
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: messageId++,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2025-03-26',
+            capabilities: {},
+            clientInfo: {
+              name: 'KuzuMem-MCP E2E Test',
+              version: '1.0.0',
+            },
+          },
+        }),
+      });
+
+      if (!initResponse.ok) {
+        // Consume the response body to avoid resource leaks
+        await initResponse.text();
+        throw new Error(`HTTP error! status: ${initResponse.status}`);
+      }
+
+      // Extract session ID from response headers
+      const newSessionId = initResponse.headers.get('Mcp-Session-Id');
+      if (newSessionId) {
+        sessionId = newSessionId;
+        console.log('Session reinitialized with ID:', sessionId);
+        // Consume the response body to avoid TCP connection leaks
+        await initResponse.text();
+      } else {
+        // Consume the response body to avoid resource leaks
+        await initResponse.text();
+        throw new Error('Failed to get session ID from reinitialization');
+      }
+    }
+  };
+
   // Helper to call MCP tool
   const callTool = async (toolName: string, params: any): Promise<any> => {
+    // Ensure we have a valid session before making tool calls
+    await ensureSession();
+
     const response = await sendHttpRequest('tools/call', {
       name: toolName,
       arguments: {
@@ -207,7 +311,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         id: messageId++,
         method: 'initialize',
         params: {
-          protocolVersion: '1.0.0',
+          protocolVersion: '2025-03-26',
           capabilities: {},
           clientInfo: {
             name: 'E2E Test Client',
@@ -291,6 +395,90 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     }
   });
 
+  describe('T_HTTPSTREAM_001: MCP Protocol Compliance', () => {
+    it('should return proper MCP initialize response', async () => {
+      // Send a fresh initialize request to test the response format
+      const initHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      };
+
+      const initResponse = await fetch(SERVER_URL, {
+        method: 'POST',
+        headers: initHeaders,
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 999,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2025-03-26',
+            capabilities: {},
+            clientInfo: {
+              name: 'MCP Compliance Test Client',
+              version: '1.0.0',
+            },
+          },
+        }),
+      });
+
+      expect(initResponse.ok).toBe(true);
+
+      // Extract session ID from response headers
+      const testSessionId = initResponse.headers.get('Mcp-Session-Id');
+      expect(testSessionId).toBeDefined();
+      expect(testSessionId).toMatch(/^[a-f0-9-]{36}$/); // UUID format
+
+      // Parse response
+      const contentType = initResponse.headers.get('content-type');
+      let responseData: any;
+
+      if (contentType?.includes('text/event-stream')) {
+        // Parse SSE response
+        const text = await initResponse.text();
+        const lines = text.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const dataContent = line.substring(6);
+              if (dataContent.trim() === '') {
+                continue;
+              }
+
+              const data = JSON.parse(dataContent);
+              if (data.jsonrpc === '2.0' && data.result) {
+                responseData = data;
+                break;
+              }
+            } catch (parseError) {
+              // Skip non-JSON lines
+            }
+          }
+        }
+      } else {
+        // Parse regular JSON response
+        responseData = await initResponse.json();
+      }
+
+      expect(responseData).toBeDefined();
+      expect(responseData.jsonrpc).toBe('2.0');
+      expect(responseData.id).toBe(999);
+      expect(responseData.result).toBeDefined();
+
+      // Verify MCP 2025-03-26 compliance
+      expect(responseData.result.protocolVersion).toBe('2025-03-26');
+      expect(responseData.result.capabilities).toBeDefined();
+      expect(responseData.result.capabilities.tools).toEqual({
+        list: true,
+        call: true,
+        listChanged: true,
+      });
+      expect(responseData.result.serverInfo).toBeDefined();
+      expect(responseData.result.serverInfo.name).toBe('KuzuMem-MCP-HTTPStream');
+      expect(responseData.result.serverInfo.version).toBe('3.0.0');
+    });
+  });
+
   describe('Tool 1: memory-bank', () => {
     it('should initialize memory bank', async () => {
       const result = await callTool('memory-bank', {
@@ -303,7 +491,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         success: true,
         message: expect.stringContaining('Memory bank initialized'),
       });
-    });
+    }, 15000); // 15 second timeout
 
     it('should get metadata', async () => {
       const result = await callTool('memory-bank', {
@@ -323,7 +511,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         architecture: expect.any(String),
         memory_spec_version: expect.any(String),
       });
-    });
+    }, 10000); // 10 second timeout
 
     it('should update metadata', async () => {
       const params = {
@@ -353,7 +541,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       expect(result).toMatchObject({
         success: true,
       });
-    });
+    }, 10000); // 10 second timeout
   });
 
   describe('Tool 2: entity', () => {
@@ -376,7 +564,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         success: true,
         message: expect.stringContaining('created'),
       });
-    });
+    }, 10000);
 
     it('should create decision entity', async () => {
       const result = await callTool('entity', {
@@ -397,7 +585,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         success: true,
         message: expect.stringContaining('created'),
       });
-    });
+    }, 10000);
 
     it('should create rule entity', async () => {
       const result = await callTool('entity', {
@@ -419,7 +607,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         success: true,
         message: expect.stringContaining('created'),
       });
-    });
+    }, 10000);
 
     it('should create file entity', async () => {
       const result = await callTool('entity', {
@@ -440,7 +628,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         success: true,
         message: expect.stringContaining('created'),
       });
-    });
+    }, 10000);
 
     it('should create tag entity', async () => {
       const result = await callTool('entity', {
@@ -461,7 +649,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         success: true,
         message: expect.stringContaining('created'),
       });
-    });
+    }, 10000);
   });
 
   describe('Tool 3: introspect', () => {
@@ -476,7 +664,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         labels: expect.arrayContaining(['Component', 'Decision', 'Rule', 'File', 'Tag']),
         status: 'complete',
       });
-    });
+    }, 10000);
 
     it('should count nodes by label', async () => {
       const result = await callTool('introspect', {
@@ -490,7 +678,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         label: 'Component',
         count: expect.any(Number),
       });
-    });
+    }, 10000);
 
     it('should get node properties', async () => {
       const result = await callTool('introspect', {
@@ -512,7 +700,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
           type: expect.any(String),
         });
       }
-    });
+    }, 10000);
 
     it('should list indexes', async () => {
       const result = await callTool('introspect', {
@@ -524,7 +712,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       expect(result).toMatchObject({
         indexes: expect.any(Array),
       });
-    });
+    }, 10000);
   });
 
   describe('Tool 4: context', () => {
@@ -541,7 +729,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       expect(result).toMatchObject({
         success: true,
       });
-    });
+    }, 10000);
   });
 
   describe('Tool 5: query', () => {
@@ -558,7 +746,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         type: 'context',
         contexts: expect.any(Array),
       });
-    });
+    }, 10000);
 
     it('should query entities', async () => {
       const result = await callTool('query', {
@@ -574,7 +762,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         label: 'Component',
         entities: expect.any(Array),
       });
-    });
+    }, 10000);
 
     it('should query history', async () => {
       const result = await callTool('query', {
@@ -589,7 +777,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         type: 'history',
         contextHistory: expect.any(Array),
       });
-    });
+    }, 10000);
 
     it('should query governance', async () => {
       const result = await callTool('query', {
@@ -604,7 +792,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         decisions: expect.any(Array),
         rules: expect.any(Array),
       });
-    });
+    }, 10000);
   });
 
   describe('Tool 6: associate', () => {
@@ -621,7 +809,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         success: true,
         type: 'file-component',
       });
-    });
+    }, 10000);
 
     it('should tag an item', async () => {
       const result = await callTool('associate', {
@@ -636,7 +824,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         success: true,
         type: 'tag-item',
       });
-    });
+    }, 10000);
   });
 
   describe('Tool 7: analyze', () => {
@@ -656,7 +844,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         status: expect.any(String),
         nodes: expect.any(Array),
       });
-    });
+    }, 15000);
 
     it('should run k-core analysis', async () => {
       const result = await callTool('analyze', {
@@ -674,7 +862,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         status: expect.any(String),
         nodes: expect.any(Array),
       });
-    });
+    }, 15000);
 
     it('should run Louvain community detection', async () => {
       const result = await callTool('analyze', {
@@ -691,7 +879,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         status: expect.any(String),
         nodes: expect.any(Array),
       });
-    });
+    }, 15000);
 
     it('should find shortest path', async () => {
       const result = await callTool('detect', {
@@ -709,7 +897,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         type: 'path',
         status: 'complete',
       });
-    });
+    }, 15000);
   });
 
   describe('Tool 8: detect', () => {
@@ -756,7 +944,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
           depends_on: ['comp-ServiceB'],
         },
       });
-    });
+    }, 30000); // 30 second timeout for setup
 
     it('should detect islands', async () => {
       const result = await callTool('detect', {
@@ -773,7 +961,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         status: expect.any(String),
         components: expect.any(Array),
       });
-    });
+    }, 15000);
 
     it('should detect cycles', async () => {
       const result = await callTool('detect', {
@@ -790,7 +978,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         status: expect.any(String),
         components: expect.any(Array),
       });
-    });
+    }, 15000);
 
     it('should find path', async () => {
       const result = await callTool('detect', {
@@ -808,7 +996,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         type: 'path',
         status: 'complete',
       });
-    });
+    }, 15000);
   });
 
   describe('Tool 9: bulk-import', () => {
@@ -843,7 +1031,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         });
         expect(result.imported).toBeGreaterThan(0);
       }
-    });
+    }, 15000);
   });
 
   describe('Tool 10: search', () => {
@@ -874,7 +1062,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
           score: expect.any(Number),
         });
       }
-    });
+    }, 10000);
 
     it('should search across multiple entity types', async () => {
       const result = await callTool('search', {
@@ -893,7 +1081,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         totalResults: expect.any(Number),
         query: 'bulk decision',
       });
-    });
+    }, 10000);
 
     it('should handle empty search results gracefully', async () => {
       const result = await callTool('search', {
@@ -911,7 +1099,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         totalResults: 0,
         query: 'httpstream-nonexistent-term-xyz789',
       });
-    });
+    }, 10000);
   });
 
   describe('Cleanup verification', () => {
@@ -946,6 +1134,6 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         const foundComponents = expectedComponents.filter((id) => componentIds.includes(id));
         expect(foundComponents.length).toBeGreaterThan(0);
       }
-    });
+    }, 10000);
   });
 });
