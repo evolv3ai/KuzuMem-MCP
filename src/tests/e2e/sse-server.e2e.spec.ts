@@ -95,17 +95,29 @@ const collectStreamEvents = async (sseResponseEmitter: any): Promise<CollectedSs
           }
           const eventPayload = { type: eventType, id: eventId, data: parsedData };
           events.push(eventPayload);
-          console.log(`[collectStreamEvents] Received event:`, eventPayload);
-
-          if (eventType === 'message' && parsedData.method === 'notifications/progress') {
-            progressEventsCount++;
-            console.log(`[collectStreamEvents] Progress event count: ${progressEventsCount}`);
+          if (process.env.DEBUG_SSE_TESTS) {
+            console.log(`[collectStreamEvents] Received event:`, eventPayload);
           }
-          if (eventType === 'message' && parsedData.result && parsedData.id) {
+
+          // More robust progress detection - handle various progress notification formats
+          if (eventType === 'message' && parsedData.method &&
+              (parsedData.method === 'notifications/progress' ||
+               parsedData.method === 'progress' ||
+               parsedData.method === 'tool/progress')) {
+            progressEventsCount++;
+            if (process.env.DEBUG_SSE_TESTS) {
+              console.log(`[collectStreamEvents] Progress event count: ${progressEventsCount}`);
+            }
+          }
+          // More robust final response detection - handle both success and error responses
+          if (eventType === 'message' && parsedData.id &&
+              (parsedData.result !== undefined || parsedData.error !== undefined)) {
             finalResponseEvent = eventPayload;
-            console.log(
-              '[collectStreamEvents] Final response event received. Resolving promise.',
-            );
+            if (process.env.DEBUG_SSE_TESTS) {
+              console.log(
+                '[collectStreamEvents] Final response event received. Resolving promise.',
+              );
+            }
             settlePromise(resolve, { events, progressEventsCount, finalResponseEvent, errorEvent });
             return;
           }
@@ -151,9 +163,11 @@ const collectStreamEvents = async (sseResponseEmitter: any): Promise<CollectedSs
         }
         const chunkStr = chunk.toString();
         buffer += chunkStr;
-        console.log(`[collectStreamEvents] Data chunk received (${chunk.length} bytes)`);
-        console.log(`[collectStreamEvents] Raw chunk data:`, JSON.stringify(chunkStr));
-        console.log(`[collectStreamEvents] Current buffer:`, JSON.stringify(buffer));
+        if (process.env.DEBUG_SSE_TESTS) {
+          console.log(`[collectStreamEvents] Data chunk received (${chunk.length} bytes)`);
+          console.log(`[collectStreamEvents] Raw chunk data:`, JSON.stringify(chunkStr));
+          console.log(`[collectStreamEvents] Current buffer:`, JSON.stringify(buffer));
+        }
         processBuffer();
       });
       sseResponseEmitter.on('end', () => {
@@ -335,7 +349,9 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
             }
 
             // Debug: Log all events received
-            console.log('All events received:', JSON.stringify(events, null, 2));
+            if (process.env.DEBUG_SSE_TESTS) {
+              console.log('All events received:', JSON.stringify(events, null, 2));
+            }
 
             // For initialize, look for the message event with id 'initialize'
             const initializeEvent = events.find(
@@ -347,12 +363,17 @@ describe('MCP SSE Server E2E Tests (Legacy)', () => {
             );
 
             if (!initializeEvent) {
-              console.log('Available events:', events.map(e => ({ type: e.type, id: e.data?.id, hasResult: !!e.data?.result })));
+              console.log(
+                'Available events:',
+                events.map((e) => ({ type: e.type, id: e.data?.id, hasResult: !!e.data?.result })),
+              );
               reject(new Error('No initialize response event received'));
               return;
             }
 
-            console.log('Initialize response event:', JSON.stringify(initializeEvent, null, 2));
+            if (process.env.DEBUG_SSE_TESTS) {
+              console.log('Initialize response event:', JSON.stringify(initializeEvent, null, 2));
+            }
 
             // Validate the initialize response
             expect(initializeEvent.data.result).toBeDefined();
