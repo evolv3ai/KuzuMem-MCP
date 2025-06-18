@@ -530,6 +530,7 @@ describe('MCP Stdio Server E2E Tests', () => {
         branch: TEST_BRANCH,
         itemId: 'comp-test-service',
         tagId: 'tag-critical',
+        entityType: 'Component',
       });
 
       expect(result).toMatchObject({
@@ -647,6 +648,7 @@ describe('MCP Stdio Server E2E Tests', () => {
     it('should bulk import entities', async () => {
       const result = await callTool('bulk-import', {
         type: 'components',
+        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         components: [
