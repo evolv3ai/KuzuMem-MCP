@@ -1734,15 +1734,13 @@ export class MemoryService {
     }
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-      const repoId = `${repositoryName}:${branch}`;
-
       const query = `
         MATCH (n:${label})
-        WHERE n.repository = $repoId AND n.branch = $branch
+        WHERE n.repository = $repositoryName AND n.branch = $branch
         RETURN COUNT(n) AS count
       `;
 
-      const result = await kuzuClient.executeQuery(query, { repoId, branch });
+      const result = await kuzuClient.executeQuery(query, { repositoryName, branch });
       const count = result[0]?.count || 0;
 
       logger.info(
@@ -1780,18 +1778,21 @@ export class MemoryService {
     }
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-      const repoId = `${repositoryName}:${branch}`;
-
       const query = `
         MATCH (n:${label})
-        WHERE n.repository = $repoId AND n.branch = $branch
+        WHERE n.repository = $repositoryName AND n.branch = $branch
         RETURN n
         ORDER BY n.name, n.id
         SKIP $offset
         LIMIT $limit
       `;
 
-      const results = await kuzuClient.executeQuery(query, { repoId, branch, limit, offset });
+      const results = await kuzuClient.executeQuery(query, {
+        repositoryName,
+        branch,
+        limit,
+        offset,
+      });
       const entities = results.map((row: any) => {
         const node = row.n.properties || row.n;
         return { ...node, repository: repositoryName, branch };
@@ -1836,17 +1837,15 @@ export class MemoryService {
     }
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-      const repoId = `${repositoryName}:${branch}`;
-
       // Get a sample node to inspect properties
       const sampleQuery = `
         MATCH (n:${label})
-        WHERE n.repository = $repoId AND n.branch = $branch
+        WHERE n.repository = $repositoryName AND n.branch = $branch
         RETURN n
         LIMIT 1
       `;
 
-      const sampleResults = await kuzuClient.executeQuery(sampleQuery, { repoId, branch });
+      const sampleResults = await kuzuClient.executeQuery(sampleQuery, { repositoryName, branch });
       if (sampleResults.length === 0) {
         return { label, properties: [] };
       }
