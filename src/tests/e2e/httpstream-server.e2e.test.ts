@@ -52,6 +52,8 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
 
     // For streaming responses, we need to handle SSE
     const contentType = response.headers.get('content-type');
+    console.log('Response content-type:', contentType);
+
     if (contentType?.includes('text/event-stream')) {
       const text = await response.text();
       const lines = text.split('\n');
@@ -136,7 +138,10 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       return foundResponse;
     } else {
       // Regular JSON response
+      console.log('Parsing as JSON response');
       const data = await response.json();
+      console.log('Parsed JSON response:', data);
+
       if (data.error) {
         throw new Error(`RPC Error: ${JSON.stringify(data.error)}`);
       }
@@ -196,9 +201,13 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
 
   // Helper to call MCP tool
   const callTool = async (toolName: string, params: any): Promise<any> => {
-    // Ensure we have a valid session before making tool calls
-    await ensureSession();
+    // Check if we have a session, but don't reinitialize if we already have one
+    if (!sessionId) {
+      console.log('No session ID, calling ensureSession...');
+      await ensureSession();
+    }
 
+    console.log(`Calling tool ${toolName} with session ${sessionId}`);
     const response = await sendHttpRequest('tools/call', {
       name: toolName,
       arguments: {

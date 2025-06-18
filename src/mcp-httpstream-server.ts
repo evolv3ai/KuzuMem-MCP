@@ -58,6 +58,7 @@ async function executeToolDirectly(
   args: any,
   memoryService: MemoryService,
   logger: any,
+  progressCallback?: (progressData: any) => Promise<void>,
 ): Promise<any> {
   logger.debug({ toolName, args }, 'Executing tool using existing handlers');
 
@@ -67,7 +68,7 @@ async function executeToolDirectly(
     throw new Error(`No handler found for tool: ${toolName}`);
   }
 
-  // Create a minimal context object for the handler
+  // Create a comprehensive context object for the handler
   const handlerContext = {
     logger,
     session: {
@@ -76,12 +77,32 @@ async function executeToolDirectly(
       branch: args.branch,
     },
     sendProgress: async (progressData: any) => {
-      // Log progress since we don't have transport context in pure SDK approach
-      logger.info({ progressData }, 'Progress notification');
+      // Log progress for debugging
+      logger.info({ progressData }, 'Progress notification (HTTP Stream)');
+
+      // Call the progress callback if provided
+      if (progressCallback) {
+        try {
+          await progressCallback(progressData);
+        } catch (error) {
+          logger.warn({ error, progressData }, 'Failed to send progress notification');
+        }
+      }
     },
-    // Add minimal required properties for handler compatibility
+    // Add all required properties for handler compatibility
     signal: new AbortController().signal,
     requestId: randomUUID(),
+    // Add additional properties that handlers might expect
+    request: {
+      method: 'tools/call',
+      params: {
+        name: toolName,
+        arguments: args,
+      },
+    },
+    meta: {
+      progressToken: randomUUID(),
+    },
   };
 
   // Call the existing handler with the context
@@ -108,9 +129,10 @@ function registerTools() {
       zodRawShape,
       async (args): Promise<CallToolResult> => {
         const toolPerfLogger = createPerformanceLogger(httpStreamLogger, `tool-${tool.name}`);
+        const requestId = randomUUID();
         const toolLogger = httpStreamLogger.child({
           tool: tool.name,
-          requestId: randomUUID(), // Generate our own request ID
+          requestId,
         });
 
         toolLogger.debug({ args }, `Executing tool: ${tool.name}`);
@@ -145,27 +167,51 @@ function registerTools() {
           // Add clientProjectRoot to args
           const enhancedArgs = { ...args, clientProjectRoot: effectiveClientProjectRoot };
 
+          // Create a progress callback that can be used by the handler
+          const progressCallback = async (progressData: any) => {
+            // In the HTTP stream context, we can't send progress directly
+            // The MCP SDK handles this automatically for streaming responses
+            toolLogger.debug({ progressData, requestId }, 'Progress update');
+          };
+
           // Execute tool logic directly using the official SDK approach
           const result = await executeToolDirectly(
             tool.name,
             enhancedArgs,
             memoryService,
             toolLogger,
+            progressCallback,
           );
+
           toolPerfLogger.complete({ success: !!result });
 
+          // Return the result in the proper MCP format
           return {
             content: [
               {
                 type: 'text',
-                text: JSON.stringify(result),
+                text: JSON.stringify(result, null, 2),
               },
             ],
           };
         } catch (error) {
           toolPerfLogger.fail(error as Error);
           logError(toolLogger, error as Error, { operation: 'tool-execution' });
-          throw error;
+
+          // Return error in proper MCP format
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: false,
+                  error: error instanceof Error ? error.message : String(error),
+                  details: error instanceof Error ? error.stack : undefined,
+                }),
+              },
+            ],
+            isError: true,
+          };
         }
       },
     );
@@ -189,84 +235,139 @@ async function handlePostRequest(
 ): Promise<void> {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
-  // Parse the request body first - this is critical for proper transport handling
-  let parsedBody: unknown;
-  try {
-    const chunks: Buffer[] = [];
-    for await (const chunk of req) {
-      chunks.push(chunk);
+  // Set a timeout for request processing
+  const requestTimeout = setTimeout(() => {
+    if (!res.headersSent) {
+      requestLogger.warn('Request timeout - closing connection');
+      res.writeHead(408, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: {
+            code: -32000,
+            message: 'Request timeout',
+          },
+          id: null,
+        }),
+      );
     }
-    const body = Buffer.concat(chunks).toString();
-    parsedBody = JSON.parse(body);
-  } catch (error) {
-    requestLogger.error({ error }, 'Failed to parse request body');
+  }, 60000); // 60 second timeout
+
+  try {
+    // Parse the request body first - this is critical for proper transport handling
+    let parsedBody: unknown;
+    try {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) {
+        chunks.push(chunk);
+      }
+      const body = Buffer.concat(chunks).toString();
+      parsedBody = JSON.parse(body);
+      requestLogger.debug({ bodyLength: body.length }, 'Request body parsed successfully');
+    } catch (error) {
+      requestLogger.error({ error }, 'Failed to parse request body');
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: {
+            code: -32700,
+            message: 'Parse error',
+            data: String(error),
+          },
+          id: null,
+        }),
+      );
+      return;
+    } finally {
+      clearTimeout(requestTimeout);
+    }
+
+    if (sessionId && transports[sessionId]) {
+      // Reuse existing transport
+      const transport = transports[sessionId];
+      requestLogger.debug({ sessionId }, 'Reusing existing transport');
+
+      try {
+        // Handle the request with existing transport - CRITICAL: include parsed body
+        await transport.handleRequest(req, res, parsedBody);
+        return;
+      } catch (error) {
+        requestLogger.error({ error, sessionId }, 'Error handling request with existing transport');
+        // Clean up the broken transport
+        delete transports[sessionId];
+        throw error;
+      }
+    }
+
+    if (!sessionId) {
+      // Create new transport for initialization request
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        enableJsonResponse: true, // Support both JSON and SSE
+        onsessioninitialized: (newSessionId: string) => {
+          // Store the transport by session ID
+          transports[newSessionId] = transport;
+          requestLogger.debug({ sessionId: newSessionId }, 'New session initialized');
+        },
+      });
+
+      // Clean up transport when closed
+      transport.onclose = () => {
+        if (transport.sessionId) {
+          delete transports[transport.sessionId];
+          requestLogger.debug({ sessionId: transport.sessionId }, 'Session transport cleaned up');
+        }
+      };
+
+      try {
+        // Connect the transport to the shared MCP server instance
+        // This is the key fix - reuse the same server instance for all transports
+        await mcpServer.connect(transport);
+        requestLogger.debug('MCP server connected to new transport');
+
+        // Let the transport handle the request with the parsed body - CRITICAL: include parsed body
+        await transport.handleRequest(req, res, parsedBody);
+        return;
+      } catch (error) {
+        requestLogger.error({ error }, 'Error handling request with new transport');
+        // Clean up the failed transport
+        if (transport.sessionId) {
+          delete transports[transport.sessionId];
+        }
+        throw error;
+      }
+    }
+
+    // Invalid request - session ID provided but not found
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({
         jsonrpc: '2.0',
         error: {
-          code: -32700,
-          message: 'Parse error',
-          data: String(error),
+          code: -32000,
+          message: 'Bad Request: Invalid session ID',
         },
         id: null,
       }),
     );
-    return;
+  } catch (error) {
+    requestLogger.error({ error }, 'Unhandled error in POST request handler');
+    if (!res.headersSent) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: {
+            code: -32603,
+            message: 'Internal error',
+            data: String(error),
+          },
+          id: null,
+        }),
+      );
+    }
   }
-
-  if (sessionId && transports[sessionId]) {
-    // Reuse existing transport
-    const transport = transports[sessionId];
-    requestLogger.debug({ sessionId }, 'Reusing existing transport');
-
-    // Handle the request with existing transport - CRITICAL: include parsed body
-    await transport.handleRequest(req, res, parsedBody);
-    return;
-  }
-
-  if (!sessionId) {
-    // Create new transport for initialization request
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
-      enableJsonResponse: true, // Support both JSON and SSE
-      onsessioninitialized: (sessionId: string) => {
-        // Store the transport by session ID
-        transports[sessionId] = transport;
-        requestLogger.debug({ sessionId }, 'New session initialized');
-      },
-    });
-
-    // Clean up transport when closed
-    transport.onclose = () => {
-      if (transport.sessionId) {
-        delete transports[transport.sessionId];
-        requestLogger.debug({ sessionId: transport.sessionId }, 'Session transport cleaned up');
-      }
-    };
-
-    // Connect the transport to the shared MCP server instance
-    // This is the key fix - reuse the same server instance for all transports
-    await mcpServer.connect(transport);
-    requestLogger.debug('MCP server connected to new transport');
-
-    // Let the transport handle the request with the parsed body - CRITICAL: include parsed body
-    await transport.handleRequest(req, res, parsedBody);
-    return;
-  }
-
-  // Invalid request - session ID provided but not found
-  res.writeHead(400, { 'Content-Type': 'application/json' });
-  res.end(
-    JSON.stringify({
-      jsonrpc: '2.0',
-      error: {
-        code: -32000,
-        message: 'Bad Request: Invalid session ID',
-      },
-      id: null,
-    }),
-  );
 }
 
 // Helper function to handle GET requests (for SSE streams)
