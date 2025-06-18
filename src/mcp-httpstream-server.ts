@@ -251,55 +251,9 @@ function validateRequestSize(req: IncomingMessage, requestLogger: Logger): void 
   }
 }
 
-/**
- * Creates a size-limited request wrapper that prevents reading beyond MAX_REQUEST_SIZE.
- * This protects against requests without Content-Length headers or malicious clients.
- */
-function createSizeLimitedRequest(req: IncomingMessage, requestLogger: Logger): IncomingMessage {
-  let totalBytesRead = 0;
-
-  // Create a proxy to intercept data events
-  const originalOn = req.on.bind(req);
-  const originalAddListener = req.addListener.bind(req);
-
-  const wrapDataListener = (listener: (chunk: any) => void) => {
-    return (chunk: Buffer | string) => {
-      const chunkSize = Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk);
-      totalBytesRead += chunkSize;
-
-      if (totalBytesRead > MAX_REQUEST_SIZE) {
-        requestLogger.error(
-          { totalBytesRead, chunkSize, maxSize: MAX_REQUEST_SIZE },
-          'Request size limit exceeded during reading'
-        );
-
-        // Emit an error to stop further processing
-        req.emit('error', new Error(`Request size ${totalBytesRead} bytes exceeds maximum allowed size ${MAX_REQUEST_SIZE} bytes`));
-        return;
-      }
-
-      // Call the original listener if size is within limits
-      listener(chunk);
-    };
-  };
-
-  // Override event registration methods to wrap data listeners
-  req.on = function(event: string, listener: (...args: any[]) => void) {
-    if (event === 'data') {
-      return originalOn(event, wrapDataListener(listener));
-    }
-    return originalOn(event, listener);
-  };
-
-  req.addListener = function(event: string, listener: (...args: any[]) => void) {
-    if (event === 'data') {
-      return originalAddListener(event, wrapDataListener(listener));
-    }
-    return originalAddListener(event, listener);
-  };
-
-  return req;
-}
+// Note: Size limiting was causing issues with MCP transport layer
+// The transport expects the original request object and wrapping it breaks event handling
+// For now, we only validate Content-Length headers for basic protection
 
 // Helper function to handle POST requests
 async function handlePostRequest(
@@ -328,7 +282,7 @@ async function handlePostRequest(
   }, 60000); // 60 second timeout
 
   try {
-    // Validate request size before processing
+    // Validate request size before processing (Content-Length only)
     try {
       validateRequestSize(req, requestLogger);
     } catch (error) {
@@ -349,30 +303,8 @@ async function handlePostRequest(
       return;
     }
 
-    // Create size-limited request wrapper
-    const sizeLimitedReq = createSizeLimitedRequest(req, requestLogger);
-
-    // Set up error handler for size limit violations during reading
-    sizeLimitedReq.on('error', (error) => {
-      if (!res.headersSent) {
-        clearTimeout(requestTimeout);
-        requestLogger.error({ error }, 'Request size limit exceeded during reading');
-        res.writeHead(413, { 'Content-Type': 'application/json' });
-        res.end(
-          JSON.stringify({
-            jsonrpc: '2.0',
-            error: {
-              code: -32000,
-              message: 'Payload Too Large',
-              data: error.message,
-            },
-            id: null,
-          }),
-        );
-      }
-    });
-
-    // Keep timeout active during transport handling and tool execution
+    // Clear timeout early since we're handling the request
+    clearTimeout(requestTimeout);
 
     if (sessionId && transports[sessionId]) {
       // Reuse existing transport
@@ -380,8 +312,8 @@ async function handlePostRequest(
       requestLogger.debug({ sessionId }, 'Reusing existing transport');
 
       try {
-        // Let the transport handle the size-limited request and parse the body internally
-        await transport.handleRequest(sizeLimitedReq, res);
+        // Let the transport handle the request and parse the body internally
+        await transport.handleRequest(req, res);
         return;
       } catch (error) {
         requestLogger.error({ error, sessionId }, 'Error handling request with existing transport');
@@ -417,8 +349,8 @@ async function handlePostRequest(
         await mcpServer.connect(transport);
         requestLogger.debug('MCP server connected to new transport');
 
-        // Let the transport handle the size-limited request and parse the body internally
-        await transport.handleRequest(sizeLimitedReq, res);
+        // Let the transport handle the request and parse the body internally
+        await transport.handleRequest(req, res);
         return;
       } catch (error) {
         requestLogger.error({ error }, 'Error handling request with new transport');
@@ -458,9 +390,6 @@ async function handlePostRequest(
         }),
       );
     }
-  } finally {
-    // Clear timeout only after all request processing is complete
-    clearTimeout(requestTimeout);
   }
 }
 
