@@ -144,36 +144,53 @@ class MemoryOptimizationAgent {
 
 #### 1. LLM Framework & Provider Selection
 
-**Recommended: Vercel AI SDK + OpenAI/Anthropic**
+**Recommended: Vercel AI SDK + High-Reasoning Models**
 
 ```typescript
-// Serverless-first, simple integration
+// Advanced reasoning models for core memory optimization
 import { generateObject, generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
 
-class MemoryOptimizationAgent {
-  private model = openai('gpt-4o') || anthropic('claude-3-5-sonnet-20241022');
+class CoreMemoryOptimizationAgent {
+  private model = openai('o1-mini') || anthropic('claude-3-5-sonnet-20241022');
 
   async analyzeMemoryGraph(context: MemoryContext): Promise<OptimizationPlan> {
     const result = await generateObject({
       model: this.model,
       system: this.getSystemPrompt(),
       prompt: this.buildAnalysisPrompt(context),
-      schema: OptimizationPlanSchema
+      schema: OptimizationPlanSchema,
+      // High reasoning configuration
+      reasoning: 'high',              // OpenAI o1/o3 HIGH reasoning
+      maxReasoningTokens: 32768,      // Maximum reasoning capacity
+      thinking: {                     // Anthropic extended thinking
+        enabled: true,
+        maxTokens: 2048              // 2048 token thinking budget
+      }
     });
     return result.object;
   }
 }
 ```
 
-**Why Vercel AI SDK:**
+**Why Vercel AI SDK + High-Reasoning Models:**
+- ✅ **Advanced reasoning** - Supports OpenAI o1/o3 HIGH reasoning and Claude extended thinking
 - ✅ **Serverless-optimized** - Works perfectly in edge/serverless environments
 - ✅ **Provider-agnostic** - Easy to switch between OpenAI, Anthropic, etc.
 - ✅ **TypeScript-first** - Excellent type safety with Zod schemas
-- ✅ **Streaming support** - For real-time optimization feedback
+- ✅ **Reasoning configuration** - Fine-grained control over reasoning parameters
 - ✅ **Simple integration** - Minimal boilerplate, focus on logic
-- ✅ **Cost-effective** - Pay-per-use, no infrastructure overhead
+- ✅ **Intelligent decisions** - Deep reasoning for complex memory optimization
+
+**Supported High-Reasoning Models:**
+
+| Provider | Model | Reasoning Type | Configuration |
+|----------|-------|----------------|---------------|
+| **OpenAI** | `o3` | HIGH reasoning | `reasoning: 'high'`, `maxReasoningTokens: 32768` |
+| **OpenAI** | `o1-mini` | HIGH reasoning | `reasoning: 'high'`, `maxReasoningTokens: 32768` |
+| **Anthropic** | `claude-3-5-sonnet-20241022` | Extended thinking | `thinking: { enabled: true, maxTokens: 2048 }` |
+| **Anthropic** | `claude-3-5-haiku-20241022` | Extended thinking | `thinking: { enabled: true, maxTokens: 2048 }` |
 
 #### 2. System Prompt Management Strategy
 

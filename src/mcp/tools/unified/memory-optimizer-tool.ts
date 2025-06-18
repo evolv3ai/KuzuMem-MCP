@@ -1,43 +1,49 @@
 import { McpTool } from '../../types';
 
 /**
- * Dynamic Memory Optimization Tool
- * 
- * Provides AI-powered memory graph optimization capabilities:
+ * Core Memory Optimization Tool
+ *
+ * Provides AI-powered memory graph optimization with advanced reasoning capabilities:
+ * - Deep reasoning analysis using OpenAI o1/o3 models (HIGH reasoning) or Claude with extended thinking
  * - Intelligent analysis of memory patterns and relationships
- * - Safe, context-aware pruning and cleanup operations  
+ * - Safe, context-aware pruning and cleanup operations
  * - Stale entity detection and redundancy removal
  * - Autonomous optimization with safety guarantees
  */
 export const memoryOptimizerTool: McpTool = {
   name: 'memory-optimizer',
-  description: `AI-powered dynamic memory optimization for KuzuMem-MCP graph databases.
+  description: `AI-powered core memory optimization for KuzuMem-MCP graph databases with advanced reasoning.
+
+REASONING MODELS:
+- OpenAI: o3, o1-mini with HIGH reasoning settings for deep analysis
+- Anthropic: Claude-3.5-Sonnet, Claude-3.5-Haiku with extended thinking (2048 token budget)
 
 OPERATIONS:
-- analyze: Analyze memory graph for optimization opportunities using AI
-- optimize: Generate and execute safe optimization plans  
+- analyze: Deep reasoning analysis of memory graph patterns and optimization opportunities
+- optimize: Generate and execute safe optimization plans with reasoning validation
 - rollback: Rollback to previous state using snapshots
 
 CAPABILITIES:
-- Stale entity detection based on age and usage patterns
-- Redundancy identification and consolidation recommendations
-- Dependency chain optimization and relationship cleanup
-- Context-aware pruning that preserves critical knowledge
-- Safety-first approach with dry-run mode and rollback capabilities
+- Advanced reasoning for stale entity detection based on complex usage patterns
+- Intelligent redundancy identification with contextual understanding
+- Dependency chain optimization with safety reasoning
+- Context-aware pruning that preserves critical knowledge through deep analysis
+- Safety-first approach with reasoning-validated decisions
 
 STRATEGIES:
 - conservative: Minimal risk, obvious optimizations only (max 5 deletions)
-- balanced: Moderate optimization balancing safety and efficiency (max 20 deletions)  
+- balanced: Moderate optimization balancing safety and efficiency (max 20 deletions)
 - aggressive: Maximum optimization for significant gains (max 50 deletions)
 
 SAFETY FEATURES:
+- Reasoning-validated optimization decisions
 - Dry-run mode for preview without changes
 - Automatic snapshots before optimization
 - Confirmation requirements for bulk operations
 - Rollback capabilities for error recovery
 - Preservation of critical and recent entities
 
-The agent analyzes entity relationships, usage patterns, and temporal data to make intelligent decisions about what can be safely optimized while preserving important knowledge and maintaining system integrity.`,
+The agent uses advanced reasoning to analyze entity relationships, usage patterns, and temporal data to make highly intelligent decisions about what can be safely optimized while preserving important knowledge and maintaining system integrity.`,
 
   parameters: {
     type: 'object',
@@ -71,7 +77,7 @@ The agent analyzes entity relationships, usage patterns, and temporal data to ma
       },
       model: {
         type: 'string',
-        description: 'Specific model to use (e.g., gpt-4o, claude-3-5-sonnet-20241022)',
+        description: 'Specific model to use. OpenAI: o3, o1-mini (with HIGH reasoning). Anthropic: claude-3-5-sonnet-20241022, claude-3-5-haiku-20241022 (with extended thinking, 2048 token budget)',
       },
       dryRun: {
         type: 'boolean',

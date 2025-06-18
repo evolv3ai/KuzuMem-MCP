@@ -111,23 +111,26 @@ export class MemoryOptimizationAgent {
         staleCandidates: staleEntityCandidates.length,
       });
 
-      // Generate analysis using LLM
+      // Generate analysis using LLM with reasoning configuration
       const result = await generateObject({
         model: this.llmClient,
         system: systemPrompt,
         prompt: userPrompt,
         schema: AnalysisResultSchema,
         temperature: 0.1, // Low temperature for consistent analysis
+        ...this.getReasoningConfig(),
       });
+
+      const analysisResult = result.object as AnalysisResult;
 
       analysisLogger.info('Memory analysis completed', {
-        staleEntitiesFound: result.object.staleEntities.length,
-        redundancyGroupsFound: result.object.redundancies.length,
-        optimizationOpportunities: result.object.optimizationOpportunities.length,
-        overallHealthScore: result.object.summary.overallHealthScore,
+        staleEntitiesFound: analysisResult.staleEntities.length,
+        redundancyGroupsFound: analysisResult.redundancies.length,
+        optimizationOpportunities: analysisResult.optimizationOpportunities.length,
+        overallHealthScore: analysisResult.summary.overallHealthScore,
       });
 
-      return result.object;
+      return analysisResult;
     } catch (error) {
       analysisLogger.error('Memory analysis failed:', error);
       throw new Error(`Memory analysis failed: ${error}`);
@@ -177,17 +180,20 @@ export class MemoryOptimizationAgent {
         redundancies: analysisResult.redundancies.length,
       });
 
-      // Generate optimization plan using LLM
+      // Generate optimization plan using LLM with reasoning configuration
       const result = await generateObject({
         model: this.llmClient,
         system: systemPrompt,
         prompt: userPrompt,
         schema: OptimizationPlanSchema,
         temperature: 0.1, // Low temperature for consistent planning
+        ...this.getReasoningConfig(),
       });
 
+      const optimizationPlan = result.object as OptimizationPlan;
+
       // Validate plan against strategy constraints
-      const validatedPlan = await this.validateOptimizationPlan(result.object, strategy);
+      const validatedPlan = await this.validateOptimizationPlan(optimizationPlan, strategy);
 
       planLogger.info('Optimization plan generated', {
         planId: validatedPlan.id,
@@ -321,11 +327,37 @@ export class MemoryOptimizationAgent {
   private initializeLLMClient(): any {
     switch (this.config.llmProvider) {
       case 'openai':
-        return openai(this.config.model || 'gpt-4o');
+        // Use latest reasoning models with HIGH reasoning settings
+        return openai(this.config.model || 'o1-mini');
       case 'anthropic':
+        // Use latest Claude models with extended thinking
         return anthropic(this.config.model || 'claude-3-5-sonnet-20241022');
       default:
         throw new Error(`Unsupported LLM provider: ${this.config.llmProvider}`);
+    }
+  }
+
+  /**
+   * Get reasoning configuration based on provider
+   */
+  private getReasoningConfig(): any {
+    switch (this.config.llmProvider) {
+      case 'openai':
+        // OpenAI o1/o3 models with HIGH reasoning
+        return {
+          reasoning: 'high', // HIGH reasoning setting for o1/o3 models
+          maxReasoningTokens: 32768, // Maximum reasoning tokens for complex analysis
+        };
+      case 'anthropic':
+        // Claude models with extended thinking (2048 token budget)
+        return {
+          thinking: {
+            enabled: true,
+            maxTokens: 2048, // 2048 token thinking budget
+          },
+        };
+      default:
+        return {};
     }
   }
 
