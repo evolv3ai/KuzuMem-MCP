@@ -1,6 +1,6 @@
 /**
  * Security test for request size limiting in HTTP stream server
- * 
+ *
  * This test verifies that the streaming back-pressure implementation
  * correctly prevents memory exhaustion attacks from oversized requests.
  */
@@ -47,7 +47,9 @@ describe('HTTP Stream Server Security - Request Size Limiting', () => {
 
       const onStderr = (data: Buffer) => {
         const message = data.toString();
-        if (message.includes(`MCP HTTP stream server listening at http://localhost:${serverPort}`)) {
+        if (
+          message.includes(`MCP HTTP stream server listening at http://localhost:${serverPort}`)
+        ) {
           clearTimeout(timeout);
           serverProcess.stderr?.off('data', onStderr);
           resolve();
@@ -66,7 +68,7 @@ describe('HTTP Stream Server Security - Request Size Limiting', () => {
   afterAll(async () => {
     if (serverProcess) {
       serverProcess.kill('SIGTERM');
-      
+
       // Wait for process to exit
       await new Promise<void>((resolve) => {
         serverProcess.on('exit', () => resolve());
@@ -97,7 +99,7 @@ describe('HTTP Stream Server Security - Request Size Limiting', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json, text/event-stream',
+        Accept: 'application/json, text/event-stream',
       },
       body: JSON.stringify(oversizedPayload),
     });
@@ -127,7 +129,7 @@ describe('HTTP Stream Server Security - Request Size Limiting', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json, text/event-stream',
+        Accept: 'application/json, text/event-stream',
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
@@ -142,7 +144,10 @@ describe('HTTP Stream Server Security - Request Size Limiting', () => {
     });
 
     console.log('Normal request - Response status:', response.status);
-    console.log('Normal request - Response headers:', Object.fromEntries(response.headers.entries()));
+    console.log(
+      'Normal request - Response headers:',
+      Object.fromEntries(response.headers.entries()),
+    );
 
     if (response.status !== 200) {
       const responseText = await response.text();
@@ -170,7 +175,7 @@ describe('HTTP Stream Server Security - Request Size Limiting', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json, text/event-stream',
+        Accept: 'application/json, text/event-stream',
       },
       body,
     });

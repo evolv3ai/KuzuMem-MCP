@@ -277,7 +277,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     if (contentType?.includes('text/event-stream')) {
       // Parse SSE response
       const text = await toolResponse.text();
-      const lines = text.split('\n').filter(line => line.startsWith('data: '));
+      const lines = text.split('\n').filter((line) => line.startsWith('data: '));
       if (lines.length > 0) {
         const lastLine = lines[lines.length - 1];
         responseData = JSON.parse(lastLine.substring(6));

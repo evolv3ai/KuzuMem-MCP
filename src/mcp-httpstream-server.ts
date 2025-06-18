@@ -96,7 +96,10 @@ function registerTools() {
         try {
           // Handle clientProjectRoot storage for memory-bank init operations
           if (tool.name === 'memory-bank' && (args as any).operation === 'init') {
-            const repoBranchKey = createRepositoryBranchKey((args as any).repository, (args as any).branch);
+            const repoBranchKey = createRepositoryBranchKey(
+              (args as any).repository,
+              (args as any).branch,
+            );
             repositoryRootMap.set(repoBranchKey, (args as any).clientProjectRoot);
             toolLogger.debug(
               { repoBranchKey, clientProjectRoot: (args as any).clientProjectRoot },
@@ -107,7 +110,10 @@ function registerTools() {
           // Get clientProjectRoot from stored map or args
           let effectiveClientProjectRoot = (args as any).clientProjectRoot;
           if (!effectiveClientProjectRoot && (args as any).repository) {
-            const repoBranchKey = createRepositoryBranchKey((args as any).repository, (args as any).branch);
+            const repoBranchKey = createRepositoryBranchKey(
+              (args as any).repository,
+              (args as any).branch,
+            );
             effectiveClientProjectRoot = repositoryRootMap.get(repoBranchKey);
           }
 
@@ -219,9 +225,11 @@ function createSizeLimitedRequest(req: IncomingMessage, requestLogger: Logger): 
     } else if (declaredSize > MAX_REQUEST_SIZE) {
       requestLogger.error(
         { contentLength: declaredSize, maxSize: MAX_REQUEST_SIZE },
-        'Request size exceeds maximum allowed size (Content-Length check)'
+        'Request size exceeds maximum allowed size (Content-Length check)',
       );
-      throw new Error(`Request size ${declaredSize} bytes exceeds maximum allowed size ${MAX_REQUEST_SIZE} bytes`);
+      throw new Error(
+        `Request size ${declaredSize} bytes exceeds maximum allowed size ${MAX_REQUEST_SIZE} bytes`,
+      );
     }
   }
 
@@ -231,7 +239,7 @@ function createSizeLimitedRequest(req: IncomingMessage, requestLogger: Logger): 
   const originalAddListener = req.addListener.bind(req);
 
   // Override event listeners to intercept 'data' events
-  req.on = function(event: string | symbol, listener: GenericEventListener) {
+  req.on = function (event: string | symbol, listener: GenericEventListener) {
     if (event === 'data') {
       // Wrap the data listener to track cumulative size
       const wrappedListener: DataEventListener = (chunk: Buffer | string) => {
@@ -246,17 +254,22 @@ function createSizeLimitedRequest(req: IncomingMessage, requestLogger: Logger): 
           sizeLimitExceeded = true;
           requestLogger.error(
             { cumulativeSize, chunkSize, maxSize: MAX_REQUEST_SIZE },
-            'Request size limit exceeded during streaming'
+            'Request size limit exceeded during streaming',
           );
 
           // Emit an error to terminate the request processing
-          req.emit('error', new Error(`Request size ${cumulativeSize} bytes exceeds maximum allowed size ${MAX_REQUEST_SIZE} bytes`));
+          req.emit(
+            'error',
+            new Error(
+              `Request size ${cumulativeSize} bytes exceeds maximum allowed size ${MAX_REQUEST_SIZE} bytes`,
+            ),
+          );
           return;
         }
 
         requestLogger.debug(
           { cumulativeSize, chunkSize, maxSize: MAX_REQUEST_SIZE },
-          'Request chunk processed'
+          'Request chunk processed',
         );
 
         // Call the original listener with the chunk (type-safe cast)
@@ -271,7 +284,7 @@ function createSizeLimitedRequest(req: IncomingMessage, requestLogger: Logger): 
   };
 
   // Also override addListener (alias for on)
-  req.addListener = function(event: string | symbol, listener: GenericEventListener) {
+  req.addListener = function (event: string | symbol, listener: GenericEventListener) {
     return req.on(event, listener);
   };
 
@@ -307,7 +320,7 @@ async function handlePostRequest(
 
   // Monitor response completion to clear timeout
   const originalEnd = res.end.bind(res);
-  res.end = function(chunk?: any, encoding?: any, cb?: any): ServerResponse {
+  res.end = function (chunk?: any, encoding?: any, cb?: any): ServerResponse {
     requestCompleted = true;
     clearTimeout(requestTimeout);
     return originalEnd.call(this, chunk, encoding, cb);
