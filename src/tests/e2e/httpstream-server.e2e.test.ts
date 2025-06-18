@@ -899,19 +899,52 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     }, 10000);
 
     it('should tag an item', async () => {
+      // Since we use fresh sessions, we need to create the entities first
+      // Create a component to tag
+      await callTool('entity', {
+        operation: 'create',
+        entityType: 'component',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        id: 'comp-TagTestComponent',
+        data: {
+          name: 'Tag Test Component',
+          kind: 'service',
+          status: 'active',
+          depends_on: [],
+        },
+      });
+
+      // Create a tag
+      await callTool('entity', {
+        operation: 'create',
+        entityType: 'tag',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        id: 'tag-test-association',
+        data: {
+          name: 'Test Association Tag',
+          description: 'Tag for testing associations',
+        },
+      });
+
+      // Now tag the item
       const result = await callTool('associate', {
         type: 'tag-item',
         repository: TEST_REPO,
         branch: TEST_BRANCH,
-        itemId: 'comp-TestComponent',
-        tagId: 'tag-test-tag',
+        itemId: 'comp-TagTestComponent',
+        tagId: 'tag-test-association',
+        entityType: 'Component', // Required field for tag-item association
       });
+
+      console.log('Tag association result:', JSON.stringify(result, null, 2));
 
       expect(result).toMatchObject({
         success: true,
         type: 'tag-item',
       });
-    }, 10000);
+    }, 15000);
   });
 
   describe('Tool 7: analyze', () => {
@@ -1098,12 +1131,14 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
             name: 'Bulk Component A',
             kind: 'service',
             status: 'active',
+            depends_on: [],
           },
           {
             id: 'comp-BulkB',
             name: 'Bulk Component B',
             kind: 'service',
             status: 'active',
+            depends_on: [],
           },
         ],
       });
