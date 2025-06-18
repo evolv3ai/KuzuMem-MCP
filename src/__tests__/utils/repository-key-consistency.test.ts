@@ -16,9 +16,9 @@ describe('Repository-Branch Key Consistency', () => {
       expect(key).toBe('my-repo:main');
     });
 
-    it('should handle empty string branch by defaulting to main', () => {
+    it('should preserve empty string branch (not default to main)', () => {
       const key = createRepositoryBranchKey('my-repo', '');
-      expect(key).toBe('my-repo:main');
+      expect(key).toBe('my-repo:');
     });
 
     it('should preserve valid branch names', () => {
@@ -35,6 +35,29 @@ describe('Repository-Branch Key Consistency', () => {
       const key = createRepositoryBranchKey('my-repo', 'develop');
       expect(key).toBe('my-repo:develop');
     });
+
+    it('should throw error when repository contains colon', () => {
+      expect(() => createRepositoryBranchKey('my:repo', 'main')).toThrow(
+        'Repository name cannot contain colons: "my:repo"'
+      );
+    });
+
+    it('should throw error when branch contains colon', () => {
+      expect(() => createRepositoryBranchKey('my-repo', 'feature:branch')).toThrow(
+        'Branch name cannot contain colons: "feature:branch"'
+      );
+    });
+
+    it('should throw error when both repository and branch contain colons', () => {
+      expect(() => createRepositoryBranchKey('my:repo', 'feature:branch')).toThrow(
+        'Repository name cannot contain colons: "my:repo"'
+      );
+    });
+
+    it('should allow null branch and validate it properly', () => {
+      const key = createRepositoryBranchKey('my-repo', null as any);
+      expect(key).toBe('my-repo:main');
+    });
   });
 
   describe('Key consistency scenarios', () => {
@@ -44,10 +67,12 @@ describe('Repository-Branch Key Consistency', () => {
       expect(key1).toBe(key2);
     });
 
-    it('should generate same key for empty string and main branch', () => {
+    it('should generate different keys for empty string and main branch', () => {
       const key1 = createRepositoryBranchKey('test-repo', '');
       const key2 = createRepositoryBranchKey('test-repo', 'main');
-      expect(key1).toBe(key2);
+      expect(key1).toBe('test-repo:');
+      expect(key2).toBe('test-repo:main');
+      expect(key1).not.toBe(key2);
     });
 
     it('should generate same key for missing and main branch', () => {
