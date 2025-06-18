@@ -183,29 +183,83 @@ const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 const MAX_REQUEST_SIZE = 10 * 1024 * 1024; // 10MB - reasonable limit for MCP requests
 
 /**
- * Validates request size to prevent memory exhaustion from large payloads.
- * Monitors the Content-Length header and tracks cumulative chunk sizes.
+ * Creates a size-limited request wrapper that tracks cumulative chunk sizes
+ * while preserving the original request interface for MCP transport compatibility.
+ *
+ * This provides robust protection against oversized requests by monitoring
+ * actual data flow, not just headers which can be spoofed or omitted.
  */
-function validateRequestSize(req: IncomingMessage, requestLogger: Logger): void {
-  // Check Content-Length header if present
+function createSizeLimitedRequest(req: IncomingMessage, requestLogger: Logger): IncomingMessage {
+  let cumulativeSize = 0;
+  let sizeLimitExceeded = false;
+
+  // First, validate Content-Length header if present (fast fail for obvious oversized requests)
   const contentLength = req.headers['content-length'];
   if (contentLength) {
-    const size = parseInt(contentLength, 10);
-    if (isNaN(size)) {
+    const declaredSize = parseInt(contentLength, 10);
+    if (isNaN(declaredSize)) {
       requestLogger.warn({ contentLength }, 'Invalid Content-Length header');
-    } else if (size > MAX_REQUEST_SIZE) {
+    } else if (declaredSize > MAX_REQUEST_SIZE) {
       requestLogger.error(
-        { contentLength: size, maxSize: MAX_REQUEST_SIZE },
-        'Request size exceeds maximum allowed size'
+        { contentLength: declaredSize, maxSize: MAX_REQUEST_SIZE },
+        'Request size exceeds maximum allowed size (Content-Length check)'
       );
-      throw new Error(`Request size ${size} bytes exceeds maximum allowed size ${MAX_REQUEST_SIZE} bytes`);
+      throw new Error(`Request size ${declaredSize} bytes exceeds maximum allowed size ${MAX_REQUEST_SIZE} bytes`);
     }
   }
-}
 
-// Note: Size limiting was causing issues with MCP transport layer
-// The transport expects the original request object and wrapping it breaks event handling
-// For now, we only validate Content-Length headers for basic protection
+  // Create a proxy that intercepts data events to track cumulative size
+  // This preserves the original request interface while adding size monitoring
+  const originalOn = req.on.bind(req);
+  const originalAddListener = req.addListener.bind(req);
+
+  // Override event listeners to intercept 'data' events
+  req.on = function(event: string | symbol, listener: (...args: any[]) => void) {
+    if (event === 'data') {
+      // Wrap the data listener to track cumulative size
+      const wrappedListener = (chunk: Buffer | string) => {
+        if (sizeLimitExceeded) {
+          return; // Don't process more data if limit already exceeded
+        }
+
+        const chunkSize = Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk, 'utf8');
+        cumulativeSize += chunkSize;
+
+        if (cumulativeSize > MAX_REQUEST_SIZE) {
+          sizeLimitExceeded = true;
+          requestLogger.error(
+            { cumulativeSize, chunkSize, maxSize: MAX_REQUEST_SIZE },
+            'Request size limit exceeded during streaming'
+          );
+
+          // Emit an error to terminate the request processing
+          req.emit('error', new Error(`Request size ${cumulativeSize} bytes exceeds maximum allowed size ${MAX_REQUEST_SIZE} bytes`));
+          return;
+        }
+
+        requestLogger.debug(
+          { cumulativeSize, chunkSize, maxSize: MAX_REQUEST_SIZE },
+          'Request chunk processed'
+        );
+
+        // Call the original listener with the chunk
+        listener(chunk);
+      };
+
+      return originalOn.call(this, event, wrappedListener);
+    }
+
+    // For all other events, use the original listener
+    return originalOn.call(this, event, listener);
+  };
+
+  // Also override addListener (alias for on)
+  req.addListener = function(event: string | symbol, listener: (...args: any[]) => void) {
+    return req.on(event, listener);
+  };
+
+  return req;
+}
 
 // Helper function to handle POST requests
 async function handlePostRequest(
@@ -243,12 +297,13 @@ async function handlePostRequest(
   };
 
   try {
-    // Validate request size before processing (Content-Length only)
+    // Create size-limited request wrapper with streaming back-pressure
+    let sizeLimitedReq: IncomingMessage;
     try {
-      validateRequestSize(req, requestLogger);
+      sizeLimitedReq = createSizeLimitedRequest(req, requestLogger);
     } catch (error) {
       clearTimeout(requestTimeout);
-      requestLogger.error({ error }, 'Request size validation failed');
+      requestLogger.error({ error }, 'Request size validation failed (Content-Length check)');
       res.writeHead(413, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
@@ -264,6 +319,26 @@ async function handlePostRequest(
       return;
     }
 
+    // Set up error handler for streaming size limit violations
+    sizeLimitedReq.on('error', (error) => {
+      if (!requestCompleted && !res.headersSent) {
+        clearTimeout(requestTimeout);
+        requestLogger.error({ error }, 'Request size limit exceeded during streaming');
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            error: {
+              code: -32000,
+              message: 'Payload Too Large',
+              data: error.message,
+            },
+            id: null,
+          }),
+        );
+      }
+    });
+
     // Keep timeout active - it will be cleared when response completes
     // This provides protection against hanging requests while not interfering
     // with the MCP transport layer's internal operations
@@ -274,8 +349,8 @@ async function handlePostRequest(
       requestLogger.debug({ sessionId }, 'Reusing existing transport');
 
       try {
-        // Let the transport handle the request and parse the body internally
-        await transport.handleRequest(req, res);
+        // Use size-limited request for robust protection against oversized payloads
+        await transport.handleRequest(sizeLimitedReq, res);
         return;
       } catch (error) {
         requestLogger.error({ error, sessionId }, 'Error handling request with existing transport');
@@ -311,8 +386,8 @@ async function handlePostRequest(
         await mcpServer.connect(transport);
         requestLogger.debug('MCP server connected to new transport');
 
-        // Let the transport handle the request and parse the body internally
-        await transport.handleRequest(req, res);
+        // Use size-limited request for robust protection against oversized payloads
+        await transport.handleRequest(sizeLimitedReq, res);
         return;
       } catch (error) {
         requestLogger.error({ error }, 'Error handling request with new transport');
