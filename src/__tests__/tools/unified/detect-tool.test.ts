@@ -1,6 +1,31 @@
 import { detectHandler } from '../../../mcp/services/handlers/unified/detect-handler';
-import { MemoryService } from '../../../services/memory.service';
 import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { MemoryService } from '../../../services/memory.service';
+
+// Define discriminated union type for detect handler results
+type DetectResult =
+  | {
+      type: 'strongly-connected';
+      status: 'complete';
+      projectedGraphName: string;
+      components: Array<{ componentId: number; nodes: string[] }>;
+      totalComponents: number;
+      message?: string;
+    }
+  | {
+      type: 'weakly-connected';
+      status: 'complete';
+      projectedGraphName: string;
+      components: Array<{ componentId: number; nodes: string[] }>;
+      totalComponents: number;
+      message?: string;
+    }
+  | {
+      type: 'strongly-connected' | 'weakly-connected';
+      status: 'error';
+      message: string;
+      components: [];
+    };
 
 describe('Detect Tool Tests', () => {
   let mockMemoryService: jest.Mocked<MemoryService>;
@@ -45,7 +70,7 @@ describe('Detect Tool Tests', () => {
       };
       mockMemoryService.getStronglyConnectedComponents.mockResolvedValue(mockResult);
 
-      const result = await detectHandler(
+      const result = (await detectHandler(
         {
           type: 'strongly-connected',
           repository: 'test-repo',
@@ -56,16 +81,20 @@ describe('Detect Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as DetectResult;
 
-      expect(result.type).toBe('strongly-connected');
-      expect(result.status).toBe('complete');
-      expect(result.components).toHaveLength(2);
-      expect(result.components[0]).toEqual({
-        componentId: 0,
-        nodes: ['comp-1', 'comp-2', 'comp-3'],
-      });
-      expect(result.totalComponents).toBe(2);
+      if (result.type === 'strongly-connected' && result.status === 'complete') {
+        expect(result.type).toBe('strongly-connected');
+        expect(result.status).toBe('complete');
+        expect(result.components).toHaveLength(2);
+        expect(result.components[0]).toEqual({
+          componentId: 0,
+          nodes: ['comp-1', 'comp-2', 'comp-3'],
+        });
+        expect(result.totalComponents).toBe(2);
+      } else {
+        fail('Expected result to be strongly-connected with complete status');
+      }
       expect(mockMemoryService.getStronglyConnectedComponents).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
@@ -89,7 +118,7 @@ describe('Detect Tool Tests', () => {
         totalComponents: 0,
       });
 
-      const result = await detectHandler(
+      const result = (await detectHandler(
         {
           type: 'strongly-connected',
           repository: 'test-repo',
@@ -99,10 +128,14 @@ describe('Detect Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as DetectResult;
 
-      expect(result.components).toEqual([]);
-      expect(result.totalComponents).toBe(0);
+      if (result.type === 'strongly-connected' && result.status === 'complete') {
+        expect(result.components).toEqual([]);
+        expect(result.totalComponents).toBe(0);
+      } else {
+        fail('Expected result to be strongly-connected with complete status');
+      }
     });
   });
 
@@ -122,7 +155,7 @@ describe('Detect Tool Tests', () => {
       };
       mockMemoryService.getWeaklyConnectedComponents.mockResolvedValue(mockResult);
 
-      const result = await detectHandler(
+      const result = (await detectHandler(
         {
           type: 'weakly-connected',
           repository: 'test-repo',
@@ -132,15 +165,19 @@ describe('Detect Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as DetectResult;
 
-      expect(result.type).toBe('weakly-connected');
-      expect(result.components).toHaveLength(3);
-      expect(result.components[2]).toEqual({
-        componentId: 2,
-        nodes: ['comp-4', 'comp-5', 'comp-6'],
-      });
-      expect(result.totalComponents).toBe(3);
+      if (result.type === 'weakly-connected' && result.status === 'complete') {
+        expect(result.type).toBe('weakly-connected');
+        expect(result.components).toHaveLength(3);
+        expect(result.components[2]).toEqual({
+          componentId: 2,
+          nodes: ['comp-4', 'comp-5', 'comp-6'],
+        });
+        expect(result.totalComponents).toBe(3);
+      } else {
+        fail('Expected result to be weakly-connected with complete status');
+      }
     });
   });
 

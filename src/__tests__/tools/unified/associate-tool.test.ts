@@ -1,6 +1,21 @@
 import { associateHandler } from '../../../mcp/services/handlers/unified/associate-handler';
-import { MemoryService } from '../../../services/memory.service';
 import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { MemoryService } from '../../../services/memory.service';
+
+// Define discriminated union type for associate handler results
+type AssociateResult =
+  | {
+      type: 'file-component';
+      success: boolean;
+      message: string;
+      association: { from: string; to: string; relationship: string };
+    }
+  | {
+      type: 'tag-item';
+      success: boolean;
+      message: string;
+      association: { from: string; to: string; relationship: string };
+    };
 
 describe('Associate Tool Tests', () => {
   let mockMemoryService: jest.Mocked<MemoryService>;
@@ -44,7 +59,7 @@ describe('Associate Tool Tests', () => {
       };
       mockMemoryService.associateFileWithComponent.mockResolvedValue(mockResult);
 
-      const result = await associateHandler(
+      const result = (await associateHandler(
         {
           type: 'file-component',
           repository: 'test-repo',
@@ -54,13 +69,17 @@ describe('Associate Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as AssociateResult;
 
-      expect(result.type).toBe('file-component');
-      expect(result.success).toBe(true);
-      expect(result.association.from).toBe('file-auth-ts');
-      expect(result.association.to).toBe('comp-AuthService');
-      expect(result.association.relationship).toBe('IMPLEMENTS');
+      if (result.type === 'file-component') {
+        expect(result.type).toBe('file-component');
+        expect(result.success).toBe(true);
+        expect(result.association.from).toBe('file-auth-ts');
+        expect(result.association.to).toBe('comp-AuthService');
+        expect(result.association.relationship).toBe('IMPLEMENTS');
+      } else {
+        fail('Expected result type to be file-component');
+      }
       expect(mockMemoryService.associateFileWithComponent).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
@@ -114,7 +133,7 @@ describe('Associate Tool Tests', () => {
       };
       mockMemoryService.tagItem.mockResolvedValue(mockResult);
 
-      const result = await associateHandler(
+      const result = (await associateHandler(
         {
           type: 'tag-item',
           repository: 'test-repo',
@@ -125,13 +144,17 @@ describe('Associate Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as AssociateResult;
 
-      expect(result.type).toBe('tag-item');
-      expect(result.success).toBe(true);
-      expect(result.association.from).toBe('comp-AuthService');
-      expect(result.association.to).toBe('tag-security');
-      expect(result.association.relationship).toBe('TAGGED_WITH');
+      if (result.type === 'tag-item') {
+        expect(result.type).toBe('tag-item');
+        expect(result.success).toBe(true);
+        expect(result.association.from).toBe('comp-AuthService');
+        expect(result.association.to).toBe('tag-security');
+        expect(result.association.relationship).toBe('TAGGED_WITH');
+      } else {
+        fail('Expected result type to be tag-item');
+      }
       expect(mockMemoryService.tagItem).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
