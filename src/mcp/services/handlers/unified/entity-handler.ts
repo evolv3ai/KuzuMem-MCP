@@ -91,7 +91,7 @@ function mapDataToEntity(entityType: string, id: string, data: any): EntityData 
  */
 export const entityHandler: SdkToolHandler = async (params, context, memoryService) => {
   // 1. Validate and extract parameters
-  const validatedParams = params as EntityParams;
+  const validatedParams = params as unknown as EntityParams;
 
   // Basic validation
   if (!validatedParams.operation) {

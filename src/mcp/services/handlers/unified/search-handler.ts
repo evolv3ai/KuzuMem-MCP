@@ -50,7 +50,7 @@ export const searchHandler: SdkToolHandler = async (params, context, memoryServi
     limit = 10,
     conjunctive = false,
     threshold = 0.5,
-  } = params as SearchParams;
+  } = params as unknown as SearchParams;
 
   // Validate required parameters
   if (!query) {

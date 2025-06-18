@@ -13,12 +13,12 @@ import { memoryBankHandler } from './services/handlers/unified/memory-bank-handl
 import { queryHandler } from './services/handlers/unified/query-handler';
 import { searchHandler } from './services/handlers/unified/search-handler';
 
-// Simplified Handler Type for Official SDK Approach
-export type SdkToolHandler = (
-  params: any,
+// Type-safe Handler Type for Official SDK Approach
+export type SdkToolHandler<TParams = Record<string, unknown>, TResult = unknown> = (
+  params: TParams,
   context: ToolHandlerContext,
   memoryService: MemoryService,
-) => Promise<any>;
+) => Promise<TResult>;
 
 /**
  * Tool handlers mapping - only unified tools

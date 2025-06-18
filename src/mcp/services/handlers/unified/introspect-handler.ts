@@ -50,7 +50,7 @@ interface IndexesOutput {
  */
 export const introspectHandler: SdkToolHandler = async (params, context, memoryService) => {
   // 1. Validate and extract parameters
-  const validatedParams = params as IntrospectParams;
+  const validatedParams = params as unknown as IntrospectParams;
 
   // Basic validation
   if (!validatedParams.query) {

@@ -15,8 +15,9 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 // Our tool definitions and services
-import { toolHandlers } from './mcp/tool-handlers';
+import { toolHandlers, type SdkToolHandler } from './mcp/tool-handlers';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
+import { type ToolHandlerContext } from './mcp/types/sdk-custom';
 import { MemoryService } from './services/memory.service';
 import { createPerformanceLogger, logError, loggers } from './utils/logger';
 import { createZodRawShape } from './mcp/utils/schema-utils';
@@ -49,7 +50,18 @@ const mcpServer = new McpServer(
 
 // Schema creation is now handled by shared utility
 
-// Remove custom executeToolDirectly - we'll use the official SDK pattern directly
+// Type definitions for improved type safety
+type ToolArguments = Record<string, unknown>;
+
+interface EnhancedToolArguments extends ToolArguments {
+  clientProjectRoot: string;
+  repository: string;
+  branch: string;
+}
+
+// Type-safe event listener for request size monitoring
+type DataEventListener = (chunk: Buffer | string) => void;
+type GenericEventListener = (...args: any[]) => void;
 
 // Register all our tools with the MCP server
 function registerTools() {
@@ -71,10 +83,10 @@ function registerTools() {
         description: tool.description,
         inputSchema: zodRawShape,
       },
-      async (args): Promise<CallToolResult> => {
+      async (args: ToolArguments): Promise<CallToolResult> => {
         const toolPerfLogger = createPerformanceLogger(httpStreamLogger, `tool-${tool.name}`);
         const requestId = randomUUID();
-        const toolLogger = httpStreamLogger.child({
+        const toolLogger: Logger = httpStreamLogger.child({
           tool: tool.name,
           requestId,
         });
@@ -83,19 +95,19 @@ function registerTools() {
 
         try {
           // Handle clientProjectRoot storage for memory-bank init operations
-          if (tool.name === 'memory-bank' && args.operation === 'init') {
-            const repoBranchKey = createRepositoryBranchKey(args.repository, args.branch);
-            repositoryRootMap.set(repoBranchKey, args.clientProjectRoot);
+          if (tool.name === 'memory-bank' && (args as any).operation === 'init') {
+            const repoBranchKey = createRepositoryBranchKey((args as any).repository, (args as any).branch);
+            repositoryRootMap.set(repoBranchKey, (args as any).clientProjectRoot);
             toolLogger.debug(
-              { repoBranchKey, clientProjectRoot: args.clientProjectRoot },
+              { repoBranchKey, clientProjectRoot: (args as any).clientProjectRoot },
               `Stored clientProjectRoot for ${repoBranchKey}`,
             );
           }
 
           // Get clientProjectRoot from stored map or args
-          let effectiveClientProjectRoot = args.clientProjectRoot;
-          if (!effectiveClientProjectRoot && args.repository) {
-            const repoBranchKey = createRepositoryBranchKey(args.repository, args.branch);
+          let effectiveClientProjectRoot = (args as any).clientProjectRoot;
+          if (!effectiveClientProjectRoot && (args as any).repository) {
+            const repoBranchKey = createRepositoryBranchKey((args as any).repository, (args as any).branch);
             effectiveClientProjectRoot = repositoryRootMap.get(repoBranchKey);
           }
 
@@ -108,8 +120,13 @@ function registerTools() {
           // Get memory service instance
           const memoryService = await MemoryService.getInstance();
 
-          // Add clientProjectRoot to args
-          const enhancedArgs = { ...args, clientProjectRoot: effectiveClientProjectRoot } as any;
+          // Add clientProjectRoot to args with proper typing
+          const enhancedArgs: EnhancedToolArguments = {
+            ...args,
+            clientProjectRoot: effectiveClientProjectRoot,
+            repository: ((args as any).repository as string) || 'unknown',
+            branch: ((args as any).branch as string) || 'main',
+          };
 
           // Get the tool handler directly
           const handler = toolHandlers[tool.name];
@@ -117,13 +134,13 @@ function registerTools() {
             throw new Error(`No handler found for tool: ${tool.name}`);
           }
 
-          // Create a minimal context object - no sendProgress since SDK doesn't support it
-          const handlerContext = {
+          // Create a properly typed context object
+          const handlerContext: ToolHandlerContext = {
             logger: toolLogger,
             session: {
               clientProjectRoot: effectiveClientProjectRoot,
-              repository: enhancedArgs.repository || 'unknown',
-              branch: enhancedArgs.branch || 'main',
+              repository: enhancedArgs.repository,
+              branch: enhancedArgs.branch,
             },
             sendProgress: async () => {
               // No-op - MCP SDK doesn't support progress for individual tools
@@ -132,8 +149,8 @@ function registerTools() {
             requestId,
           };
 
-          // Execute the handler directly
-          const result = await handler(enhancedArgs, handlerContext as any, memoryService);
+          // Execute the handler with proper types
+          const result: unknown = await handler(enhancedArgs, handlerContext, memoryService);
 
           toolPerfLogger.complete({ success: !!result });
 
@@ -214,10 +231,10 @@ function createSizeLimitedRequest(req: IncomingMessage, requestLogger: Logger): 
   const originalAddListener = req.addListener.bind(req);
 
   // Override event listeners to intercept 'data' events
-  req.on = function(event: string | symbol, listener: (...args: any[]) => void) {
+  req.on = function(event: string | symbol, listener: GenericEventListener) {
     if (event === 'data') {
       // Wrap the data listener to track cumulative size
-      const wrappedListener = (chunk: Buffer | string) => {
+      const wrappedListener: DataEventListener = (chunk: Buffer | string) => {
         if (sizeLimitExceeded) {
           return; // Don't process more data if limit already exceeded
         }
@@ -242,8 +259,8 @@ function createSizeLimitedRequest(req: IncomingMessage, requestLogger: Logger): 
           'Request chunk processed'
         );
 
-        // Call the original listener with the chunk
-        listener(chunk);
+        // Call the original listener with the chunk (type-safe cast)
+        (listener as DataEventListener)(chunk);
       };
 
       return originalOn.call(this, event, wrappedListener);
@@ -254,7 +271,7 @@ function createSizeLimitedRequest(req: IncomingMessage, requestLogger: Logger): 
   };
 
   // Also override addListener (alias for on)
-  req.addListener = function(event: string | symbol, listener: (...args: any[]) => void) {
+  req.addListener = function(event: string | symbol, listener: GenericEventListener) {
     return req.on(event, listener);
   };
 
@@ -290,10 +307,10 @@ async function handlePostRequest(
 
   // Monitor response completion to clear timeout
   const originalEnd = res.end.bind(res);
-  res.end = function(chunk?: any, encoding?: BufferEncoding | (() => void), cb?: () => void) {
+  res.end = function(chunk?: any, encoding?: any, cb?: any): ServerResponse {
     requestCompleted = true;
     clearTimeout(requestTimeout);
-    return originalEnd.call(this, chunk, encoding as any, cb);
+    return originalEnd.call(this, chunk, encoding, cb);
   };
 
   try {
