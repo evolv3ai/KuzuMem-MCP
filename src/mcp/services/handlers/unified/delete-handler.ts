@@ -318,6 +318,40 @@ async function handleSingleDeletion(
   };
 }
 
+// Helper function to validate bulk operation requirements
+function validateBulkOperation(params: DeleteParams, requiredParam?: string): void {
+  if (requiredParam && !params[requiredParam as keyof DeleteParams]) {
+    throw new Error(`${requiredParam} is required for ${params.operation} deletion`);
+  }
+
+  if (!params.confirm && !params.dryRun) {
+    throw new Error(
+      'confirm=true is required for bulk deletion operations (or use dryRun=true to preview)',
+    );
+  }
+}
+
+// Helper function to format bulk operation results
+function formatBulkResult(
+  operation: string,
+  result: any,
+  dryRun?: boolean,
+  operationTarget?: string,
+): DeleteResult {
+  const target = operationTarget || 'entities';
+  return {
+    success: true,
+    operation,
+    message: dryRun
+      ? `Would delete ${result.count} ${target}`
+      : `Deleted ${result.count} ${target}`,
+    deletedCount: result.count,
+    deletedEntities: result.entities,
+    dryRun,
+    warnings: result.warnings,
+  };
+}
+
 // Helper function for bulk deletion by type
 async function handleBulkByType(
   params: DeleteParams,
@@ -327,17 +361,8 @@ async function handleBulkByType(
   repository: string,
   branch: string,
 ): Promise<DeleteResult> {
-  if (!params.targetType) {
-    throw new Error('targetType is required for bulk-by-type deletion');
-  }
+  validateBulkOperation(params, 'targetType');
 
-  if (!params.confirm && !params.dryRun) {
-    throw new Error(
-      'confirm=true is required for bulk deletion operations (or use dryRun=true to preview)',
-    );
-  }
-
-  // Use the new bulk delete methods we'll add to MemoryService
   const result = await memoryService.bulkDeleteByType(
     context,
     clientProjectRoot,
@@ -350,17 +375,7 @@ async function handleBulkByType(
     },
   );
 
-  return {
-    success: true,
-    operation: 'bulk-by-type',
-    message: params.dryRun
-      ? `Would delete ${result.count} ${params.targetType} entities`
-      : `Deleted ${result.count} ${params.targetType} entities`,
-    deletedCount: result.count,
-    deletedEntities: result.entities,
-    dryRun: params.dryRun,
-    warnings: result.warnings,
-  };
+  return formatBulkResult('bulk-by-type', result, params.dryRun, `${params.targetType} entities`);
 }
 
 // Helper function for bulk deletion by tag
@@ -372,15 +387,7 @@ async function handleBulkByTag(
   repository: string,
   branch: string,
 ): Promise<DeleteResult> {
-  if (!params.tagId) {
-    throw new Error('tagId is required for bulk-by-tag deletion');
-  }
-
-  if (!params.confirm && !params.dryRun) {
-    throw new Error(
-      'confirm=true is required for bulk deletion operations (or use dryRun=true to preview)',
-    );
-  }
+  validateBulkOperation(params, 'tagId');
 
   const result = await memoryService.bulkDeleteByTag(
     context,
@@ -394,17 +401,12 @@ async function handleBulkByTag(
     },
   );
 
-  return {
-    success: true,
-    operation: 'bulk-by-tag',
-    message: params.dryRun
-      ? `Would delete ${result.count} entities tagged with ${params.tagId}`
-      : `Deleted ${result.count} entities tagged with ${params.tagId}`,
-    deletedCount: result.count,
-    deletedEntities: result.entities,
-    dryRun: params.dryRun,
-    warnings: result.warnings,
-  };
+  return formatBulkResult(
+    'bulk-by-tag',
+    result,
+    params.dryRun,
+    `entities tagged with ${params.tagId}`,
+  );
 }
 
 // Helper function for bulk deletion by branch
@@ -415,15 +417,7 @@ async function handleBulkByBranch(
   clientProjectRoot: string,
   repository: string,
 ): Promise<DeleteResult> {
-  if (!params.targetBranch) {
-    throw new Error('targetBranch is required for bulk-by-branch deletion');
-  }
-
-  if (!params.confirm && !params.dryRun) {
-    throw new Error(
-      'confirm=true is required for bulk deletion operations (or use dryRun=true to preview)',
-    );
-  }
+  validateBulkOperation(params, 'targetBranch');
 
   const result = await memoryService.bulkDeleteByBranch(
     context,
@@ -436,17 +430,12 @@ async function handleBulkByBranch(
     },
   );
 
-  return {
-    success: true,
-    operation: 'bulk-by-branch',
-    message: params.dryRun
-      ? `Would delete ${result.count} entities from branch ${params.targetBranch}`
-      : `Deleted ${result.count} entities from branch ${params.targetBranch}`,
-    deletedCount: result.count,
-    deletedEntities: result.entities,
-    dryRun: params.dryRun,
-    warnings: result.warnings,
-  };
+  return formatBulkResult(
+    'bulk-by-branch',
+    result,
+    params.dryRun,
+    `entities from branch ${params.targetBranch}`,
+  );
 }
 
 // Helper function for bulk deletion by repository
@@ -457,11 +446,7 @@ async function handleBulkByRepository(
   clientProjectRoot: string,
   repository: string,
 ): Promise<DeleteResult> {
-  if (!params.confirm && !params.dryRun) {
-    throw new Error(
-      'confirm=true is required for bulk deletion operations (or use dryRun=true to preview)',
-    );
-  }
+  validateBulkOperation(params);
 
   const result = await memoryService.bulkDeleteByRepository(
     context,
@@ -473,17 +458,12 @@ async function handleBulkByRepository(
     },
   );
 
-  return {
-    success: true,
-    operation: 'bulk-by-repository',
-    message: params.dryRun
-      ? `Would delete ${result.count} entities from repository ${repository} (all branches)`
-      : `Deleted ${result.count} entities from repository ${repository} (all branches)`,
-    deletedCount: result.count,
-    deletedEntities: result.entities,
-    dryRun: params.dryRun,
-    warnings: result.warnings,
-  };
+  return formatBulkResult(
+    'bulk-by-repository',
+    result,
+    params.dryRun,
+    `entities from repository ${repository} (all branches)`,
+  );
 }
 
 // Helper function for bulk deletion by filter (placeholder for now)

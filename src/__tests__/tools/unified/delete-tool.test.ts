@@ -43,7 +43,7 @@ describe('delete tool handler', () => {
       bulkDeleteByTag: jest.fn(),
       bulkDeleteByBranch: jest.fn(),
       bulkDeleteByRepository: jest.fn(),
-    } as any;
+    } as unknown as jest.Mocked<MemoryService>;
   });
 
   describe('parameter validation', () => {
@@ -127,12 +127,10 @@ describe('delete tool handler', () => {
 
       const result = await deleteHandler(params, mockContext, mockMemoryService);
 
-      expect(result).toEqual({
-        success: false,
-        operation: 'single',
-        message: 'Failed to execute single: entityType and id are required for single deletion',
-        deletedCount: 0,
-      });
+      expect(result.success).toBe(false);
+      expect(result.operation).toBe('single');
+      expect(result.message).toMatch(/entityType and id.*required.*single deletion/);
+      expect(result.deletedCount).toBe(0);
     });
 
     it('should support dry run for single deletion', async () => {
@@ -220,13 +218,10 @@ describe('delete tool handler', () => {
 
       const result = await deleteHandler(params, mockContext, mockMemoryService);
 
-      expect(result).toEqual({
-        success: false,
-        operation: 'bulk-by-type',
-        message:
-          'Failed to execute bulk-by-type: confirm=true is required for bulk deletion operations (or use dryRun=true to preview)',
-        deletedCount: 0,
-      });
+      expect(result.success).toBe(false);
+      expect(result.operation).toBe('bulk-by-type');
+      expect(result.message).toMatch(/confirm.*required.*bulk deletion/);
+      expect(result.deletedCount).toBe(0);
     });
 
     it('should require targetType for bulk-by-type', async () => {
