@@ -242,7 +242,7 @@ async function main() {
 
   // Connect to transport using the high-level API
   const transport = new StdioServerTransport();
-  await mcpServer.connect(transport);
+  await server.connect(transport);
 
   mcpStdioLogger.info('MCP Server (stdio) initialized and listening');
 
