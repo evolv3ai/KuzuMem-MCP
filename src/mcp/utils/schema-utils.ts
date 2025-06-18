@@ -14,7 +14,15 @@ import { z } from 'zod';
 function createZodTypeFromProperty(prop: any): z.ZodTypeAny {
   // Check for enum first, as it can apply to any type
   if (prop.enum && Array.isArray(prop.enum)) {
-    return z.enum(prop.enum as [string, ...string[]]);
+    // Build a union of literals to cover non-string enum members as well.
+    const literals = prop.enum.map((v: any) => z.literal(v));
+    if (literals.length === 0) {
+      throw new Error('Enum array cannot be empty');
+    }
+    if (literals.length === 1) {
+      return literals[0];
+    }
+    return z.union([literals[0], literals[1], ...literals.slice(2)]);
   }
 
   switch (prop.type) {

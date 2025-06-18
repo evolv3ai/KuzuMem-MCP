@@ -54,64 +54,15 @@ Best practices:
       },
       components: {
         type: 'array',
-        description: 'Array of component entities to import',
-        items: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', description: 'Component ID' },
-            name: { type: 'string', description: 'Component name' },
-            kind: { type: 'string', description: 'Component kind (e.g., service, library)' },
-            status: {
-              type: 'string',
-              enum: ['active', 'deprecated', 'planned'],
-              description: 'Component status'
-            },
-            depends_on: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Array of component IDs this component depends on'
-            },
-          },
-          required: ['id', 'name'],
-        },
+        description: 'Array of component entities to import (when type=components)',
       },
       decisions: {
         type: 'array',
-        description: 'Array of decision entities to import',
-        items: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', description: 'Decision ID' },
-            name: { type: 'string', description: 'Decision name' },
-            date: { type: 'string', description: 'Decision date (YYYY-MM-DD)' },
-            context: { type: 'string', description: 'Decision context' },
-          },
-          required: ['id', 'name', 'date'],
-        },
+        description: 'Array of decision entities to import (when type=decisions)',
       },
       rules: {
         type: 'array',
-        description: 'Array of rule entities to import',
-        items: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', description: 'Rule ID' },
-            name: { type: 'string', description: 'Rule name' },
-            created: { type: 'string', description: 'Rule creation date (YYYY-MM-DD)' },
-            content: { type: 'string', description: 'Rule content' },
-            triggers: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Array of trigger keywords'
-            },
-            status: {
-              type: 'string',
-              enum: ['active', 'deprecated'],
-              description: 'Rule status'
-            },
-          },
-          required: ['id', 'name', 'created', 'content'],
-        },
+        description: 'Array of rule entities to import (when type=rules)',
       },
     },
     required: ['type', 'repository'],
