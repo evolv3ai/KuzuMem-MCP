@@ -13,7 +13,7 @@
  * @returns A consistent repository:branch key string
  * @throws Error if repository or branch contains colons
  */
-export function createRepositoryBranchKey(repository: string, branch?: string): string {
+export function createRepositoryBranchKey(repository: string, branch?: string | null): string {
   // Validate that repository doesn't contain colons
   if (repository.includes(':')) {
     throw new Error(`Repository name cannot contain colons: "${repository}"`);

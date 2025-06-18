@@ -55,7 +55,7 @@ describe('Repository-Branch Key Consistency', () => {
     });
 
     it('should allow null branch and validate it properly', () => {
-      const key = createRepositoryBranchKey('my-repo', null as any);
+      const key = createRepositoryBranchKey('my-repo', null);
       expect(key).toBe('my-repo:main');
     });
   });
