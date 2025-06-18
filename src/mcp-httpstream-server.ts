@@ -279,7 +279,7 @@ async function handlePostRequest(
         }),
       );
     }
-  }, 60000); // 60 second timeout
+  }, 30000); // 30 second timeout - shorter than test timeouts to avoid interference
 
   try {
     // Validate request size before processing (Content-Length only)
@@ -303,8 +303,7 @@ async function handlePostRequest(
       return;
     }
 
-    // Clear timeout early since we're handling the request
-    clearTimeout(requestTimeout);
+    // Keep timeout active during transport handling and tool execution
 
     if (sessionId && transports[sessionId]) {
       // Reuse existing transport
@@ -390,6 +389,9 @@ async function handlePostRequest(
         }),
       );
     }
+  } finally {
+    // Clear timeout only after all request processing is complete
+    clearTimeout(requestTimeout);
   }
 }
 
