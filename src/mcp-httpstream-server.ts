@@ -206,7 +206,7 @@ function registerTools() {
                 text: JSON.stringify({
                   success: false,
                   error: error instanceof Error ? error.message : String(error),
-                  details: error instanceof Error ? error.stack : undefined,
+                  errorId: randomUUID(), // Generic error identifier for tracking without exposing internals
                 }),
               },
             ],
