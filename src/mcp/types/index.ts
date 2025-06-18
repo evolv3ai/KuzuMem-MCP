@@ -24,6 +24,9 @@ export interface McpTool {
         enum?: string[];
         items?: {
           type: string;
+          properties?: Record<string, any>;
+          required?: string[];
+          enum?: any[];
         };
       }
     >;
