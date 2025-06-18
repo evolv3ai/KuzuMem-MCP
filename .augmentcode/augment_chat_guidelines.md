@@ -12,34 +12,34 @@ All MCP tool calls **MUST** include these exact base fields:
 {
   "clientProjectRoot": "/Users/jokkeruokolainen/Documents/Solita/GenAI/Azure/MCP/kuzumem-mcp",
   "repository": "kuzumem-mcp",
-  "branch": "current_working_branch_name"  // Update when on feature branches
+  "branch": "current_working_branch_name", // Update when on feature branches
 }
 ```
 
 ## 2. ID Naming Conventions
 
-| Entity/Artifact | ID Format | Example |
-|-----------------|-----------|---------|
-| Component | `comp-<CamelName>` | `comp-MemoryService` |
-| Decision  | `dec-YYYYMMDD-<slug>` | `dec-20250612-api-versioning` |
-| Rule      | `rule-<category>-<slug>` | `rule-security-auth` |
-| File      | `file-<path-slug>-v<revision>` | `file-src-db-kuzu-ts-v1` |
-| Tag       | `tag-<category>` | `tag-performance` |
-| Context Log | `ctx-YYYYMMDD-hhmm-<slug>` | `ctx-20250612-0930-session-summary` |
-| Graph Projection | `graph-<algorithm>-<timestamp>` | `graph-pagerank-20250612T094500Z` |
-| Relationship CSV | `rel-<from>-<to>-v<revision>` | `rel-AuthService-PaymentService-v1` |
+| Entity/Artifact  | ID Format                       | Example                             |
+| ---------------- | ------------------------------- | ----------------------------------- |
+| Component        | `comp-<CamelName>`              | `comp-MemoryService`                |
+| Decision         | `dec-YYYYMMDD-<slug>`           | `dec-20250612-api-versioning`       |
+| Rule             | `rule-<category>-<slug>`        | `rule-security-auth`                |
+| File             | `file-<path-slug>-v<revision>`  | `file-src-db-kuzu-ts-v1`            |
+| Tag              | `tag-<category>`                | `tag-performance`                   |
+| Context Log      | `ctx-YYYYMMDD-hhmm-<slug>`      | `ctx-20250612-0930-session-summary` |
+| Graph Projection | `graph-<algorithm>-<timestamp>` | `graph-pagerank-20250612T094500Z`   |
+| Relationship CSV | `rel-<from>-<to>-v<revision>`   | `rel-AuthService-PaymentService-v1` |
 
 ## 3. Memory & Entity Types
 
-| Type | Purpose | Governing MCP Tool |
-|------|---------|--------------------|
-| Component | System module/service/code unit | `mcp_KuzuMem-MCP_entity` (`entityType: component`) |
-| Decision | Architectural/technical decision with rationale | `mcp_KuzuMem-MCP_entity` (`decision`) |
-| Rule | Coding standard/architectural constraint | `mcp_KuzuMem-MCP_entity` (`rule`) |
-| File | Source file metadata & metrics | `mcp_KuzuMem-MCP_entity` (`file`) |
-| Tag | Categorical label for filtering/analysis | `mcp_KuzuMem-MCP_entity` (`tag`) |
-| Context | Session log for work progress | `mcp_KuzuMem-MCP_context` |
-| Metadata | Repository-level metadata | `mcp_KuzuMem-MCP_memory-bank` (`operation: update-metadata`) |
+| Type      | Purpose                                         | Governing MCP Tool                                           |
+| --------- | ----------------------------------------------- | ------------------------------------------------------------ |
+| Component | System module/service/code unit                 | `mcp_KuzuMem-MCP_entity` (`entityType: component`)           |
+| Decision  | Architectural/technical decision with rationale | `mcp_KuzuMem-MCP_entity` (`decision`)                        |
+| Rule      | Coding standard/architectural constraint        | `mcp_KuzuMem-MCP_entity` (`rule`)                            |
+| File      | Source file metadata & metrics                  | `mcp_KuzuMem-MCP_entity` (`file`)                            |
+| Tag       | Categorical label for filtering/analysis        | `mcp_KuzuMem-MCP_entity` (`tag`)                             |
+| Context   | Session log for work progress                   | `mcp_KuzuMem-MCP_context`                                    |
+| Metadata  | Repository-level metadata                       | `mcp_KuzuMem-MCP_memory-bank` (`operation: update-metadata`) |
 
 ## 4. Tech Stack & Architecture
 
@@ -68,13 +68,13 @@ All MCP tool calls **MUST** include these exact base fields:
 
 ## 6. Workflow State Machine
 
-| Phase | Purpose | Exit Condition |
-|-------|---------|----------------|
-| ANALYZE   | Understand task, gather MCP context & graph topology | Blueprint drafted |
-| BLUEPRINT | Produce numbered Plan and propose a Decision | User replies **APPROVED** |
-| CONSTRUCT | Execute Plan step-by-step, reflecting changes in MCP graph | All Plan steps succeed |
-| VALIDATE  | Run tests/linters, record summary | Tests green → DONE; else return to CONSTRUCT |
-| ROLLBACK  | (auto) Undo partial work on unrecoverable error | Rollback succeeds → ANALYZE |
+| Phase     | Purpose                                                    | Exit Condition                               |
+| --------- | ---------------------------------------------------------- | -------------------------------------------- |
+| ANALYZE   | Understand task, gather MCP context & graph topology       | Blueprint drafted                            |
+| BLUEPRINT | Produce numbered Plan and propose a Decision               | User replies **APPROVED**                    |
+| CONSTRUCT | Execute Plan step-by-step, reflecting changes in MCP graph | All Plan steps succeed                       |
+| VALIDATE  | Run tests/linters, record summary                          | Tests green → DONE; else return to CONSTRUCT |
+| ROLLBACK  | (auto) Undo partial work on unrecoverable error            | Rollback succeeds → ANALYZE                  |
 
 ## 7. Essential MCP Tool Patterns
 
@@ -88,9 +88,9 @@ All MCP tool calls **MUST** include these exact base fields:
       "operation": "init",
       "clientProjectRoot": "/Users/jokkeruokolainen/Documents/Solita/GenAI/Azure/MCP/kuzumem-mcp",
       "repository": "kuzumem-mcp",
-      "branch": "feature/branch-name"
-    }
-  }
+      "branch": "feature/branch-name",
+    },
+  },
 }
 ```
 
@@ -107,9 +107,9 @@ All MCP tool calls **MUST** include these exact base fields:
       "name": "Example Component",
       "kind": "service",
       "status": "active",
-      "dependsOn": ["comp-OtherComponent"]
-    }
-  }
+      "dependsOn": ["comp-OtherComponent"],
+    },
+  },
 }
 ```
 
@@ -124,9 +124,9 @@ All MCP tool calls **MUST** include these exact base fields:
       "agent": "assistant",
       "summary": "one-line summary of work",
       "observation": "optional details",
-      "repository": "kuzumem-mcp"
-    }
-  }
+      "repository": "kuzumem-mcp",
+    },
+  },
 }
 ```
 
@@ -137,14 +137,14 @@ All MCP tool calls **MUST** include these exact base fields:
   "tool": {
     "name": "mcp_KuzuMem-MCP_analyze",
     "arguments": {
-      "algorithm": "pagerank",  // or "k-core", "louvain"
+      "algorithm": "pagerank", // or "k-core", "louvain"
       "clientProjectRoot": "/Users/jokkeruokolainen/Documents/Solita/GenAI/Azure/MCP/kuzumem-mcp",
       "repository": "kuzumem-mcp",
       "graphName": "graph-pagerank-timestamp",
       "nodeTypes": ["Component"],
-      "relationshipTypes": ["DEPENDS_ON"]
-    }
-  }
+      "relationshipTypes": ["DEPENDS_ON"],
+    },
+  },
 }
 ```
 
@@ -155,35 +155,35 @@ All MCP tool calls **MUST** include these exact base fields:
   "tool": {
     "name": "mcp_KuzuMem-MCP_detect",
     "arguments": {
-      "type": "cycles",   // or "islands", "path", "strongly-connected", "weakly-connected"
+      "type": "cycles", // or "islands", "path", "strongly-connected", "weakly-connected"
       "repository": "kuzumem-mcp",
       "projectedGraphName": "graph-pagerank-timestamp",
       "nodeTableNames": ["Component"],
-      "relationshipTableNames": ["DEPENDS_ON"]
-    }
-  }
+      "relationshipTableNames": ["DEPENDS_ON"],
+    },
+  },
 }
 ```
 
 ## 8. Memory Hygiene Guidelines
 
-| Memory Type | When to Write |
-|-------------|--------------|
-| Context (`ctx-*`) | After every significant action or phase transition |
-| Decision (`dec-*`) | Blueprint creation & status updates |
-| Graph Projection (`graph-*`) | After every `analyze`/`detect` run |
-| File (`file-*`) | When adding/updating source files |
-| Component/Rule/Tag | When architecture evolves |
+| Memory Type                  | When to Write                                      |
+| ---------------------------- | -------------------------------------------------- |
+| Context (`ctx-*`)            | After every significant action or phase transition |
+| Decision (`dec-*`)           | Blueprint creation & status updates                |
+| Graph Projection (`graph-*`) | After every `analyze`/`detect` run                 |
+| File (`file-*`)              | When adding/updating source files                  |
+| Component/Rule/Tag           | When architecture evolves                          |
 
 ## 9. Quick Tool Reference
 
-| Situation | Recommended Tool |
-|-----------|------------------|
-| Need recent history | `query → context` |
-| Explore neighbourhood | `query → relationships` |
-| Impact analysis | `query → dependencies` + `analyze → pagerank` |
-| Detect cycles/islands | `detect → cycles` / `detect → islands` |
-| Bulk onboarding | `bulk-import → components/rules` |
+| Situation             | Recommended Tool                              |
+| --------------------- | --------------------------------------------- |
+| Need recent history   | `query → context`                             |
+| Explore neighbourhood | `query → relationships`                       |
+| Impact analysis       | `query → dependencies` + `analyze → pagerank` |
+| Detect cycles/islands | `detect → cycles` / `detect → islands`        |
+| Bulk onboarding       | `bulk-import → components/rules`              |
 
 ## 10. Error Handling
 

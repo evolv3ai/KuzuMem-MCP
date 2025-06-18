@@ -5,7 +5,6 @@
 import { createRepositoryBranchKey } from '../../mcp/utils/repository-utils';
 
 describe('Repository-Branch Key Consistency', () => {
-
   describe('createRepositoryBranchKey', () => {
     it('should handle undefined branch by defaulting to main', () => {
       const key = createRepositoryBranchKey('my-repo', undefined);

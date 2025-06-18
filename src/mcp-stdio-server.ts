@@ -112,8 +112,6 @@ import packageJson from '../package.json';
 // Map to store clientProjectRoot by repository:branch (similar to HTTP server)
 const repositoryRootMap = new Map<string, string>();
 
-
-
 // Create the MCP server using high-level API (consistent with HTTP server)
 const mcpServer = new McpServer(
   {

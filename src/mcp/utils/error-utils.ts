@@ -30,7 +30,9 @@ export async function handleToolError(
 export function validateSession(context: ToolHandlerContext, toolName: string): string {
   const clientProjectRoot = context.session.clientProjectRoot;
   if (!clientProjectRoot) {
-    throw new Error(`No active session for ${toolName} tool. Use memory-bank tool with operation "init" first.`);
+    throw new Error(
+      `No active session for ${toolName} tool. Use memory-bank tool with operation "init" first.`,
+    );
   }
   return clientProjectRoot;
 }

@@ -2,7 +2,6 @@
  * Tests for schema-utils.ts
  */
 
-import { z } from 'zod';
 import { createZodRawShape } from '../../mcp/utils/schema-utils';
 
 describe('createZodRawShape', () => {

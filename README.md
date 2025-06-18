@@ -74,11 +74,7 @@ Add to your IDE's MCP configuration:
   "mcpServers": {
     "KuzuMem-MCP": {
       "command": "npx",
-      "args": [
-        "-y",
-        "ts-node",
-        "/absolute/path/to/kuzumem-mcp/src/mcp-stdio-server.ts"
-      ],
+      "args": ["-y", "ts-node", "/absolute/path/to/kuzumem-mcp/src/mcp-stdio-server.ts"],
       "env": {
         "PORT": "3000",
         "HOST": "localhost",

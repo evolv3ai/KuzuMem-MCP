@@ -8,7 +8,6 @@ import dotenv from 'dotenv';
 import { randomUUID } from 'node:crypto';
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 import { type Logger } from 'pino';
-import { z } from 'zod';
 
 // Official MCP SDK imports
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -35,8 +34,6 @@ const httpStreamLogger = loggers.mcpHttp();
 
 // Map to store clientProjectRoot for each repository and branch
 const repositoryRootMap = new Map<string, string>();
-
-
 
 // Create the official MCP server with proper capabilities
 const mcpServer = new McpServer(
