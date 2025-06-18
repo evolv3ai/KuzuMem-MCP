@@ -372,8 +372,7 @@ async function handlePostRequest(
       }
     });
 
-    // Clear timeout early since we're handling the request
-    clearTimeout(requestTimeout);
+    // Keep timeout active during transport handling and tool execution
 
     if (sessionId && transports[sessionId]) {
       // Reuse existing transport
@@ -459,6 +458,9 @@ async function handlePostRequest(
         }),
       );
     }
+  } finally {
+    // Clear timeout only after all request processing is complete
+    clearTimeout(requestTimeout);
   }
 }
 
