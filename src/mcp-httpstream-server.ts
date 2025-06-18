@@ -49,65 +49,7 @@ const mcpServer = new McpServer(
 
 // Schema creation is now handled by shared utility
 
-/**
- * Execute tool logic using existing handlers with official SDK approach.
- * This follows the pure official SDK pattern while reusing existing business logic.
- */
-async function executeToolDirectly(
-  toolName: string,
-  args: any,
-  memoryService: MemoryService,
-  logger: any,
-  progressCallback?: (progressData: any) => Promise<void>,
-): Promise<any> {
-  logger.debug({ toolName, args }, 'Executing tool using existing handlers');
-
-  // Get the handler for this tool
-  const handler = toolHandlers[toolName];
-  if (!handler) {
-    throw new Error(`No handler found for tool: ${toolName}`);
-  }
-
-  // Create a comprehensive context object for the handler
-  const handlerContext = {
-    logger,
-    session: {
-      clientProjectRoot: args.clientProjectRoot,
-      repository: args.repository,
-      branch: args.branch,
-    },
-    sendProgress: async (progressData: any) => {
-      // Log progress for debugging
-      logger.info({ progressData }, 'Progress notification (HTTP Stream)');
-
-      // Call the progress callback if provided
-      if (progressCallback) {
-        try {
-          await progressCallback(progressData);
-        } catch (error) {
-          logger.warn({ error, progressData }, 'Failed to send progress notification');
-        }
-      }
-    },
-    // Add all required properties for handler compatibility
-    signal: new AbortController().signal,
-    requestId: randomUUID(),
-    // Add additional properties that handlers might expect
-    request: {
-      method: 'tools/call',
-      params: {
-        name: toolName,
-        arguments: args,
-      },
-    },
-    meta: {
-      progressToken: randomUUID(),
-    },
-  };
-
-  // Call the existing handler with the context
-  return await handler(args, handlerContext as any, memoryService);
-}
+// Remove custom executeToolDirectly - we'll use the official SDK pattern directly
 
 // Register all our tools with the MCP server
 function registerTools() {
@@ -122,11 +64,14 @@ function registerTools() {
 
     const zodRawShape = createZodRawShape(tool);
 
-    // Use the simpler tool() method instead of registerTool()
-    mcpServer.tool(
+    // Use the official registerTool method following SDK patterns
+    mcpServer.registerTool(
       tool.name,
-      tool.description,
-      zodRawShape,
+      {
+        title: tool.name,
+        description: tool.description,
+        inputSchema: zodRawShape,
+      },
       async (args): Promise<CallToolResult> => {
         const toolPerfLogger = createPerformanceLogger(httpStreamLogger, `tool-${tool.name}`);
         const requestId = randomUUID();
@@ -167,21 +112,29 @@ function registerTools() {
           // Add clientProjectRoot to args
           const enhancedArgs = { ...args, clientProjectRoot: effectiveClientProjectRoot };
 
-          // Create a progress callback that can be used by the handler
-          const progressCallback = async (progressData: any) => {
-            // In the HTTP stream context, we can't send progress directly
-            // The MCP SDK handles this automatically for streaming responses
-            toolLogger.debug({ progressData, requestId }, 'Progress update');
+          // Get the tool handler directly
+          const handler = toolHandlers[tool.name];
+          if (!handler) {
+            throw new Error(`No handler found for tool: ${tool.name}`);
+          }
+
+          // Create a minimal context object - no sendProgress since SDK doesn't support it
+          const handlerContext = {
+            logger: toolLogger,
+            session: {
+              clientProjectRoot: effectiveClientProjectRoot,
+              repository: enhancedArgs.repository,
+              branch: enhancedArgs.branch,
+            },
+            sendProgress: async () => {
+              // No-op - MCP SDK doesn't support progress for individual tools
+            },
+            signal: new AbortController().signal,
+            requestId,
           };
 
-          // Execute tool logic directly using the official SDK approach
-          const result = await executeToolDirectly(
-            tool.name,
-            enhancedArgs,
-            memoryService,
-            toolLogger,
-            progressCallback,
-          );
+          // Execute the handler directly
+          const result = await handler(enhancedArgs, handlerContext as any, memoryService);
 
           toolPerfLogger.complete({ success: !!result });
 
