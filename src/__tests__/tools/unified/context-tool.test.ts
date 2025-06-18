@@ -1,6 +1,32 @@
 import { contextHandler } from '../../../mcp/services/handlers/unified/context-handler';
-import { MemoryService } from '../../../services/memory.service';
 import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { MemoryService } from '../../../services/memory.service';
+
+// Define discriminated union type for context handler results
+type ContextResult =
+  | {
+      success: true;
+      message?: string;
+      context: {
+        id: string;
+        iso_date: string;
+        agent: string;
+        summary: string;
+        observation: string | null;
+        repository: string;
+        branch: string;
+        created_at: string | null;
+        updated_at: string | null;
+      };
+    }
+  | {
+      success: true;
+      message?: string;
+    }
+  | {
+      success: false;
+      message: string;
+    };
 
 describe('context tool handler', () => {
   let mockContext: EnrichedRequestHandlerExtra;
@@ -121,10 +147,18 @@ describe('context tool handler', () => {
         // observation omitted
       };
 
-      const result = await contextHandler(params, mockContext, mockMemoryService);
+      const result = (await contextHandler(
+        params,
+        mockContext,
+        mockMemoryService,
+      )) as ContextResult;
 
-      expect(result.success).toBe(true);
-      expect(result.context?.observation).toBeNull();
+      if (result.success && 'context' in result) {
+        expect(result.success).toBe(true);
+        expect(result.context?.observation).toBeNull();
+      } else {
+        fail('Expected result to be successful with context');
+      }
     });
 
     it('should handle failed update', async () => {

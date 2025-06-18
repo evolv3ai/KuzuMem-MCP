@@ -1,6 +1,30 @@
 import { bulkImportHandler } from '../../../mcp/services/handlers/unified/bulk-import-handler';
-import { MemoryService } from '../../../services/memory.service';
 import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { MemoryService } from '../../../services/memory.service';
+
+// Define discriminated union type for bulk import handler results
+type BulkImportResult =
+  | {
+      type: 'components';
+      imported: number;
+      skipped: number;
+      failed: number;
+      errors?: Array<{ id: string; error: string }>;
+    }
+  | {
+      type: 'decisions';
+      imported: number;
+      skipped: number;
+      failed: number;
+      errors?: Array<{ id: string; error: string }>;
+    }
+  | {
+      type: 'rules';
+      imported: number;
+      skipped: number;
+      failed: number;
+      errors?: Array<{ id: string; error: string }>;
+    };
 
 describe('Bulk Import Tool Tests', () => {
   let mockMemoryService: jest.Mocked<MemoryService>;
@@ -39,7 +63,7 @@ describe('Bulk Import Tool Tests', () => {
       mockMemoryService.getComponent.mockResolvedValue(null);
       mockMemoryService.upsertComponent.mockResolvedValue({} as any);
 
-      const result = await bulkImportHandler(
+      const result = (await bulkImportHandler(
         {
           type: 'components',
           repository: 'test-repo',
@@ -52,12 +76,16 @@ describe('Bulk Import Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as BulkImportResult;
 
-      expect(result.type).toBe('components');
-      expect(result.imported).toBe(3);
-      expect(result.skipped).toBe(0);
-      expect(result.failed).toBe(0);
+      if (result.type === 'components') {
+        expect(result.type).toBe('components');
+        expect(result.imported).toBe(3);
+        expect(result.skipped).toBe(0);
+        expect(result.failed).toBe(0);
+      } else {
+        fail('Expected result type to be components');
+      }
       expect(mockMemoryService.upsertComponent).toHaveBeenCalledTimes(3);
     });
 
@@ -67,7 +95,7 @@ describe('Bulk Import Tool Tests', () => {
         .mockResolvedValueOnce(null) // doesn't exist
         .mockResolvedValueOnce({ id: 'comp-3' } as any); // exists
 
-      const result = await bulkImportHandler(
+      const result = (await bulkImportHandler(
         {
           type: 'components',
           repository: 'test-repo',
@@ -80,18 +108,22 @@ describe('Bulk Import Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as BulkImportResult;
 
-      expect(result.imported).toBe(1);
-      expect(result.skipped).toBe(2);
-      expect(result.failed).toBe(0);
+      if (result.type === 'components') {
+        expect(result.imported).toBe(1);
+        expect(result.skipped).toBe(2);
+        expect(result.failed).toBe(0);
+      } else {
+        fail('Expected result type to be components');
+      }
       expect(mockMemoryService.upsertComponent).toHaveBeenCalledTimes(1);
     });
 
     it('should overwrite existing components when overwrite is true', async () => {
       mockMemoryService.upsertComponent.mockResolvedValue({} as any);
 
-      const result = await bulkImportHandler(
+      const result = (await bulkImportHandler(
         {
           type: 'components',
           repository: 'test-repo',
@@ -103,10 +135,14 @@ describe('Bulk Import Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as BulkImportResult;
 
-      expect(result.imported).toBe(2);
-      expect(result.skipped).toBe(0);
+      if (result.type === 'components') {
+        expect(result.imported).toBe(2);
+        expect(result.skipped).toBe(0);
+      } else {
+        fail('Expected result type to be components');
+      }
       expect(mockMemoryService.getComponent).not.toHaveBeenCalled();
     });
 
@@ -117,7 +153,7 @@ describe('Bulk Import Tool Tests', () => {
         .mockRejectedValueOnce(new Error('DB error'))
         .mockResolvedValueOnce({} as any);
 
-      const result = await bulkImportHandler(
+      const result = (await bulkImportHandler(
         {
           type: 'components',
           repository: 'test-repo',
@@ -129,15 +165,19 @@ describe('Bulk Import Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as BulkImportResult;
 
-      expect(result.imported).toBe(2);
-      expect(result.failed).toBe(1);
-      expect(result.errors).toHaveLength(1);
-      expect(result.errors?.[0]).toEqual({
-        id: 'comp-2',
-        error: 'DB error',
-      });
+      if (result.type === 'components') {
+        expect(result.imported).toBe(2);
+        expect(result.failed).toBe(1);
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors?.[0]).toEqual({
+          id: 'comp-2',
+          error: 'DB error',
+        });
+      } else {
+        fail('Expected result type to be components');
+      }
     });
   });
 
@@ -146,7 +186,7 @@ describe('Bulk Import Tool Tests', () => {
       mockMemoryService.getDecision.mockResolvedValue(null);
       mockMemoryService.upsertDecision.mockResolvedValue({} as any);
 
-      const result = await bulkImportHandler(
+      const result = (await bulkImportHandler(
         {
           type: 'decisions',
           repository: 'test-repo',
@@ -157,10 +197,14 @@ describe('Bulk Import Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as BulkImportResult;
 
-      expect(result.type).toBe('decisions');
-      expect(result.imported).toBe(2);
+      if (result.type === 'decisions') {
+        expect(result.type).toBe('decisions');
+        expect(result.imported).toBe(2);
+      } else {
+        fail('Expected result type to be decisions');
+      }
       expect(mockMemoryService.upsertDecision).toHaveBeenCalledTimes(2);
     });
   });
@@ -170,7 +214,7 @@ describe('Bulk Import Tool Tests', () => {
       mockMemoryService.getRule.mockResolvedValue(null);
       mockMemoryService.upsertRule.mockResolvedValue({} as any);
 
-      const result = await bulkImportHandler(
+      const result = (await bulkImportHandler(
         {
           type: 'rules',
           repository: 'test-repo',
@@ -193,10 +237,14 @@ describe('Bulk Import Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as BulkImportResult;
 
-      expect(result.type).toBe('rules');
-      expect(result.imported).toBe(2);
+      if (result.type === 'rules') {
+        expect(result.type).toBe('rules');
+        expect(result.imported).toBe(2);
+      } else {
+        fail('Expected result type to be rules');
+      }
       expect(mockMemoryService.upsertRule).toHaveBeenCalledTimes(2);
     });
   });
@@ -304,7 +352,7 @@ describe('Bulk Import Tool Tests', () => {
         .mockResolvedValue(null);
       mockMemoryService.upsertComponent.mockResolvedValue({} as any);
 
-      const result = await bulkImportHandler(
+      const result = (await bulkImportHandler(
         {
           type: 'components',
           repository: 'test-repo',
@@ -315,15 +363,19 @@ describe('Bulk Import Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as BulkImportResult;
 
-      expect(result.failed).toBe(1);
-      expect(result.imported).toBe(1);
-      expect(result.errors).toHaveLength(1);
-      expect(result.errors?.[0]).toEqual({
-        id: 'comp-1',
-        error: 'Service unavailable',
-      });
+      if (result.type === 'components') {
+        expect(result.failed).toBe(1);
+        expect(result.imported).toBe(1);
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors?.[0]).toEqual({
+          id: 'comp-1',
+          error: 'Service unavailable',
+        });
+      } else {
+        fail('Expected result type to be components');
+      }
     });
   });
 });

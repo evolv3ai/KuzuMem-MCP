@@ -1,6 +1,38 @@
 import { analyzeHandler } from '../../../mcp/services/handlers/unified/analyze-handler';
-import { MemoryService } from '../../../services/memory.service';
 import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { MemoryService } from '../../../services/memory.service';
+
+// Define discriminated union type for analyze handler results
+type AnalyzeResult =
+  | {
+      type: 'pagerank';
+      status: 'complete';
+      projectedGraphName: string;
+      nodes: Array<{ id: string; pagerank: number }>;
+      message?: string;
+    }
+  | {
+      type: 'shortest-path';
+      status: 'complete';
+      projectedGraphName: string;
+      pathFound: boolean;
+      path: string[];
+      pathLength: number;
+    }
+  | {
+      type: 'k-core';
+      status: 'complete';
+      projectedGraphName: string;
+      nodes: Array<{ id: string; coreNumber: number }>;
+      k: number;
+    }
+  | {
+      type: 'louvain';
+      status: 'complete';
+      projectedGraphName: string;
+      nodes: Array<{ id: string; communityId: number }>;
+      modularity: number;
+    };
 
 describe('Analyze Tool Tests', () => {
   let mockMemoryService: jest.Mocked<MemoryService>;
@@ -46,7 +78,7 @@ describe('Analyze Tool Tests', () => {
       };
       mockMemoryService.pageRank.mockResolvedValue(mockResult);
 
-      const result = await analyzeHandler(
+      const result = (await analyzeHandler(
         {
           type: 'pagerank',
           repository: 'test-repo',
@@ -59,12 +91,16 @@ describe('Analyze Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as AnalyzeResult;
 
-      expect(result.type).toBe('pagerank');
-      expect(result.status).toBe('complete');
-      expect(result.nodes).toHaveLength(2);
-      expect(result.nodes[0]).toEqual({ id: 'comp-1', pagerank: 0.25 });
+      if (result.type === 'pagerank') {
+        expect(result.type).toBe('pagerank');
+        expect(result.status).toBe('complete');
+        expect(result.nodes).toHaveLength(2);
+        expect(result.nodes[0]).toEqual({ id: 'comp-1', pagerank: 0.25 });
+      } else {
+        fail('Expected result type to be pagerank');
+      }
       expect(mockMemoryService.pageRank).toHaveBeenCalledWith(mockContext, '/test/project', {
         type: 'pagerank',
         repository: 'test-repo',
@@ -121,7 +157,7 @@ describe('Analyze Tool Tests', () => {
       };
       mockMemoryService.shortestPath.mockResolvedValue(mockResult);
 
-      const result = await analyzeHandler(
+      const result = (await analyzeHandler(
         {
           type: 'shortest-path',
           repository: 'test-repo',
@@ -133,12 +169,16 @@ describe('Analyze Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as AnalyzeResult;
 
-      expect(result.type).toBe('shortest-path');
-      expect(result.pathFound).toBe(true);
-      expect(result.path).toEqual(['comp-1', 'comp-2', 'comp-3']);
-      expect(result.pathLength).toBe(3);
+      if (result.type === 'shortest-path') {
+        expect(result.type).toBe('shortest-path');
+        expect(result.pathFound).toBe(true);
+        expect(result.path).toEqual(['comp-1', 'comp-2', 'comp-3']);
+        expect(result.pathLength).toBe(3);
+      } else {
+        fail('Expected result type to be shortest-path');
+      }
     });
 
     it('should handle no path found', async () => {
@@ -152,7 +192,7 @@ describe('Analyze Tool Tests', () => {
       };
       mockMemoryService.shortestPath.mockResolvedValue(mockResult);
 
-      const result = await analyzeHandler(
+      const result = (await analyzeHandler(
         {
           type: 'shortest-path',
           repository: 'test-repo',
@@ -164,11 +204,15 @@ describe('Analyze Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as AnalyzeResult;
 
-      expect(result.pathFound).toBe(false);
-      expect(result.path).toEqual([]);
-      expect(result.pathLength).toBe(0);
+      if (result.type === 'shortest-path') {
+        expect(result.pathFound).toBe(false);
+        expect(result.path).toEqual([]);
+        expect(result.pathLength).toBe(0);
+      } else {
+        fail('Expected result type to be shortest-path');
+      }
     });
 
     it('should throw error if start/end nodes missing', async () => {
@@ -203,7 +247,7 @@ describe('Analyze Tool Tests', () => {
       };
       mockMemoryService.kCoreDecomposition.mockResolvedValue(mockResult);
 
-      const result = await analyzeHandler(
+      const result = (await analyzeHandler(
         {
           type: 'k-core',
           repository: 'test-repo',
@@ -214,11 +258,15 @@ describe('Analyze Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as AnalyzeResult;
 
-      expect(result.type).toBe('k-core');
-      expect(result.nodes).toHaveLength(2);
-      expect(result.nodes[0]).toEqual({ id: 'comp-1', coreNumber: 3 });
+      if (result.type === 'k-core') {
+        expect(result.type).toBe('k-core');
+        expect(result.nodes).toHaveLength(2);
+        expect(result.nodes[0]).toEqual({ id: 'comp-1', coreNumber: 3 });
+      } else {
+        fail('Expected result type to be k-core');
+      }
     });
 
     it('should throw error if k parameter missing', async () => {
@@ -253,7 +301,7 @@ describe('Analyze Tool Tests', () => {
       };
       mockMemoryService.louvainCommunityDetection.mockResolvedValue(mockResult);
 
-      const result = await analyzeHandler(
+      const result = (await analyzeHandler(
         {
           type: 'louvain',
           repository: 'test-repo',
@@ -263,12 +311,16 @@ describe('Analyze Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as AnalyzeResult;
 
-      expect(result.type).toBe('louvain');
-      expect(result.nodes).toHaveLength(3);
-      expect(result.nodes[0]).toEqual({ id: 'comp-1', communityId: 0 });
-      expect(result.nodes[2]).toEqual({ id: 'comp-3', communityId: 1 });
+      if (result.type === 'louvain') {
+        expect(result.type).toBe('louvain');
+        expect(result.nodes).toHaveLength(3);
+        expect(result.nodes[0]).toEqual({ id: 'comp-1', communityId: 0 });
+        expect(result.nodes[2]).toEqual({ id: 'comp-3', communityId: 1 });
+      } else {
+        fail('Expected result type to be louvain');
+      }
     });
   });
 

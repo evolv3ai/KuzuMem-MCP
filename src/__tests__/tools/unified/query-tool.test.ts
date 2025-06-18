@@ -2,6 +2,34 @@ import { queryHandler } from '../../../mcp/services/handlers/unified/query-handl
 import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
 import { MemoryService } from '../../../services/memory.service';
 
+// Define discriminated union types for query results
+type QueryResult =
+  | { type: 'context'; contexts: any[] }
+  | {
+      type: 'entities';
+      label: string;
+      entities: any[];
+      limit: number;
+      offset: number;
+      totalCount: number;
+    }
+  | {
+      type: 'relationships';
+      startItemId: string;
+      relatedItems: any[];
+      relationshipFilter?: string;
+      depth?: number;
+    }
+  | {
+      type: 'dependencies';
+      componentId: string;
+      direction: 'dependencies' | 'dependents';
+      components: any[];
+    }
+  | { type: 'governance'; componentId: string; decisions: any[]; rules: any[] }
+  | { type: 'history'; itemId: string; itemType: string; contextHistory: any[] }
+  | { type: 'tags'; tagId: string; items: any[] };
+
 // Test file for query tool - consolidates 7 query types
 describe('Query Tool Tests', () => {
   let mockMemoryService: jest.Mocked<MemoryService>;
@@ -55,7 +83,7 @@ describe('Query Tool Tests', () => {
       ];
       mockMemoryService.getLatestContexts.mockResolvedValue(mockContexts);
 
-      const result = await queryHandler(
+      const result = (await queryHandler(
         {
           type: 'context',
           repository: 'test-repo',
@@ -63,11 +91,15 @@ describe('Query Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as QueryResult;
 
-      expect(result.type).toBe('context');
-      expect(result.contexts).toHaveLength(1);
-      expect(result.contexts[0].id).toBe('ctx-1');
+      if (result.type === 'context') {
+        expect(result.type).toBe('context');
+        expect(result.contexts).toHaveLength(1);
+        expect(result.contexts[0].id).toBe('ctx-1');
+      } else {
+        fail('Expected result type to be context');
+      }
       expect(mockMemoryService.getLatestContexts).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
@@ -115,7 +147,7 @@ describe('Query Tool Tests', () => {
       };
       mockMemoryService.listNodesByLabel.mockResolvedValue(mockResult);
 
-      const result = await queryHandler(
+      const result = (await queryHandler(
         {
           type: 'entities',
           repository: 'test-repo',
@@ -123,12 +155,16 @@ describe('Query Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as QueryResult;
 
-      expect(result.type).toBe('entities');
-      expect(result.label).toBe('Component');
-      expect(result.entities).toHaveLength(2);
-      expect(result.totalCount).toBe(2);
+      if (result.type === 'entities') {
+        expect(result.type).toBe('entities');
+        expect(result.label).toBe('Component');
+        expect(result.entities).toHaveLength(2);
+        expect(result.totalCount).toBe(2);
+      } else {
+        fail('Expected result type to be entities');
+      }
     });
 
     it('should throw error if label is missing', async () => {
@@ -156,7 +192,7 @@ describe('Query Tool Tests', () => {
       };
       mockMemoryService.getRelatedItems.mockResolvedValue(mockResult as any);
 
-      const result = await queryHandler(
+      const result = (await queryHandler(
         {
           type: 'relationships',
           repository: 'test-repo',
@@ -166,12 +202,16 @@ describe('Query Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as QueryResult;
 
-      expect(result.type).toBe('relationships');
-      expect(result.startItemId).toBe('comp-1');
-      expect(result.relatedItems).toHaveLength(2);
-      expect(result.depth).toBe(2);
+      if (result.type === 'relationships') {
+        expect(result.type).toBe('relationships');
+        expect(result.startItemId).toBe('comp-1');
+        expect(result.relatedItems).toHaveLength(2);
+        expect(result.depth).toBe(2);
+      } else {
+        fail('Expected result type to be relationships');
+      }
       expect(mockMemoryService.getRelatedItems).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
@@ -208,7 +248,7 @@ describe('Query Tool Tests', () => {
       };
       mockMemoryService.getComponentDependencies.mockResolvedValue(mockResult as any);
 
-      const result = await queryHandler(
+      const result = (await queryHandler(
         {
           type: 'dependencies',
           repository: 'test-repo',
@@ -217,12 +257,16 @@ describe('Query Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as QueryResult;
 
-      expect(result.type).toBe('dependencies');
-      expect(result.componentId).toBe('comp-1');
-      expect(result.direction).toBe('dependencies');
-      expect(result.components).toHaveLength(1);
+      if (result.type === 'dependencies') {
+        expect(result.type).toBe('dependencies');
+        expect(result.componentId).toBe('comp-1');
+        expect(result.direction).toBe('dependencies');
+        expect(result.components).toHaveLength(1);
+      } else {
+        fail('Expected result type to be dependencies');
+      }
       expect(mockMemoryService.getComponentDependencies).toHaveBeenCalled();
     });
 
@@ -233,7 +277,7 @@ describe('Query Tool Tests', () => {
       };
       mockMemoryService.getComponentDependents.mockResolvedValue(mockResult as any);
 
-      const result = await queryHandler(
+      const result = (await queryHandler(
         {
           type: 'dependencies',
           repository: 'test-repo',
@@ -242,11 +286,15 @@ describe('Query Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as QueryResult;
 
-      expect(result.type).toBe('dependencies');
-      expect(result.direction).toBe('dependents');
-      expect(result.components).toHaveLength(1);
+      if (result.type === 'dependencies') {
+        expect(result.type).toBe('dependencies');
+        expect(result.direction).toBe('dependents');
+        expect(result.components).toHaveLength(1);
+      } else {
+        fail('Expected result type to be dependencies');
+      }
       expect(mockMemoryService.getComponentDependents).toHaveBeenCalled();
     });
 
@@ -274,7 +322,7 @@ describe('Query Tool Tests', () => {
       };
       mockMemoryService.getGoverningItemsForComponent.mockResolvedValue(mockResult as any);
 
-      const result = await queryHandler(
+      const result = (await queryHandler(
         {
           type: 'governance',
           repository: 'test-repo',
@@ -282,12 +330,16 @@ describe('Query Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as QueryResult;
 
-      expect(result.type).toBe('governance');
-      expect(result.componentId).toBe('comp-1');
-      expect(result.decisions).toHaveLength(1);
-      expect(result.rules).toHaveLength(1);
+      if (result.type === 'governance') {
+        expect(result.type).toBe('governance');
+        expect(result.componentId).toBe('comp-1');
+        expect(result.decisions).toHaveLength(1);
+        expect(result.rules).toHaveLength(1);
+      } else {
+        fail('Expected result type to be governance');
+      }
     });
 
     it('should throw error if componentId is missing', async () => {
@@ -316,7 +368,7 @@ describe('Query Tool Tests', () => {
       };
       mockMemoryService.getItemContextualHistory.mockResolvedValue(mockResult as any);
 
-      const result = await queryHandler(
+      const result = (await queryHandler(
         {
           type: 'history',
           repository: 'test-repo',
@@ -325,12 +377,16 @@ describe('Query Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as QueryResult;
 
-      expect(result.type).toBe('history');
-      expect(result.itemId).toBe('comp-1');
-      expect(result.itemType).toBe('Component');
-      expect(result.contextHistory).toHaveLength(2);
+      if (result.type === 'history') {
+        expect(result.type).toBe('history');
+        expect(result.itemId).toBe('comp-1');
+        expect(result.itemType).toBe('Component');
+        expect(result.contextHistory).toHaveLength(2);
+      } else {
+        fail('Expected result type to be history');
+      }
     });
 
     it('should throw error if itemId or itemType is missing', async () => {
@@ -360,7 +416,7 @@ describe('Query Tool Tests', () => {
       };
       mockMemoryService.findItemsByTag.mockResolvedValue(mockResult);
 
-      const result = await queryHandler(
+      const result = (await queryHandler(
         {
           type: 'tags',
           repository: 'test-repo',
@@ -368,12 +424,16 @@ describe('Query Tool Tests', () => {
         },
         mockContext,
         mockMemoryService,
-      );
+      )) as QueryResult;
 
-      expect(result.type).toBe('tags');
-      expect(result.tagId).toBe('tag-security');
-      expect(result.items).toHaveLength(2);
-      expect(result.items[0].type).toBe('Component');
+      if (result.type === 'tags') {
+        expect(result.type).toBe('tags');
+        expect(result.tagId).toBe('tag-security');
+        expect(result.items).toHaveLength(2);
+        expect(result.items[0].type).toBe('Component');
+      } else {
+        fail('Expected result type to be tags');
+      }
     });
 
     it('should find items by tag with entity type filter', async () => {
