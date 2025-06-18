@@ -11,6 +11,7 @@ import { detectHandler } from './services/handlers/unified/detect-handler';
 import { entityHandler } from './services/handlers/unified/entity-handler';
 import { introspectHandler } from './services/handlers/unified/introspect-handler';
 import { memoryBankHandler } from './services/handlers/unified/memory-bank-handler';
+import { memoryOptimizerHandler } from './services/handlers/unified/memory-optimizer-handler';
 import { queryHandler } from './services/handlers/unified/query-handler';
 import { searchHandler } from './services/handlers/unified/search-handler';
 
@@ -36,4 +37,5 @@ export const toolHandlers: Record<string, SdkToolHandler> = {
   'bulk-import': bulkImportHandler,
   search: searchHandler,
   delete: deleteHandler,
+  'memory-optimizer': memoryOptimizerHandler,
 };

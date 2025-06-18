@@ -1,0 +1,385 @@
+import { generateObject } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { anthropic } from '@ai-sdk/anthropic';
+import { MemoryService } from '../../services/memory.service.js';
+import { MemoryContextBuilder } from './context-builder.js';
+import { PromptManager, type AgentRole, type OptimizationStrategy } from './prompt-manager.js';
+import { logger } from '../../utils/logger.js';
+import type { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom.js';
+import type {
+  MemoryContext,
+  AnalysisResult,
+  OptimizationPlan,
+  OptimizationResult
+} from '../../schemas/optimization/types.js';
+import {
+  AnalysisResultSchema,
+  OptimizationPlanSchema
+} from '../../schemas/optimization/types.js';
+
+export interface MemoryOptimizationConfig {
+  llmProvider: 'openai' | 'anthropic';
+  model?: string;
+  promptVersion?: string;
+  defaultStrategy?: OptimizationStrategy;
+}
+
+/**
+ * Dynamic Memory Optimization Agent
+ * 
+ * Uses LLM intelligence to analyze memory graphs and generate safe optimization plans.
+ * Leverages existing KuzuMem-MCP infrastructure for data access and execution.
+ */
+export class MemoryOptimizationAgent {
+  private llmClient: any;
+  private contextBuilder: MemoryContextBuilder;
+  private promptManager: PromptManager;
+  private agentLogger = logger.child({ component: 'MemoryOptimizationAgent' });
+
+  constructor(
+    private memoryService: MemoryService,
+    private config: MemoryOptimizationConfig = { llmProvider: 'openai' }
+  ) {
+    // Initialize LLM client based on provider
+    this.llmClient = this.initializeLLMClient();
+    
+    // Initialize supporting services
+    this.contextBuilder = new MemoryContextBuilder(memoryService);
+    this.promptManager = new PromptManager();
+    
+    this.agentLogger.info('Memory Optimization Agent initialized', {
+      provider: config.llmProvider,
+      model: config.model,
+    });
+  }
+
+  /**
+   * Analyze memory graph and identify optimization opportunities
+   */
+  async analyzeMemory(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repository: string,
+    branch: string = 'main',
+    strategy: OptimizationStrategy = 'conservative'
+  ): Promise<AnalysisResult> {
+    const analysisLogger = this.agentLogger.child({
+      operation: 'analyzeMemory',
+      repository,
+      branch,
+      strategy,
+    });
+
+    try {
+      analysisLogger.info('Starting memory analysis');
+
+      // Build comprehensive memory context
+      const memoryContext = await this.contextBuilder.buildMemoryContext(
+        mcpContext,
+        clientProjectRoot,
+        repository,
+        branch
+      );
+
+      // Get additional context for analysis
+      const staleEntityCandidates = await this.contextBuilder.getStaleEntityCandidates(
+        mcpContext,
+        clientProjectRoot,
+        repository,
+        branch,
+        this.getStaleDaysThreshold(strategy)
+      );
+
+      const relationshipSummary = await this.contextBuilder.getRelationshipSummary(
+        mcpContext,
+        clientProjectRoot,
+        repository,
+        branch
+      );
+
+      // Build prompts for LLM analysis
+      const systemPrompt = await this.promptManager.buildSystemPrompt('analyzer', strategy);
+      const userPrompt = await this.promptManager.buildUserPrompt(
+        'analysis',
+        memoryContext,
+        strategy,
+        JSON.stringify({ staleEntityCandidates, relationshipSummary })
+      );
+
+      analysisLogger.debug('Sending analysis request to LLM', {
+        totalEntities: memoryContext.totalEntities,
+        staleCandidates: staleEntityCandidates.length,
+      });
+
+      // Generate analysis using LLM
+      const result = await generateObject({
+        model: this.llmClient,
+        system: systemPrompt,
+        prompt: userPrompt,
+        schema: AnalysisResultSchema,
+        temperature: 0.1, // Low temperature for consistent analysis
+      });
+
+      analysisLogger.info('Memory analysis completed', {
+        staleEntitiesFound: result.object.staleEntities.length,
+        redundancyGroupsFound: result.object.redundancies.length,
+        optimizationOpportunities: result.object.optimizationOpportunities.length,
+        overallHealthScore: result.object.summary.overallHealthScore,
+      });
+
+      return result.object;
+    } catch (error) {
+      analysisLogger.error('Memory analysis failed:', error);
+      throw new Error(`Memory analysis failed: ${error}`);
+    }
+  }
+
+  /**
+   * Generate optimization plan based on analysis results
+   */
+  async generateOptimizationPlan(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repository: string,
+    branch: string,
+    analysisResult: AnalysisResult,
+    strategy: OptimizationStrategy = 'conservative'
+  ): Promise<OptimizationPlan> {
+    const planLogger = this.agentLogger.child({
+      operation: 'generateOptimizationPlan',
+      repository,
+      branch,
+      strategy,
+    });
+
+    try {
+      planLogger.info('Generating optimization plan');
+
+      // Build memory context for plan generation
+      const memoryContext = await this.contextBuilder.buildMemoryContext(
+        mcpContext,
+        clientProjectRoot,
+        repository,
+        branch
+      );
+
+      // Build prompts for optimization planning
+      const systemPrompt = await this.promptManager.buildSystemPrompt('optimizer', strategy);
+      const userPrompt = await this.promptManager.buildUserPrompt(
+        'optimization',
+        memoryContext,
+        strategy,
+        JSON.stringify(analysisResult)
+      );
+
+      planLogger.debug('Sending optimization request to LLM', {
+        staleEntities: analysisResult.staleEntities.length,
+        redundancies: analysisResult.redundancies.length,
+      });
+
+      // Generate optimization plan using LLM
+      const result = await generateObject({
+        model: this.llmClient,
+        system: systemPrompt,
+        prompt: userPrompt,
+        schema: OptimizationPlanSchema,
+        temperature: 0.1, // Low temperature for consistent planning
+      });
+
+      // Validate plan against strategy constraints
+      const validatedPlan = await this.validateOptimizationPlan(result.object, strategy);
+
+      planLogger.info('Optimization plan generated', {
+        planId: validatedPlan.id,
+        totalActions: validatedPlan.actions.length,
+        entitiesAffected: validatedPlan.estimatedImpact.entitiesAffected,
+      });
+
+      return validatedPlan;
+    } catch (error) {
+      planLogger.error('Optimization plan generation failed:', error);
+      throw new Error(`Optimization plan generation failed: ${error}`);
+    }
+  }
+
+  /**
+   * Execute optimization plan safely
+   */
+  async executeOptimizationPlan(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repository: string,
+    branch: string,
+    plan: OptimizationPlan,
+    options: {
+      dryRun?: boolean;
+      requireConfirmation?: boolean;
+    } = {}
+  ): Promise<OptimizationResult> {
+    const executeLogger = this.agentLogger.child({
+      operation: 'executeOptimizationPlan',
+      planId: plan.id,
+      repository,
+      branch,
+      dryRun: options.dryRun,
+    });
+
+    try {
+      executeLogger.info('Executing optimization plan', {
+        totalActions: plan.actions.length,
+        dryRun: options.dryRun,
+      });
+
+      // Create snapshot if required
+      let snapshotId: string | undefined;
+      if (plan.safetyMeasures.snapshotRequired && !options.dryRun) {
+        // TODO: Implement snapshot creation
+        executeLogger.info('Snapshot creation would be implemented here');
+      }
+
+      const executedActions: OptimizationResult['executedActions'] = [];
+      let entitiesDeleted = 0;
+      let entitiesMerged = 0;
+      let entitiesUpdated = 0;
+
+      // Execute actions in the specified order
+      for (const actionId of plan.executionOrder) {
+        const action = plan.actions.find(a => a.entityId === actionId);
+        if (!action) {
+          executeLogger.warn(`Action not found: ${actionId}`);
+          continue;
+        }
+
+        try {
+          if (options.dryRun) {
+            executeLogger.info(`DRY RUN: Would execute ${action.type} on ${action.entityId}`);
+            executedActions.push({
+              actionId: action.entityId,
+              status: 'success',
+            });
+          } else {
+            // Execute actual action using existing MemoryService methods
+            await this.executeAction(mcpContext, clientProjectRoot, repository, branch, action);
+            
+            executedActions.push({
+              actionId: action.entityId,
+              status: 'success',
+            });
+
+            // Update counters
+            switch (action.type) {
+              case 'delete':
+                entitiesDeleted++;
+                break;
+              case 'merge':
+                entitiesMerged++;
+                break;
+              case 'update':
+                entitiesUpdated++;
+                break;
+            }
+          }
+        } catch (error) {
+          executeLogger.error(`Failed to execute action ${action.entityId}:`, error);
+          executedActions.push({
+            actionId: action.entityId,
+            status: 'failed',
+            error: String(error),
+          });
+        }
+      }
+
+      const result: OptimizationResult = {
+        planId: plan.id,
+        status: executedActions.every(a => a.status === 'success') ? 'success' : 'partial',
+        executedActions,
+        summary: {
+          entitiesDeleted,
+          entitiesMerged,
+          entitiesUpdated,
+        },
+        snapshotId,
+      };
+
+      executeLogger.info('Optimization plan execution completed', {
+        status: result.status,
+        entitiesDeleted,
+        entitiesMerged,
+        entitiesUpdated,
+      });
+
+      return result;
+    } catch (error) {
+      executeLogger.error('Optimization plan execution failed:', error);
+      throw new Error(`Optimization plan execution failed: ${error}`);
+    }
+  }
+
+  /**
+   * Initialize LLM client based on configuration
+   */
+  private initializeLLMClient(): any {
+    switch (this.config.llmProvider) {
+      case 'openai':
+        return openai(this.config.model || 'gpt-4o');
+      case 'anthropic':
+        return anthropic(this.config.model || 'claude-3-5-sonnet-20241022');
+      default:
+        throw new Error(`Unsupported LLM provider: ${this.config.llmProvider}`);
+    }
+  }
+
+  /**
+   * Get stale days threshold based on strategy
+   */
+  private getStaleDaysThreshold(strategy: OptimizationStrategy): number {
+    switch (strategy) {
+      case 'conservative':
+        return 180; // 6 months
+      case 'balanced':
+        return 90;  // 3 months
+      case 'aggressive':
+        return 30;  // 1 month
+      default:
+        return 90;
+    }
+  }
+
+  /**
+   * Validate optimization plan against strategy constraints
+   */
+  private async validateOptimizationPlan(
+    plan: OptimizationPlan,
+    strategy: OptimizationStrategy
+  ): Promise<OptimizationPlan> {
+    const strategyConfig = await this.promptManager.getStrategyConfig(strategy);
+    
+    // Limit actions based on strategy
+    if (plan.actions.length > strategyConfig.maxDeletions) {
+      plan.actions = plan.actions.slice(0, strategyConfig.maxDeletions);
+      plan.estimatedImpact.entitiesAffected = plan.actions.length;
+    }
+
+    // Ensure confirmation is required for strategy
+    if (strategyConfig.requiresConfirmation) {
+      plan.safetyMeasures.confirmationRequired = true;
+    }
+
+    return plan;
+  }
+
+  /**
+   * Execute individual optimization action
+   */
+  private async executeAction(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repository: string,
+    branch: string,
+    action: any
+  ): Promise<void> {
+    // TODO: Implement actual action execution using existing MemoryService methods
+    // This would use the delete tool we already implemented
+    this.agentLogger.info(`Executing ${action.type} action on ${action.entityId}`);
+  }
+}
