@@ -164,7 +164,10 @@ describe('context tool handler', () => {
 
       const result = await contextHandler(params, mockContext, mockMemoryService);
 
-      expect(result).toBeNull();
+      expect(result).toEqual({
+        success: false,
+        message: 'Failed to update context: unexpected response format',
+      });
     });
   });
 

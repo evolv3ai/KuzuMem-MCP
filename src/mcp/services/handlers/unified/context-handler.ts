@@ -67,6 +67,21 @@ export const contextHandler: SdkToolHandler = async (params, context, memoryServ
           validatedParams,
         );
 
+        // Check if result is null and handle appropriately
+        if (result === null) {
+          await context.sendProgress({
+            status: 'error',
+            message: 'Failed to update context: unexpected response format',
+            percent: 100,
+            isFinal: true,
+          });
+
+          return {
+            success: false,
+            message: 'Failed to update context: unexpected response format',
+          };
+        }
+
         // Send completion notification
         await context.sendProgress({
           status: 'complete',
