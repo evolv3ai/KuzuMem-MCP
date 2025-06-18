@@ -178,8 +178,13 @@ function registerTools(): void {
           // Get memory service instance
           const memoryService = await MemoryService.getInstance();
 
-          // Add clientProjectRoot to args
-          const enhancedArgs = { ...args, clientProjectRoot: effectiveClientProjectRoot };
+          // Add clientProjectRoot to args with consistent branch handling
+          const enhancedArgs = {
+            ...args,
+            clientProjectRoot: effectiveClientProjectRoot,
+            repository: (args as any).repository || 'unknown',
+            branch: (args as any).branch || 'main',
+          };
 
           // Execute tool logic using existing handlers (same as HTTP server)
           const handler = toolHandlers[tool.name];
@@ -192,8 +197,8 @@ function registerTools(): void {
             logger: toolLogger,
             session: {
               clientProjectRoot: effectiveClientProjectRoot,
-              repository: (enhancedArgs as any).repository,
-              branch: (enhancedArgs as any).branch,
+              repository: enhancedArgs.repository,
+              branch: enhancedArgs.branch,
             },
             sendProgress: async (progressData: any) => {
               // STDIO doesn't support progress notifications, just log
