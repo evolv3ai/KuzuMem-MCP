@@ -254,34 +254,8 @@ async function handlePostRequest(
   }, 60000); // 60 second timeout
 
   try {
-    // Parse the request body first - this is critical for proper transport handling
-    let parsedBody: unknown;
-    try {
-      const chunks: Buffer[] = [];
-      for await (const chunk of req) {
-        chunks.push(chunk);
-      }
-      const body = Buffer.concat(chunks).toString();
-      parsedBody = JSON.parse(body);
-      requestLogger.debug({ bodyLength: body.length }, 'Request body parsed successfully');
-    } catch (error) {
-      requestLogger.error({ error }, 'Failed to parse request body');
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(
-        JSON.stringify({
-          jsonrpc: '2.0',
-          error: {
-            code: -32700,
-            message: 'Parse error',
-            data: String(error),
-          },
-          id: null,
-        }),
-      );
-      return;
-    } finally {
-      clearTimeout(requestTimeout);
-    }
+    // Clear timeout early since we're handling the request
+    clearTimeout(requestTimeout);
 
     if (sessionId && transports[sessionId]) {
       // Reuse existing transport
@@ -289,8 +263,8 @@ async function handlePostRequest(
       requestLogger.debug({ sessionId }, 'Reusing existing transport');
 
       try {
-        // Handle the request with existing transport - CRITICAL: include parsed body
-        await transport.handleRequest(req, res, parsedBody);
+        // Let the transport handle the request and parse the body internally
+        await transport.handleRequest(req, res);
         return;
       } catch (error) {
         requestLogger.error({ error, sessionId }, 'Error handling request with existing transport');
@@ -326,8 +300,8 @@ async function handlePostRequest(
         await mcpServer.connect(transport);
         requestLogger.debug('MCP server connected to new transport');
 
-        // Let the transport handle the request with the parsed body - CRITICAL: include parsed body
-        await transport.handleRequest(req, res, parsedBody);
+        // Let the transport handle the request and parse the body internally
+        await transport.handleRequest(req, res);
         return;
       } catch (error) {
         requestLogger.error({ error }, 'Error handling request with new transport');
@@ -394,8 +368,8 @@ async function handleGetRequest(
   }
 
   const transport = transports[sessionId];
-  // GET requests don't have a body, so pass undefined for parsedBody
-  await transport.handleRequest(req, res, undefined);
+  // Let the transport handle the GET request
+  await transport.handleRequest(req, res);
 }
 
 // Helper function to handle DELETE requests (for session termination)
