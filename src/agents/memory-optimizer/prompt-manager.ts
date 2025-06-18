@@ -2,6 +2,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { logger } from '../../utils/logger.js';
 import type { MemoryContext } from '../../schemas/optimization/types.js';
+import type { MCPSamplingManager, MemorySample } from './mcp-sampling-manager.js';
+import type { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom.js';
 
 export interface SystemPromptConfig {
   version: string;
@@ -46,7 +48,10 @@ export class PromptManager {
   private prompts: Map<string, SystemPromptConfig> = new Map();
   private currentVersion: string = 'v1.0';
 
-  constructor(private promptsDir: string = './src/prompts') {}
+  constructor(
+    private promptsDir: string = './src/prompts',
+    private samplingManager?: MCPSamplingManager
+  ) {}
 
   /**
    * Load prompt configuration from file
@@ -90,7 +95,7 @@ export class PromptManager {
   ): Promise<string> {
     const config = await this.getCurrentConfig();
     const strategyConfig = config.strategies[strategy];
-    
+
     const systemPrompt = [
       config.basePrompt,
       '',
@@ -112,6 +117,77 @@ export class PromptManager {
     ].join('\n');
 
     return systemPrompt;
+  }
+
+  /**
+   * Build context-aware system prompt using MCP sampling
+   */
+  async buildContextAwareSystemPrompt(
+    role: AgentRole,
+    strategy: OptimizationStrategy,
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repository: string,
+    branch: string,
+    enableSampling: boolean = true,
+    samplingStrategy: 'representative' | 'problematic' | 'recent' | 'diverse' = 'representative'
+  ): Promise<string> {
+    try {
+      // Get base prompt
+      const basePrompt = await this.buildSystemPrompt(role, strategy);
+
+      // If sampling is disabled or not available, return base prompt
+      if (!enableSampling || !this.samplingManager) {
+        logger.debug('[PromptManager] MCP sampling disabled or unavailable, using base prompt');
+        return basePrompt;
+      }
+
+      logger.info('[PromptManager] Building context-aware prompt with MCP sampling', {
+        role,
+        strategy,
+        repository,
+        branch,
+        samplingStrategy,
+      });
+
+      // Sample memory context
+      const memorySample = await this.samplingManager.sampleMemoryContext(
+        mcpContext,
+        clientProjectRoot,
+        repository,
+        branch,
+        samplingStrategy,
+        20 // Sample size
+      );
+
+      // Build context-aware prompt
+      const contextAwarePrompt = await this.samplingManager.buildContextAwarePrompt(
+        role,
+        strategy,
+        memorySample,
+        basePrompt
+      );
+
+      logger.info('[PromptManager] Context-aware prompt built successfully', {
+        sampledEntities: memorySample.entities.length,
+        sampledRelationships: memorySample.relationships.length,
+        samplingRatio: memorySample.metadata.samplingRatio,
+      });
+
+      return contextAwarePrompt;
+    } catch (error) {
+      logger.error('[PromptManager] Failed to build context-aware prompt, falling back to base prompt:', error);
+      // Fallback to base prompt if sampling fails
+      return await this.buildSystemPrompt(role, strategy);
+    }
+  }
+
+  /**
+   * Set sampling manager for context-aware prompts
+   */
+  setSamplingManager(samplingManager: MCPSamplingManager): void {
+    this.samplingManager = samplingManager;
+    logger.info('[PromptManager] MCP Sampling Manager configured');
   }
 
   /**

@@ -29,6 +29,8 @@ const MemoryOptimizerInputSchema = z.object({
   preserveCategories: z.array(z.string()).optional(),
   snapshotId: z.string().optional(),
   analysisId: z.string().optional(),
+  enableMCPSampling: z.boolean().default(true),
+  samplingStrategy: z.enum(['representative', 'problematic', 'recent', 'diverse']).default('representative'),
 });
 
 type MemoryOptimizerParams = z.infer<typeof MemoryOptimizerInputSchema>;
@@ -75,6 +77,8 @@ export async function memoryOptimizerHandler(
       llmProvider: validatedParams.llmProvider,
       model: validatedParams.model,
       defaultStrategy: validatedParams.strategy,
+      enableMCPSampling: validatedParams.enableMCPSampling,
+      samplingStrategy: validatedParams.samplingStrategy,
     });
 
     // Route to appropriate operation handler

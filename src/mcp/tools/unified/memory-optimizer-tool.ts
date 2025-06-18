@@ -18,6 +18,12 @@ REASONING MODELS:
 - OpenAI: o3, o1-mini with HIGH reasoning settings for deep analysis
 - Anthropic: Claude-3.5-Sonnet, Claude-3.5-Haiku with extended thinking (2048 token budget)
 
+MCP SAMPLING:
+- Context-aware prompts that adapt to actual memory state and project characteristics
+- Sampling strategies: representative, problematic, recent, diverse
+- Automatic project analysis: maturity, activity level, complexity assessment
+- Adaptive optimization strategies based on real memory patterns
+
 OPERATIONS:
 - analyze: Deep reasoning analysis of memory graph patterns and optimization opportunities
 - optimize: Generate and execute safe optimization plans with reasoning validation
@@ -107,6 +113,15 @@ The agent uses advanced reasoning to analyze entity relationships, usage pattern
       analysisId: {
         type: 'string',
         description: 'Analysis ID to use for optimization (from previous analyze operation)',
+      },
+      enableMCPSampling: {
+        type: 'boolean',
+        description: 'Enable MCP sampling for context-aware prompts (default: true)',
+      },
+      samplingStrategy: {
+        type: 'string',
+        enum: ['representative', 'problematic', 'recent', 'diverse'],
+        description: 'MCP sampling strategy: representative (balanced sample), problematic (stale/disconnected), recent (new entities), diverse (all types)',
       },
     },
     required: ['operation', 'clientProjectRoot', 'repository'],

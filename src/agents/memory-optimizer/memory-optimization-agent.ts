@@ -4,6 +4,7 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { MemoryService } from '../../services/memory.service.js';
 import { MemoryContextBuilder } from './context-builder.js';
 import { PromptManager, type AgentRole, type OptimizationStrategy } from './prompt-manager.js';
+import { MCPSamplingManager } from './mcp-sampling-manager.js';
 import { logger } from '../../utils/logger.js';
 import type { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom.js';
 import type {
@@ -22,6 +23,8 @@ export interface MemoryOptimizationConfig {
   model?: string;
   promptVersion?: string;
   defaultStrategy?: OptimizationStrategy;
+  enableMCPSampling?: boolean;
+  samplingStrategy?: 'representative' | 'problematic' | 'recent' | 'diverse';
 }
 
 /**
@@ -34,22 +37,33 @@ export class MemoryOptimizationAgent {
   private llmClient: any;
   private contextBuilder: MemoryContextBuilder;
   private promptManager: PromptManager;
+  private samplingManager: MCPSamplingManager;
   private agentLogger = logger.child({ component: 'MemoryOptimizationAgent' });
 
   constructor(
     private memoryService: MemoryService,
-    private config: MemoryOptimizationConfig = { llmProvider: 'openai' }
+    private config: MemoryOptimizationConfig = {
+      llmProvider: 'openai',
+      enableMCPSampling: true,
+      samplingStrategy: 'representative'
+    }
   ) {
     // Initialize LLM client based on provider
     this.llmClient = this.initializeLLMClient();
-    
+
     // Initialize supporting services
     this.contextBuilder = new MemoryContextBuilder(memoryService);
-    this.promptManager = new PromptManager();
-    
+    this.samplingManager = new MCPSamplingManager(memoryService);
+    this.promptManager = new PromptManager('./src/prompts', this.samplingManager);
+
+    // Configure sampling manager in prompt manager
+    this.promptManager.setSamplingManager(this.samplingManager);
+
     this.agentLogger.info('Memory Optimization Agent initialized', {
       provider: config.llmProvider,
       model: config.model,
+      mcpSampling: config.enableMCPSampling,
+      samplingStrategy: config.samplingStrategy,
     });
   }
 
@@ -97,8 +111,20 @@ export class MemoryOptimizationAgent {
         branch
       );
 
-      // Build prompts for LLM analysis
-      const systemPrompt = await this.promptManager.buildSystemPrompt('analyzer', strategy);
+      // Build prompts for LLM analysis (with optional MCP sampling)
+      const systemPrompt = this.config.enableMCPSampling
+        ? await this.promptManager.buildContextAwareSystemPrompt(
+            'analyzer',
+            strategy,
+            mcpContext,
+            clientProjectRoot,
+            repository,
+            branch,
+            true,
+            this.config.samplingStrategy || 'representative'
+          )
+        : await this.promptManager.buildSystemPrompt('analyzer', strategy);
+
       const userPrompt = await this.promptManager.buildUserPrompt(
         'analysis',
         memoryContext,
@@ -166,8 +192,20 @@ export class MemoryOptimizationAgent {
         branch
       );
 
-      // Build prompts for optimization planning
-      const systemPrompt = await this.promptManager.buildSystemPrompt('optimizer', strategy);
+      // Build prompts for optimization planning (with optional MCP sampling)
+      const systemPrompt = this.config.enableMCPSampling
+        ? await this.promptManager.buildContextAwareSystemPrompt(
+            'optimizer',
+            strategy,
+            mcpContext,
+            clientProjectRoot,
+            repository,
+            branch,
+            true,
+            this.config.samplingStrategy || 'representative'
+          )
+        : await this.promptManager.buildSystemPrompt('optimizer', strategy);
+
       const userPrompt = await this.promptManager.buildUserPrompt(
         'optimization',
         memoryContext,
