@@ -4,7 +4,8 @@ A TypeScript implementation of a distributed memory bank as an MCP (Model Contex
 
 ## Key Features
 
-- **Unified Tool Architecture** - 10 consolidated tools covering all memory bank operations
+- **🧠 AI-Powered Memory Optimization** - Advanced reasoning models (OpenAI o1/o3, Claude) for intelligent memory management
+- **Unified Tool Architecture** - 12 consolidated tools covering all memory bank operations
 - **Thread-Safe Singleton Pattern** - Ensures each resource is instantiated only once, with proper thread safety
 - **Distributed Graph Structure** - Follows the advanced memory bank specification using a KùzuDB graph
 - **Repository & Branch Awareness** - All operations are contextualized by repository name and branch
@@ -14,10 +15,11 @@ A TypeScript implementation of a distributed memory bank as an MCP (Model Contex
 - **Fully MCP Compliant** - All tools follow the Model Context Protocol for client integration
 - **Progressive Results Streaming** - Supports streaming for long-running graph operations
 - **Client Project Root Isolation** - Each client project gets its own isolated database instance
+- **High-Reasoning Analysis** - Leverages OpenAI HIGH reasoning and Anthropic extended thinking for memory optimization
 
 ## Unified Tools
 
-The system currently broadcasts **10** unified tools that consolidate all memory bank operations (one additional tool is planned):
+The system currently broadcasts **12** unified tools that consolidate all memory bank operations:
 
 1. **memory-bank** - Initialize and manage memory bank metadata
 2. **entity** - Create, update, delete, and retrieve all entity types (components, decisions, rules, files, tags)
@@ -29,6 +31,8 @@ The system currently broadcasts **10** unified tools that consolidate all memory
 8. **detect** - Detect patterns (strongly/weakly connected components)
 9. **bulk-import** - Efficient bulk entity import
 10. **search** - Full-text search across all entity types with KuzuDB FTS integration
+11. **delete** - Safe deletion of entities with dependency validation
+12. **memory-optimizer** - 🧠 **AI-powered core memory optimization with advanced reasoning**
 
 For detailed tool documentation, see [Unified Tools Documentation](docs/unified-tools.md).
 
@@ -53,7 +57,7 @@ npm run build
 
 ## Configuration
 
-Create a `.env` file in the root directory:
+Create a `.env` file in the root directory (copy from `.env.example`):
 
 ```env
 # Database Configuration
@@ -65,7 +69,29 @@ HOST=localhost
 
 # Debug Logging (0=Error, 1=Warn, 2=Info, 3=Debug, 4=Trace)
 DEBUG=1
+
+# Core Memory Optimization Agent - AI Provider Configuration
+# Required for memory optimization features
+OPENAI_API_KEY=sk-your-openai-api-key-here
+ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key-here
+
+# Optional: Custom API endpoints
+# OPENAI_BASE_URL=https://api.openai.com/v1
+# ANTHROPIC_BASE_URL=https://api.anthropic.com
 ```
+
+### Core Memory Optimization Setup
+
+The Core Memory Optimization Agent requires API keys for high-reasoning models:
+
+- **OpenAI**: Get your API key from [OpenAI Platform](https://platform.openai.com/api-keys)
+- **Anthropic**: Get your API key from [Anthropic Console](https://console.anthropic.com/)
+
+**Supported Models:**
+- **OpenAI**: `o3`, `o1-mini` (with HIGH reasoning, 32,768 tokens)
+- **Anthropic**: `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022` (with extended thinking, 2,048 tokens)
+
+For detailed setup instructions, see [Core Memory Optimization Setup Guide](CORE_MEMORY_OPTIMIZATION_SETUP.md).
 
 Add to your IDE's MCP configuration:
 
@@ -144,6 +170,65 @@ Add to your IDE's MCP configuration:
   "relationshipTableNames": ["DEPENDS_ON"]
 }
 ```
+
+## 🧠 Core Memory Optimization Agent
+
+The **Core Memory Optimization Agent** provides AI-powered memory graph optimization with advanced reasoning capabilities:
+
+### Features
+- **High-Reasoning Analysis**: Uses OpenAI o1/o3 (HIGH reasoning) or Claude (extended thinking) for intelligent memory analysis
+- **Safe Optimization**: Conservative, balanced, and aggressive strategies with safety validation
+- **Stale Entity Detection**: Identifies outdated entities based on age and usage patterns
+- **Redundancy Removal**: Finds and consolidates duplicate or redundant entities
+- **Dependency Optimization**: Optimizes relationship chains while preserving integrity
+- **Dry-Run Mode**: Preview optimizations without making changes
+
+### Quick Start
+
+#### 1. Analyze Memory Graph
+```json
+{
+  "tool": "memory-optimizer",
+  "operation": "analyze",
+  "repository": "my-app",
+  "branch": "main",
+  "llmProvider": "openai",
+  "model": "o1-mini",
+  "strategy": "conservative"
+}
+```
+
+#### 2. Preview Optimization (Dry Run)
+```json
+{
+  "tool": "memory-optimizer",
+  "operation": "optimize",
+  "repository": "my-app",
+  "branch": "main",
+  "dryRun": true,
+  "strategy": "conservative"
+}
+```
+
+#### 3. Execute Optimization
+```json
+{
+  "tool": "memory-optimizer",
+  "operation": "optimize",
+  "repository": "my-app",
+  "branch": "main",
+  "dryRun": false,
+  "confirm": true,
+  "strategy": "conservative"
+}
+```
+
+### Optimization Strategies
+- **Conservative**: Max 5 deletions, 6-month stale threshold (recommended for production)
+- **Balanced**: Max 20 deletions, 3-month stale threshold (recommended for development)
+- **Aggressive**: Max 50 deletions, 1-month stale threshold (use with caution)
+
+For complete setup and usage instructions, see [Core Memory Optimization Setup Guide](CORE_MEMORY_OPTIMIZATION_SETUP.md).
 
 ## Testing
 
