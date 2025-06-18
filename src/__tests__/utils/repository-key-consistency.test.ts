@@ -38,19 +38,19 @@ describe('Repository-Branch Key Consistency', () => {
 
     it('should throw error when repository contains colon', () => {
       expect(() => createRepositoryBranchKey('my:repo', 'main')).toThrow(
-        'Repository name cannot contain colons: "my:repo"'
+        'Repository name cannot contain colons: "my:repo"',
       );
     });
 
     it('should throw error when branch contains colon', () => {
       expect(() => createRepositoryBranchKey('my-repo', 'feature:branch')).toThrow(
-        'Branch name cannot contain colons: "feature:branch"'
+        'Branch name cannot contain colons: "feature:branch"',
       );
     });
 
     it('should throw error when both repository and branch contain colons', () => {
       expect(() => createRepositoryBranchKey('my:repo', 'feature:branch')).toThrow(
-        'Repository name cannot contain colons: "my:repo"'
+        'Repository name cannot contain colons: "my:repo"',
       );
     });
 
