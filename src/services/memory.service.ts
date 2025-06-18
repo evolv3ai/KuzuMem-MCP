@@ -2539,21 +2539,24 @@ export class MemoryService {
           }
         } else {
           // For actual deletion, use bulk delete
+          // First get tag details before deletion
+          const tagSelectQuery = `MATCH (t:Tag) RETURN t.id as id, t.name as name`;
+          const tagSelectResults = await kuzuClient.executeQuery(tagSelectQuery, {});
+
+          // Store tag details before deletion
+          for (const row of tagSelectResults) {
+            deletedEntities.push({ type: 'tag', id: row.id, name: row.name });
+          }
+
+          // Now perform bulk deletion
           const tagDeleteQuery = `
             MATCH (t:Tag)
             OPTIONAL MATCH (t)-[r]-()
             DELETE r, t
-            RETURN count(t) as deletedCount
           `;
 
-          const tagDeleteResult = await kuzuClient.executeQuery(tagDeleteQuery, {});
-          const deletedCount = tagDeleteResult[0]?.deletedCount || 0;
-          totalCount += deletedCount;
-
-          // For actual deletion, we can't get individual tag details after deletion
-          for (let i = 0; i < deletedCount; i++) {
-            deletedEntities.push({ type: 'tag', id: `tag-${i}`, name: 'Deleted Tag' });
-          }
+          await kuzuClient.executeQuery(tagDeleteQuery, {});
+          totalCount += tagSelectResults.length;
         }
       }
 
@@ -2669,7 +2672,7 @@ export class MemoryService {
           totalCount++;
         }
       } else {
-        // Delete entities found with the tag
+        // Store entity details before bulk deletion
         for (const row of findResults) {
           const nodeLabels = row.nodeLabels || [];
           const entityType = nodeLabels.find((label: string) =>
@@ -2677,29 +2680,30 @@ export class MemoryService {
           );
 
           if (entityType) {
-            const deleteQuery = `
-              MATCH (n:${entityType} {id: $entityId, repository: $repositoryName, branch: $branch})
-              OPTIONAL MATCH (n)-[r]-()
-              DELETE r, n
-              RETURN count(n) as deletedCount
-            `;
-
-            const deleteResult = await kuzuClient.executeQuery(deleteQuery, {
-              entityId: row.id,
-              repositoryName,
-              branch,
+            deletedEntities.push({
+              type: entityType.toLowerCase(),
+              id: row.id,
+              name: row.name,
             });
-
-            const deletedCount = deleteResult[0]?.deletedCount || 0;
-            if (deletedCount > 0) {
-              deletedEntities.push({
-                type: entityType.toLowerCase(),
-                id: row.id,
-                name: row.name,
-              });
-              totalCount += deletedCount;
-            }
           }
+        }
+
+        // Perform bulk deletion with single query
+        if (deletedEntities.length > 0) {
+          const bulkDeleteQuery = `
+            MATCH (t:Tag {id: $tagId})-[:TAGGED_WITH]-(n)
+            WHERE n.repository = $repositoryName AND n.branch = $branch
+            OPTIONAL MATCH (n)-[r]-()
+            DELETE r, n
+          `;
+
+          await kuzuClient.executeQuery(bulkDeleteQuery, {
+            tagId,
+            repositoryName,
+            branch,
+          });
+
+          totalCount = deletedEntities.length;
         }
       }
 
