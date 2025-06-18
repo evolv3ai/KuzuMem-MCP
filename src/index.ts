@@ -1,19 +1,19 @@
-import { loggers } from './utils/logger';
+/**
+ * KuzuMem MCP - Main Entry Point
+ *
+ * This package provides MCP (Model Context Protocol) tools for distributed
+ * graph memory bank storage using KuzuDB.
+ *
+ * Available servers:
+ * - STDIO Server: npm run start:stdio
+ * - HTTP Stream Server: npm run start:httpstream
+ * - CLI Tool: npm run cli
+ *
+ * For more information, see README.md
+ */
 
-const mainLogger = loggers.controller().child({ component: 'Main' });
-
-mainLogger.info(
-  'This is the main index.ts. Previously, this started the default HTTP server (src/app.ts), which has been removed. \n' +
-    'Please use specific commands to start servers, e.g.: \n' +
-    '  - For STDIN/STDOUT SDK server: npm run start:stdio \n' +
-    '  - For HTTP Streaming server: npx ts-node src/mcp-httpstream-server.ts',
-);
-
-// // import { startServer } from './app'; // Removed
-// // import { initializeKuzuDB } from './db/kuzu'; // Removed
-
-// // KuzuDB initialization is now handled by MemoryService on demand for each clientProjectRoot
-// (async () => {
-//   // await initializeKuzuDB(); // Removed call
-//   // startServer(); // Removed
-// })();
+console.log('KuzuMem MCP - Use specific server commands:');
+console.log('  - STDIO Server: npm run start:stdio');
+console.log('  - HTTP Stream Server: npm run start:httpstream');
+console.log('  - CLI Tool: npm run cli');
+console.log('  - See README.md for more information');

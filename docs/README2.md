@@ -403,9 +403,9 @@ DEBUG=1
 
 ### Server Options
 
-- **HTTP Server:** `npm start`
-- **HTTP Streaming:** `npx ts-node src/mcp-httpstream-server.ts`
-- **stdio Server:** `npx ts-node src/mcp-stdio-server.ts`
+- **HTTP Stream Server:** `npm run start:httpstream`
+- **STDIO Server:** `npm run start:stdio`
+- **CLI Tool:** `npm run cli`
 
 ### MCP Tools
 
@@ -451,7 +451,7 @@ This project follows a multi-layer architecture:
 - **[KùzuDB](https://kuzudb.com/)** - Embedded property graph database
 - **[TypeScript](https://www.typescriptlang.org/)** - Type-safe programming language
 - **[Node.js](https://nodejs.org/)** - JavaScript runtime
-- **[Express](https://expressjs.com/)** - Web framework
+- **[MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)** - Official MCP implementation
 - **[Model Context Protocol](https://modelcontextprotocol.io/introduction)** - Agent-tool communication standard
 - **[Commander.js](https://github.com/tj/commander.js/)** - Command-line application framework
 
