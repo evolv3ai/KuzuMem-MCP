@@ -468,7 +468,7 @@ describe('entity tool handler', () => {
 
       expect(mockContext.sendProgress).toHaveBeenCalledWith({
         status: 'error',
-        message: 'Failed to create component: Database error',
+        message: 'Failed to execute create component: Database error',
         percent: 100,
         isFinal: true,
       });

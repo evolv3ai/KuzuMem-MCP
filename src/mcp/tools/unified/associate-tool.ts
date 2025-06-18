@@ -61,6 +61,11 @@ Best practices:
         type: 'string',
         description: 'Item ID (for tag-item association)',
       },
+      entityType: {
+        type: 'string',
+        enum: ['Component', 'Decision', 'Rule', 'File', 'Context'],
+        description: 'Type of entity being tagged (for tag-item association)',
+      },
     },
     required: ['type', 'repository'],
   },

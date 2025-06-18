@@ -3,6 +3,7 @@ import {
   BulkImportInputSchema,
   BulkImportOutputSchema,
 } from '../../../schemas/unified-tool-schemas';
+import { handleToolError, validateSession, logToolExecution } from '../../../utils/error-utils';
 import { z } from 'zod';
 
 /**
@@ -14,14 +15,11 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
   const validatedParams = BulkImportInputSchema.parse(params);
   const { type, repository, branch = 'main', overwrite = false } = validatedParams;
 
-  // 2. Get clientProjectRoot from session
-  const clientProjectRoot = context.session.clientProjectRoot as string | undefined;
-  if (!clientProjectRoot) {
-    throw new Error('No active session. Use memory-bank tool with operation "init" first.');
-  }
+  // 2. Validate session and get clientProjectRoot
+  const clientProjectRoot = validateSession(context, 'bulk-import');
 
   // 3. Log the operation
-  context.logger.info(`Executing bulk import: ${type}`, {
+  logToolExecution(context, `bulk import: ${type}`, {
     repository,
     branch,
     clientProjectRoot,
@@ -236,19 +234,7 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
       message: `Successfully imported ${imported} ${type}, skipped ${skipped}, failed ${failed}`,
     } satisfies z.infer<typeof BulkImportOutputSchema>;
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    context.logger.error(`Bulk import failed: ${errorMessage}`, {
-      type,
-      error,
-    });
-
-    await context.sendProgress({
-      status: 'error',
-      message: `Failed to execute bulk import: ${errorMessage}`,
-      percent: 100,
-      isFinal: true,
-    });
-
+    await handleToolError(error, context, `bulk import: ${type}`, type);
     throw error;
   }
 };

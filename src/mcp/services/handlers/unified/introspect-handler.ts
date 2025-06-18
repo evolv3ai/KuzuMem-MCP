@@ -1,4 +1,5 @@
 import { SdkToolHandler } from '../../../tool-handlers';
+import { handleToolError, validateSession, logToolExecution } from '../../../utils/error-utils';
 
 // TypeScript interfaces for introspect parameters
 interface IntrospectParams {
@@ -49,7 +50,7 @@ interface IndexesOutput {
  */
 export const introspectHandler: SdkToolHandler = async (params, context, memoryService) => {
   // 1. Validate and extract parameters
-  const validatedParams = params as IntrospectParams;
+  const validatedParams = params as unknown as IntrospectParams;
 
   // Basic validation
   if (!validatedParams.query) {
@@ -61,18 +62,15 @@ export const introspectHandler: SdkToolHandler = async (params, context, memoryS
 
   const { query, repository, branch = 'main', target } = validatedParams;
 
-  // 2. Get clientProjectRoot from session
-  const clientProjectRoot = context.session.clientProjectRoot as string | undefined;
-  if (!clientProjectRoot) {
-    throw new Error('No active session. Use memory-bank tool with operation "init" first.');
-  }
+  // 2. Validate session and get clientProjectRoot
+  const clientProjectRoot = validateSession(context, 'introspect');
 
   // 3. Log the operation
-  context.logger.info(`Executing introspect query: ${query}`, {
+  logToolExecution(context, `introspect query: ${query}`, {
     repository,
     branch,
-    target,
     clientProjectRoot,
+    target,
   });
 
   // 4. Validate target parameter for queries that require it
@@ -201,19 +199,9 @@ export const introspectHandler: SdkToolHandler = async (params, context, memoryS
         throw new Error(`Unknown introspection query: ${query}`);
     }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    context.logger.error(`Introspect query failed: ${errorMessage}`, {
-      query,
-      target,
-      error,
-    });
+    await handleToolError(error, context, `${query} introspect query`, query);
 
-    await context.sendProgress({
-      status: 'error',
-      message: `Failed to execute ${query} query: ${errorMessage}`,
-      percent: 100,
-      isFinal: true,
-    });
+    const errorMessage = error instanceof Error ? error.message : String(error);
 
     // Return appropriate error response based on query type
     if (query === 'labels') {

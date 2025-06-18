@@ -63,6 +63,7 @@ describe('context tool handler', () => {
       const result = await contextHandler(params, mockContext, mockMemoryService);
 
       expect(mockMemoryService.updateContext).toHaveBeenCalledWith(mockContext, '/test/project', {
+        operation: 'update',
         repository: 'test-repo',
         branch: 'main',
         agent: 'cursor',
@@ -165,7 +166,7 @@ describe('context tool handler', () => {
 
       expect(result).toEqual({
         success: false,
-        message: 'Failed to update context - unexpected response format',
+        message: 'Failed to update context: unexpected response format',
       });
     });
   });
@@ -182,9 +183,13 @@ describe('context tool handler', () => {
         summary: 'Test update',
       };
 
-      await expect(contextHandler(params, mockContext, mockMemoryService)).rejects.toThrow(
-        'No active session',
-      );
+      const result = await contextHandler(params, mockContext, mockMemoryService);
+
+      expect(result).toEqual({
+        success: false,
+        message:
+          'No active session for context tool. Use memory-bank tool with operation "init" first.',
+      });
     });
 
     it('should handle service errors gracefully', async () => {
@@ -207,7 +212,7 @@ describe('context tool handler', () => {
 
       expect(mockContext.sendProgress).toHaveBeenCalledWith({
         status: 'error',
-        message: 'Failed to update context: Database error',
+        message: 'Failed to execute context update: Database error',
         percent: 100,
         isFinal: true,
       });
@@ -222,7 +227,12 @@ describe('context tool handler', () => {
         // summary missing
       };
 
-      await expect(contextHandler(params, mockContext, mockMemoryService)).rejects.toThrow();
+      const result = await contextHandler(params, mockContext, mockMemoryService);
+
+      expect(result).toEqual({
+        success: false,
+        message: expect.stringContaining('Required'),
+      });
     });
   });
 

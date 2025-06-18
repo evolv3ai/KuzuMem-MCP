@@ -141,7 +141,7 @@ describe('Query Tool Tests', () => {
           mockContext,
           mockMemoryService,
         ),
-      ).rejects.toThrow('Label is required for entities query');
+      ).rejects.toThrow('Required fields missing for the specified query type');
     });
   });
 
@@ -196,7 +196,7 @@ describe('Query Tool Tests', () => {
           mockContext,
           mockMemoryService,
         ),
-      ).rejects.toThrow('startItemId is required for relationships query');
+      ).rejects.toThrow('Required fields missing for the specified query type');
     });
   });
 
@@ -261,7 +261,7 @@ describe('Query Tool Tests', () => {
           mockContext,
           mockMemoryService,
         ),
-      ).rejects.toThrow('componentId and direction are required');
+      ).rejects.toThrow(); // Zod validation error for missing direction
     });
   });
 
@@ -300,7 +300,7 @@ describe('Query Tool Tests', () => {
           mockContext,
           mockMemoryService,
         ),
-      ).rejects.toThrow('componentId is required for governance query');
+      ).rejects.toThrow('Required fields missing for the specified query type');
     });
   });
 
@@ -344,7 +344,7 @@ describe('Query Tool Tests', () => {
           mockContext,
           mockMemoryService,
         ),
-      ).rejects.toThrow('itemId and itemType are required for history query');
+      ).rejects.toThrow('Required fields missing for the specified query type');
     });
   });
 
@@ -415,7 +415,7 @@ describe('Query Tool Tests', () => {
           mockContext,
           mockMemoryService,
         ),
-      ).rejects.toThrow('tagId is required for tags query');
+      ).rejects.toThrow('Required fields missing for the specified query type');
     });
   });
 

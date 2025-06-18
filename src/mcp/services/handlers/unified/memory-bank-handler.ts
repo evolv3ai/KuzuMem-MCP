@@ -1,7 +1,8 @@
 import path from 'path';
 import { MemoryService } from '../../../../services/memory.service';
 import { SdkToolHandler } from '../../../tool-handlers';
-import { EnrichedRequestHandlerExtra } from '../../../types/sdk-custom';
+import { ToolHandlerContext } from '../../../types/sdk-custom';
+import { logToolExecution } from '../../../utils/error-utils';
 
 // TypeScript interfaces for memory bank parameters
 interface MemoryBankParams {
@@ -18,7 +19,7 @@ interface MemoryBankParams {
  */
 function ensureValidSessionContext(
   params: any,
-  context: EnrichedRequestHandlerExtra,
+  context: ToolHandlerContext,
   toolName: string,
 ): string {
   const logger = context.logger || console;
@@ -79,7 +80,7 @@ function ensureValidSessionContext(
  */
 async function handleInit(
   params: any,
-  context: EnrichedRequestHandlerExtra,
+  context: ToolHandlerContext,
   memoryService: MemoryService,
 ): Promise<any> {
   const { clientProjectRoot, repository, branch = 'main' } = params;
@@ -157,7 +158,7 @@ async function handleInit(
  */
 async function handleGetMetadata(
   params: any,
-  context: EnrichedRequestHandlerExtra,
+  context: ToolHandlerContext,
   memoryService: MemoryService,
   clientProjectRoot: string,
 ): Promise<any> {
@@ -182,7 +183,7 @@ async function handleGetMetadata(
  */
 async function handleUpdateMetadata(
   params: any,
-  context: EnrichedRequestHandlerExtra,
+  context: ToolHandlerContext,
   memoryService: MemoryService,
   clientProjectRoot: string,
 ): Promise<any> {
@@ -213,7 +214,7 @@ async function handleUpdateMetadata(
  */
 export const memoryBankHandler: SdkToolHandler = async (
   params: any,
-  context: EnrichedRequestHandlerExtra,
+  context: ToolHandlerContext,
   memoryService: MemoryService,
 ): Promise<unknown> => {
   // 1. Validate and extract parameters
@@ -231,7 +232,7 @@ export const memoryBankHandler: SdkToolHandler = async (
   const clientProjectRoot = ensureValidSessionContext(validatedParams, context, 'memory-bank');
 
   // 3. Log the operation
-  context.logger.info(`Executing memory-bank with operation: ${validatedParams.operation}`, {
+  logToolExecution(context, `memory-bank operation: ${validatedParams.operation}`, {
     repository: validatedParams.repository,
     branch: validatedParams.branch || 'main',
     clientProjectRoot,

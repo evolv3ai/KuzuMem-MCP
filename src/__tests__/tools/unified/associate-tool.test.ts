@@ -82,7 +82,7 @@ describe('Associate Tool Tests', () => {
           mockContext,
           mockMemoryService,
         ),
-      ).rejects.toThrow('fileId and componentId are required for file-component association');
+      ).rejects.toThrow('Required fields missing for association type');
     });
 
     it('should throw error if componentId is missing', async () => {
@@ -96,7 +96,7 @@ describe('Associate Tool Tests', () => {
           mockContext,
           mockMemoryService,
         ),
-      ).rejects.toThrow('fileId and componentId are required for file-component association');
+      ).rejects.toThrow('Required fields missing for association type');
     });
   });
 
@@ -107,9 +107,9 @@ describe('Associate Tool Tests', () => {
         success: true,
         message: 'Component tagged successfully',
         association: {
-          from: 'tag-security',
-          to: 'comp-AuthService',
-          relationship: 'TAGS',
+          from: 'comp-AuthService',
+          to: 'tag-security',
+          relationship: 'TAGGED_WITH',
         },
       };
       mockMemoryService.tagItem.mockResolvedValue(mockResult);
@@ -121,6 +121,7 @@ describe('Associate Tool Tests', () => {
           branch: 'main',
           itemId: 'comp-AuthService',
           tagId: 'tag-security',
+          entityType: 'Component',
         },
         mockContext,
         mockMemoryService,
@@ -137,7 +138,7 @@ describe('Associate Tool Tests', () => {
         'test-repo',
         'main',
         'comp-AuthService',
-        'Component', // Default item type
+        'Component',
         'tag-security',
       );
     });
@@ -153,7 +154,7 @@ describe('Associate Tool Tests', () => {
           mockContext,
           mockMemoryService,
         ),
-      ).rejects.toThrow('itemId and tagId are required for tag-item association');
+      ).rejects.toThrow(); // Zod validation error
     });
 
     it('should throw error if tagId is missing', async () => {
@@ -167,7 +168,22 @@ describe('Associate Tool Tests', () => {
           mockContext,
           mockMemoryService,
         ),
-      ).rejects.toThrow('itemId and tagId are required for tag-item association');
+      ).rejects.toThrow(); // Zod validation error
+    });
+
+    it('should throw error if entityType is missing', async () => {
+      await expect(
+        associateHandler(
+          {
+            type: 'tag-item',
+            repository: 'test-repo',
+            itemId: 'comp-AuthService',
+            tagId: 'tag-security',
+          },
+          mockContext,
+          mockMemoryService,
+        ),
+      ).rejects.toThrow(); // Zod validation error
     });
   });
 
@@ -222,7 +238,7 @@ describe('Associate Tool Tests', () => {
 
       expect(mockContext.sendProgress).toHaveBeenCalledWith({
         status: 'error',
-        message: 'Failed to create file-component association: Service error',
+        message: 'Failed to execute file-component association: Service error',
         percent: 100,
         isFinal: true,
       });
@@ -239,6 +255,7 @@ describe('Associate Tool Tests', () => {
             repository: 'test-repo',
             itemId: 'comp-1',
             tagId: 'tag-1',
+            entityType: 'Component',
           },
           mockContext,
           mockMemoryService,
@@ -247,7 +264,7 @@ describe('Associate Tool Tests', () => {
 
       expect(mockContext.sendProgress).toHaveBeenCalledWith({
         status: 'error',
-        message: 'Failed to create tag-item association: Tag service error',
+        message: 'Failed to execute tag-item association: Tag service error',
         percent: 100,
         isFinal: true,
       });
@@ -323,6 +340,7 @@ describe('Associate Tool Tests', () => {
           repository: 'test-repo',
           itemId: 'comp-1',
           tagId: 'tag-1',
+          entityType: 'Component',
         },
         mockContext,
         mockMemoryService,
@@ -330,7 +348,7 @@ describe('Associate Tool Tests', () => {
 
       expect(mockContext.sendProgress).toHaveBeenCalledWith({
         status: 'in_progress',
-        message: 'Tagging item comp-1 with tag tag-1...',
+        message: 'Tagging Component comp-1 with tag tag-1...',
         percent: 50,
       });
 

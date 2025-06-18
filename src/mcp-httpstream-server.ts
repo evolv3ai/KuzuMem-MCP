@@ -8,18 +8,20 @@ import dotenv from 'dotenv';
 import { randomUUID } from 'node:crypto';
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 import { type Logger } from 'pino';
-import { z } from 'zod';
 
 // Official MCP SDK imports
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-// Our tool handlers and services
-import { toolHandlers as sdkToolHandlers } from './mcp/tool-handlers';
+// Our tool definitions and services
+import { toolHandlers, type SdkToolHandler } from './mcp/tool-handlers';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools';
+import { type ToolHandlerContext } from './mcp/types/sdk-custom';
 import { MemoryService } from './services/memory.service';
 import { createPerformanceLogger, logError, loggers } from './utils/logger';
+import { createZodRawShape } from './mcp/utils/schema-utils';
+import { createRepositoryBranchKey } from './mcp/utils/repository-utils';
 
 // Load environment variables
 dotenv.config();
@@ -34,7 +36,7 @@ const httpStreamLogger = loggers.mcpHttp();
 // Map to store clientProjectRoot for each repository and branch
 const repositoryRootMap = new Map<string, string>();
 
-// Create the official MCP server
+// Create the official MCP server with proper capabilities
 const mcpServer = new McpServer(
   { name: 'KuzuMem-MCP-HTTPStream', version: '3.0.0' },
   {
@@ -46,44 +48,20 @@ const mcpServer = new McpServer(
   },
 );
 
-// Create tool schema helper
-function createZodSchema(tool: any) {
-  const shape: Record<string, z.ZodTypeAny> = {};
+// Schema creation is now handled by shared utility
 
-  if (tool.parameters && tool.parameters.properties) {
-    for (const [propName, propDef] of Object.entries(tool.parameters.properties)) {
-      const prop = propDef as any;
-      let zodType: z.ZodTypeAny = z.string(); // Default to string
+// Type definitions for improved type safety
+type ToolArguments = Record<string, unknown>;
 
-      if (prop.type === 'string') {
-        zodType = z.string();
-      } else if (prop.type === 'number') {
-        zodType = z.number();
-      } else if (prop.type === 'boolean') {
-        zodType = z.boolean();
-      } else if (prop.type === 'array') {
-        zodType = z.array(z.string()); // Assume string array
-      } else if (prop.type === 'object') {
-        zodType = z.object({}).passthrough(); // Allow any object
-      }
-
-      if (prop.description) {
-        zodType = zodType.describe(prop.description);
-      }
-
-      // Handle optional fields
-      if (!tool.parameters.required?.includes(propName)) {
-        zodType = zodType.optional();
-      }
-
-      shape[propName] = zodType;
-    }
-  }
-
-  return Object.keys(shape).length === 0
-    ? z.object({}).passthrough() // accept anything for param-less tools
-    : z.object(shape);
+interface EnhancedToolArguments extends ToolArguments {
+  clientProjectRoot: string;
+  repository: string;
+  branch: string;
 }
+
+// Type-safe event listener for request size monitoring
+type DataEventListener = (chunk: Buffer | string) => void;
+type GenericEventListener = (...args: any[]) => void;
 
 // Register all our tools with the MCP server
 function registerTools() {
@@ -96,36 +74,46 @@ function registerTools() {
   for (const tool of MEMORY_BANK_MCP_TOOLS) {
     httpStreamLogger.debug({ toolName: tool.name }, `Registering tool: ${tool.name}`);
 
-    const schema = createZodSchema(tool);
+    const zodRawShape = createZodRawShape(tool);
 
-    mcpServer.tool(
+    // Use the official registerTool method following SDK patterns
+    mcpServer.registerTool(
       tool.name,
-      tool.description,
-      schema as any, // Type assertion to bypass complex inference
-      async (args, context): Promise<CallToolResult> => {
+      {
+        description: tool.description,
+        inputSchema: zodRawShape,
+      },
+      async (args: ToolArguments): Promise<CallToolResult> => {
         const toolPerfLogger = createPerformanceLogger(httpStreamLogger, `tool-${tool.name}`);
-        const toolLogger = httpStreamLogger.child({
+        const requestId = randomUUID();
+        const toolLogger: Logger = httpStreamLogger.child({
           tool: tool.name,
-          requestId: context.requestId || randomUUID(),
+          requestId,
         });
 
         toolLogger.debug({ args }, `Executing tool: ${tool.name}`);
 
         try {
           // Handle clientProjectRoot storage for memory-bank init operations
-          if (tool.name === 'memory-bank' && args.operation === 'init') {
-            const repoBranchKey = `${args.repository}:${args.branch}`;
-            repositoryRootMap.set(repoBranchKey, args.clientProjectRoot);
+          if (tool.name === 'memory-bank' && (args as any).operation === 'init') {
+            const repoBranchKey = createRepositoryBranchKey(
+              (args as any).repository,
+              (args as any).branch,
+            );
+            repositoryRootMap.set(repoBranchKey, (args as any).clientProjectRoot);
             toolLogger.debug(
-              { repoBranchKey, clientProjectRoot: args.clientProjectRoot },
+              { repoBranchKey, clientProjectRoot: (args as any).clientProjectRoot },
               `Stored clientProjectRoot for ${repoBranchKey}`,
             );
           }
 
           // Get clientProjectRoot from stored map or args
-          let effectiveClientProjectRoot = args.clientProjectRoot;
-          if (!effectiveClientProjectRoot && args.repository && args.branch) {
-            const repoBranchKey = `${args.repository}:${args.branch}`;
+          let effectiveClientProjectRoot = (args as any).clientProjectRoot;
+          if (!effectiveClientProjectRoot && (args as any).repository) {
+            const repoBranchKey = createRepositoryBranchKey(
+              (args as any).repository,
+              (args as any).branch,
+            );
             effectiveClientProjectRoot = repositoryRootMap.get(repoBranchKey);
           }
 
@@ -135,53 +123,70 @@ function registerTools() {
             );
           }
 
-          // Get the SDK handler
-          const handler = sdkToolHandlers[tool.name];
-          if (!handler) {
-            throw new Error(`Tool handler not found: ${tool.name}`);
-          }
-
-          // Create enriched context
+          // Get memory service instance
           const memoryService = await MemoryService.getInstance();
-          const enrichedContext = {
-            ...context,
-            logger: toolLogger, // Use structured logger instead of custom debug function
-            session: {
-              clientProjectRoot: effectiveClientProjectRoot,
-              repository: args.repository,
-              branch: args.branch,
-            },
-            sendProgress: async (progressData: any) => {
-              // Send progress notifications through MCP
-              await context.sendNotification({
-                method: 'notifications/progress',
-                params: {
-                  progressToken: context.requestId || randomUUID(),
-                  ...progressData,
-                },
-              });
-            },
-            memoryService,
+
+          // Add clientProjectRoot to args with proper typing
+          const enhancedArgs: EnhancedToolArguments = {
+            ...args,
+            clientProjectRoot: effectiveClientProjectRoot,
+            repository: ((args as any).repository as string) || 'unknown',
+            branch: ((args as any).branch as string) || 'main',
           };
 
-          // Add clientProjectRoot to args
-          const enhancedArgs = { ...args, clientProjectRoot: effectiveClientProjectRoot };
+          // Get the tool handler directly
+          const handler = toolHandlers[tool.name];
+          if (!handler) {
+            throw new Error(`No handler found for tool: ${tool.name}`);
+          }
 
-          const result = await handler(enhancedArgs, enrichedContext, memoryService);
+          // Create a properly typed context object
+          const handlerContext: ToolHandlerContext = {
+            logger: toolLogger,
+            session: {
+              clientProjectRoot: effectiveClientProjectRoot,
+              repository: enhancedArgs.repository,
+              branch: enhancedArgs.branch,
+            },
+            sendProgress: async () => {
+              // No-op - MCP SDK doesn't support progress for individual tools
+            },
+            signal: new AbortController().signal,
+            requestId,
+          };
+
+          // Execute the handler with proper types
+          const result: unknown = await handler(enhancedArgs, handlerContext, memoryService);
+
           toolPerfLogger.complete({ success: !!result });
 
+          // Return the result in the proper MCP format
           return {
             content: [
               {
                 type: 'text',
-                text: JSON.stringify(result),
+                text: JSON.stringify(result, null, 2),
               },
             ],
           };
         } catch (error) {
           toolPerfLogger.fail(error as Error);
           logError(toolLogger, error as Error, { operation: 'tool-execution' });
-          throw error;
+
+          // Return error in proper MCP format
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: false,
+                  error: error instanceof Error ? error.message : String(error),
+                  errorId: randomUUID(), // Generic error identifier for tracking without exposing internals
+                }),
+              },
+            ],
+            isError: true,
+          };
         }
       },
     );
@@ -197,6 +202,95 @@ function registerTools() {
 let server: Server;
 const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
+// Request size limits (in bytes)
+const MAX_REQUEST_SIZE = 10 * 1024 * 1024; // 10MB - reasonable limit for MCP requests
+
+/**
+ * Creates a size-limited request wrapper that tracks cumulative chunk sizes
+ * while preserving the original request interface for MCP transport compatibility.
+ *
+ * This provides robust protection against oversized requests by monitoring
+ * actual data flow, not just headers which can be spoofed or omitted.
+ */
+function createSizeLimitedRequest(req: IncomingMessage, requestLogger: Logger): IncomingMessage {
+  let cumulativeSize = 0;
+  let sizeLimitExceeded = false;
+
+  // First, validate Content-Length header if present (fast fail for obvious oversized requests)
+  const contentLength = req.headers['content-length'];
+  if (contentLength) {
+    const declaredSize = parseInt(contentLength, 10);
+    if (isNaN(declaredSize)) {
+      requestLogger.warn({ contentLength }, 'Invalid Content-Length header');
+    } else if (declaredSize > MAX_REQUEST_SIZE) {
+      requestLogger.error(
+        { contentLength: declaredSize, maxSize: MAX_REQUEST_SIZE },
+        'Request size exceeds maximum allowed size (Content-Length check)',
+      );
+      throw new Error(
+        `Request size ${declaredSize} bytes exceeds maximum allowed size ${MAX_REQUEST_SIZE} bytes`,
+      );
+    }
+  }
+
+  // Create a proxy that intercepts data events to track cumulative size
+  // This preserves the original request interface while adding size monitoring
+  const originalOn = req.on.bind(req);
+  const originalAddListener = req.addListener.bind(req);
+
+  // Override event listeners to intercept 'data' events
+  req.on = function (event: string | symbol, listener: GenericEventListener) {
+    if (event === 'data') {
+      // Wrap the data listener to track cumulative size
+      const wrappedListener: DataEventListener = (chunk: Buffer | string) => {
+        if (sizeLimitExceeded) {
+          return; // Don't process more data if limit already exceeded
+        }
+
+        const chunkSize = Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk, 'utf8');
+        cumulativeSize += chunkSize;
+
+        if (cumulativeSize > MAX_REQUEST_SIZE) {
+          sizeLimitExceeded = true;
+          requestLogger.error(
+            { cumulativeSize, chunkSize, maxSize: MAX_REQUEST_SIZE },
+            'Request size limit exceeded during streaming',
+          );
+
+          // Emit an error to terminate the request processing
+          req.emit(
+            'error',
+            new Error(
+              `Request size ${cumulativeSize} bytes exceeds maximum allowed size ${MAX_REQUEST_SIZE} bytes`,
+            ),
+          );
+          return;
+        }
+
+        requestLogger.debug(
+          { cumulativeSize, chunkSize, maxSize: MAX_REQUEST_SIZE },
+          'Request chunk processed',
+        );
+
+        // Call the original listener with the chunk (type-safe cast)
+        (listener as DataEventListener)(chunk);
+      };
+
+      return originalOn.call(this, event, wrappedListener);
+    }
+
+    // For all other events, use the original listener
+    return originalOn.call(this, event, listener);
+  };
+
+  // Also override addListener (alias for on)
+  req.addListener = function (event: string | symbol, listener: GenericEventListener) {
+    return req.on(event, listener);
+  };
+
+  return req;
+}
+
 // Helper function to handle POST requests
 async function handlePostRequest(
   req: IncomingMessage,
@@ -205,57 +299,165 @@ async function handlePostRequest(
 ): Promise<void> {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
-  if (sessionId && transports[sessionId]) {
-    // Reuse existing transport
-    const transport = transports[sessionId];
-    requestLogger.debug({ sessionId }, 'Reusing existing transport');
+  // Set up timeout protection that monitors response completion
+  let requestCompleted = false;
+  const requestTimeout = setTimeout(() => {
+    if (!requestCompleted && !res.headersSent) {
+      requestLogger.warn('Request timeout - closing connection');
+      res.writeHead(408, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: {
+            code: -32000,
+            message: 'Request timeout',
+          },
+          id: null,
+        }),
+      );
+    }
+  }, 30000); // 30 second timeout
 
-    // Handle the request with existing transport
-    await transport.handleRequest(req, res);
-    return;
-  }
+  // Monitor response completion to clear timeout
+  const originalEnd = res.end.bind(res);
+  res.end = function (chunk?: any, encoding?: any, cb?: any): ServerResponse {
+    requestCompleted = true;
+    clearTimeout(requestTimeout);
+    return originalEnd.call(this, chunk, encoding, cb);
+  };
 
-  if (!sessionId) {
-    // Create new transport for initialization request
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
-      enableJsonResponse: true, // Support both JSON and SSE
-      onsessioninitialized: (sessionId: string) => {
-        // Store the transport by session ID
-        transports[sessionId] = transport;
-        requestLogger.debug({ sessionId }, 'New session initialized');
-      },
+  try {
+    // Create size-limited request wrapper with streaming back-pressure
+    let sizeLimitedReq: IncomingMessage;
+    try {
+      sizeLimitedReq = createSizeLimitedRequest(req, requestLogger);
+    } catch (error) {
+      clearTimeout(requestTimeout);
+      requestLogger.error({ error }, 'Request size validation failed (Content-Length check)');
+      res.writeHead(413, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: {
+            code: -32000,
+            message: 'Payload Too Large',
+            data: error instanceof Error ? error.message : String(error),
+          },
+          id: null,
+        }),
+      );
+      return;
+    }
+
+    // Set up error handler for streaming size limit violations
+    sizeLimitedReq.on('error', (error) => {
+      if (!requestCompleted && !res.headersSent) {
+        clearTimeout(requestTimeout);
+        requestLogger.error({ error }, 'Request size limit exceeded during streaming');
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            error: {
+              code: -32000,
+              message: 'Payload Too Large',
+              data: error.message,
+            },
+            id: null,
+          }),
+        );
+      }
     });
 
-    // Clean up transport when closed
-    transport.onclose = () => {
-      if (transport.sessionId) {
-        delete transports[transport.sessionId];
-        requestLogger.debug({ sessionId: transport.sessionId }, 'Session transport cleaned up');
+    // Keep timeout active - it will be cleared when response completes
+    // This provides protection against hanging requests while not interfering
+    // with the MCP transport layer's internal operations
+
+    if (sessionId && transports[sessionId]) {
+      // Reuse existing transport
+      const transport = transports[sessionId];
+      requestLogger.debug({ sessionId }, 'Reusing existing transport');
+
+      try {
+        // Use size-limited request for robust protection against oversized payloads
+        await transport.handleRequest(sizeLimitedReq, res);
+        return;
+      } catch (error) {
+        requestLogger.error({ error, sessionId }, 'Error handling request with existing transport');
+        // Clean up the broken transport
+        delete transports[sessionId];
+        throw error;
       }
-    };
+    }
 
-    // Connect to the MCP server
-    await mcpServer.connect(transport);
-    requestLogger.debug('MCP server connected to new transport');
+    if (!sessionId) {
+      // Create new transport for initialization request
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        enableJsonResponse: true, // Support both JSON and SSE
+        onsessioninitialized: (newSessionId: string) => {
+          // Store the transport by session ID
+          transports[newSessionId] = transport;
+          requestLogger.debug({ sessionId: newSessionId }, 'New session initialized');
+        },
+      });
 
-    // Let the transport handle the request and parse the body internally
-    await transport.handleRequest(req, res);
-    return;
+      // Clean up transport when closed
+      transport.onclose = () => {
+        if (transport.sessionId) {
+          delete transports[transport.sessionId];
+          requestLogger.debug({ sessionId: transport.sessionId }, 'Session transport cleaned up');
+        }
+      };
+
+      try {
+        // Connect the transport to the shared MCP server instance
+        // This is the key fix - reuse the same server instance for all transports
+        await mcpServer.connect(transport);
+        requestLogger.debug('MCP server connected to new transport');
+
+        // Use size-limited request for robust protection against oversized payloads
+        await transport.handleRequest(sizeLimitedReq, res);
+        return;
+      } catch (error) {
+        requestLogger.error({ error }, 'Error handling request with new transport');
+        // Clean up the failed transport
+        if (transport.sessionId) {
+          delete transports[transport.sessionId];
+        }
+        throw error;
+      }
+    }
+
+    // Invalid request - session ID provided but not found
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: 'Bad Request: Invalid session ID',
+        },
+        id: null,
+      }),
+    );
+  } catch (error) {
+    requestLogger.error({ error }, 'Unhandled error in POST request handler');
+    if (!res.headersSent) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: {
+            code: -32603,
+            message: 'Internal error',
+            data: String(error),
+          },
+          id: null,
+        }),
+      );
+    }
   }
-
-  // Invalid request - session ID provided but not found
-  res.writeHead(400, { 'Content-Type': 'application/json' });
-  res.end(
-    JSON.stringify({
-      jsonrpc: '2.0',
-      error: {
-        code: -32000,
-        message: 'Bad Request: Invalid session ID',
-      },
-      id: null,
-    }),
-  );
 }
 
 // Helper function to handle GET requests (for SSE streams)
@@ -282,6 +484,7 @@ async function handleGetRequest(
   }
 
   const transport = transports[sessionId];
+  // Let the transport handle the GET request
   await transport.handleRequest(req, res);
 }
 
@@ -413,10 +616,14 @@ async function startServer(): Promise<void> {
 
   // Start listening
   server.listen(port, host, () => {
-    httpStreamLogger.info(
-      { host, port },
-      `MCP HTTP stream server listening at http://${host}:${port}`,
-    );
+    const message = `MCP HTTP stream server listening at http://${host}:${port}`;
+    httpStreamLogger.info({ host, port }, message);
+
+    // EXPLICIT test detection message - required for E2E tests to detect server readiness
+    if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID !== undefined) {
+      // Use stderr for test detection to avoid stdout pollution
+      process.stderr.write(message + '\n');
+    }
   });
 
   // Handle server errors

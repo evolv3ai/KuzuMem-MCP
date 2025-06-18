@@ -1,5 +1,6 @@
 import { AnalyzeInputSchema } from '../../../schemas/unified-tool-schemas';
 import { SdkToolHandler } from '../../../tool-handlers';
+import { handleToolError, validateSession, logToolExecution } from '../../../utils/error-utils';
 
 /**
  * Analyze Handler
@@ -10,14 +11,11 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
   const validatedParams = AnalyzeInputSchema.parse(params);
   const { type, repository, branch = 'main' } = validatedParams;
 
-  // 2. Get clientProjectRoot from session
-  const clientProjectRoot = context.session.clientProjectRoot as string | undefined;
-  if (!clientProjectRoot) {
-    throw new Error('No active session. Use memory-bank tool with operation "init" first.');
-  }
+  // 2. Validate session and get clientProjectRoot
+  const clientProjectRoot = validateSession(context, 'analyze');
 
   // 3. Log the operation
-  context.logger.info(`Executing analysis: ${type}`, {
+  logToolExecution(context, `analysis: ${type}`, {
     repository,
     branch,
     clientProjectRoot,
@@ -155,19 +153,7 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
         throw new Error(`Unknown analysis type: ${type}`);
     }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    context.logger.error(`Analysis failed: ${errorMessage}`, {
-      type,
-      error,
-    });
-
-    await context.sendProgress({
-      status: 'error',
-      message: `Failed to execute ${type} analysis: ${errorMessage}`,
-      percent: 100,
-      isFinal: true,
-    });
-
+    await handleToolError(error, context, `${type} analysis`, type);
     throw error;
   }
 };

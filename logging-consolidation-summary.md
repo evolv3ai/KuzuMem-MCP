@@ -44,11 +44,11 @@ Completed **Phase 1** of logging consolidation across the KuzuMem-MCP repository
 - **After**: Main logger with proper structured output
 - **Impact**: Consistent approach even for simple startup messages
 
-#### 7. Stdio Transport (`src/mcp/streaming/stdio-transport.ts`)
+#### 7. Schema Utilities (`src/mcp/utils/schema-utils.ts`)
 
-- **Before**: Custom debug function parameter
-- **After**: Dedicated stdio transport logger
-- **Impact**: Structured logging while maintaining stdout protocol compliance
+- **Before**: Duplicate schema creation functions in multiple server files
+- **After**: Shared utility for Zod schema creation
+- **Impact**: Reduced code duplication and consistent schema handling
 
 ## Phase 2 Required - Repository & Database Layer
 
@@ -78,8 +78,7 @@ The following core files still have extensive console logging that needs consoli
 
 #### Service Layer
 
-- `src/mcp/services/tool-execution.service.ts` - Error logging
-- `src/mcp/streaming/operations/simple-echo.operation.ts` - Debug logging
+- Streaming services have been removed and replaced with official SDK implementations
 
 ## Current Logging Architecture
 

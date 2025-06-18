@@ -1,4 +1,6 @@
 import { SdkToolHandler } from '../../../tool-handlers';
+import { handleToolError, validateSession, logToolExecution } from '../../../utils/error-utils';
+import { AssociateInputSchema } from '../../../schemas/unified-tool-schemas';
 
 // TypeScript interfaces for associate parameters
 interface AssociateParams {
@@ -9,6 +11,7 @@ interface AssociateParams {
   componentId?: string;
   itemId?: string;
   tagId?: string;
+  entityType?: 'Component' | 'Decision' | 'Rule' | 'File' | 'Context';
 }
 
 /**
@@ -16,45 +19,22 @@ interface AssociateParams {
  * Handles relationship creation between entities
  */
 export const associateHandler: SdkToolHandler = async (params, context, memoryService) => {
-  // 1. Validate and extract parameters
-  const validatedParams = params as AssociateParams;
-
-  // Basic validation
-  if (!validatedParams.type) {
-    throw new Error('type parameter is required');
-  }
-  if (!validatedParams.repository) {
-    throw new Error('repository parameter is required');
-  }
+  // 1. Validate and extract parameters using Zod schema
+  const validatedParams = AssociateInputSchema.parse(params) as AssociateParams;
 
   const { type, repository, branch = 'main' } = validatedParams;
 
-  // 2. Get clientProjectRoot from session
-  const clientProjectRoot = context.session.clientProjectRoot as string | undefined;
-  if (!clientProjectRoot) {
-    throw new Error('No active session. Use memory-bank tool with operation "init" first.');
-  }
+  // 2. Validate session and get clientProjectRoot
+  const clientProjectRoot = validateSession(context, 'associate');
 
   // 3. Log the operation
-  context.logger.info(`Creating association: ${type}`, {
+  logToolExecution(context, `association: ${type}`, {
     repository,
     branch,
     clientProjectRoot,
   });
 
-  // 4. Validate type-specific required parameters
-  switch (type) {
-    case 'file-component':
-      if (!validatedParams.fileId || !validatedParams.componentId) {
-        throw new Error('fileId and componentId are required for file-component association');
-      }
-      break;
-    case 'tag-item':
-      if (!validatedParams.itemId || !validatedParams.tagId) {
-        throw new Error('itemId and tagId are required for tag-item association');
-      }
-      break;
-  }
+  // 4. Type-specific validation is now handled by the Zod schema
 
   try {
     switch (type) {
@@ -97,11 +77,11 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
       }
 
       case 'tag-item': {
-        const { itemId, tagId } = validatedParams;
+        const { itemId, tagId, entityType } = validatedParams;
 
         await context.sendProgress({
           status: 'in_progress',
-          message: `Tagging item ${itemId} with tag ${tagId}...`,
+          message: `Tagging ${entityType} ${itemId} with tag ${tagId}...`,
           percent: 50,
         });
 
@@ -112,7 +92,7 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
           repository,
           branch,
           itemId!,
-          'Component',
+          entityType!,
           tagId!,
         );
 
@@ -126,7 +106,7 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
         return {
           type: 'tag-item' as const,
           success: true,
-          message: `Successfully tagged item ${itemId} with tag ${tagId}`,
+          message: `Successfully tagged ${entityType} ${itemId} with tag ${tagId}`,
           association: {
             from: itemId!,
             to: tagId!,
@@ -139,19 +119,7 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
         throw new Error(`Unknown association type: ${type}`);
     }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    context.logger.error(`Association failed: ${errorMessage}`, {
-      type,
-      error,
-    });
-
-    await context.sendProgress({
-      status: 'error',
-      message: `Failed to create ${type} association: ${errorMessage}`,
-      percent: 100,
-      isFinal: true,
-    });
-
+    await handleToolError(error, context, `${type} association`, type);
     throw error;
   }
 };

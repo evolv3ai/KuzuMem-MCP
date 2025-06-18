@@ -227,7 +227,7 @@ describe('MCP Stdio Server E2E Tests', () => {
         success: true,
         message: expect.stringContaining('Memory bank initialized'),
       });
-    });
+    }, 15000); // 15 second timeout for database initialization
 
     it('should get metadata', async () => {
       const result = await callTool('memory-bank', {
@@ -530,6 +530,7 @@ describe('MCP Stdio Server E2E Tests', () => {
         branch: TEST_BRANCH,
         itemId: 'comp-test-service',
         tagId: 'tag-critical',
+        entityType: 'Component',
       });
 
       expect(result).toMatchObject({
@@ -573,6 +574,7 @@ describe('MCP Stdio Server E2E Tests', () => {
     it('should run PageRank analysis', async () => {
       const result = await callTool('analyze', {
         type: 'pagerank',
+        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         projectedGraphName: 'test-pagerank',
@@ -646,6 +648,7 @@ describe('MCP Stdio Server E2E Tests', () => {
     it('should bulk import entities', async () => {
       const result = await callTool('bulk-import', {
         type: 'components',
+        clientProjectRoot: testProjectRoot,
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         components: [

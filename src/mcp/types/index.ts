@@ -4,7 +4,6 @@
  * See: https://modelcontextprotocol.io
  */
 
-import { ProgressHandler } from '../streaming/progress-handler';
 import { MemoryService } from '../../services/memory.service';
 
 /**
@@ -25,6 +24,9 @@ export interface McpTool {
         enum?: string[];
         items?: {
           type: string;
+          properties?: Record<string, any>;
+          required?: string[];
+          enum?: any[];
         };
       }
     >;
@@ -61,11 +63,10 @@ export interface McpServerMetadata {
 }
 
 /**
- * Tool handler function signature with progress support
+ * Tool handler function signature
  */
 export type ToolHandler = (
   toolArgs: any, // Standard tool arguments from the MCP call
   memoryService: MemoryService, // Instance of the memory service
-  progressHandler?: ProgressHandler, // Optional handler for streaming progress
-  clientProjectRoot?: string, // NEW: Optional, to be supplied by ToolExecutionService
+  clientProjectRoot?: string, // Optional, to be supplied by server
 ) => Promise<unknown>; // Return type of the handler

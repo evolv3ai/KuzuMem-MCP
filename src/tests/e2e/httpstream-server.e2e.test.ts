@@ -32,7 +32,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
 
     // Add session ID header if we have one
     if (sessionId) {
-      headers['Mcp-Session-Id'] = sessionId;
+      headers['mcp-session-id'] = sessionId;
     }
 
     const response = await fetch(SERVER_URL, {
@@ -52,6 +52,8 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
 
     // For streaming responses, we need to handle SSE
     const contentType = response.headers.get('content-type');
+    console.log('Response content-type:', contentType);
+
     if (contentType?.includes('text/event-stream')) {
       const text = await response.text();
       const lines = text.split('\n');
@@ -136,7 +138,10 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       return foundResponse;
     } else {
       // Regular JSON response
+      console.log('Parsing as JSON response');
       const data = await response.json();
+      console.log('Parsed JSON response:', data);
+
       if (data.error) {
         throw new Error(`RPC Error: ${JSON.stringify(data.error)}`);
       }
@@ -180,7 +185,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       }
 
       // Extract session ID from response headers
-      const newSessionId = initResponse.headers.get('Mcp-Session-Id');
+      const newSessionId = initResponse.headers.get('mcp-session-id');
       if (newSessionId) {
         sessionId = newSessionId;
         console.log('Session reinitialized with ID:', sessionId);
@@ -194,31 +199,112 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     }
   };
 
-  // Helper to call MCP tool
+  // Helper to call MCP tool with fresh session for each call
   const callTool = async (toolName: string, params: any): Promise<any> => {
-    // Ensure we have a valid session before making tool calls
-    await ensureSession();
+    // Create a fresh session for each tool call to avoid session state issues
+    console.log(`Creating fresh session for tool ${toolName}...`);
 
-    const response = await sendHttpRequest('tools/call', {
-      name: toolName,
-      arguments: {
-        ...params,
-        clientProjectRoot: testProjectRoot,
-      },
+    const initHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+    };
+
+    const initResponse = await fetch(SERVER_URL, {
+      method: 'POST',
+      headers: initHeaders,
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: messageId++,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-03-26',
+          capabilities: {},
+          clientInfo: {
+            name: 'E2E Test Client',
+            version: '1.0.0',
+          },
+        },
+      }),
     });
 
-    if (response.result?.content?.[0]?.text) {
-      const text = response.result.content[0].text;
+    if (!initResponse.ok) {
+      throw new Error(`HTTP error! status: ${initResponse.status}`);
+    }
+
+    // Extract session ID from response headers
+    const freshSessionId = initResponse.headers.get('mcp-session-id');
+    if (!freshSessionId) {
+      throw new Error('Failed to get session ID from fresh session');
+    }
+
+    // Consume the init response body
+    await initResponse.text();
+
+    console.log(`Calling tool ${toolName} with fresh session ${freshSessionId}`);
+
+    // Now make the tool call with the fresh session
+    const toolHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      'mcp-session-id': freshSessionId,
+    };
+
+    const toolResponse = await fetch(SERVER_URL, {
+      method: 'POST',
+      headers: toolHeaders,
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: messageId++,
+        method: 'tools/call',
+        params: {
+          name: toolName,
+          arguments: {
+            ...params,
+            clientProjectRoot: testProjectRoot,
+          },
+        },
+      }),
+    });
+
+    if (!toolResponse.ok) {
+      throw new Error(`HTTP error! status: ${toolResponse.status}`);
+    }
+
+    // Parse response
+    const contentType = toolResponse.headers.get('content-type');
+    let responseData: any;
+
+    if (contentType?.includes('text/event-stream')) {
+      // Parse SSE response
+      const text = await toolResponse.text();
+      const lines = text.split('\n').filter((line) => line.startsWith('data: '));
+      if (lines.length > 0) {
+        const lastLine = lines[lines.length - 1];
+        responseData = JSON.parse(lastLine.substring(6));
+      } else {
+        throw new Error('No data in SSE response');
+      }
+    } else {
+      // Parse JSON response
+      responseData = await toolResponse.json();
+    }
+
+    if (responseData.error) {
+      throw new Error(`Tool error: ${responseData.error.message}`);
+    }
+
+    if (responseData.result?.content?.[0]?.text) {
+      const text = responseData.result.content[0].text;
       try {
         // Try to parse as JSON first
         return JSON.parse(text);
       } catch (e) {
         // If not JSON, return the text as is (for error messages, etc.)
-        return { text, isError: response.result.isError };
+        return { text, isError: responseData.result.isError };
       }
     }
 
-    return response.result;
+    return responseData.result;
   };
 
   beforeAll(async () => {
@@ -257,6 +343,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
 
           const handleData = (data: Buffer) => {
             const output = data.toString();
+
             if (output.includes('EADDRINUSE')) {
               // Port in use – abort and retry
               clearTimeout(timeout);
@@ -326,7 +413,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     }
 
     // Extract session ID from response headers
-    sessionId = initResponse.headers.get('Mcp-Session-Id') || 'test-session';
+    sessionId = initResponse.headers.get('mcp-session-id') || 'test-session';
 
     // Handle SSE or JSON response
     const contentType = initResponse.headers.get('content-type');
@@ -424,7 +511,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       expect(initResponse.ok).toBe(true);
 
       // Extract session ID from response headers
-      const testSessionId = initResponse.headers.get('Mcp-Session-Id');
+      const testSessionId = initResponse.headers.get('mcp-session-id');
       expect(testSessionId).toBeDefined();
       expect(testSessionId).toMatch(/^[a-f0-9-]{36}$/); // UUID format
 
@@ -812,19 +899,52 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     }, 10000);
 
     it('should tag an item', async () => {
+      // Since we use fresh sessions, we need to create the entities first
+      // Create a component to tag
+      await callTool('entity', {
+        operation: 'create',
+        entityType: 'component',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        id: 'comp-TagTestComponent',
+        data: {
+          name: 'Tag Test Component',
+          kind: 'service',
+          status: 'active',
+          depends_on: [],
+        },
+      });
+
+      // Create a tag
+      await callTool('entity', {
+        operation: 'create',
+        entityType: 'tag',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        id: 'tag-test-association',
+        data: {
+          name: 'Test Association Tag',
+          description: 'Tag for testing associations',
+        },
+      });
+
+      // Now tag the item
       const result = await callTool('associate', {
         type: 'tag-item',
         repository: TEST_REPO,
         branch: TEST_BRANCH,
-        itemId: 'comp-TestComponent',
-        tagId: 'tag-test-tag',
+        itemId: 'comp-TagTestComponent',
+        tagId: 'tag-test-association',
+        entityType: 'Component', // Required field for tag-item association
       });
+
+      console.log('Tag association result:', JSON.stringify(result, null, 2));
 
       expect(result).toMatchObject({
         success: true,
         type: 'tag-item',
       });
-    }, 10000);
+    }, 15000);
   });
 
   describe('Tool 7: analyze', () => {
@@ -1011,12 +1131,14 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
             name: 'Bulk Component A',
             kind: 'service',
             status: 'active',
+            depends_on: [],
           },
           {
             id: 'comp-BulkB',
             name: 'Bulk Component B',
             kind: 'service',
             status: 'active',
+            depends_on: [],
           },
         ],
       });

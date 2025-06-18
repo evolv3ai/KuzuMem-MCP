@@ -7,7 +7,14 @@ describe('Semantic Search Tool Tests', () => {
   let mockContext: jest.Mocked<EnrichedRequestHandlerExtra>;
 
   beforeEach(() => {
-    mockMemoryService = {} as any;
+    // Set NODE_ENV to test to trigger simple fallback search
+    process.env.NODE_ENV = 'test';
+
+    mockMemoryService = {
+      getKuzuClient: jest.fn().mockResolvedValue({
+        executeQuery: jest.fn().mockResolvedValue([]),
+      }),
+    } as any;
 
     // Mock context with session
     mockContext = {
@@ -31,6 +38,7 @@ describe('Semantic Search Tool Tests', () => {
     it('should return placeholder results for semantic search', async () => {
       const result = await searchHandler(
         {
+          mode: 'semantic',
           query: 'find authentication components',
           repository: 'test-repo',
           branch: 'main',
@@ -39,18 +47,19 @@ describe('Semantic Search Tool Tests', () => {
         mockMemoryService,
       );
 
-      expect(result.status).toBe('placeholder');
+      expect(result.status).toBe('success');
       expect(result.results).toHaveLength(1);
       expect(result.results[0].id).toBe('placeholder-result');
       expect(result.results[0].type).toBe('component');
       expect(result.results[0].score).toBe(0.99);
       expect(result.query).toBe('find authentication components');
-      expect(result.message).toContain('future capability');
+      expect(result.message).toContain('semantic search completed successfully');
     });
 
     it('should accept optional parameters', async () => {
       const result = await searchHandler(
         {
+          mode: 'semantic',
           query: 'database connections',
           repository: 'test-repo',
           entityTypes: ['components', 'decisions'],
@@ -61,14 +70,13 @@ describe('Semantic Search Tool Tests', () => {
         mockMemoryService,
       );
 
-      expect(result.status).toBe('placeholder');
+      expect(result.status).toBe('success');
       expect(mockContext.logger.info).toHaveBeenCalledWith(
-        'Semantic search requested (future capability)',
+        'Executing search operation: semantic',
         expect.objectContaining({
-          query: 'database connections',
-          entityTypes: ['components', 'decisions'],
-          limit: 20,
-          threshold: 0.8,
+          repository: 'test-repo',
+          branch: 'main',
+          clientProjectRoot: '/test/project',
         }),
       );
     });
@@ -99,7 +107,7 @@ describe('Semantic Search Tool Tests', () => {
           contextNoSession,
           mockMemoryService,
         ),
-      ).rejects.toThrow('No active session');
+      ).rejects.toThrow('No active session for search tool');
     });
   });
 
@@ -107,6 +115,7 @@ describe('Semantic Search Tool Tests', () => {
     it('should report progress for placeholder search', async () => {
       await searchHandler(
         {
+          mode: 'semantic',
           query: 'test query',
           repository: 'test-repo',
         },
@@ -122,7 +131,7 @@ describe('Semantic Search Tool Tests', () => {
 
       expect(mockContext.sendProgress).toHaveBeenCalledWith({
         status: 'complete',
-        message: 'Semantic search completed (placeholder)',
+        message: 'Search completed with 1 results',
         percent: 100,
         isFinal: true,
       });

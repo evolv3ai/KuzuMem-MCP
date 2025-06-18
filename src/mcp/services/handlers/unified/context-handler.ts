@@ -1,5 +1,6 @@
 import { ContextInputSchema } from '../../../schemas/unified-tool-schemas';
 import { SdkToolHandler } from '../../../tool-handlers';
+import { handleToolError, validateSession, logToolExecution } from '../../../utils/error-utils';
 
 // TypeScript interfaces for context parameters
 interface ContextParams {
@@ -34,55 +35,73 @@ interface ContextUpdateOutput {
  * Handles context updates for session tracking
  */
 export const contextHandler: SdkToolHandler = async (params, context, memoryService) => {
-  // 1. Parse and validate parameters
-  const validatedParams = ContextInputSchema.parse(params);
-  const { operation, repository } = validatedParams;
+  try {
+    // 1. Parse and validate parameters
+    const validatedParams = ContextInputSchema.parse(params);
+    const { operation, repository } = validatedParams;
 
-  // 2. Get clientProjectRoot from session
-  const clientProjectRoot = context.session.clientProjectRoot as string | undefined;
-  if (!clientProjectRoot) {
-    throw new Error('No active session. Use memory-bank tool with operation "init" first.');
-  }
+    // 2. Validate session and get clientProjectRoot
+    const clientProjectRoot = validateSession(context, 'context');
 
-  // 3. Log the operation
-  context.logger.info(`Executing context operation: ${operation}`, {
-    repository,
-    clientProjectRoot,
-  });
+    // 3. Log the operation
+    logToolExecution(context, `context operation: ${operation}`, {
+      repository,
+      branch: validatedParams.branch ?? 'main',
+      clientProjectRoot,
+    });
 
-  // 4. Execute the operation
-  switch (operation) {
-    case 'update': {
-      // Validate required parameters for update
-      if (!validatedParams.agent) {
-        throw new Error('agent parameter is required for context update');
+    // 4. Execute the operation
+    switch (operation) {
+      case 'update': {
+        // Send progress notification
+        await context.sendProgress({
+          status: 'in_progress',
+          message: 'Updating context...',
+          percent: 50,
+        });
+
+        // Call memory service to update context
+        const result = await memoryService.updateContext(
+          context,
+          clientProjectRoot,
+          validatedParams,
+        );
+
+        // Check if result is null and handle appropriately
+        if (result === null) {
+          await context.sendProgress({
+            status: 'error',
+            message: 'Failed to update context: unexpected response format',
+            percent: 100,
+            isFinal: true,
+          });
+
+          return {
+            success: false,
+            message: 'Failed to update context: unexpected response format',
+          };
+        }
+
+        // Send completion notification
+        await context.sendProgress({
+          status: 'complete',
+          message: 'Context updated successfully',
+          percent: 100,
+          isFinal: true,
+        });
+
+        return result;
       }
-      if (!validatedParams.summary) {
-        throw new Error('summary parameter is required for context update');
-      }
 
-      // Send progress notification
-      await context.sendProgress({
-        status: 'in_progress',
-        message: 'Updating context...',
-        percent: 50,
-      });
-
-      // Call memory service to update context
-      const result = await memoryService.updateContext(context, clientProjectRoot, validatedParams);
-
-      // Send completion notification
-      await context.sendProgress({
-        status: 'complete',
-        message: 'Context updated successfully',
-        percent: 100,
-        isFinal: true,
-      });
-
-      return result;
+      // Note: default case is unreachable since Zod schema only allows 'update'
     }
+  } catch (error) {
+    await handleToolError(error, context, 'context update', 'context');
 
-    default:
-      throw new Error(`Unknown context operation: ${operation}`);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      success: false,
+      message: errorMessage,
+    };
   }
 };

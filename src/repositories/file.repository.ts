@@ -274,10 +274,10 @@ export class FileRepository {
           } as File;
         })
         .filter(Boolean); // Filter out null results from branch mismatch
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(
-        `[FileRepository] Error finding files for C:${componentId} via ${relationshipType}:`,
-        error,
+        `[FileRepository] Error finding files for C:${componentId} via ${relationshipType}: ${error.message}`,
+        { error, stack: error.stack },
       );
       return [];
     }
@@ -330,10 +330,10 @@ export class FileRepository {
           updated_at: new Date(componentNode.updated_at || Date.now()),
         };
       });
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(
-        `[FileRepository] Error finding components for F:${fileId} via ${safeRelType}:`,
-        error,
+        `[FileRepository] Error finding components for F:${fileId} via ${safeRelType}: ${error.message}`,
+        { error, stack: error.stack },
       );
       return [];
     }

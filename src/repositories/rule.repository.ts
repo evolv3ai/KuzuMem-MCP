@@ -81,10 +81,10 @@ export class RuleRepository {
       return result.map((row: any) =>
         this.formatKuzuRowToRule(row.r, repoNameFromNodeId, ruleBranch),
       );
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(
-        `[RuleRepository] Error in getActiveRules for ${repositoryNodeId}, branch ${ruleBranch}:`,
-        error,
+        `[RuleRepository] Error in getActiveRules for ${repositoryNodeId}, branch ${ruleBranch}: ${error.message}`,
+        { error, stack: error.stack },
       );
       return [];
     }
@@ -177,8 +177,11 @@ export class RuleRepository {
         return this.formatKuzuRowToRule(result[0].r, repositoryName, itemBranch);
       }
       return null;
-    } catch (error) {
-      this.logger.error(`[RuleRepository] Error in findByIdAndBranch for GID ${graphUniqueId}:`, error);
+    } catch (error: any) {
+      this.logger.error(
+        `[RuleRepository] Error in findByIdAndBranch for GID ${graphUniqueId}: ${error.message}`,
+        { error, stack: error.stack },
+      );
       return null;
     }
   }
@@ -202,10 +205,10 @@ export class RuleRepository {
       return result.map((row: any) =>
         this.formatKuzuRowToRule(row.r, repoNameFromNodeId, ruleBranch),
       );
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(
-        `[RuleRepository] Error in getAllRules for ${repositoryNodeId}, branch ${ruleBranch}:`,
-        error,
+        `[RuleRepository] Error in getAllRules for ${repositoryNodeId}, branch ${ruleBranch}: ${error.message}`,
+        { error, stack: error.stack },
       );
       return [];
     }
