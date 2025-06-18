@@ -263,9 +263,10 @@ async function handlePostRequest(
 ): Promise<void> {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
-  // Set a timeout for request processing
+  // Set up timeout protection that monitors response completion
+  let requestCompleted = false;
   const requestTimeout = setTimeout(() => {
-    if (!res.headersSent) {
+    if (!requestCompleted && !res.headersSent) {
       requestLogger.warn('Request timeout - closing connection');
       res.writeHead(408, { 'Content-Type': 'application/json' });
       res.end(
@@ -279,7 +280,15 @@ async function handlePostRequest(
         }),
       );
     }
-  }, 30000); // 30 second timeout - shorter than test timeouts to avoid interference
+  }, 30000); // 30 second timeout
+
+  // Monitor response completion to clear timeout
+  const originalEnd = res.end.bind(res);
+  res.end = function(...args: any[]) {
+    requestCompleted = true;
+    clearTimeout(requestTimeout);
+    return originalEnd.apply(this, args);
+  };
 
   try {
     // Validate request size before processing (Content-Length only)
@@ -303,12 +312,9 @@ async function handlePostRequest(
       return;
     }
 
-    // Clear timeout before transport handling to avoid interference with MCP layer
-    // The timeout has already protected against malformed headers and basic validation
-    // TODO: Implement timeout protection that doesn't interfere with MCP transport layer
-    // The current approach provides basic protection against malformed requests but
-    // clears the timeout before the potentially long-running transport operations
-    clearTimeout(requestTimeout);
+    // Keep timeout active - it will be cleared when response completes
+    // This provides protection against hanging requests while not interfering
+    // with the MCP transport layer's internal operations
 
     if (sessionId && transports[sessionId]) {
       // Reuse existing transport
