@@ -1224,6 +1224,126 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     }, 10000);
   });
 
+  describe('Tool 9: delete', () => {
+    // First create some test entities to delete
+    beforeAll(async () => {
+      // Create test components for deletion
+      await callTool('entity', {
+        operation: 'create',
+        entityType: 'component',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        id: 'comp-http-delete-test-1',
+        data: {
+          name: 'HTTP Delete Test Component 1',
+          kind: 'service',
+          status: 'active',
+        },
+      });
+
+      await callTool('entity', {
+        operation: 'create',
+        entityType: 'component',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        id: 'comp-http-delete-test-2',
+        data: {
+          name: 'HTTP Delete Test Component 2',
+          kind: 'service',
+          status: 'deprecated',
+        },
+      });
+
+      // Create a test decision
+      await callTool('entity', {
+        operation: 'create',
+        entityType: 'decision',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        id: 'dec-http-delete-test',
+        data: {
+          title: 'HTTP Delete Test Decision',
+          rationale: 'Test decision for deletion',
+          status: 'approved',
+        },
+      });
+    }, 30000);
+
+    it('should perform dry run for single entity deletion', async () => {
+      const result = await callTool('delete', {
+        operation: 'single',
+        entityType: 'component',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        id: 'comp-http-delete-test-1',
+        dryRun: true,
+      });
+
+      expect(result).toMatchObject({
+        success: true,
+        operation: 'single',
+        message: expect.stringContaining('Would delete'),
+        deletedCount: 1,
+        dryRun: true,
+      });
+    }, 10000);
+
+    it('should delete a single decision', async () => {
+      const result = await callTool('delete', {
+        operation: 'single',
+        entityType: 'decision',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        id: 'dec-http-delete-test',
+      });
+
+      expect(result).toMatchObject({
+        success: true,
+        operation: 'single',
+        message: expect.stringContaining('deleted successfully'),
+        deletedCount: 1,
+      });
+    }, 15000);
+
+    it('should perform dry run for bulk deletion by type', async () => {
+      const result = await callTool('delete', {
+        operation: 'bulk-by-type',
+        targetType: 'component',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        dryRun: true,
+      });
+
+      expect(result).toMatchObject({
+        success: true,
+        operation: 'bulk-by-type',
+        message: expect.stringContaining('Would delete'),
+        dryRun: true,
+      });
+    }, 10000);
+
+    it('should require confirmation for bulk operations', async () => {
+      await expect(
+        callTool('delete', {
+          operation: 'bulk-by-type',
+          targetType: 'component',
+          repository: TEST_REPO,
+          branch: TEST_BRANCH,
+        })
+      ).rejects.toThrow();
+    }, 10000);
+
+    it('should handle missing required parameters', async () => {
+      await expect(
+        callTool('delete', {
+          operation: 'single',
+          repository: TEST_REPO,
+          branch: TEST_BRANCH,
+        })
+      ).rejects.toThrow();
+    }, 10000);
+  });
+
   describe('Cleanup verification', () => {
     it('should verify all test data exists', async () => {
       const result = await callTool('query', {

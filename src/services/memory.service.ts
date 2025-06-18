@@ -2428,6 +2428,405 @@ export class MemoryService {
     }
   }
 
+  async deleteContext(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    contextId: string,
+  ): Promise<boolean> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.deleteContext] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+      const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+
+      // Get repository to ensure it exists
+      const repository = await repositoryRepo.findByName(repositoryName, branch);
+      if (!repository || !repository.id) {
+        logger.warn(
+          `[MemoryService.deleteContext] Repository ${repositoryName}:${branch} not found.`,
+        );
+        return false;
+      }
+
+      // Format the graph unique ID
+      const graphUniqueId = `${repositoryName}:${branch}:${contextId}`;
+
+      // Delete all relationships and the context node
+      const deleteQuery = `
+        MATCH (c:Context {graph_unique_id: $graphUniqueId})
+        OPTIONAL MATCH (c)-[r]-()
+        DELETE r, c
+        RETURN count(c) as deletedCount
+      `;
+
+      const result = await kuzuClient.executeQuery(deleteQuery, { graphUniqueId });
+      const deletedCount = result[0]?.deletedCount || 0;
+
+      logger.info(`[MemoryService.deleteContext] Deleted ${deletedCount} context(s) with ID ${contextId}`);
+      return deletedCount > 0;
+    } catch (error: any) {
+      logger.error(`[MemoryService.deleteContext] Error deleting context ${contextId}:`, error);
+      throw error;
+    }
+  }
+
+  // Bulk delete methods
+  async bulkDeleteByType(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    entityType: 'component' | 'decision' | 'rule' | 'file' | 'tag' | 'context' | 'all',
+    options: {
+      dryRun?: boolean;
+      force?: boolean;
+    } = {},
+  ): Promise<{
+    count: number;
+    entities: Array<{ type: string; id: string; name?: string }>;
+    warnings: string[];
+  }> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.bulkDeleteByType] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+      const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+
+      // Get repository to ensure it exists
+      const repository = await repositoryRepo.findByName(repositoryName, branch);
+      if (!repository || !repository.id) {
+        logger.warn(
+          `[MemoryService.bulkDeleteByType] Repository ${repositoryName}:${branch} not found.`,
+        );
+        return { count: 0, entities: [], warnings: [`Repository ${repositoryName}:${branch} not found`] };
+      }
+
+      const repoId = `${repositoryName}:${branch}`;
+      const warnings: string[] = [];
+      let totalCount = 0;
+      const deletedEntities: Array<{ type: string; id: string; name?: string }> = [];
+
+      // Define entity types to process
+      const entityTypes = entityType === 'all'
+        ? ['Component', 'Decision', 'Rule', 'File', 'Context']
+        : [entityType.charAt(0).toUpperCase() + entityType.slice(1)];
+
+      // Special handling for tags (they're not scoped to repository/branch)
+      if (entityType === 'tag' || entityType === 'all') {
+        const tagQuery = options.dryRun
+          ? `MATCH (t:Tag) RETURN t.id as id, t.name as name, count(t) as count`
+          : `MATCH (t:Tag) OPTIONAL MATCH (t)-[r]-() DELETE r, t RETURN t.id as id, t.name as name, count(t) as count`;
+
+        const tagResults = await kuzuClient.executeQuery(tagQuery, {});
+        for (const row of tagResults) {
+          totalCount += row.count || 0;
+          if (row.id) {
+            deletedEntities.push({ type: 'tag', id: row.id, name: row.name });
+          }
+        }
+      }
+
+      // Process repository-scoped entities
+      for (const type of entityTypes) {
+        if (type === 'Tag') continue; // Already handled above
+
+        const query = options.dryRun
+          ? `MATCH (n:${type} {repository: $repoId, branch: $branch}) RETURN n.id as id, n.name as name, count(n) as count`
+          : `MATCH (n:${type} {repository: $repoId, branch: $branch}) OPTIONAL MATCH (n)-[r]-() DELETE r, n RETURN n.id as id, n.name as name, count(n) as count`;
+
+        const results = await kuzuClient.executeQuery(query, { repoId, branch });
+        for (const row of results) {
+          totalCount += row.count || 0;
+          if (row.id) {
+            deletedEntities.push({ type: type.toLowerCase(), id: row.id, name: row.name });
+          }
+        }
+      }
+
+      logger.info(
+        `[MemoryService.bulkDeleteByType] ${options.dryRun ? 'Would delete' : 'Deleted'} ${totalCount} ${entityType} entities in ${repositoryName}:${branch}`,
+      );
+
+      return {
+        count: totalCount,
+        entities: deletedEntities,
+        warnings,
+      };
+    } catch (error: any) {
+      logger.error(`[MemoryService.bulkDeleteByType] Error bulk deleting ${entityType}:`, error);
+      throw error;
+    }
+  }
+
+  async bulkDeleteByTag(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    tagId: string,
+    options: {
+      dryRun?: boolean;
+      force?: boolean;
+    } = {},
+  ): Promise<{
+    count: number;
+    entities: Array<{ type: string; id: string; name?: string }>;
+    warnings: string[];
+  }> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.bulkDeleteByTag] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+      const repoId = `${repositoryName}:${branch}`;
+      const warnings: string[] = [];
+      let totalCount = 0;
+      const deletedEntities: Array<{ type: string; id: string; name?: string }> = [];
+
+      // Find all entities tagged with the specified tag
+      const findQuery = `
+        MATCH (t:Tag {id: $tagId})-[:TAGGED_WITH]-(n)
+        WHERE n.repository = $repoId AND n.branch = $branch
+        RETURN labels(n) as nodeLabels, n.id as id, n.name as name
+      `;
+
+      const findResults = await kuzuClient.executeQuery(findQuery, { tagId, repoId, branch });
+
+      if (options.dryRun) {
+        for (const row of findResults) {
+          const nodeLabels = row.nodeLabels || [];
+          const entityType = nodeLabels.find((label: string) =>
+            ['Component', 'Decision', 'Rule', 'File', 'Context'].includes(label)
+          )?.toLowerCase() || 'unknown';
+
+          deletedEntities.push({ type: entityType, id: row.id, name: row.name });
+          totalCount++;
+        }
+      } else {
+        // Delete entities found with the tag
+        for (const row of findResults) {
+          const nodeLabels = row.nodeLabels || [];
+          const entityType = nodeLabels.find((label: string) =>
+            ['Component', 'Decision', 'Rule', 'File', 'Context'].includes(label)
+          );
+
+          if (entityType) {
+            const deleteQuery = `
+              MATCH (n:${entityType} {id: $entityId, repository: $repoId, branch: $branch})
+              OPTIONAL MATCH (n)-[r]-()
+              DELETE r, n
+              RETURN count(n) as deletedCount
+            `;
+
+            const deleteResult = await kuzuClient.executeQuery(deleteQuery, {
+              entityId: row.id,
+              repoId,
+              branch
+            });
+
+            const deletedCount = deleteResult[0]?.deletedCount || 0;
+            if (deletedCount > 0) {
+              deletedEntities.push({
+                type: entityType.toLowerCase(),
+                id: row.id,
+                name: row.name
+              });
+              totalCount += deletedCount;
+            }
+          }
+        }
+      }
+
+      logger.info(
+        `[MemoryService.bulkDeleteByTag] ${options.dryRun ? 'Would delete' : 'Deleted'} ${totalCount} entities tagged with ${tagId} in ${repositoryName}:${branch}`,
+      );
+
+      return {
+        count: totalCount,
+        entities: deletedEntities,
+        warnings,
+      };
+    } catch (error: any) {
+      logger.error(`[MemoryService.bulkDeleteByTag] Error bulk deleting by tag ${tagId}:`, error);
+      throw error;
+    }
+  }
+
+  async bulkDeleteByBranch(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repositoryName: string,
+    targetBranch: string,
+    options: {
+      dryRun?: boolean;
+      force?: boolean;
+    } = {},
+  ): Promise<{
+    count: number;
+    entities: Array<{ type: string; id: string; name?: string }>;
+    warnings: string[];
+  }> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.bulkDeleteByBranch] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+      const repoId = `${repositoryName}:${targetBranch}`;
+      const warnings: string[] = [];
+      let totalCount = 0;
+      const deletedEntities: Array<{ type: string; id: string; name?: string }> = [];
+
+      // Entity types that are scoped to repository/branch
+      const entityTypes = ['Component', 'Decision', 'Rule', 'File', 'Context'];
+
+      for (const entityType of entityTypes) {
+        const query = options.dryRun
+          ? `MATCH (n:${entityType} {repository: $repoId, branch: $targetBranch}) RETURN n.id as id, n.name as name, count(n) as count`
+          : `MATCH (n:${entityType} {repository: $repoId, branch: $targetBranch}) OPTIONAL MATCH (n)-[r]-() DELETE r, n RETURN n.id as id, n.name as name, count(n) as count`;
+
+        const results = await kuzuClient.executeQuery(query, { repoId, targetBranch });
+        for (const row of results) {
+          totalCount += row.count || 0;
+          if (row.id) {
+            deletedEntities.push({ type: entityType.toLowerCase(), id: row.id, name: row.name });
+          }
+        }
+      }
+
+      // Also delete the repository record for this branch if not dry run
+      if (!options.dryRun) {
+        const repoDeleteQuery = `
+          MATCH (r:Repository {name: $repositoryName, branch: $targetBranch})
+          DELETE r
+          RETURN count(r) as deletedCount
+        `;
+
+        const repoResult = await kuzuClient.executeQuery(repoDeleteQuery, { repositoryName, targetBranch });
+        const repoDeletedCount = repoResult[0]?.deletedCount || 0;
+        if (repoDeletedCount > 0) {
+          deletedEntities.push({ type: 'repository', id: `${repositoryName}:${targetBranch}`, name: repositoryName });
+          totalCount += repoDeletedCount;
+        }
+      }
+
+      logger.info(
+        `[MemoryService.bulkDeleteByBranch] ${options.dryRun ? 'Would delete' : 'Deleted'} ${totalCount} entities from branch ${targetBranch} in repository ${repositoryName}`,
+      );
+
+      return {
+        count: totalCount,
+        entities: deletedEntities,
+        warnings,
+      };
+    } catch (error: any) {
+      logger.error(`[MemoryService.bulkDeleteByBranch] Error bulk deleting branch ${targetBranch}:`, error);
+      throw error;
+    }
+  }
+
+  async bulkDeleteByRepository(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repositoryName: string,
+    options: {
+      dryRun?: boolean;
+      force?: boolean;
+    } = {},
+  ): Promise<{
+    count: number;
+    entities: Array<{ type: string; id: string; name?: string }>;
+    warnings: string[];
+  }> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error('[MemoryService.bulkDeleteByRepository] RepositoryProvider not initialized');
+      throw new Error('RepositoryProvider not initialized');
+    }
+
+    try {
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+      const warnings: string[] = [];
+      let totalCount = 0;
+      const deletedEntities: Array<{ type: string; id: string; name?: string }> = [];
+
+      // Entity types that are scoped to repository
+      const entityTypes = ['Component', 'Decision', 'Rule', 'File', 'Context'];
+
+      for (const entityType of entityTypes) {
+        const query = options.dryRun
+          ? `MATCH (n:${entityType}) WHERE n.repository STARTS WITH $repositoryPrefix RETURN n.id as id, n.name as name, n.branch as branch, count(n) as count`
+          : `MATCH (n:${entityType}) WHERE n.repository STARTS WITH $repositoryPrefix OPTIONAL MATCH (n)-[r]-() DELETE r, n RETURN n.id as id, n.name as name, n.branch as branch, count(n) as count`;
+
+        const repositoryPrefix = `${repositoryName}:`;
+        const results = await kuzuClient.executeQuery(query, { repositoryPrefix });
+
+        for (const row of results) {
+          totalCount += row.count || 0;
+          if (row.id) {
+            deletedEntities.push({
+              type: entityType.toLowerCase(),
+              id: row.id,
+              name: row.name ? `${row.name} (${row.branch})` : `${row.id} (${row.branch})`
+            });
+          }
+        }
+      }
+
+      // Delete all repository records for this repository (all branches)
+      if (!options.dryRun) {
+        const repoDeleteQuery = `
+          MATCH (r:Repository {name: $repositoryName})
+          DELETE r
+          RETURN count(r) as deletedCount, collect(r.branch) as branches
+        `;
+
+        const repoResult = await kuzuClient.executeQuery(repoDeleteQuery, { repositoryName });
+        const repoDeletedCount = repoResult[0]?.deletedCount || 0;
+        const branches = repoResult[0]?.branches || [];
+
+        if (repoDeletedCount > 0) {
+          for (const branch of branches) {
+            deletedEntities.push({
+              type: 'repository',
+              id: `${repositoryName}:${branch}`,
+              name: `${repositoryName} (${branch})`
+            });
+          }
+          totalCount += repoDeletedCount;
+        }
+      }
+
+      logger.info(
+        `[MemoryService.bulkDeleteByRepository] ${options.dryRun ? 'Would delete' : 'Deleted'} ${totalCount} entities from repository ${repositoryName} (all branches)`,
+      );
+
+      return {
+        count: totalCount,
+        entities: deletedEntities,
+        warnings,
+      };
+    } catch (error: any) {
+      logger.error(`[MemoryService.bulkDeleteByRepository] Error bulk deleting repository ${repositoryName}:`, error);
+      throw error;
+    }
+  }
+
   // Update methods for entities (distinct from upsert - only update existing)
   async updateComponent(
     mcpContext: EnrichedRequestHandlerExtra,
