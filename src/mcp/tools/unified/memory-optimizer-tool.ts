@@ -22,6 +22,7 @@ OPERATIONS:
 - analyze: Deep reasoning analysis of memory graph patterns and optimization opportunities
 - optimize: Generate and execute safe optimization plans with reasoning validation
 - rollback: Rollback to previous state using snapshots
+- list-snapshots: List available snapshots for a repository
 
 CAPABILITIES:
 - Advanced reasoning for stale entity detection based on complex usage patterns
@@ -50,8 +51,8 @@ The agent uses advanced reasoning to analyze entity relationships, usage pattern
     properties: {
       operation: {
         type: 'string',
-        enum: ['analyze', 'optimize', 'rollback'],
-        description: 'Operation to perform: analyze (identify opportunities), optimize (execute plan), rollback (restore snapshot)',
+        enum: ['analyze', 'optimize', 'rollback', 'list-snapshots'],
+        description: 'Operation to perform: analyze (identify opportunities), optimize (execute plan), rollback (restore snapshot), list-snapshots (show available snapshots)',
       },
       clientProjectRoot: {
         type: 'string',

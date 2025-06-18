@@ -2,6 +2,7 @@ import * as path from 'path';
 import { z } from 'zod';
 import { KuzuDBClient } from '../db/kuzu';
 import { RepositoryProvider } from '../db/repository-provider';
+import { SnapshotService } from './snapshot.service';
 import * as toolSchemas from '../mcp/schemas/unified-tool-schemas';
 import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
 import {
@@ -46,6 +47,9 @@ export class MemoryService {
 
   // Repository provider for managing repository instances
   private repositoryProvider: RepositoryProvider | null = null;
+
+  // Snapshot services for each client project root
+  private snapshotServices: Map<string, SnapshotService> = new Map();
 
   private constructor() {
     // No initialization here - will be done in initialize()
@@ -125,6 +129,14 @@ export class MemoryService {
       await newClient.initialize(mcpContext); // This now also handles schema init
       this.kuzuClients.set(clientProjectRoot, newClient);
       await this.repositoryProvider.initializeRepositories(clientProjectRoot, newClient);
+
+      // Initialize SnapshotService for this client project root
+      if (!this.snapshotServices.has(clientProjectRoot)) {
+        const snapshotService = new SnapshotService(newClient);
+        this.snapshotServices.set(clientProjectRoot, snapshotService);
+        logger.info(`[MemoryService.getKuzuClient] SnapshotService initialized for: ${clientProjectRoot}`);
+      }
+
       logger.info(
         `[MemoryService.getKuzuClient] KuzuDBClient and repositories initialized for: ${clientProjectRoot}`,
       );
@@ -138,6 +150,34 @@ export class MemoryService {
         `Failed to initialize database for project root ${clientProjectRoot}: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  /**
+   * Get SnapshotService for a project root
+   * @param mcpContext MCP context for progress notifications and logging
+   * @param clientProjectRoot Client project root directory
+   * @returns SnapshotService instance
+   */
+  public async getSnapshotService(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+  ): Promise<SnapshotService> {
+    const logger = mcpContext.logger || console;
+
+    // Ensure absolute path
+    clientProjectRoot = this.ensureAbsoluteRoot(clientProjectRoot);
+
+    // Ensure KuzuDB client is initialized (this also initializes SnapshotService)
+    await this.getKuzuClient(mcpContext, clientProjectRoot);
+
+    // Get cached SnapshotService
+    const snapshotService = this.snapshotServices.get(clientProjectRoot);
+    if (!snapshotService) {
+      throw new Error(`SnapshotService not found for project root: ${clientProjectRoot}`);
+    }
+
+    logger.debug(`[MemoryService.getSnapshotService] Retrieved SnapshotService for: ${clientProjectRoot}`);
+    return snapshotService;
   }
 
   static async getInstance(

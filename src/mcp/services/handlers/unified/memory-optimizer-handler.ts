@@ -8,7 +8,7 @@ import type { OptimizationStrategy } from '../../../../agents/memory-optimizer/p
 
 // Input schema for memory optimizer tool
 const MemoryOptimizerInputSchema = z.object({
-  operation: z.enum(['analyze', 'optimize', 'rollback']),
+  operation: z.enum(['analyze', 'optimize', 'rollback', 'list-snapshots']),
   clientProjectRoot: z.string(),
   repository: z.string(),
   branch: z.string().default('main'),
@@ -87,7 +87,10 @@ export async function memoryOptimizerHandler(
 
       case 'rollback':
         return await handleRollbackOperation(agent, validatedParams, context as EnrichedRequestHandlerExtra, handlerLogger);
-      
+
+      case 'list-snapshots':
+        return await handleListSnapshotsOperation(agent, validatedParams, context as EnrichedRequestHandlerExtra, handlerLogger);
+
       default:
         throw new Error(`Unsupported operation: ${validatedParams.operation}`);
     }
@@ -226,6 +229,7 @@ async function handleOptimizeOperation(
       {
         dryRun: params.dryRun,
         requireConfirmation: params.confirm,
+        createSnapshot: true, // Always create snapshot for safety
       },
     );
 
@@ -277,22 +281,79 @@ async function handleRollbackOperation(
       throw new Error('snapshotId is required for rollback operation');
     }
 
-    // TODO: Implement rollback functionality
-    // This would restore the memory graph to a previous snapshot state
-    
-    logger.info('Rollback operation completed', { snapshotId });
+    // Execute rollback using the agent
+    const rollbackResult = await agent.rollbackToSnapshot(
+      context,
+      params.clientProjectRoot,
+      params.repository,
+      params.branch,
+      snapshotId
+    );
+
+    logger.info('Rollback operation completed', {
+      snapshotId,
+      restoredEntities: rollbackResult.restoredEntities,
+      restoredRelationships: rollbackResult.restoredRelationships,
+    });
 
     return {
-      success: true,
+      success: rollbackResult.success,
       operation: 'rollback',
       data: {
-        rollbackStatus: 'success',
-        restoredEntities: 0, // TODO: Implement actual count
+        rollbackStatus: rollbackResult.success ? 'success' : 'failed',
+        restoredEntities: rollbackResult.restoredEntities,
+        restoredRelationships: rollbackResult.restoredRelationships,
+        rollbackTime: rollbackResult.rollbackTime,
+        snapshotId: rollbackResult.snapshotId,
       },
-      message: `Successfully rolled back to snapshot ${snapshotId}`,
+      message: rollbackResult.message,
     };
   } catch (error) {
     logger.error('Rollback operation failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * Handle list snapshots operation
+ */
+async function handleListSnapshotsOperation(
+  agent: MemoryOptimizationAgent,
+  params: MemoryOptimizerParams,
+  context: EnrichedRequestHandlerExtra,
+  logger: any,
+): Promise<any> {
+  logger.info('Starting list snapshots operation', {
+    repository: params.repository,
+    branch: params.branch,
+  });
+
+  try {
+    // List snapshots using the agent
+    const snapshots = await agent.listSnapshots(
+      context,
+      params.clientProjectRoot,
+      params.repository,
+      params.branch
+    );
+
+    logger.info('List snapshots operation completed', {
+      snapshotCount: snapshots.length,
+    });
+
+    return {
+      success: true,
+      operation: 'list-snapshots',
+      data: {
+        snapshots,
+        count: snapshots.length,
+        repository: params.repository,
+        branch: params.branch,
+      },
+      message: `Found ${snapshots.length} snapshots for ${params.repository}${params.branch ? `:${params.branch}` : ''}`,
+    };
+  } catch (error) {
+    logger.error('List snapshots operation failed:', error);
     throw error;
   }
 }

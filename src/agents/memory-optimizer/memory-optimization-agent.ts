@@ -220,6 +220,7 @@ export class MemoryOptimizationAgent {
     options: {
       dryRun?: boolean;
       requireConfirmation?: boolean;
+      createSnapshot?: boolean;
     } = {}
   ): Promise<OptimizationResult> {
     const executeLogger = this.agentLogger.child({
@@ -234,13 +235,31 @@ export class MemoryOptimizationAgent {
       executeLogger.info('Executing optimization plan', {
         totalActions: plan.actions.length,
         dryRun: options.dryRun,
+        createSnapshot: options.createSnapshot,
       });
 
-      // Create snapshot if required
+      // Create snapshot before optimization (if not dry run)
       let snapshotId: string | undefined;
-      if (plan.safetyMeasures.snapshotRequired && !options.dryRun) {
-        // TODO: Implement snapshot creation
-        executeLogger.info('Snapshot creation would be implemented here');
+      if (!options.dryRun && options.createSnapshot !== false) {
+        try {
+          const snapshotService = await this.memoryService.getSnapshotService(mcpContext, clientProjectRoot);
+          const snapshotResult = await snapshotService.createSnapshot(
+            repository,
+            branch,
+            `Pre-optimization snapshot for plan ${plan.id}`
+          );
+          snapshotId = snapshotResult.snapshotId;
+
+          executeLogger.info('Created pre-optimization snapshot', {
+            snapshotId,
+            entitiesCount: snapshotResult.entitiesCount,
+            relationshipsCount: snapshotResult.relationshipsCount,
+          });
+        } catch (snapshotError) {
+          executeLogger.error('Failed to create snapshot:', snapshotError);
+          // Continue without snapshot but log the warning
+          executeLogger.warn('Proceeding with optimization without snapshot - rollback will not be available');
+        }
       }
 
       const executedActions: OptimizationResult['executedActions'] = [];
@@ -318,6 +337,87 @@ export class MemoryOptimizationAgent {
     } catch (error) {
       executeLogger.error('Optimization plan execution failed:', error);
       throw new Error(`Optimization plan execution failed: ${error}`);
+    }
+  }
+
+  /**
+   * Rollback to a previous snapshot
+   */
+  async rollbackToSnapshot(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repository: string,
+    branch: string,
+    snapshotId: string
+  ): Promise<{
+    success: boolean;
+    snapshotId: string;
+    restoredEntities: number;
+    restoredRelationships: number;
+    rollbackTime: string;
+    message: string;
+  }> {
+    const rollbackLogger = this.agentLogger.child({
+      operation: 'rollbackToSnapshot',
+      snapshotId,
+      repository,
+      branch,
+    });
+
+    try {
+      rollbackLogger.info('Starting rollback to snapshot');
+
+      // Get snapshot service
+      const snapshotService = await this.memoryService.getSnapshotService(mcpContext, clientProjectRoot);
+
+      // Validate snapshot before rollback
+      const validation = await snapshotService.validateSnapshot(snapshotId);
+      if (!validation.valid) {
+        throw new Error(`Snapshot validation failed: ${validation.issues.join(', ')}`);
+      }
+
+      rollbackLogger.info('Snapshot validation passed, executing rollback', {
+        entityCount: validation.entityCount,
+        relationshipCount: validation.relationshipCount,
+      });
+
+      // Execute rollback
+      const rollbackResult = await snapshotService.rollbackToSnapshot(snapshotId);
+
+      rollbackLogger.info('Rollback completed successfully', {
+        restoredEntities: rollbackResult.restoredEntities,
+        restoredRelationships: rollbackResult.restoredRelationships,
+      });
+
+      return {
+        success: rollbackResult.success,
+        snapshotId: rollbackResult.snapshotId,
+        restoredEntities: rollbackResult.restoredEntities,
+        restoredRelationships: rollbackResult.restoredRelationships,
+        rollbackTime: rollbackResult.rollbackTime,
+        message: `Successfully rolled back to snapshot ${snapshotId}. Restored ${rollbackResult.restoredEntities} entities and ${rollbackResult.restoredRelationships} relationships.`,
+      };
+    } catch (error) {
+      rollbackLogger.error('Rollback failed:', error);
+      throw new Error(`Rollback failed: ${error}`);
+    }
+  }
+
+  /**
+   * List available snapshots for a repository
+   */
+  async listSnapshots(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repository: string,
+    branch?: string
+  ): Promise<any[]> {
+    try {
+      const snapshotService = await this.memoryService.getSnapshotService(mcpContext, clientProjectRoot);
+      return await snapshotService.listSnapshots(repository, branch);
+    } catch (error) {
+      this.agentLogger.error('Failed to list snapshots:', error);
+      throw new Error(`Failed to list snapshots: ${error}`);
     }
   }
 
