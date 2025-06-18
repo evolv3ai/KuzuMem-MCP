@@ -68,7 +68,6 @@ function registerTools() {
     mcpServer.registerTool(
       tool.name,
       {
-        title: tool.name,
         description: tool.description,
         inputSchema: zodRawShape,
       },
@@ -110,7 +109,7 @@ function registerTools() {
           const memoryService = await MemoryService.getInstance();
 
           // Add clientProjectRoot to args
-          const enhancedArgs = { ...args, clientProjectRoot: effectiveClientProjectRoot };
+          const enhancedArgs = { ...args, clientProjectRoot: effectiveClientProjectRoot } as any;
 
           // Get the tool handler directly
           const handler = toolHandlers[tool.name];
@@ -123,8 +122,8 @@ function registerTools() {
             logger: toolLogger,
             session: {
               clientProjectRoot: effectiveClientProjectRoot,
-              repository: enhancedArgs.repository,
-              branch: enhancedArgs.branch,
+              repository: enhancedArgs.repository || 'unknown',
+              branch: enhancedArgs.branch || 'main',
             },
             sendProgress: async () => {
               // No-op - MCP SDK doesn't support progress for individual tools
@@ -237,10 +236,10 @@ async function handlePostRequest(
 
   // Monitor response completion to clear timeout
   const originalEnd = res.end.bind(res);
-  res.end = function(...args: any[]) {
+  res.end = function(chunk?: any, encoding?: BufferEncoding | (() => void), cb?: () => void) {
     requestCompleted = true;
     clearTimeout(requestTimeout);
-    return originalEnd.apply(this, args);
+    return originalEnd.call(this, chunk, encoding as any, cb);
   };
 
   try {
