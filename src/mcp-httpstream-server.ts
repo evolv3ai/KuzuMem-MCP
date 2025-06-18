@@ -303,7 +303,12 @@ async function handlePostRequest(
       return;
     }
 
-    // Keep timeout active during transport handling and tool execution
+    // Clear timeout before transport handling to avoid interference with MCP layer
+    // The timeout has already protected against malformed headers and basic validation
+    // TODO: Implement timeout protection that doesn't interfere with MCP transport layer
+    // The current approach provides basic protection against malformed requests but
+    // clears the timeout before the potentially long-running transport operations
+    clearTimeout(requestTimeout);
 
     if (sessionId && transports[sessionId]) {
       // Reuse existing transport
@@ -389,9 +394,6 @@ async function handlePostRequest(
         }),
       );
     }
-  } finally {
-    // Clear timeout only after all request processing is complete
-    clearTimeout(requestTimeout);
   }
 }
 
