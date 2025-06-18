@@ -71,6 +71,12 @@ temp/
 .debug/
 debug/
 
+# Core dumps and crash files
+core
+core.*
+*.core
+*.dump
+
 # Task Master AI MCP Tool
 tasks/
 
