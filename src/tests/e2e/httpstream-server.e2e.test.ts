@@ -199,35 +199,112 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     }
   };
 
-  // Helper to call MCP tool
+  // Helper to call MCP tool with fresh session for each call
   const callTool = async (toolName: string, params: any): Promise<any> => {
-    // Check if we have a session, but don't reinitialize if we already have one
-    if (!sessionId) {
-      console.log('No session ID, calling ensureSession...');
-      await ensureSession();
-    }
+    // Create a fresh session for each tool call to avoid session state issues
+    console.log(`Creating fresh session for tool ${toolName}...`);
 
-    console.log(`Calling tool ${toolName} with session ${sessionId}`);
-    const response = await sendHttpRequest('tools/call', {
-      name: toolName,
-      arguments: {
-        ...params,
-        clientProjectRoot: testProjectRoot,
-      },
+    const initHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+    };
+
+    const initResponse = await fetch(SERVER_URL, {
+      method: 'POST',
+      headers: initHeaders,
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: messageId++,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-03-26',
+          capabilities: {},
+          clientInfo: {
+            name: 'E2E Test Client',
+            version: '1.0.0',
+          },
+        },
+      }),
     });
 
-    if (response.result?.content?.[0]?.text) {
-      const text = response.result.content[0].text;
+    if (!initResponse.ok) {
+      throw new Error(`HTTP error! status: ${initResponse.status}`);
+    }
+
+    // Extract session ID from response headers
+    const freshSessionId = initResponse.headers.get('mcp-session-id');
+    if (!freshSessionId) {
+      throw new Error('Failed to get session ID from fresh session');
+    }
+
+    // Consume the init response body
+    await initResponse.text();
+
+    console.log(`Calling tool ${toolName} with fresh session ${freshSessionId}`);
+
+    // Now make the tool call with the fresh session
+    const toolHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      'mcp-session-id': freshSessionId,
+    };
+
+    const toolResponse = await fetch(SERVER_URL, {
+      method: 'POST',
+      headers: toolHeaders,
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: messageId++,
+        method: 'tools/call',
+        params: {
+          name: toolName,
+          arguments: {
+            ...params,
+            clientProjectRoot: testProjectRoot,
+          },
+        },
+      }),
+    });
+
+    if (!toolResponse.ok) {
+      throw new Error(`HTTP error! status: ${toolResponse.status}`);
+    }
+
+    // Parse response
+    const contentType = toolResponse.headers.get('content-type');
+    let responseData: any;
+
+    if (contentType?.includes('text/event-stream')) {
+      // Parse SSE response
+      const text = await toolResponse.text();
+      const lines = text.split('\n').filter(line => line.startsWith('data: '));
+      if (lines.length > 0) {
+        const lastLine = lines[lines.length - 1];
+        responseData = JSON.parse(lastLine.substring(6));
+      } else {
+        throw new Error('No data in SSE response');
+      }
+    } else {
+      // Parse JSON response
+      responseData = await toolResponse.json();
+    }
+
+    if (responseData.error) {
+      throw new Error(`Tool error: ${responseData.error.message}`);
+    }
+
+    if (responseData.result?.content?.[0]?.text) {
+      const text = responseData.result.content[0].text;
       try {
         // Try to parse as JSON first
         return JSON.parse(text);
       } catch (e) {
         // If not JSON, return the text as is (for error messages, etc.)
-        return { text, isError: response.result.isError };
+        return { text, isError: responseData.result.isError };
       }
     }
 
-    return response.result;
+    return responseData.result;
   };
 
   beforeAll(async () => {
