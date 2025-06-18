@@ -2529,15 +2529,31 @@ export class MemoryService {
 
       // Special handling for tags (they're not scoped to repository/branch)
       if (entityType === 'tag' || entityType === 'all') {
-        const tagQuery = options.dryRun
-          ? `MATCH (t:Tag) RETURN t.id as id, t.name as name, count(t) as count`
-          : `MATCH (t:Tag) OPTIONAL MATCH (t)-[r]-() DELETE r, t RETURN t.id as id, t.name as name, count(t) as count`;
+        if (options.dryRun) {
+          // For dry run, get tag details
+          const tagQuery = `MATCH (t:Tag) RETURN t.id as id, t.name as name`;
+          const tagResults = await kuzuClient.executeQuery(tagQuery, {});
 
-        const tagResults = await kuzuClient.executeQuery(tagQuery, {});
-        for (const row of tagResults) {
-          totalCount += row.count || 0;
-          if (row.id) {
+          for (const row of tagResults) {
             deletedEntities.push({ type: 'tag', id: row.id, name: row.name });
+            totalCount++;
+          }
+        } else {
+          // For actual deletion, use bulk delete
+          const tagDeleteQuery = `
+            MATCH (t:Tag)
+            OPTIONAL MATCH (t)-[r]-()
+            DELETE r, t
+            RETURN count(t) as deletedCount
+          `;
+
+          const tagDeleteResult = await kuzuClient.executeQuery(tagDeleteQuery, {});
+          const deletedCount = tagDeleteResult[0]?.deletedCount || 0;
+          totalCount += deletedCount;
+
+          // For actual deletion, we can't get individual tag details after deletion
+          for (let i = 0; i < deletedCount; i++) {
+            deletedEntities.push({ type: 'tag', id: `tag-${i}`, name: 'Deleted Tag' });
           }
         }
       }
@@ -2548,15 +2564,39 @@ export class MemoryService {
           continue;
         } // Already handled above
 
-        const query = options.dryRun
-          ? `MATCH (n:${type} {repository: $repositoryName, branch: $branch}) RETURN n.id as id, n.name as name, count(n) as count`
-          : `MATCH (n:${type} {repository: $repositoryName, branch: $branch}) OPTIONAL MATCH (n)-[r]-() DELETE r, n RETURN n.id as id, n.name as name, count(n) as count`;
+        if (options.dryRun) {
+          // For dry run, get entity details
+          const query = `MATCH (n:${type} {repository: $repositoryName, branch: $branch}) RETURN n.id as id, n.name as name`;
+          const results = await kuzuClient.executeQuery(query, { repositoryName, branch });
 
-        const results = await kuzuClient.executeQuery(query, { repositoryName, branch });
-        for (const row of results) {
-          totalCount += row.count || 0;
-          if (row.id) {
+          for (const row of results) {
             deletedEntities.push({ type: type.toLowerCase(), id: row.id, name: row.name });
+            totalCount++;
+          }
+        } else {
+          // For actual deletion, use bulk delete
+          const deleteQuery = `
+            MATCH (n:${type} {repository: $repositoryName, branch: $branch})
+            OPTIONAL MATCH (n)-[r]-()
+            DELETE r, n
+            RETURN count(n) as deletedCount
+          `;
+
+          const deleteResult = await kuzuClient.executeQuery(deleteQuery, {
+            repositoryName,
+            branch,
+          });
+          const deletedCount = deleteResult[0]?.deletedCount || 0;
+          totalCount += deletedCount;
+
+          // For actual deletion, we can't get individual entity details after deletion
+          // So we'll just record the count
+          for (let i = 0; i < deletedCount; i++) {
+            deletedEntities.push({
+              type: type.toLowerCase(),
+              id: `${type.toLowerCase()}-${i}`,
+              name: `Deleted ${type}`,
+            });
           }
         }
       }
@@ -2709,15 +2749,38 @@ export class MemoryService {
       const entityTypes = ['Component', 'Decision', 'Rule', 'File', 'Context'];
 
       for (const entityType of entityTypes) {
-        const query = options.dryRun
-          ? `MATCH (n:${entityType} {repository: $repositoryName, branch: $targetBranch}) RETURN n.id as id, n.name as name, count(n) as count`
-          : `MATCH (n:${entityType} {repository: $repositoryName, branch: $targetBranch}) OPTIONAL MATCH (n)-[r]-() DELETE r, n RETURN n.id as id, n.name as name, count(n) as count`;
+        if (options.dryRun) {
+          // For dry run, get entity details
+          const query = `MATCH (n:${entityType} {repository: $repositoryName, branch: $targetBranch}) RETURN n.id as id, n.name as name`;
+          const results = await kuzuClient.executeQuery(query, { repositoryName, targetBranch });
 
-        const results = await kuzuClient.executeQuery(query, { repositoryName, targetBranch });
-        for (const row of results) {
-          totalCount += row.count || 0;
-          if (row.id) {
+          for (const row of results) {
             deletedEntities.push({ type: entityType.toLowerCase(), id: row.id, name: row.name });
+            totalCount++;
+          }
+        } else {
+          // For actual deletion, use bulk delete
+          const deleteQuery = `
+            MATCH (n:${entityType} {repository: $repositoryName, branch: $targetBranch})
+            OPTIONAL MATCH (n)-[r]-()
+            DELETE r, n
+            RETURN count(n) as deletedCount
+          `;
+
+          const deleteResult = await kuzuClient.executeQuery(deleteQuery, {
+            repositoryName,
+            targetBranch,
+          });
+          const deletedCount = deleteResult[0]?.deletedCount || 0;
+          totalCount += deletedCount;
+
+          // For actual deletion, we can't get individual entity details after deletion
+          for (let i = 0; i < deletedCount; i++) {
+            deletedEntities.push({
+              type: entityType.toLowerCase(),
+              id: `${entityType.toLowerCase()}-${i}`,
+              name: `Deleted ${entityType}`,
+            });
           }
         }
       }
@@ -2792,19 +2855,38 @@ export class MemoryService {
       const entityTypes = ['Component', 'Decision', 'Rule', 'File', 'Context'];
 
       for (const entityType of entityTypes) {
-        const query = options.dryRun
-          ? `MATCH (n:${entityType} {repository: $repositoryName}) RETURN n.id as id, n.name as name, n.branch as branch, count(n) as count`
-          : `MATCH (n:${entityType} {repository: $repositoryName}) OPTIONAL MATCH (n)-[r]-() DELETE r, n RETURN n.id as id, n.name as name, n.branch as branch, count(n) as count`;
+        if (options.dryRun) {
+          // For dry run, get entity details
+          const query = `MATCH (n:${entityType} {repository: $repositoryName}) RETURN n.id as id, n.name as name, n.branch as branch`;
+          const results = await kuzuClient.executeQuery(query, { repositoryName });
 
-        const results = await kuzuClient.executeQuery(query, { repositoryName });
-
-        for (const row of results) {
-          totalCount += row.count || 0;
-          if (row.id) {
+          for (const row of results) {
             deletedEntities.push({
               type: entityType.toLowerCase(),
               id: row.id,
               name: row.name ? `${row.name} (${row.branch})` : `${row.id} (${row.branch})`,
+            });
+            totalCount++;
+          }
+        } else {
+          // For actual deletion, use bulk delete
+          const deleteQuery = `
+            MATCH (n:${entityType} {repository: $repositoryName})
+            OPTIONAL MATCH (n)-[r]-()
+            DELETE r, n
+            RETURN count(n) as deletedCount
+          `;
+
+          const deleteResult = await kuzuClient.executeQuery(deleteQuery, { repositoryName });
+          const deletedCount = deleteResult[0]?.deletedCount || 0;
+          totalCount += deletedCount;
+
+          // For actual deletion, we can't get individual entity details after deletion
+          for (let i = 0; i < deletedCount; i++) {
+            deletedEntities.push({
+              type: entityType.toLowerCase(),
+              id: `${entityType.toLowerCase()}-${i}`,
+              name: `Deleted ${entityType}`,
             });
           }
         }

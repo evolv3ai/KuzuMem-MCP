@@ -802,7 +802,7 @@ describe('MCP Stdio Server E2E Tests', () => {
 
       // Tag one of the components
       await callTool('associate', {
-        operation: 'tag-item',
+        type: 'tag-item',
         repository: TEST_REPO,
         branch: TEST_BRANCH,
         tagId: 'tag-delete-test',

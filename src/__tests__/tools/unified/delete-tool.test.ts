@@ -125,7 +125,7 @@ describe('delete tool handler', () => {
         repository: 'test-repo',
       };
 
-      const result = await deleteHandler(params, mockContext, mockMemoryService) as any;
+      const result = (await deleteHandler(params, mockContext, mockMemoryService)) as any;
 
       expect(result.success).toBe(false);
       expect(result.operation).toBe('single');
@@ -216,7 +216,7 @@ describe('delete tool handler', () => {
         branch: 'main',
       };
 
-      const result = await deleteHandler(params, mockContext, mockMemoryService) as any;
+      const result = (await deleteHandler(params, mockContext, mockMemoryService)) as any;
 
       expect(result.success).toBe(false);
       expect(result.operation).toBe('bulk-by-type');
