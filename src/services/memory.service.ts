@@ -2468,7 +2468,9 @@ export class MemoryService {
       const result = await kuzuClient.executeQuery(deleteQuery, { graphUniqueId });
       const deletedCount = result[0]?.deletedCount || 0;
 
-      logger.info(`[MemoryService.deleteContext] Deleted ${deletedCount} context(s) with ID ${contextId}`);
+      logger.info(
+        `[MemoryService.deleteContext] Deleted ${deletedCount} context(s) with ID ${contextId}`,
+      );
       return deletedCount > 0;
     } catch (error: any) {
       logger.error(`[MemoryService.deleteContext] Error deleting context ${contextId}:`, error);
@@ -2508,18 +2510,22 @@ export class MemoryService {
         logger.warn(
           `[MemoryService.bulkDeleteByType] Repository ${repositoryName}:${branch} not found.`,
         );
-        return { count: 0, entities: [], warnings: [`Repository ${repositoryName}:${branch} not found`] };
+        return {
+          count: 0,
+          entities: [],
+          warnings: [`Repository ${repositoryName}:${branch} not found`],
+        };
       }
 
-      const repoId = `${repositoryName}:${branch}`;
       const warnings: string[] = [];
       let totalCount = 0;
       const deletedEntities: Array<{ type: string; id: string; name?: string }> = [];
 
       // Define entity types to process
-      const entityTypes = entityType === 'all'
-        ? ['Component', 'Decision', 'Rule', 'File', 'Context']
-        : [entityType.charAt(0).toUpperCase() + entityType.slice(1)];
+      const entityTypes =
+        entityType === 'all'
+          ? ['Component', 'Decision', 'Rule', 'File', 'Context']
+          : [entityType.charAt(0).toUpperCase() + entityType.slice(1)];
 
       // Special handling for tags (they're not scoped to repository/branch)
       if (entityType === 'tag' || entityType === 'all') {
@@ -2538,13 +2544,15 @@ export class MemoryService {
 
       // Process repository-scoped entities
       for (const type of entityTypes) {
-        if (type === 'Tag') continue; // Already handled above
+        if (type === 'Tag') {
+          continue;
+        } // Already handled above
 
         const query = options.dryRun
-          ? `MATCH (n:${type} {repository: $repoId, branch: $branch}) RETURN n.id as id, n.name as name, count(n) as count`
-          : `MATCH (n:${type} {repository: $repoId, branch: $branch}) OPTIONAL MATCH (n)-[r]-() DELETE r, n RETURN n.id as id, n.name as name, count(n) as count`;
+          ? `MATCH (n:${type} {repository: $repositoryName, branch: $branch}) RETURN n.id as id, n.name as name, count(n) as count`
+          : `MATCH (n:${type} {repository: $repositoryName, branch: $branch}) OPTIONAL MATCH (n)-[r]-() DELETE r, n RETURN n.id as id, n.name as name, count(n) as count`;
 
-        const results = await kuzuClient.executeQuery(query, { repoId, branch });
+        const results = await kuzuClient.executeQuery(query, { repositoryName, branch });
         for (const row of results) {
           totalCount += row.count || 0;
           if (row.id) {
@@ -2591,7 +2599,6 @@ export class MemoryService {
 
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-      const repoId = `${repositoryName}:${branch}`;
       const warnings: string[] = [];
       let totalCount = 0;
       const deletedEntities: Array<{ type: string; id: string; name?: string }> = [];
@@ -2599,18 +2606,25 @@ export class MemoryService {
       // Find all entities tagged with the specified tag
       const findQuery = `
         MATCH (t:Tag {id: $tagId})-[:TAGGED_WITH]-(n)
-        WHERE n.repository = $repoId AND n.branch = $branch
+        WHERE n.repository = $repositoryName AND n.branch = $branch
         RETURN labels(n) as nodeLabels, n.id as id, n.name as name
       `;
 
-      const findResults = await kuzuClient.executeQuery(findQuery, { tagId, repoId, branch });
+      const findResults = await kuzuClient.executeQuery(findQuery, {
+        tagId,
+        repositoryName,
+        branch,
+      });
 
       if (options.dryRun) {
         for (const row of findResults) {
           const nodeLabels = row.nodeLabels || [];
-          const entityType = nodeLabels.find((label: string) =>
-            ['Component', 'Decision', 'Rule', 'File', 'Context'].includes(label)
-          )?.toLowerCase() || 'unknown';
+          const entityType =
+            nodeLabels
+              .find((label: string) =>
+                ['Component', 'Decision', 'Rule', 'File', 'Context'].includes(label),
+              )
+              ?.toLowerCase() || 'unknown';
 
           deletedEntities.push({ type: entityType, id: row.id, name: row.name });
           totalCount++;
@@ -2620,12 +2634,12 @@ export class MemoryService {
         for (const row of findResults) {
           const nodeLabels = row.nodeLabels || [];
           const entityType = nodeLabels.find((label: string) =>
-            ['Component', 'Decision', 'Rule', 'File', 'Context'].includes(label)
+            ['Component', 'Decision', 'Rule', 'File', 'Context'].includes(label),
           );
 
           if (entityType) {
             const deleteQuery = `
-              MATCH (n:${entityType} {id: $entityId, repository: $repoId, branch: $branch})
+              MATCH (n:${entityType} {id: $entityId, repository: $repositoryName, branch: $branch})
               OPTIONAL MATCH (n)-[r]-()
               DELETE r, n
               RETURN count(n) as deletedCount
@@ -2633,8 +2647,8 @@ export class MemoryService {
 
             const deleteResult = await kuzuClient.executeQuery(deleteQuery, {
               entityId: row.id,
-              repoId,
-              branch
+              repositoryName,
+              branch,
             });
 
             const deletedCount = deleteResult[0]?.deletedCount || 0;
@@ -2642,7 +2656,7 @@ export class MemoryService {
               deletedEntities.push({
                 type: entityType.toLowerCase(),
                 id: row.id,
-                name: row.name
+                name: row.name,
               });
               totalCount += deletedCount;
             }
@@ -2687,7 +2701,6 @@ export class MemoryService {
 
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-      const repoId = `${repositoryName}:${targetBranch}`;
       const warnings: string[] = [];
       let totalCount = 0;
       const deletedEntities: Array<{ type: string; id: string; name?: string }> = [];
@@ -2697,10 +2710,10 @@ export class MemoryService {
 
       for (const entityType of entityTypes) {
         const query = options.dryRun
-          ? `MATCH (n:${entityType} {repository: $repoId, branch: $targetBranch}) RETURN n.id as id, n.name as name, count(n) as count`
-          : `MATCH (n:${entityType} {repository: $repoId, branch: $targetBranch}) OPTIONAL MATCH (n)-[r]-() DELETE r, n RETURN n.id as id, n.name as name, count(n) as count`;
+          ? `MATCH (n:${entityType} {repository: $repositoryName, branch: $targetBranch}) RETURN n.id as id, n.name as name, count(n) as count`
+          : `MATCH (n:${entityType} {repository: $repositoryName, branch: $targetBranch}) OPTIONAL MATCH (n)-[r]-() DELETE r, n RETURN n.id as id, n.name as name, count(n) as count`;
 
-        const results = await kuzuClient.executeQuery(query, { repoId, targetBranch });
+        const results = await kuzuClient.executeQuery(query, { repositoryName, targetBranch });
         for (const row of results) {
           totalCount += row.count || 0;
           if (row.id) {
@@ -2717,10 +2730,17 @@ export class MemoryService {
           RETURN count(r) as deletedCount
         `;
 
-        const repoResult = await kuzuClient.executeQuery(repoDeleteQuery, { repositoryName, targetBranch });
+        const repoResult = await kuzuClient.executeQuery(repoDeleteQuery, {
+          repositoryName,
+          targetBranch,
+        });
         const repoDeletedCount = repoResult[0]?.deletedCount || 0;
         if (repoDeletedCount > 0) {
-          deletedEntities.push({ type: 'repository', id: `${repositoryName}:${targetBranch}`, name: repositoryName });
+          deletedEntities.push({
+            type: 'repository',
+            id: `${repositoryName}:${targetBranch}`,
+            name: repositoryName,
+          });
           totalCount += repoDeletedCount;
         }
       }
@@ -2735,7 +2755,10 @@ export class MemoryService {
         warnings,
       };
     } catch (error: any) {
-      logger.error(`[MemoryService.bulkDeleteByBranch] Error bulk deleting branch ${targetBranch}:`, error);
+      logger.error(
+        `[MemoryService.bulkDeleteByBranch] Error bulk deleting branch ${targetBranch}:`,
+        error,
+      );
       throw error;
     }
   }
@@ -2770,11 +2793,10 @@ export class MemoryService {
 
       for (const entityType of entityTypes) {
         const query = options.dryRun
-          ? `MATCH (n:${entityType}) WHERE n.repository STARTS WITH $repositoryPrefix RETURN n.id as id, n.name as name, n.branch as branch, count(n) as count`
-          : `MATCH (n:${entityType}) WHERE n.repository STARTS WITH $repositoryPrefix OPTIONAL MATCH (n)-[r]-() DELETE r, n RETURN n.id as id, n.name as name, n.branch as branch, count(n) as count`;
+          ? `MATCH (n:${entityType} {repository: $repositoryName}) RETURN n.id as id, n.name as name, n.branch as branch, count(n) as count`
+          : `MATCH (n:${entityType} {repository: $repositoryName}) OPTIONAL MATCH (n)-[r]-() DELETE r, n RETURN n.id as id, n.name as name, n.branch as branch, count(n) as count`;
 
-        const repositoryPrefix = `${repositoryName}:`;
-        const results = await kuzuClient.executeQuery(query, { repositoryPrefix });
+        const results = await kuzuClient.executeQuery(query, { repositoryName });
 
         for (const row of results) {
           totalCount += row.count || 0;
@@ -2782,7 +2804,7 @@ export class MemoryService {
             deletedEntities.push({
               type: entityType.toLowerCase(),
               id: row.id,
-              name: row.name ? `${row.name} (${row.branch})` : `${row.id} (${row.branch})`
+              name: row.name ? `${row.name} (${row.branch})` : `${row.id} (${row.branch})`,
             });
           }
         }
@@ -2805,7 +2827,7 @@ export class MemoryService {
             deletedEntities.push({
               type: 'repository',
               id: `${repositoryName}:${branch}`,
-              name: `${repositoryName} (${branch})`
+              name: `${repositoryName} (${branch})`,
             });
           }
           totalCount += repoDeletedCount;
@@ -2822,7 +2844,10 @@ export class MemoryService {
         warnings,
       };
     } catch (error: any) {
-      logger.error(`[MemoryService.bulkDeleteByRepository] Error bulk deleting repository ${repositoryName}:`, error);
+      logger.error(
+        `[MemoryService.bulkDeleteByRepository] Error bulk deleting repository ${repositoryName}:`,
+        error,
+      );
       throw error;
     }
   }

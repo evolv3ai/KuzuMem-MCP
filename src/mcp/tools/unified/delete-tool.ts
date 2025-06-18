@@ -90,19 +90,23 @@ Best practices:
       // Filter parameters for bulk-by-filter
       filterStatus: {
         type: 'string',
-        description: 'Filter by entity status (e.g., deprecated, inactive) for bulk-by-filter operation',
+        description:
+          'Filter by entity status (e.g., deprecated, inactive) for bulk-by-filter operation',
       },
       filterCreatedBefore: {
         type: 'string',
-        description: 'Delete entities created before this date (ISO format) for bulk-by-filter operation',
+        description:
+          'Delete entities created before this date (ISO format) for bulk-by-filter operation',
       },
       filterCreatedAfter: {
         type: 'string',
-        description: 'Delete entities created after this date (ISO format) for bulk-by-filter operation',
+        description:
+          'Delete entities created after this date (ISO format) for bulk-by-filter operation',
       },
       filterNamePattern: {
         type: 'string',
-        description: 'Delete entities with names matching this pattern (regex) for bulk-by-filter operation',
+        description:
+          'Delete entities with names matching this pattern (regex) for bulk-by-filter operation',
       },
       // Safety and control parameters
       confirm: {

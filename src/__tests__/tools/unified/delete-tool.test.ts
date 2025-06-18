@@ -140,7 +140,7 @@ describe('delete tool handler', () => {
         id: 'comp-test',
         name: 'Test Component',
         repository: 'test-repo',
-        branch: 'main'
+        branch: 'main',
       });
 
       const params = {
@@ -223,7 +223,8 @@ describe('delete tool handler', () => {
       expect(result).toEqual({
         success: false,
         operation: 'bulk-by-type',
-        message: 'Failed to execute bulk-by-type: confirm=true is required for bulk deletion operations (or use dryRun=true to preview)',
+        message:
+          'Failed to execute bulk-by-type: confirm=true is required for bulk deletion operations (or use dryRun=true to preview)',
         deletedCount: 0,
       });
     });
@@ -317,7 +318,11 @@ describe('delete tool handler', () => {
         count: 10,
         entities: [
           { type: 'component', id: 'comp-1', name: 'Component 1' },
-          { type: 'repository', id: 'test-repo:feature-branch', name: 'test-repo (feature-branch)' },
+          {
+            type: 'repository',
+            id: 'test-repo:feature-branch',
+            name: 'test-repo (feature-branch)',
+          },
         ],
         warnings: [],
       };
@@ -366,7 +371,8 @@ describe('delete tool handler', () => {
       expect(result).toEqual({
         success: false,
         operation: 'bulk-by-branch',
-        message: 'Failed to execute bulk-by-branch: targetBranch is required for bulk-by-branch deletion',
+        message:
+          'Failed to execute bulk-by-branch: targetBranch is required for bulk-by-branch deletion',
         deletedCount: 0,
       });
     });
@@ -428,7 +434,8 @@ describe('delete tool handler', () => {
       expect(result).toEqual({
         success: false,
         operation: 'bulk-by-filter',
-        message: 'Failed to execute bulk-by-filter: bulk-by-filter operation not yet implemented - will be added in future version',
+        message:
+          'Failed to execute bulk-by-filter: bulk-by-filter operation not yet implemented - will be added in future version',
         deletedCount: 0,
       });
     });

@@ -1224,7 +1224,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     }, 10000);
   });
 
-  describe('Tool 9: delete', () => {
+  describe('Tool 11: delete', () => {
     // First create some test entities to delete
     beforeAll(async () => {
       // Create test components for deletion
@@ -1329,7 +1329,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
           targetType: 'component',
           repository: TEST_REPO,
           branch: TEST_BRANCH,
-        })
+        }),
       ).rejects.toThrow();
     }, 10000);
 
@@ -1339,7 +1339,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
           operation: 'single',
           repository: TEST_REPO,
           branch: TEST_BRANCH,
-        })
+        }),
       ).rejects.toThrow();
     }, 10000);
   });

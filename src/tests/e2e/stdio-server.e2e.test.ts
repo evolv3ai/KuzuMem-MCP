@@ -756,7 +756,7 @@ describe('MCP Stdio Server E2E Tests', () => {
     }, 20000);
   });
 
-  describe('Tool 9: delete', () => {
+  describe('Tool 11: delete', () => {
     // First create some test entities to delete
     beforeAll(async () => {
       // Create test components for deletion
@@ -882,7 +882,7 @@ describe('MCP Stdio Server E2E Tests', () => {
           targetType: 'component',
           repository: TEST_REPO,
           branch: TEST_BRANCH,
-        })
+        }),
       ).rejects.toThrow();
     }, 10000);
 

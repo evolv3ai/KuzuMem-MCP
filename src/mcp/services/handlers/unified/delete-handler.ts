@@ -3,20 +3,26 @@ import { handleToolError, validateSession, logToolExecution } from '../../../uti
 
 // TypeScript interfaces for delete input parameters
 interface DeleteParams {
-  operation: 'single' | 'bulk-by-type' | 'bulk-by-tag' | 'bulk-by-branch' | 'bulk-by-repository' | 'bulk-by-filter';
+  operation:
+    | 'single'
+    | 'bulk-by-type'
+    | 'bulk-by-tag'
+    | 'bulk-by-branch'
+    | 'bulk-by-repository'
+    | 'bulk-by-filter';
   repository: string;
   branch?: string;
   clientProjectRoot?: string;
-  
+
   // Single entity deletion
   entityType?: 'component' | 'decision' | 'rule' | 'file' | 'tag' | 'context';
   id?: string;
-  
+
   // Bulk deletion parameters
   targetType?: 'component' | 'decision' | 'rule' | 'file' | 'tag' | 'context' | 'all';
   tagId?: string;
   targetBranch?: string;
-  
+
   // Filter parameters
   filters?: {
     status?: string;
@@ -24,7 +30,7 @@ interface DeleteParams {
     createdAfter?: string;
     namePattern?: string;
   };
-  
+
   // Safety parameters
   confirm?: boolean;
   dryRun?: boolean;
@@ -52,7 +58,7 @@ interface DeleteResult {
 export const deleteHandler: SdkToolHandler = async (params, context, memoryService) => {
   // 1. Validate and extract parameters
   const validatedParams = params as unknown as DeleteParams;
-  
+
   // Basic validation
   if (!validatedParams.operation) {
     throw new Error('operation parameter is required');
@@ -60,19 +66,19 @@ export const deleteHandler: SdkToolHandler = async (params, context, memoryServi
   if (!validatedParams.repository) {
     throw new Error('repository parameter is required');
   }
-  
+
   // Validate session and get client project root
   const clientProjectRoot = validateSession(context, 'delete');
   const repository = validatedParams.repository;
   const branch = validatedParams.branch || context.session.branch || 'main';
-  
+
   const logger = context.logger || console;
 
   try {
     logToolExecution(context, 'delete', validatedParams);
-    
+
     let result: DeleteResult;
-    
+
     switch (validatedParams.operation) {
       case 'single':
         result = await handleSingleDeletion(
@@ -84,7 +90,7 @@ export const deleteHandler: SdkToolHandler = async (params, context, memoryServi
           branch,
         );
         break;
-        
+
       case 'bulk-by-type':
         result = await handleBulkByType(
           validatedParams,
@@ -95,7 +101,7 @@ export const deleteHandler: SdkToolHandler = async (params, context, memoryServi
           branch,
         );
         break;
-        
+
       case 'bulk-by-tag':
         result = await handleBulkByTag(
           validatedParams,
@@ -106,7 +112,7 @@ export const deleteHandler: SdkToolHandler = async (params, context, memoryServi
           branch,
         );
         break;
-        
+
       case 'bulk-by-branch':
         result = await handleBulkByBranch(
           validatedParams,
@@ -116,7 +122,7 @@ export const deleteHandler: SdkToolHandler = async (params, context, memoryServi
           repository,
         );
         break;
-        
+
       case 'bulk-by-repository':
         result = await handleBulkByRepository(
           validatedParams,
@@ -126,7 +132,7 @@ export const deleteHandler: SdkToolHandler = async (params, context, memoryServi
           repository,
         );
         break;
-        
+
       case 'bulk-by-filter':
         result = await handleBulkByFilter(
           validatedParams,
@@ -137,14 +143,13 @@ export const deleteHandler: SdkToolHandler = async (params, context, memoryServi
           branch,
         );
         break;
-        
+
       default:
         throw new Error(`Unknown operation: ${validatedParams.operation}`);
     }
-    
+
     logger.info(`[deleteHandler] ${validatedParams.operation} completed successfully`);
     return result;
-
   } catch (error: any) {
     await handleToolError(error, context, 'delete', validatedParams.operation);
 
@@ -170,28 +175,58 @@ async function handleSingleDeletion(
   if (!params.entityType || !params.id) {
     throw new Error('entityType and id are required for single deletion');
   }
-  
+
   const logger = context.logger || console;
-  
+
   if (params.dryRun) {
     // For dry run, just check if entity exists
     let exists = false;
     try {
       switch (params.entityType) {
         case 'component':
-          exists = !!(await memoryService.getComponent(context, clientProjectRoot, repository, branch, params.id));
+          exists = !!(await memoryService.getComponent(
+            context,
+            clientProjectRoot,
+            repository,
+            branch,
+            params.id,
+          ));
           break;
         case 'decision':
-          exists = !!(await memoryService.getDecision(context, clientProjectRoot, repository, branch, params.id));
+          exists = !!(await memoryService.getDecision(
+            context,
+            clientProjectRoot,
+            repository,
+            branch,
+            params.id,
+          ));
           break;
         case 'rule':
-          exists = !!(await memoryService.getRule(context, clientProjectRoot, repository, branch, params.id));
+          exists = !!(await memoryService.getRule(
+            context,
+            clientProjectRoot,
+            repository,
+            branch,
+            params.id,
+          ));
           break;
         case 'file':
-          exists = !!(await memoryService.getFile(context, clientProjectRoot, repository, branch, params.id));
+          exists = !!(await memoryService.getFile(
+            context,
+            clientProjectRoot,
+            repository,
+            branch,
+            params.id,
+          ));
           break;
         case 'tag':
-          exists = !!(await memoryService.getTag(context, clientProjectRoot, repository, branch, params.id));
+          exists = !!(await memoryService.getTag(
+            context,
+            clientProjectRoot,
+            repository,
+            branch,
+            params.id,
+          ));
           break;
         case 'context':
           // Context entities don't have a direct get method, assume exists for now
@@ -201,46 +236,82 @@ async function handleSingleDeletion(
     } catch (error) {
       exists = false;
     }
-    
+
     return {
       success: true,
       operation: 'single',
-      message: exists 
-        ? `Would delete ${params.entityType} with ID ${params.id}` 
+      message: exists
+        ? `Would delete ${params.entityType} with ID ${params.id}`
         : `${params.entityType} with ID ${params.id} not found`,
       deletedCount: exists ? 1 : 0,
       dryRun: true,
     };
   }
-  
+
   // Perform actual deletion
   let deleted = false;
-  
+
   switch (params.entityType) {
     case 'component':
-      deleted = await memoryService.deleteComponent(context, clientProjectRoot, repository, branch, params.id);
+      deleted = await memoryService.deleteComponent(
+        context,
+        clientProjectRoot,
+        repository,
+        branch,
+        params.id,
+      );
       break;
     case 'decision':
-      deleted = await memoryService.deleteDecision(context, clientProjectRoot, repository, branch, params.id);
+      deleted = await memoryService.deleteDecision(
+        context,
+        clientProjectRoot,
+        repository,
+        branch,
+        params.id,
+      );
       break;
     case 'rule':
-      deleted = await memoryService.deleteRule(context, clientProjectRoot, repository, branch, params.id);
+      deleted = await memoryService.deleteRule(
+        context,
+        clientProjectRoot,
+        repository,
+        branch,
+        params.id,
+      );
       break;
     case 'file':
-      deleted = await memoryService.deleteFile(context, clientProjectRoot, repository, branch, params.id);
+      deleted = await memoryService.deleteFile(
+        context,
+        clientProjectRoot,
+        repository,
+        branch,
+        params.id,
+      );
       break;
     case 'tag':
-      deleted = await memoryService.deleteTag(context, clientProjectRoot, repository, branch, params.id);
+      deleted = await memoryService.deleteTag(
+        context,
+        clientProjectRoot,
+        repository,
+        branch,
+        params.id,
+      );
       break;
     case 'context':
-      deleted = await memoryService.deleteContext(context, clientProjectRoot, repository, branch, params.id);
+      deleted = await memoryService.deleteContext(
+        context,
+        clientProjectRoot,
+        repository,
+        branch,
+        params.id,
+      );
       break;
   }
-  
+
   return {
     success: deleted,
     operation: 'single',
-    message: deleted 
+    message: deleted
       ? `${params.entityType} ${params.id} deleted successfully`
       : `${params.entityType} with ID ${params.id} not found`,
     deletedCount: deleted ? 1 : 0,
@@ -259,11 +330,13 @@ async function handleBulkByType(
   if (!params.targetType) {
     throw new Error('targetType is required for bulk-by-type deletion');
   }
-  
+
   if (!params.confirm && !params.dryRun) {
-    throw new Error('confirm=true is required for bulk deletion operations (or use dryRun=true to preview)');
+    throw new Error(
+      'confirm=true is required for bulk deletion operations (or use dryRun=true to preview)',
+    );
   }
-  
+
   // Use the new bulk delete methods we'll add to MemoryService
   const result = await memoryService.bulkDeleteByType(
     context,
@@ -274,13 +347,13 @@ async function handleBulkByType(
     {
       dryRun: params.dryRun || false,
       force: params.force || false,
-    }
+    },
   );
-  
+
   return {
     success: true,
     operation: 'bulk-by-type',
-    message: params.dryRun 
+    message: params.dryRun
       ? `Would delete ${result.count} ${params.targetType} entities`
       : `Deleted ${result.count} ${params.targetType} entities`,
     deletedCount: result.count,
@@ -304,7 +377,9 @@ async function handleBulkByTag(
   }
 
   if (!params.confirm && !params.dryRun) {
-    throw new Error('confirm=true is required for bulk deletion operations (or use dryRun=true to preview)');
+    throw new Error(
+      'confirm=true is required for bulk deletion operations (or use dryRun=true to preview)',
+    );
   }
 
   const result = await memoryService.bulkDeleteByTag(
@@ -316,7 +391,7 @@ async function handleBulkByTag(
     {
       dryRun: params.dryRun || false,
       force: params.force || false,
-    }
+    },
   );
 
   return {
@@ -345,7 +420,9 @@ async function handleBulkByBranch(
   }
 
   if (!params.confirm && !params.dryRun) {
-    throw new Error('confirm=true is required for bulk deletion operations (or use dryRun=true to preview)');
+    throw new Error(
+      'confirm=true is required for bulk deletion operations (or use dryRun=true to preview)',
+    );
   }
 
   const result = await memoryService.bulkDeleteByBranch(
@@ -356,7 +433,7 @@ async function handleBulkByBranch(
     {
       dryRun: params.dryRun || false,
       force: params.force || false,
-    }
+    },
   );
 
   return {
@@ -381,7 +458,9 @@ async function handleBulkByRepository(
   repository: string,
 ): Promise<DeleteResult> {
   if (!params.confirm && !params.dryRun) {
-    throw new Error('confirm=true is required for bulk deletion operations (or use dryRun=true to preview)');
+    throw new Error(
+      'confirm=true is required for bulk deletion operations (or use dryRun=true to preview)',
+    );
   }
 
   const result = await memoryService.bulkDeleteByRepository(
@@ -391,7 +470,7 @@ async function handleBulkByRepository(
     {
       dryRun: params.dryRun || false,
       force: params.force || false,
-    }
+    },
   );
 
   return {
