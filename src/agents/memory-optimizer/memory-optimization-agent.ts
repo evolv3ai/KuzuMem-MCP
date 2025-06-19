@@ -726,7 +726,9 @@ export class MemoryOptimizationAgent {
     const targetEntityId = action.targetEntityId;
 
     if (!targetEntityId) {
-      throw new Error(`Merge action requires targetEntityId for entity ${sourceEntityId}`);
+      throw new Error(
+        `Merge action requires targetEntityId for entity ${sourceEntityId}`
+      );
     }
 
     logger.info(`Merging entity ${sourceEntityId} into ${targetEntityId}`);
@@ -737,13 +739,17 @@ export class MemoryOptimizationAgent {
     // 3. Update relationships to point to the target entity
     // 4. Delete the source entity
 
-    const kuzuClient = await this.memoryService.getKuzuClient(mcpContext, clientProjectRoot);
+    const kuzuClient = await this.memoryService.getKuzuClient(
+      mcpContext,
+      clientProjectRoot
+    );
 
     // Get source entity data
     const sourceQuery = `
       MATCH (source {id: $sourceId, repository: $repository, branch: $branch})
       RETURN source, labels(source) AS sourceLabels
     `;
+
     const sourceResult = await kuzuClient.executeQuery(sourceQuery, {
       sourceId: sourceEntityId,
       repository,
@@ -758,13 +764,18 @@ export class MemoryOptimizationAgent {
     const sourceLabels = sourceResult[0].sourceLabels;
 
     // Update relationships to point to target entity
+    const relationshipType = sourceLabels[0] === 'Component'
+      ? 'DEPENDS_ON'
+      : 'RELATED_TO';
+
     const updateRelationshipsQuery = `
       MATCH (source {id: $sourceId, repository: $repository, branch: $branch})-[r]-(other)
       MATCH (target {id: $targetId, repository: $repository, branch: $branch})
       WHERE NOT (target)-[r]-(other)
-      CREATE (target)-[newR:${sourceLabels[0] === 'Component' ? 'DEPENDS_ON' : 'RELATED_TO'}]->(other)
+      CREATE (target)-[newR:${relationshipType}]->(other)
       SET newR = properties(r)
     `;
+
     await kuzuClient.executeQuery(updateRelationshipsQuery, {
       sourceId: sourceEntityId,
       targetId: targetEntityId,
@@ -774,10 +785,19 @@ export class MemoryOptimizationAgent {
 
     // Delete the source entity (this will also delete its relationships)
     const entityType = this.determineEntityType(sourceEntityId, action);
-    await this.executeDeleteAction(mcpContext, clientProjectRoot, repository, branch,
-      { ...action, type: 'delete', entityId: sourceEntityId }, logger);
 
-    logger.info(`Successfully merged entity ${sourceEntityId} into ${targetEntityId}`);
+    await this.executeDeleteAction(
+      mcpContext,
+      clientProjectRoot,
+      repository,
+      branch,
+      { ...action, type: 'delete', entityId: sourceEntityId },
+      logger
+    );
+
+    logger.info(
+      `Successfully merged entity ${sourceEntityId} into ${targetEntityId}`
+    );
   }
 
   /**
