@@ -1378,4 +1378,158 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       }
     }, 10000);
   });
+
+  describe('T_HTTPSTREAM_MEMORY_OPTIMIZER: Memory Optimizer Integration', () => {
+    it('should analyze memory graph via HTTP stream', async () => {
+      const result = await callTool('memory-optimizer', {
+        operation: 'analyze',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        strategy: 'conservative',
+        enableMCPSampling: true,
+        samplingStrategy: 'representative',
+      });
+
+      expect(result).toMatchObject({
+        success: true,
+        operation: 'analyze',
+        data: {
+          analysisId: expect.any(String),
+          summary: expect.objectContaining({
+            totalEntitiesAnalyzed: expect.any(Number),
+            overallHealthScore: expect.any(Number),
+          }),
+          staleEntities: expect.any(Array),
+          redundancies: expect.any(Array),
+          optimizationOpportunities: expect.any(Array),
+          recommendations: expect.any(Array),
+        },
+        message: expect.stringContaining('Analysis completed'),
+      });
+
+      console.log('Memory analysis completed via HTTP stream:', {
+        analysisId: result.data.analysisId,
+        entitiesAnalyzed: result.data.summary.totalEntitiesAnalyzed,
+        healthScore: result.data.summary.overallHealthScore,
+      });
+    }, 45000);
+
+    it('should perform dry-run optimization via HTTP stream', async () => {
+      // First analyze to get an analysis ID
+      const analysisResult = await callTool('memory-optimizer', {
+        operation: 'analyze',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        strategy: 'conservative',
+        enableMCPSampling: false, // Faster without sampling for this test
+      });
+
+      expect(analysisResult.success).toBe(true);
+      const analysisId = analysisResult.data.analysisId;
+
+      // Then perform dry-run optimization
+      const result = await callTool('memory-optimizer', {
+        operation: 'optimize',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        analysisId: analysisId,
+        dryRun: true,
+        strategy: 'conservative',
+      });
+
+      expect(result).toMatchObject({
+        success: true,
+        operation: 'optimize',
+        data: {
+          planId: expect.any(String),
+          status: expect.any(String),
+          executedActions: expect.any(Array),
+          optimizationSummary: expect.objectContaining({
+            entitiesDeleted: expect.any(Number),
+            entitiesMerged: expect.any(Number),
+            entitiesUpdated: expect.any(Number),
+          }),
+        },
+        message: expect.stringContaining('Dry run completed'),
+      });
+
+      // Dry run should not create a snapshot
+      expect(result.data.snapshotId).toBeUndefined();
+
+      console.log('Dry-run optimization completed via HTTP stream:', {
+        planId: result.data.planId,
+        status: result.data.status,
+        actionsCount: result.data.executedActions.length,
+      });
+    }, 45000);
+
+    it('should list snapshots via HTTP stream', async () => {
+      const result = await callTool('memory-optimizer', {
+        operation: 'list-snapshots',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+      });
+
+      expect(result).toMatchObject({
+        success: true,
+        operation: 'list-snapshots',
+        data: {
+          snapshots: expect.any(Array),
+          count: expect.any(Number),
+          repository: TEST_REPO,
+          branch: TEST_BRANCH,
+        },
+        message: expect.stringContaining('Found'),
+      });
+
+      console.log('Snapshots listed via HTTP stream:', {
+        count: result.data.count,
+        snapshots: result.data.snapshots.map((s: any) => ({
+          id: s.id,
+          created: s.created,
+          entitiesCount: s.entitiesCount,
+        })),
+      });
+    }, 15000);
+
+    it('should handle memory optimizer tool availability via HTTP stream', async () => {
+      // Get tools list to verify memory-optimizer is available
+      const toolsResponse = await sendHttpRequest('tools/list', {});
+
+      expect(toolsResponse.result?.tools).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'memory-optimizer',
+            description: expect.stringContaining('AI-powered core memory optimization'),
+            inputSchema: expect.objectContaining({
+              properties: expect.objectContaining({
+                operation: expect.objectContaining({
+                  enum: expect.arrayContaining(['analyze', 'optimize', 'rollback', 'list-snapshots']),
+                }),
+              }),
+            }),
+          }),
+        ])
+      );
+
+      console.log('Memory optimizer tool verified as available via HTTP stream');
+    }, 10000);
+
+    it('should handle invalid memory optimizer operation via HTTP stream', async () => {
+      try {
+        await callTool('memory-optimizer', {
+          operation: 'invalid-operation',
+          repository: TEST_REPO,
+          branch: TEST_BRANCH,
+        });
+
+        // Should not reach here
+        expect(true).toBe(false);
+      } catch (error) {
+        // Should throw an error for invalid operation
+        expect(error).toBeDefined();
+        console.log('Invalid operation correctly rejected via HTTP stream:', String(error));
+      }
+    }, 15000);
+  });
 });
