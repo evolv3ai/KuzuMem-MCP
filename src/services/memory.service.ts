@@ -2541,13 +2541,17 @@ export class MemoryService {
     entityType: string,
     whereClause: string,
     params: Record<string, any>,
-    dryRun: boolean
+    dryRun: boolean,
   ): Promise<{
     entities: Array<{ type: string; id: string; name?: string }>;
     count: number;
   }> {
     if (dryRun) {
-      const query = `MATCH (n:${entityType}) WHERE ${whereClause} RETURN n.id as id, n.name as name`;
+      const query = `
+        MATCH (n:${entityType})
+        WHERE ${whereClause}
+        RETURN n.id as id, n.name as name
+      `;
       const results = await kuzuClient.executeQuery(query, params);
 
       const entities = results.map((row: any) => ({
@@ -2559,7 +2563,11 @@ export class MemoryService {
       return { entities, count: entities.length };
     } else {
       // First get entity details before deletion
-      const selectQuery = `MATCH (n:${entityType}) WHERE ${whereClause} RETURN n.id as id, n.name as name`;
+      const selectQuery = `
+        MATCH (n:${entityType})
+        WHERE ${whereClause}
+        RETURN n.id as id, n.name as name
+      `;
       const selectResults = await kuzuClient.executeQuery(selectQuery, params);
 
       const entities = selectResults.map((row: any) => ({
