@@ -2,12 +2,12 @@
 import { kuzuLogger } from '../utils/logger';
 
 // Specialized services
-import { BaseKuzuClient, timeOperation } from './base/base-kuzu-client';
+import { BaseKuzuClient } from './base/base-kuzu-client';
 import { KuzuConnectionManager } from './services/kuzu-connection-manager';
-import { KuzuQueryExecutor } from './services/kuzu-query-executor';
-import { KuzuTransactionManager } from './services/kuzu-transaction-manager';
-import { KuzuSchemaManager } from './services/kuzu-schema-manager';
 import { KuzuErrorHandler } from './services/kuzu-error-handler';
+import { KuzuQueryExecutor } from './services/kuzu-query-executor';
+import { KuzuSchemaManager } from './services/kuzu-schema-manager';
+import { KuzuTransactionManager } from './services/kuzu-transaction-manager';
 
 /**
  * Main KuzuDB Client that orchestrates specialized database services
@@ -103,14 +103,16 @@ export class KuzuDBClient extends BaseKuzuClient {
  */
 export async function initializeKuzuDBSchema(connection: any): Promise<void> {
   const logger = kuzuLogger.child({ operation: 'initialize-schema-legacy' });
-  logger.warn('Using deprecated initializeKuzuDBSchema function. Consider using KuzuSchemaManager instead.');
+  logger.warn(
+    'Using deprecated initializeKuzuDBSchema function. Consider using KuzuSchemaManager instead.',
+  );
 
   // For backward compatibility, we'll create a temporary schema manager
   // This is not ideal but maintains compatibility with existing code
   const tempSchemaManager = {
     async executeQuery(query: string): Promise<any> {
       return connection.query(query);
-    }
+    },
   };
 
   // Execute basic schema creation

@@ -1,7 +1,7 @@
-import { MemoryService } from '../../services/memory.service';
 import { KuzuDBClient } from '../../db/kuzu';
-import { logger } from '../../utils/logger';
 import type { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { MemoryService } from '../../services/memory.service';
+import { logger } from '../../utils/logger';
 import type { OptimizationStrategy } from './prompt-manager';
 
 export interface MemorySample {
@@ -319,7 +319,7 @@ export class MCPSamplingManager {
         WITH n
         ORDER BY n.id
         LIMIT $sampleSize
-        RETURN n.id, n.name, n.created, n.description, n.status
+        RETURN n.id, n.name, n.created_at, n.description, n.status
       `;
 
       const entities = await kuzuClient.executeQuery(query, { repository, branch, sampleSize });
@@ -359,7 +359,7 @@ export class MCPSamplingManager {
         WHERE relationshipCount = 0 OR n.status = 'deprecated'
         ORDER BY relationshipCount ASC
         LIMIT $sampleSize
-        RETURN n.id, n.name, n.created, n.description, n.status, relationshipCount
+        RETURN n.id, n.name, n.created_at, n.description, n.status, relationshipCount
       `;
 
       const entities = await kuzuClient.executeQuery(query, { repository, branch, sampleSize });
@@ -393,10 +393,10 @@ export class MCPSamplingManager {
         MATCH (n)
         WHERE n.repository = $repository AND n.branch = $branch
           AND n.id IS NOT NULL
-          AND n.created IS NOT NULL AND n.created <> '' AND n.created CONTAINS 'T'
-        ORDER BY n.created DESC
+          AND n.created_at IS NOT NULL AND n.created_at <> '' AND n.created_at CONTAINS 'T'
+        ORDER BY n.created_at DESC
         LIMIT $sampleSize
-        RETURN n.id, n.name, n.created, n.description, n.status
+        RETURN n.id, n.name, n.created_at, n.description, n.status
       `;
 
       const entities = await kuzuClient.executeQuery(query, { repository, branch, sampleSize });
@@ -438,7 +438,7 @@ export class MCPSamplingManager {
           WHERE n.repository = $repository AND n.branch = $branch
           ORDER BY n.id
           LIMIT $perTypeSize
-          RETURN n.id, n.name, n.created, n.description, n.status
+          RETURN n.id, n.name, n.created_at, n.description, n.status
         `;
 
         const typeEntities = await kuzuClient.executeQuery(query, {
@@ -531,13 +531,13 @@ export class MCPSamplingManager {
     const now = new Date();
 
     for (const entity of entities) {
-      if (!entity.created || !entity.created.includes('T')) {
+      if (!entity.created_at || !entity.created_at.includes('T')) {
         distribution.old++; // Treat entities without dates as old
         continue;
       }
 
       try {
-        const created = new Date(entity.created);
+        const created = new Date(entity.created_at);
         const ageInDays = (now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24);
 
         if (ageInDays <= 30) {

@@ -158,13 +158,13 @@ export class MemoryContextBuilder {
       const query = `
         MATCH (n)
         WHERE n.repository = $repository AND n.branch = $branch
-          AND n.created IS NOT NULL
-        WITH n.created AS created
-        WHERE created <> ''
+          AND n.created_at IS NOT NULL
+        WITH n.created_at AS created_at
+        WHERE created_at <> ''
         RETURN AVG(
-          CASE 
-            WHEN created CONTAINS 'T' THEN 
-              (datetime() - datetime(created)) / 86400000000  // Convert microseconds to days
+          CASE
+            WHEN created_at CONTAINS 'T' THEN
+              (to_epoch_ms(current_timestamp()) - to_epoch_ms(TIMESTAMP(created_at))) / 86400000
             ELSE NULL
           END
         ) AS avgAge
@@ -194,8 +194,8 @@ export class MemoryContextBuilder {
         MATCH (c:Context)
         WHERE c.repository = $repository AND c.branch = $branch
           AND (c.summary CONTAINS 'optimization' OR c.summary CONTAINS 'cleanup')
-        RETURN c.created
-        ORDER BY c.created DESC
+        RETURN c.created_at
+        ORDER BY c.created_at DESC
         LIMIT 1
       `;
 
@@ -224,8 +224,8 @@ export class MemoryContextBuilder {
       const query = `
         MATCH (n:${entityType})
         WHERE n.repository = $repository AND n.branch = $branch
-        RETURN n.id, n.name, n.created, n.status, n.description
-        ORDER BY n.created DESC
+        RETURN n.id, n.name, n.created_at, n.status, n.description
+        ORDER BY n.created_at DESC
         LIMIT $limit
       `;
 
@@ -252,7 +252,7 @@ export class MemoryContextBuilder {
         MATCH (a)-[r]->(b)
         WHERE a.repository = $repository AND a.branch = $branch
           AND b.repository = $repository AND b.branch = $branch
-        RETURN type(r) AS relationshipType, COUNT(r) AS count
+        RETURN label(r) AS relationshipType, COUNT(r) AS count
         ORDER BY count DESC
       `;
 
@@ -279,10 +279,10 @@ export class MemoryContextBuilder {
       const query = `
         MATCH (n)
         WHERE n.repository = $repository AND n.branch = $branch
-          AND n.created IS NOT NULL
-          AND n.created <> ''
-          AND n.created CONTAINS 'T'
-        WITH n, (datetime() - datetime(n.created)) / 86400000000 AS ageInDays
+          AND n.created_at IS NOT NULL
+          AND n.created_at <> ''
+          AND n.created_at CONTAINS 'T'
+        WITH n, (to_epoch_ms(current_timestamp()) - to_epoch_ms(TIMESTAMP(n.created_at))) / 86400000 AS ageInDays
         WHERE ageInDays > $staleDays
         OPTIONAL MATCH (n)-[r]-()
         RETURN n.id, n.name, labels(n) AS nodeLabels, ageInDays, COUNT(r) AS relationshipCount
@@ -290,7 +290,11 @@ export class MemoryContextBuilder {
         LIMIT 50
       `;
 
-      return await kuzuClient.executeQuery(query, { repository, branch, staleDays });
+      return await kuzuClient.executeQuery(query, {
+        repository,
+        branch,
+        staleDays,
+      });
     } catch (error) {
       logger.warn('Failed to get stale entity candidates:', error);
       return [];
