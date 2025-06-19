@@ -93,45 +93,33 @@ export class MemoryService {
       throw new Error('RepositoryProvider not initialized');
     }
 
-    // Return cached client if available
+    // Correct Caching Logic: Reuse existing client if available
     if (this.kuzuClients.has(clientProjectRoot)) {
       logger.info(
-        `[MemoryService.getKuzuClient] Found cached KuzuDBClient for: ${clientProjectRoot}`,
+        `[MemoryService.getKuzuClient] Reusing cached KuzuDBClient for: ${clientProjectRoot}`,
       );
-      const cachedClient = this.kuzuClients.get(clientProjectRoot)!;
-      return cachedClient;
+      return this.kuzuClients.get(clientProjectRoot)!;
     }
 
-    // Create new client if needed
+    // Create new client only if it doesn't exist
     logger.info(
-      `[MemoryService.getKuzuClient] Creating new KuzuDBClient for: ${clientProjectRoot}`,
+      `[MemoryService.getKuzuClient] No cached client found. Creating new KuzuDBClient for: ${clientProjectRoot}`,
     );
 
     try {
-      const newClient = new KuzuDBClient(clientProjectRoot); // KuzuDBClient constructor handles path joining for db file
-      // Pass the mcpContext to allow for progress notifications during initialization
-      await newClient.initialize(mcpContext); // This now also handles schema init
+      const newClient = new KuzuDBClient(clientProjectRoot);
+      await newClient.initialize(mcpContext);
       this.kuzuClients.set(clientProjectRoot, newClient);
+
       await this.repositoryProvider.initializeRepositories(clientProjectRoot, newClient);
 
-      // Initialize SnapshotService for this client project root
+      // Initialize SnapshotService for this new client
       if (!this.snapshotServices.has(clientProjectRoot)) {
-        try {
-          const snapshotService = new SnapshotService(newClient);
-          this.snapshotServices.set(clientProjectRoot, snapshotService);
-          logger.info(
-            `[MemoryService.getKuzuClient] SnapshotService initialized for: ${clientProjectRoot}`,
-          );
-        } catch (snapshotError) {
-          logger.error(
-            `[MemoryService.getKuzuClient] Failed to initialize SnapshotService for ${clientProjectRoot}:`,
-            snapshotError,
-          );
-          // Continue without SnapshotService - optimization operations will handle this gracefully
-          logger.warn(
-            `[MemoryService.getKuzuClient] Continuing without SnapshotService - snapshot operations will not be available for ${clientProjectRoot}`,
-          );
-        }
+        const snapshotService = new SnapshotService(newClient);
+        this.snapshotServices.set(clientProjectRoot, snapshotService);
+        logger.info(
+          `[MemoryService.getKuzuClient] SnapshotService initialized for: ${clientProjectRoot}`,
+        );
       }
 
       logger.info(

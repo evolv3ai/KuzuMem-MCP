@@ -8,8 +8,8 @@ import { MemoryService } from '../../services/memory.service';
 import { logger } from '../../utils/logger';
 
 // Memory optimizer components
-import { MemoryContextBuilder } from './context-builder';
 import { MCPSamplingManager } from './mcp-sampling-manager';
+import { MemoryContextBuilder } from './memory-context-builder';
 import { PromptManager } from './prompt-manager';
 
 // Type imports

@@ -1,8 +1,8 @@
 import { KuzuDBClient } from '../db/kuzu';
 import { Component, ComponentInput, ComponentStatus, Context, Decision } from '../types';
 import { formatGraphUniqueId } from '../utils/id.utils';
-import { RepositoryRepository } from './repository.repository';
 import { loggers } from '../utils/logger';
+import { RepositoryRepository } from './repository.repository';
 
 /**
  * Repository for Component, using KuzuDB and Cypher queries.
@@ -1195,120 +1195,104 @@ export class ComponentRepository {
     status: ComponentStatus;
     depends_on?: string[] | null;
   }): Promise<Component | null> {
-    const repositoryNodeId = String(component.repository);
+    return this.kuzuClient.transaction(async (tx) => {
+      const repositoryNodeId = String(component.repository);
 
-    const repoIdParts = repositoryNodeId.split(':');
-    if (repoIdParts.length === 0) {
-      throw new Error(
-        `Invalid repositoryNodeId format in component.repository: ${repositoryNodeId}`,
-      );
-    }
-    const logicalRepositoryName = repoIdParts[0];
-
-    const componentBranch = component.branch || 'main';
-    const componentId = component.id;
-    const graphUniqueId = formatGraphUniqueId(logicalRepositoryName, componentBranch, componentId);
-    const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
-
-    const nowIso = new Date().toISOString();
-    const kuzuTimestamp = nowIso.replace('T', ' ').replace('Z', '');
-
-    const escapedName = this.escapeStr(component.name);
-    const escapedKind = this.escapeStr(component.kind);
-    const escapedStatus = this.escapeStr(component.status);
-    const escapedLogicalId = this.escapeStr(componentId);
-    const escapedComponentBranch = this.escapeStr(componentBranch);
-
-    const upsertNodeQuery = `
-        MERGE (repo:Repository {id: '${this.escapeStr(repositoryNodeId)}'})
-        ON CREATE SET repo.name = '${this.escapeStr(repositoryNodeId)}', repo.created_at = timestamp('${kuzuTimestamp}')
-        MERGE (c:Component {graph_unique_id: '${escapedGraphUniqueId}'})
-        ON CREATE SET 
-            c.id = '${escapedLogicalId}',
-            c.branch = '${escapedComponentBranch}',
-            c.name = '${escapedName}',
-            c.kind = '${escapedKind}',
-            c.status = '${escapedStatus}',
-            c.created_at = timestamp('${kuzuTimestamp}'),
-            c.updated_at = timestamp('${kuzuTimestamp}')
-        ON MATCH SET 
-            c.name = '${escapedName}',
-            c.kind = '${escapedKind}',
-            c.status = '${escapedStatus}',
-            c.id = '${escapedLogicalId}',        
-            c.branch = '${escapedComponentBranch}',
-            c.updated_at = timestamp('${kuzuTimestamp}')
-        MERGE (c)-[:PART_OF]->(repo)
-        RETURN c`;
-
-    try {
-      await this.kuzuClient.executeQuery(upsertNodeQuery);
-    } catch (error) {
-      this.logger.error(
-        `Error upserting component node ${componentId} in repo ${logicalRepositoryName} (branch: ${componentBranch}):`,
-        error,
-      );
-      this.logger.error('Query was:', upsertNodeQuery);
-      throw error;
-    }
-
-    const deleteDepsQuery = `
-        MATCH (c:Component {graph_unique_id: '${escapedGraphUniqueId}'})-[r:DEPENDS_ON]->()
-        DELETE r`;
-    await this.kuzuClient.executeQuery(deleteDepsQuery);
-
-    if (component.depends_on && component.depends_on.length > 0) {
-      for (const depId of component.depends_on) {
-        const depGraphUniqueId = formatGraphUniqueId(logicalRepositoryName, componentBranch, depId);
-        const escapedDepGraphUniqueId = this.escapeStr(depGraphUniqueId);
-
-        const ensureDepNodeQuery = `
-            MERGE (repoDep:Repository {id: $repositoryNodeId})
-            ON CREATE SET repoDep.name = $repositoryNodeId, repoDep.created_at = $depCreatedAt
-            MERGE (dep:Component {graph_unique_id: $depGraphUniqueId})
-            ON CREATE SET dep.id = $depId, dep.branch = $depBranch, dep.name = $depName, dep.kind = $depKind, dep.status = $depStatus, dep.repository = $repositoryNodeId, dep.created_at = $depCreatedAt, dep.updated_at = $depUpdatedAt
-            MERGE (dep)-[:PART_OF]->(repoDep)`;
-
-        await this.kuzuClient.executeQuery(ensureDepNodeQuery, {
-          repositoryNodeId,
-          depGraphUniqueId,
-          depId,
-          depBranch: componentBranch,
-          depName: `Placeholder for ${depId}`,
-          depKind: 'Unknown',
-          depStatus: 'planned',
-          depCreatedAt: nowIso,
-          depUpdatedAt: nowIso,
-        });
-        this.logger.error(
-          `DEBUG: upsertCompWithRel - Ensured/Created dependency node: ${escapedDepGraphUniqueId}`,
-        );
-
-        const checkCQuery = `MATCH (c:Component {graph_unique_id: '${escapedGraphUniqueId}'}) RETURN c.id AS componentId`;
-        const checkDQuery = `MATCH (d:Component {graph_unique_id: '${escapedDepGraphUniqueId}'}) RETURN d.id AS depId`;
-        const cResult = await this.kuzuClient.executeQuery(checkCQuery);
-        const dResult = await this.kuzuClient.executeQuery(checkDQuery);
-        const cRows = await cResult.getAll();
-        const dRows = await dResult.getAll();
-        this.logger.error(
-          `DEBUG: upsertCompWithRel - Pre-CREATE check: Found parent c (${escapedGraphUniqueId})? ${cRows.length > 0}. Found dep d (${escapedDepGraphUniqueId})? ${dRows.length > 0}`,
-        );
-
-        const addDepRelQuery = `
-            MATCH (c:Component {graph_unique_id: '${escapedGraphUniqueId}'}) 
-            MATCH (dep:Component {graph_unique_id: '${escapedDepGraphUniqueId}'})
-            CREATE (c)-[r:DEPENDS_ON]->(dep) RETURN count(r)`;
-
-        this.logger.error(
-          `DEBUG: upsertCompWithRel - Attempting DEPENDS_ON: ${escapedGraphUniqueId} -> ${escapedDepGraphUniqueId}`,
-        );
-        const relCreateResult = await this.kuzuClient.executeQuery(addDepRelQuery);
-        const relCreateRows = await relCreateResult.getAll();
-        this.logger.error(
-          `DEBUG: upsertCompWithRel - Executed CREATE for DEPENDS_ON, rows returned: ${relCreateRows.length}, content: ${JSON.stringify(relCreateRows)}`,
+      const repoIdParts = repositoryNodeId.split(':');
+      if (repoIdParts.length === 0) {
+        throw new Error(
+          `Invalid repositoryNodeId format in component.repository: ${repositoryNodeId}`,
         );
       }
-    }
-    return this.findByIdAndBranch(logicalRepositoryName, componentId, componentBranch);
+      const logicalRepositoryName = repoIdParts[0];
+
+      const componentBranch = component.branch || 'main';
+      const componentId = component.id;
+      const graphUniqueId = formatGraphUniqueId(
+        logicalRepositoryName,
+        componentBranch,
+        componentId,
+      );
+
+      const nowIso = new Date().toISOString();
+
+      const upsertNodeQuery = `
+          MERGE (repo:Repository {id: $repositoryNodeId})
+          ON CREATE SET repo.name = $repositoryNodeId, repo.created_at = $now
+          MERGE (c:Component {graph_unique_id: $graphUniqueId})
+          ON CREATE SET
+              c.id = $id,
+              c.branch = $branch,
+              c.name = $name,
+              c.kind = $kind,
+              c.status = $status,
+              c.created_at = $now,
+              c.updated_at = $now
+          ON MATCH SET
+              c.name = $name,
+              c.kind = $kind,
+              c.status = $status,
+              c.id = $id,
+              c.branch = $branch,
+              c.updated_at = $now
+          MERGE (c)-[:PART_OF]->(repo)
+          RETURN c`;
+
+      await tx.executeQuery(upsertNodeQuery, {
+        repositoryNodeId,
+        graphUniqueId,
+        id: componentId,
+        branch: componentBranch,
+        name: component.name,
+        kind: component.kind,
+        status: component.status,
+        now: nowIso,
+      });
+
+      const deleteDepsQuery = `
+          MATCH (c:Component {graph_unique_id: $graphUniqueId})-[r:DEPENDS_ON]->()
+          DELETE r`;
+      await tx.executeQuery(deleteDepsQuery, { graphUniqueId });
+
+      if (component.depends_on && component.depends_on.length > 0) {
+        for (const depId of component.depends_on) {
+          const depGraphUniqueId = formatGraphUniqueId(
+            logicalRepositoryName,
+            componentBranch,
+            depId,
+          );
+
+          const ensureDepNodeQuery = `
+              MERGE (repoDep:Repository {id: $repositoryNodeId})
+              ON CREATE SET repoDep.name = $repositoryNodeId, repoDep.created_at = $depCreatedAt
+              MERGE (dep:Component {graph_unique_id: $depGraphUniqueId})
+              ON CREATE SET dep.id = $depId, dep.branch = $depBranch, dep.name = $depName, dep.kind = $depKind, dep.status = $depStatus, dep.repository = $repositoryNodeId, dep.created_at = $depCreatedAt, dep.updated_at = $depUpdatedAt
+              MERGE (dep)-[:PART_OF]->(repoDep)`;
+
+          await tx.executeQuery(ensureDepNodeQuery, {
+            repositoryNodeId,
+            depGraphUniqueId,
+            depId,
+            depBranch: componentBranch,
+            depName: `Placeholder for ${depId}`,
+            depKind: 'Unknown',
+            depStatus: 'planned',
+            depCreatedAt: nowIso,
+            depUpdatedAt: nowIso,
+          });
+
+          const addDepRelQuery = `
+              MATCH (c:Component {graph_unique_id: $cId})
+              MATCH (dep:Component {graph_unique_id: $dId})
+              CREATE (c)-[r:DEPENDS_ON]->(dep) RETURN count(r)`;
+
+          await tx.executeQuery(addDepRelQuery, {
+            cId: graphUniqueId,
+            dId: depGraphUniqueId,
+          });
+        }
+      }
+      return this.findByIdAndBranch(logicalRepositoryName, componentId, componentBranch);
+    });
   }
 }

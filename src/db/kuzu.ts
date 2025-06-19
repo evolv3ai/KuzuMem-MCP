@@ -183,9 +183,9 @@ export class KuzuDBClient {
 
   /**
    * Validate the current connection is still healthy
-   * @private
+   * @public
    */
-  private async validateConnection(): Promise<boolean> {
+  public async validateConnection(): Promise<boolean> {
     const logger = kuzuLogger.child({
       operation: 'validate-connection',
       dbPath: this.dbPath,
@@ -555,6 +555,11 @@ export class KuzuDBClient {
 
     if (this.connection) {
       try {
+        // Explicitly checkpoint the database to ensure all data is flushed from the WAL to the main database file.
+        // This is critical for ensuring data is visible to the next process that opens the file.
+        await this.connection.query('CHECKPOINT');
+        logger.info('Database checkpointed successfully before closing.');
+
         this.connection.close();
         logger.info('Connection closed');
       } catch (err) {
@@ -592,36 +597,43 @@ export class KuzuDBClient {
       await this.initialize();
     }
     const logger = kuzuLogger.child({ operation: 'transaction', dbPath: this.dbPath });
-    logger.debug('Beginning transaction');
+    logger.info('Beginning transaction');
 
     try {
       await this.connection.query('BEGIN TRANSACTION');
+      logger.info('BEGIN TRANSACTION successful');
 
       const txContext = {
         executeQuery: async (query: string, params?: Record<string, any>): Promise<any> => {
-          logger.debug({ query, params }, 'Executing query in transaction');
+          logger.info({ query, params }, 'Executing query in transaction');
 
-          // When parameters are provided, use prepared statements to avoid the
-          // "progressCallback must be a function" error that occurs when
-          // passing a params object directly to connection.query().
           if (params && Object.keys(params).length > 0) {
             const prepared = await this.connection.prepare(query);
-            return this.connection.execute(prepared, params);
+            const result = await this.connection.execute(prepared, params);
+            logger.info('Query executed successfully in transaction (with params)');
+            return result;
           }
 
-          // No params: run the query directly.
-          return this.connection.query(query);
+          const result = await this.connection.query(query);
+          logger.info('Query executed successfully in transaction (no params)');
+          return result;
         },
       };
 
       const result = await transactionBlock(txContext);
       await this.connection.query('COMMIT');
-      logger.debug('Transaction committed successfully');
+      logger.info('Transaction committed successfully');
+
+      // Force a checkpoint to ensure data is visible to subsequent reads
+      await this.connection.query('CHECKPOINT');
+      logger.info('Database checkpoint successful');
+
       return result;
     } catch (error) {
       logger.error({ error }, 'Transaction failed, rolling back');
       try {
         await this.connection.query('ROLLBACK');
+        logger.info('Transaction rolled back successfully');
       } catch (rollbackError) {
         logger.error({ rollbackError }, 'Failed to rollback transaction');
       }
