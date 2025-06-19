@@ -493,20 +493,12 @@ export class MemoryOptimizationAgent {
    * Initialize LLM client based on configuration
    */
   private initializeLLMClient(): any {
-    // Check if we're in test environment with mock API keys
-    const isTestEnv = process.env.NODE_ENV === 'test' ||
-                     process.env.OPENAI_API_KEY?.startsWith('test-') ||
-                     process.env.ANTHROPIC_API_KEY?.startsWith('test-');
-
-    if (isTestEnv) {
-      this.agentLogger.info('Test environment detected, using mock LLM client');
-      return this.createMockLLMClient();
-    }
-
+    // Always use real LLM clients since API keys are available in e2e environment
     switch (this.config.llmProvider) {
       case 'openai':
-        // Use latest reasoning models with HIGH reasoning settings
-        return openai(this.config.model || 'o1-mini');
+        // Use GPT-4 models that support structured outputs (JSON schema)
+        // o1 models don't support structured outputs, so we use gpt-4o instead
+        return openai(this.config.model || 'gpt-4o');
       case 'anthropic':
         // Use latest Claude models with extended thinking
         return anthropic(this.config.model || 'claude-3-5-sonnet-20241022');
@@ -515,92 +507,7 @@ export class MemoryOptimizationAgent {
     }
   }
 
-  /**
-   * Create a mock LLM client for testing
-   */
-  private createMockLLMClient(): any {
-    return {
-      // Mock generateObject method that returns test data instead of making API calls
-      generateObject: async (params: any) => {
-        this.agentLogger.info('Mock LLM client generating test response');
 
-        // Return mock analysis result based on schema
-        if (params.schema === AnalysisResultSchema) {
-          return {
-            object: {
-              summary: {
-                totalEntitiesAnalyzed: 8,
-                overallHealthScore: 75,
-                memoryUsage: 1024,
-                lastAnalyzed: new Date().toISOString(),
-              },
-              staleEntities: [
-                {
-                  id: 'comp-old-legacy',
-                  name: 'Legacy Service',
-                  type: 'Component',
-                  staleness: 0.8,
-                  lastAccessed: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString(),
-                  reason: 'Deprecated status and old creation date',
-                },
-              ],
-              redundancies: [],
-              optimizationOpportunities: [
-                {
-                  type: 'stale-removal',
-                  description: 'Remove deprecated legacy components',
-                  impact: 'medium',
-                  entities: ['comp-old-legacy'],
-                },
-              ],
-              recommendations: [
-                'Consider removing deprecated entities',
-                'Review entity relationships for optimization',
-              ],
-              riskAssessment: {
-                overallRisk: 'low',
-                riskFactors: [],
-                safetyScore: 85,
-              },
-            },
-          };
-        }
-
-        // Return mock optimization plan
-        if (params.schema === OptimizationPlanSchema) {
-          return {
-            object: {
-              id: `plan-${Date.now()}`,
-              strategy: 'conservative',
-              actions: [
-                {
-                  type: 'delete',
-                  entityId: 'comp-old-legacy',
-                  entityType: 'Component',
-                  reason: 'Deprecated and unused',
-                  risk: 'low',
-                },
-              ],
-              estimatedImpact: {
-                entitiesAffected: 1,
-                relationshipsAffected: 0,
-                riskLevel: 'low',
-              },
-              safetyChecks: ['Verified no active dependencies'],
-            },
-          };
-        }
-
-        // Default mock response
-        return {
-          object: {
-            result: 'mock-response',
-            timestamp: new Date().toISOString(),
-          },
-        };
-      },
-    };
-  }
 
   /**
    * Get reasoning configuration based on provider
@@ -608,10 +515,9 @@ export class MemoryOptimizationAgent {
   private getReasoningConfig(): any {
     switch (this.config.llmProvider) {
       case 'openai':
-        // OpenAI o1/o3 models with HIGH reasoning
+        // GPT-4o models don't support reasoning parameter, use standard configuration
         return {
-          reasoning: 'high', // HIGH reasoning setting for o1/o3 models
-          maxReasoningTokens: 32768, // Maximum reasoning tokens for complex analysis
+          // No special reasoning config for GPT-4o
         };
       case 'anthropic':
         // Claude models with extended thinking (2048 token budget)
