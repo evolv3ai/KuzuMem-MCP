@@ -26,6 +26,19 @@ import * as tagOps from '../memory-operations/tag.ops';
 
 export class EntityService extends CoreService {
   /**
+   * Helper function to convert null to undefined for cleaner data handling
+   */
+  private convertNullToUndefined<T>(
+    value: T | null | undefined,
+    fallback?: T | null | undefined,
+  ): T | undefined {
+    if (value !== undefined) {
+      return value === null ? undefined : value;
+    }
+    return fallback === null ? undefined : fallback;
+  }
+
+  /**
    * Create or update a rule for a repository
    */
   async upsertRule(
