@@ -1,6 +1,7 @@
+import { KuzuDBClient } from '../../db/kuzu';
+import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
 import { ComponentRepository, RepositoryRepository } from '../../repositories';
 import { Component, ComponentInput } from '../../types';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
 
 // Helper function to parse timestamps from BaseEntity (Date | undefined) to string | null
 function parseBaseEntityTimestamp(timestamp: Date | undefined): string | null {
@@ -182,4 +183,38 @@ function normalizeComponent(
     repository: repositoryName,
     branch: branch,
   };
+}
+
+export async function deleteComponentOp(
+  mcpContext: EnrichedRequestHandlerExtra,
+  kuzuClient: KuzuDBClient,
+  repositoryRepo: RepositoryRepository,
+  repositoryName: string,
+  branch: string,
+  componentId: string,
+): Promise<boolean> {
+  const logger = mcpContext.logger;
+
+  const repository = await repositoryRepo.findByName(repositoryName, branch);
+  if (!repository || !repository.id) {
+    logger.warn(
+      `[component.ops.deleteComponentOp] Repository ${repositoryName}:${branch} not found.`,
+    );
+    return false;
+  }
+
+  const graphUniqueId = `${repositoryName}:${branch}:${componentId}`;
+  const deleteQuery = `
+    MATCH (c:Component {graph_unique_id: $graphUniqueId})
+    DETACH DELETE c
+    RETURN 1 as deletedCount
+  `;
+
+  const result = await kuzuClient.executeQuery(deleteQuery, { graphUniqueId });
+  const deletedCount = result[0]?.deletedCount || 0;
+
+  logger.info(
+    `[component.ops.deleteComponentOp] Deleted ${deletedCount} component(s) with ID ${componentId}`,
+  );
+  return deletedCount > 0;
 }

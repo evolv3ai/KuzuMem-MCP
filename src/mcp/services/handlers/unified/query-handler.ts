@@ -1,6 +1,6 @@
 import { QueryInputSchema } from '../../../schemas/unified-tool-schemas';
 import { SdkToolHandler } from '../../../tool-handlers';
-import { handleToolError, validateSession, logToolExecution } from '../../../utils/error-utils';
+import { handleToolError, logToolExecution, validateSession } from '../../../utils/error-utils';
 
 // TypeScript interfaces for query parameters
 interface QueryParams {
@@ -41,6 +41,9 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
 
   // 2. Validate session and get clientProjectRoot
   const clientProjectRoot = validateSession(context, 'query');
+  if (!memoryService.services) {
+    throw new Error('ServiceRegistry not initialized in MemoryService');
+  }
 
   // 3. Log the operation
   logToolExecution(context, `query type: ${type}`, {
@@ -58,7 +61,7 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
           percent: 50,
         });
 
-        const result = await memoryService.getLatestContexts(
+        const result = await memoryService.services.context.getLatestContexts(
           context,
           clientProjectRoot,
           repository,
@@ -96,7 +99,7 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
           percent: 50,
         });
 
-        const result = await memoryService.listNodesByLabel(
+        const result = await memoryService.services.graphQuery.listNodesByLabel(
           context,
           clientProjectRoot,
           repository,
@@ -130,7 +133,7 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
           percent: 50,
         });
 
-        const result = await memoryService.getRelatedItems(
+        const result = await memoryService.services.graphQuery.getRelatedItems(
           context,
           clientProjectRoot,
           repository,
@@ -169,14 +172,14 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
 
         const result =
           direction === 'dependencies'
-            ? await memoryService.getComponentDependencies(
+            ? await memoryService.services.graphQuery.getComponentDependencies(
                 context,
                 clientProjectRoot,
                 repository,
                 branch,
                 validatedParams.componentId!,
               )
-            : await memoryService.getComponentDependents(
+            : await memoryService.services.graphQuery.getComponentDependents(
                 context,
                 clientProjectRoot,
                 repository,
@@ -209,7 +212,7 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
           percent: 50,
         });
 
-        const result = await memoryService.getGoverningItemsForComponent(
+        const result = await memoryService.services.graphQuery.getGoverningItemsForComponent(
           context,
           clientProjectRoot,
           repository,
@@ -239,7 +242,7 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
           percent: 50,
         });
 
-        const result = await memoryService.getItemContextualHistory(
+        const result = await memoryService.services.graphQuery.getItemContextualHistory(
           context,
           clientProjectRoot,
           repository,
@@ -270,7 +273,7 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
           percent: 50,
         });
 
-        const result = await memoryService.findItemsByTag(
+        const result = await memoryService.services.graphQuery.findItemsByTag(
           context,
           clientProjectRoot,
           repository,

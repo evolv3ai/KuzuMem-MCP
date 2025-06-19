@@ -1,5 +1,6 @@
 import { bulkImportHandler } from '../../../mcp/services/handlers/unified/bulk-import-handler';
 import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { EntityService } from '../../../services/domain/entity.service';
 import { MemoryService } from '../../../services/memory.service';
 
 // Define discriminated union type for bulk import handler results
@@ -28,16 +29,23 @@ type BulkImportResult =
 
 describe('Bulk Import Tool Tests', () => {
   let mockMemoryService: jest.Mocked<MemoryService>;
+  let mockEntityService: jest.Mocked<EntityService>;
   let mockContext: jest.Mocked<EnrichedRequestHandlerExtra>;
 
   beforeEach(() => {
-    mockMemoryService = {
+    mockEntityService = {
       getComponent: jest.fn(),
       getDecision: jest.fn(),
       getRule: jest.fn(),
       upsertComponent: jest.fn(),
       upsertDecision: jest.fn(),
       upsertRule: jest.fn(),
+    } as any;
+
+    mockMemoryService = {
+      services: {
+        entity: mockEntityService,
+      },
     } as any;
 
     // Mock context with session
@@ -60,8 +68,8 @@ describe('Bulk Import Tool Tests', () => {
 
   describe('Component Import', () => {
     it('should bulk import components successfully', async () => {
-      mockMemoryService.getComponent.mockResolvedValue(null);
-      mockMemoryService.upsertComponent.mockResolvedValue({} as any);
+      mockEntityService.getComponent.mockResolvedValue(null);
+      mockEntityService.upsertComponent.mockResolvedValue({} as any);
 
       const result = (await bulkImportHandler(
         {
@@ -86,11 +94,11 @@ describe('Bulk Import Tool Tests', () => {
       } else {
         fail('Expected result type to be components');
       }
-      expect(mockMemoryService.upsertComponent).toHaveBeenCalledTimes(3);
+      expect(mockEntityService.upsertComponent).toHaveBeenCalledTimes(3);
     });
 
     it('should skip existing components when overwrite is false', async () => {
-      mockMemoryService.getComponent
+      mockEntityService.getComponent
         .mockResolvedValueOnce({ id: 'comp-1' } as any) // exists
         .mockResolvedValueOnce(null) // doesn't exist
         .mockResolvedValueOnce({ id: 'comp-3' } as any); // exists
@@ -117,11 +125,11 @@ describe('Bulk Import Tool Tests', () => {
       } else {
         fail('Expected result type to be components');
       }
-      expect(mockMemoryService.upsertComponent).toHaveBeenCalledTimes(1);
+      expect(mockEntityService.upsertComponent).toHaveBeenCalledTimes(1);
     });
 
     it('should overwrite existing components when overwrite is true', async () => {
-      mockMemoryService.upsertComponent.mockResolvedValue({} as any);
+      mockEntityService.upsertComponent.mockResolvedValue({} as any);
 
       const result = (await bulkImportHandler(
         {
@@ -143,12 +151,12 @@ describe('Bulk Import Tool Tests', () => {
       } else {
         fail('Expected result type to be components');
       }
-      expect(mockMemoryService.getComponent).not.toHaveBeenCalled();
+      expect(mockEntityService.getComponent).not.toHaveBeenCalled();
     });
 
     it('should handle import errors gracefully', async () => {
-      mockMemoryService.getComponent.mockResolvedValue(null);
-      mockMemoryService.upsertComponent
+      mockEntityService.getComponent.mockResolvedValue(null);
+      mockEntityService.upsertComponent
         .mockResolvedValueOnce({} as any)
         .mockRejectedValueOnce(new Error('DB error'))
         .mockResolvedValueOnce({} as any);
@@ -183,8 +191,8 @@ describe('Bulk Import Tool Tests', () => {
 
   describe('Decision Import', () => {
     it('should bulk import decisions successfully', async () => {
-      mockMemoryService.getDecision.mockResolvedValue(null);
-      mockMemoryService.upsertDecision.mockResolvedValue({} as any);
+      mockEntityService.getDecision.mockResolvedValue(null);
+      mockEntityService.upsertDecision.mockResolvedValue({} as any);
 
       const result = (await bulkImportHandler(
         {
@@ -205,14 +213,14 @@ describe('Bulk Import Tool Tests', () => {
       } else {
         fail('Expected result type to be decisions');
       }
-      expect(mockMemoryService.upsertDecision).toHaveBeenCalledTimes(2);
+      expect(mockEntityService.upsertDecision).toHaveBeenCalledTimes(2);
     });
   });
 
   describe('Rule Import', () => {
     it('should bulk import rules successfully', async () => {
-      mockMemoryService.getRule.mockResolvedValue(null);
-      mockMemoryService.upsertRule.mockResolvedValue({} as any);
+      mockEntityService.getRule.mockResolvedValue(null);
+      mockEntityService.upsertRule.mockResolvedValue({} as any);
 
       const result = (await bulkImportHandler(
         {
@@ -245,7 +253,7 @@ describe('Bulk Import Tool Tests', () => {
       } else {
         fail('Expected result type to be rules');
       }
-      expect(mockMemoryService.upsertRule).toHaveBeenCalledTimes(2);
+      expect(mockEntityService.upsertRule).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -309,8 +317,8 @@ describe('Bulk Import Tool Tests', () => {
 
   describe('Progress Reporting', () => {
     it('should report progress during import', async () => {
-      mockMemoryService.getComponent.mockResolvedValue(null);
-      mockMemoryService.upsertComponent.mockResolvedValue({} as any);
+      mockEntityService.getComponent.mockResolvedValue(null);
+      mockEntityService.upsertComponent.mockResolvedValue({} as any);
 
       await bulkImportHandler(
         {
@@ -347,10 +355,10 @@ describe('Bulk Import Tool Tests', () => {
 
   describe('Error Handling', () => {
     it('should handle component-level errors and continue processing', async () => {
-      mockMemoryService.getComponent
+      mockEntityService.getComponent
         .mockRejectedValueOnce(new Error('Service unavailable'))
         .mockResolvedValue(null);
-      mockMemoryService.upsertComponent.mockResolvedValue({} as any);
+      mockEntityService.upsertComponent.mockResolvedValue({} as any);
 
       const result = (await bulkImportHandler(
         {

@@ -1,6 +1,7 @@
-import { RepositoryRepository, FileRepository, ComponentRepository } from '../../repositories';
-import { File, FileInput } from '../../types';
+import { KuzuDBClient } from '../../db/kuzu';
 import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { FileRepository, RepositoryRepository } from '../../repositories';
+import { File, FileInput } from '../../types';
 
 // Result types for operations
 interface FileOperationResult {
@@ -141,3 +142,33 @@ export async function associateFileWithComponentOp(
 
 // Note: getFilesOp removed as FileRepository doesn't have a getAllFiles method.
 // File queries can be done through component associations using findFilesByComponent.
+
+export async function deleteFileOp(
+  mcpContext: EnrichedRequestHandlerExtra,
+  kuzuClient: KuzuDBClient,
+  repositoryRepo: RepositoryRepository,
+  repositoryName: string,
+  branch: string,
+  fileId: string,
+): Promise<boolean> {
+  const logger = mcpContext.logger;
+
+  const repository = await repositoryRepo.findByName(repositoryName, branch);
+  if (!repository || !repository.id) {
+    logger.warn(`[file.ops.deleteFileOp] Repository ${repositoryName}:${branch} not found.`);
+    return false;
+  }
+
+  const graphUniqueId = `${repositoryName}:${branch}:${fileId}`;
+  const deleteQuery = `
+    MATCH (f:File {graph_unique_id: $graphUniqueId})
+    DETACH DELETE f
+    RETURN 1 as deletedCount
+  `;
+
+  const result = await kuzuClient.executeQuery(deleteQuery, { graphUniqueId });
+  const deletedCount = result[0]?.deletedCount || 0;
+
+  logger.info(`[file.ops.deleteFileOp] Deleted ${deletedCount} file(s) with ID ${fileId}`);
+  return deletedCount > 0;
+}

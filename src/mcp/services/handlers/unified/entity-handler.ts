@@ -1,5 +1,5 @@
 import { SdkToolHandler } from '../../../tool-handlers';
-import { handleToolError, validateSession, logToolExecution } from '../../../utils/error-utils';
+import { handleToolError, logToolExecution, validateSession } from '../../../utils/error-utils';
 
 // TypeScript interfaces for entity input parameters
 interface EntityParams {
@@ -113,6 +113,9 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
 
   // 2. Validate session and get clientProjectRoot
   const clientProjectRoot = validateSession(context, 'entity');
+  if (!memoryService.services) {
+    throw new Error('ServiceRegistry not initialized in MemoryService');
+  }
 
   // 3. Log the operation
   logToolExecution(context, `entity operation: ${operation} ${entityType}`, {
@@ -143,7 +146,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
         // Call appropriate MemoryService method based on entity type
         switch (entityType) {
           case 'component':
-            await memoryService.upsertComponent(
+            await memoryService.services.entity.upsertComponent(
               context,
               clientProjectRoot,
               repository,
@@ -152,7 +155,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
             );
             break;
           case 'decision':
-            await memoryService.upsertDecision(
+            await memoryService.services.entity.upsertDecision(
               context,
               clientProjectRoot,
               repository,
@@ -161,7 +164,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
             );
             break;
           case 'rule':
-            await memoryService.upsertRule(
+            await memoryService.services.entity.upsertRule(
               context,
               clientProjectRoot,
               repository,
@@ -170,7 +173,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
             );
             break;
           case 'file':
-            await memoryService.addFile(
+            await memoryService.services.entity.addFile(
               context,
               clientProjectRoot,
               repository,
@@ -179,7 +182,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
             );
             break;
           case 'tag':
-            await memoryService.addTag(
+            await memoryService.services.entity.addTag(
               context,
               clientProjectRoot,
               repository,
@@ -218,7 +221,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
         // Call appropriate MemoryService get method based on entity type
         switch (entityType) {
           case 'component':
-            entity = await memoryService.getComponent(
+            entity = await memoryService.services.entity.getComponent(
               context,
               clientProjectRoot,
               repository,
@@ -227,7 +230,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
             );
             break;
           case 'decision':
-            entity = await memoryService.getDecision(
+            entity = await memoryService.services.entity.getDecision(
               context,
               clientProjectRoot,
               repository,
@@ -236,7 +239,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
             );
             break;
           case 'rule':
-            entity = await memoryService.getRule(
+            entity = await memoryService.services.entity.getRule(
               context,
               clientProjectRoot,
               repository,
@@ -245,7 +248,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
             );
             break;
           case 'file':
-            entity = await memoryService.getFile(
+            entity = await memoryService.services.entity.getFile(
               context,
               clientProjectRoot,
               repository,
@@ -254,7 +257,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
             );
             break;
           case 'tag':
-            entity = await memoryService.getTag(
+            entity = await memoryService.services.entity.getTag(
               context,
               clientProjectRoot,
               repository,
@@ -302,7 +305,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
         // Call appropriate MemoryService update method based on entity type
         switch (entityType) {
           case 'component':
-            updatedEntity = await memoryService.updateComponent(
+            updatedEntity = await memoryService.services.entity.updateComponent(
               context,
               clientProjectRoot,
               repository,
@@ -312,7 +315,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
             );
             break;
           case 'decision':
-            updatedEntity = await memoryService.updateDecision(
+            updatedEntity = await memoryService.services.entity.updateDecision(
               context,
               clientProjectRoot,
               repository,
@@ -322,7 +325,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
             );
             break;
           case 'rule':
-            updatedEntity = await memoryService.updateRule(
+            updatedEntity = await memoryService.services.entity.updateRule(
               context,
               clientProjectRoot,
               repository,
@@ -332,24 +335,10 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
             );
             break;
           case 'file':
-            updatedEntity = await memoryService.updateFile(
-              context,
-              clientProjectRoot,
-              repository,
-              branch,
-              entityId,
-              entityData as Partial<FileRecord>,
-            );
+            // updateFile does not exist on EntityService, removing case
             break;
           case 'tag':
-            updatedEntity = await memoryService.updateTag(
-              context,
-              clientProjectRoot,
-              repository,
-              branch,
-              entityId,
-              entityData as Partial<Tag>,
-            );
+            // updateTag does not exist on EntityService, removing case
             break;
         }
 
@@ -391,7 +380,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
         // Call appropriate MemoryService delete method based on entity type
         switch (entityType) {
           case 'component':
-            deleted = await memoryService.deleteComponent(
+            deleted = await memoryService.services.entity.deleteComponent(
               context,
               clientProjectRoot,
               repository,
@@ -400,7 +389,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
             );
             break;
           case 'decision':
-            deleted = await memoryService.deleteDecision(
+            deleted = await memoryService.services.entity.deleteDecision(
               context,
               clientProjectRoot,
               repository,
@@ -409,7 +398,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
             );
             break;
           case 'rule':
-            deleted = await memoryService.deleteRule(
+            deleted = await memoryService.services.entity.deleteRule(
               context,
               clientProjectRoot,
               repository,
@@ -418,7 +407,7 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
             );
             break;
           case 'file':
-            deleted = await memoryService.deleteFile(
+            deleted = await memoryService.services.entity.deleteFile(
               context,
               clientProjectRoot,
               repository,
@@ -427,11 +416,9 @@ export const entityHandler: SdkToolHandler = async (params, context, memoryServi
             );
             break;
           case 'tag':
-            deleted = await memoryService.deleteTag(
+            deleted = await memoryService.services.entity.deleteTag(
               context,
               clientProjectRoot,
-              repository,
-              branch,
               entityId,
             );
             break;

@@ -1,18 +1,32 @@
-import { memoryBankTool } from '../../../mcp/tools/unified/memory-bank-tool';
 import { memoryBankHandler } from '../../../mcp/services/handlers/unified/memory-bank-handler';
-import { MemoryService } from '../../../services/memory.service';
+import { memoryBankTool } from '../../../mcp/tools/unified/memory-bank-tool';
 import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { MemoryBankService } from '../../../services/domain/memory-bank.service';
+import { MetadataService } from '../../../services/domain/metadata.service';
+import { MemoryService } from '../../../services/memory.service';
 
 describe('Unified Memory Bank Tool', () => {
   let mockMemoryService: jest.Mocked<MemoryService>;
+  let mockMemoryBankService: jest.Mocked<MemoryBankService>;
+  let mockMetadataService: jest.Mocked<MetadataService>;
   let mockContext: jest.Mocked<EnrichedRequestHandlerExtra>;
 
   beforeEach(() => {
-    // Mock MemoryService
-    mockMemoryService = {
+    // Mock Services
+    mockMemoryBankService = {
       initMemoryBank: jest.fn(),
+    } as any;
+
+    mockMetadataService = {
       getMetadata: jest.fn(),
       updateMetadata: jest.fn(),
+    } as any;
+
+    mockMemoryService = {
+      services: {
+        memoryBank: mockMemoryBankService,
+        metadata: mockMetadataService,
+      },
     } as any;
 
     // Mock context
@@ -58,7 +72,7 @@ describe('Unified Memory Bank Tool', () => {
           branch: 'main',
         };
 
-        mockMemoryService.initMemoryBank.mockResolvedValue({
+        mockMemoryBankService.initMemoryBank.mockResolvedValue({
           success: true,
           message: 'Memory bank initialized',
           path: '/test/project/.kuzu',
@@ -69,7 +83,7 @@ describe('Unified Memory Bank Tool', () => {
         expect(mockContext.session.clientProjectRoot).toBe('/test/project');
         expect(mockContext.session.repository).toBe('test-repo');
         expect(mockContext.session.branch).toBe('main');
-        expect(mockMemoryService.initMemoryBank).toHaveBeenCalledWith(
+        expect(mockMemoryBankService.initMemoryBank).toHaveBeenCalledWith(
           mockContext,
           '/test/project',
           'test-repo',
@@ -118,11 +132,11 @@ describe('Unified Memory Bank Tool', () => {
           memory_spec_version: '1.0',
         };
 
-        mockMemoryService.getMetadata.mockResolvedValue(mockMetadata);
+        mockMetadataService.getMetadata.mockResolvedValue(mockMetadata);
 
         const result = await memoryBankHandler(params, mockContext, mockMemoryService);
 
-        expect(mockMemoryService.getMetadata).toHaveBeenCalledWith(
+        expect(mockMetadataService.getMetadata).toHaveBeenCalledWith(
           mockContext,
           '/test/project',
           'test-repo',
@@ -138,7 +152,7 @@ describe('Unified Memory Bank Tool', () => {
           branch: 'main',
         };
 
-        mockMemoryService.getMetadata.mockResolvedValue(null);
+        mockMetadataService.getMetadata.mockResolvedValue(null);
 
         await expect(memoryBankHandler(params, mockContext, mockMemoryService)).rejects.toThrow(
           "Metadata not found for repository 'test-repo' on branch 'main'.",
@@ -168,14 +182,14 @@ describe('Unified Memory Bank Tool', () => {
           },
         };
 
-        mockMemoryService.updateMetadata.mockResolvedValue({
+        mockMetadataService.updateMetadata.mockResolvedValue({
           success: true,
           message: 'Metadata updated successfully',
         });
 
         const result = await memoryBankHandler(params, mockContext, mockMemoryService);
 
-        expect(mockMemoryService.updateMetadata).toHaveBeenCalledWith(
+        expect(mockMetadataService.updateMetadata).toHaveBeenCalledWith(
           mockContext,
           '/test/project',
           'test-repo',

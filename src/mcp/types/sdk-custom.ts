@@ -1,5 +1,3 @@
-import type { MemoryService } from '../../services/memory.service';
-
 /**
  * Simplified progress notification payload for tool handlers.
  * This replaces the complex MCP-specific progress handling with a simple interface.

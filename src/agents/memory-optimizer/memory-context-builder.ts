@@ -1,8 +1,8 @@
-import { MemoryService } from '../../services/memory.service.js';
 import { KuzuDBClient } from '../../db/kuzu.js';
-import { logger } from '../../utils/logger.js';
 import type { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom.js';
 import type { MemoryContext } from '../../schemas/optimization/types.js';
+import { MemoryService } from '../../services/memory.service.js';
+import { logger } from '../../utils/logger.js';
 
 /**
  * Builds comprehensive memory context for optimization analysis
@@ -100,7 +100,10 @@ export class MemoryContextBuilder {
     // Use existing countNodesByLabel method
     for (const entityType of entityTypes) {
       try {
-        const result = await this.memoryService.countNodesByLabel(
+        if (!this.memoryService.services) {
+          throw new Error('ServiceRegistry not initialized in MemoryService');
+        }
+        const result = await this.memoryService.services.graphQuery.countNodesByLabel(
           mcpContext,
           clientProjectRoot,
           repository,

@@ -1,10 +1,12 @@
 import { introspectHandler } from '../../../mcp/services/handlers/unified/introspect-handler';
-import { MemoryService } from '../../../services/memory.service';
 import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { GraphQueryService } from '../../../services/domain/graph-query.service';
+import { MemoryService } from '../../../services/memory.service';
 
 describe('introspect tool handler', () => {
   let mockContext: EnrichedRequestHandlerExtra;
   let mockMemoryService: jest.Mocked<MemoryService>;
+  let mockGraphQueryService: jest.Mocked<GraphQueryService>;
 
   beforeEach(() => {
     // Reset mocks
@@ -26,12 +28,18 @@ describe('introspect tool handler', () => {
       sendProgress: jest.fn(),
     } as unknown as EnrichedRequestHandlerExtra;
 
-    // Create mock memory service
-    mockMemoryService = {
+    mockGraphQueryService = {
       listAllNodeLabels: jest.fn(),
       countNodesByLabel: jest.fn(),
       getNodeProperties: jest.fn(),
       listAllIndexes: jest.fn(),
+    } as unknown as jest.Mocked<GraphQueryService>;
+
+    // Create mock memory service
+    mockMemoryService = {
+      services: {
+        graphQuery: mockGraphQueryService,
+      },
     } as unknown as jest.Mocked<MemoryService>;
   });
 
@@ -42,7 +50,7 @@ describe('introspect tool handler', () => {
         status: 'complete' as const,
         message: 'Successfully fetched 5 node labels.',
       };
-      mockMemoryService.listAllNodeLabels.mockResolvedValueOnce(mockLabels);
+      mockGraphQueryService.listAllNodeLabels.mockResolvedValueOnce(mockLabels);
 
       const params = {
         query: 'labels',
@@ -52,7 +60,7 @@ describe('introspect tool handler', () => {
 
       const result = await introspectHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.listAllNodeLabels).toHaveBeenCalledWith(
+      expect(mockGraphQueryService.listAllNodeLabels).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -80,7 +88,7 @@ describe('introspect tool handler', () => {
         label: 'Component',
         count: 42,
       };
-      mockMemoryService.countNodesByLabel.mockResolvedValueOnce(mockCount);
+      mockGraphQueryService.countNodesByLabel.mockResolvedValueOnce(mockCount);
 
       const params = {
         query: 'count',
@@ -91,7 +99,7 @@ describe('introspect tool handler', () => {
 
       const result = await introspectHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.countNodesByLabel).toHaveBeenCalledWith(
+      expect(mockGraphQueryService.countNodesByLabel).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -131,7 +139,7 @@ describe('introspect tool handler', () => {
           { name: 'depends_on', type: 'LIST[STRING]' },
         ],
       };
-      mockMemoryService.getNodeProperties.mockResolvedValueOnce(mockProperties);
+      mockGraphQueryService.getNodeProperties.mockResolvedValueOnce(mockProperties);
 
       const params = {
         query: 'properties',
@@ -142,7 +150,7 @@ describe('introspect tool handler', () => {
 
       const result = await introspectHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.getNodeProperties).toHaveBeenCalledWith(
+      expect(mockGraphQueryService.getNodeProperties).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -185,7 +193,7 @@ describe('introspect tool handler', () => {
           },
         ],
       };
-      mockMemoryService.listAllIndexes.mockResolvedValueOnce(mockIndexes);
+      mockGraphQueryService.listAllIndexes.mockResolvedValueOnce(mockIndexes);
 
       const params = {
         query: 'indexes',
@@ -195,7 +203,7 @@ describe('introspect tool handler', () => {
 
       const result = await introspectHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.listAllIndexes).toHaveBeenCalledWith(
+      expect(mockGraphQueryService.listAllIndexes).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -235,7 +243,7 @@ describe('introspect tool handler', () => {
           },
         ],
       };
-      mockMemoryService.listAllIndexes.mockResolvedValueOnce(mockIndexes);
+      mockGraphQueryService.listAllIndexes.mockResolvedValueOnce(mockIndexes);
 
       const params = {
         query: 'indexes',
@@ -275,7 +283,7 @@ describe('introspect tool handler', () => {
     });
 
     it('should handle service errors gracefully', async () => {
-      mockMemoryService.listAllNodeLabels.mockRejectedValueOnce(new Error('Database error'));
+      mockGraphQueryService.listAllNodeLabels.mockRejectedValueOnce(new Error('Database error'));
 
       const params = {
         query: 'labels',
@@ -317,7 +325,7 @@ describe('introspect tool handler', () => {
 
   describe('progress reporting', () => {
     it('should report progress during operations', async () => {
-      mockMemoryService.countNodesByLabel.mockResolvedValueOnce({
+      mockGraphQueryService.countNodesByLabel.mockResolvedValueOnce({
         label: 'Component',
         count: 10,
       });

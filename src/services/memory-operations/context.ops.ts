@@ -1,6 +1,7 @@
+import { KuzuDBClient } from '../../db/kuzu';
+import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
 import { ContextRepository, RepositoryRepository } from '../../repositories';
 import { Context, ContextInput } from '../../types';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
 
 /**
  * Fetches the latest contexts for a repository and branch.
@@ -179,4 +180,36 @@ function normalizeContext(context: Context, repositoryName: string, branch: stri
     repository: repositoryName,
     branch: branch,
   };
+}
+
+export async function deleteContextOp(
+  mcpContext: EnrichedRequestHandlerExtra,
+  kuzuClient: KuzuDBClient,
+  repositoryRepo: RepositoryRepository,
+  repositoryName: string,
+  branch: string,
+  contextId: string,
+): Promise<boolean> {
+  const logger = mcpContext.logger;
+
+  const repository = await repositoryRepo.findByName(repositoryName, branch);
+  if (!repository || !repository.id) {
+    logger.warn(`[context.ops.deleteContextOp] Repository ${repositoryName}:${branch} not found.`);
+    return false;
+  }
+
+  const graphUniqueId = `${repositoryName}:${branch}:${contextId}`;
+  const deleteQuery = `
+    MATCH (c:Context {graph_unique_id: $graphUniqueId})
+    DETACH DELETE c
+    RETURN 1 as deletedCount
+  `;
+
+  const result = await kuzuClient.executeQuery(deleteQuery, { graphUniqueId });
+  const deletedCount = result[0]?.deletedCount || 0;
+
+  logger.info(
+    `[context.ops.deleteContextOp] Deleted ${deletedCount} context(s) with ID ${contextId}`,
+  );
+  return deletedCount > 0;
 }

@@ -1,5 +1,5 @@
 import { SdkToolHandler } from '../../../tool-handlers';
-import { handleToolError, validateSession, logToolExecution } from '../../../utils/error-utils';
+import { handleToolError, logToolExecution, validateSession } from '../../../utils/error-utils';
 
 // TypeScript interfaces for introspect parameters
 interface IntrospectParams {
@@ -64,6 +64,9 @@ export const introspectHandler: SdkToolHandler = async (params, context, memoryS
 
   // 2. Validate session and get clientProjectRoot
   const clientProjectRoot = validateSession(context, 'introspect');
+  if (!memoryService.services) {
+    throw new Error('ServiceRegistry not initialized in MemoryService');
+  }
 
   // 3. Log the operation
   logToolExecution(context, `introspect query: ${query}`, {
@@ -87,7 +90,7 @@ export const introspectHandler: SdkToolHandler = async (params, context, memoryS
           percent: 50,
         });
 
-        const result = await memoryService.listAllNodeLabels(
+        const result = await memoryService.services.graphQuery.listAllNodeLabels(
           context,
           clientProjectRoot,
           repository,
@@ -116,7 +119,7 @@ export const introspectHandler: SdkToolHandler = async (params, context, memoryS
           percent: 50,
         });
 
-        const result = await memoryService.countNodesByLabel(
+        const result = await memoryService.services.graphQuery.countNodesByLabel(
           context,
           clientProjectRoot,
           repository,
@@ -141,7 +144,7 @@ export const introspectHandler: SdkToolHandler = async (params, context, memoryS
           percent: 50,
         });
 
-        const result = await memoryService.getNodeProperties(
+        const result = await memoryService.services.graphQuery.getNodeProperties(
           context,
           clientProjectRoot,
           repository,
@@ -166,7 +169,7 @@ export const introspectHandler: SdkToolHandler = async (params, context, memoryS
           percent: 50,
         });
 
-        const result = await memoryService.listAllIndexes(
+        const result = await memoryService.services.graphQuery.listAllIndexes(
           context,
           clientProjectRoot,
           repository,

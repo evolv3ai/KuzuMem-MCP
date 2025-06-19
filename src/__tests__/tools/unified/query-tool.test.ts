@@ -1,5 +1,7 @@
 import { queryHandler } from '../../../mcp/services/handlers/unified/query-handler';
 import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { ContextService } from '../../../services/domain/context.service';
+import { GraphQueryService } from '../../../services/domain/graph-query.service';
 import { MemoryService } from '../../../services/memory.service';
 
 // Define discriminated union types for query results
@@ -33,11 +35,16 @@ type QueryResult =
 // Test file for query tool - consolidates 7 query types
 describe('Query Tool Tests', () => {
   let mockMemoryService: jest.Mocked<MemoryService>;
+  let mockContextService: jest.Mocked<ContextService>;
+  let mockGraphQueryService: jest.Mocked<GraphQueryService>;
   let mockContext: jest.Mocked<EnrichedRequestHandlerExtra>;
 
   beforeEach(() => {
-    mockMemoryService = {
+    mockContextService = {
       getLatestContexts: jest.fn(),
+    } as any;
+
+    mockGraphQueryService = {
       listNodesByLabel: jest.fn(),
       getRelatedItems: jest.fn(),
       getComponentDependencies: jest.fn(),
@@ -45,6 +52,13 @@ describe('Query Tool Tests', () => {
       getGoverningItemsForComponent: jest.fn(),
       getItemContextualHistory: jest.fn(),
       findItemsByTag: jest.fn(),
+    } as any;
+
+    mockMemoryService = {
+      services: {
+        context: mockContextService,
+        graphQuery: mockGraphQueryService,
+      },
     } as any;
 
     // Mock context with session
@@ -81,7 +95,7 @@ describe('Query Tool Tests', () => {
           updated_at: new Date('2024-12-09T10:00:00Z'),
         },
       ];
-      mockMemoryService.getLatestContexts.mockResolvedValue(mockContexts);
+      mockContextService.getLatestContexts.mockResolvedValue(mockContexts);
 
       const result = (await queryHandler(
         {
@@ -100,7 +114,7 @@ describe('Query Tool Tests', () => {
       } else {
         fail('Expected result type to be context');
       }
-      expect(mockMemoryService.getLatestContexts).toHaveBeenCalledWith(
+      expect(mockContextService.getLatestContexts).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -110,7 +124,7 @@ describe('Query Tool Tests', () => {
     });
 
     it('should retrieve contexts with limit', async () => {
-      mockMemoryService.getLatestContexts.mockResolvedValue([]);
+      mockContextService.getLatestContexts.mockResolvedValue([]);
 
       await queryHandler(
         {
@@ -122,7 +136,7 @@ describe('Query Tool Tests', () => {
         mockMemoryService,
       );
 
-      expect(mockMemoryService.getLatestContexts).toHaveBeenCalledWith(
+      expect(mockContextService.getLatestContexts).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -145,7 +159,7 @@ describe('Query Tool Tests', () => {
         offset: 0,
         totalCount: 2,
       };
-      mockMemoryService.listNodesByLabel.mockResolvedValue(mockResult);
+      mockGraphQueryService.listNodesByLabel.mockResolvedValue(mockResult);
 
       const result = (await queryHandler(
         {
@@ -190,7 +204,7 @@ describe('Query Tool Tests', () => {
           { id: 'rule-1', type: 'Rule' },
         ],
       };
-      mockMemoryService.getRelatedItems.mockResolvedValue(mockResult as any);
+      mockGraphQueryService.getRelatedItems.mockResolvedValue(mockResult as any);
 
       const result = (await queryHandler(
         {
@@ -212,7 +226,7 @@ describe('Query Tool Tests', () => {
       } else {
         fail('Expected result type to be relationships');
       }
-      expect(mockMemoryService.getRelatedItems).toHaveBeenCalledWith(
+      expect(mockGraphQueryService.getRelatedItems).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -246,7 +260,7 @@ describe('Query Tool Tests', () => {
         componentId: 'comp-1',
         dependencies: [{ id: 'comp-2', name: 'Component 2', type: 'Component' }],
       };
-      mockMemoryService.getComponentDependencies.mockResolvedValue(mockResult as any);
+      mockGraphQueryService.getComponentDependencies.mockResolvedValue(mockResult as any);
 
       const result = (await queryHandler(
         {
@@ -267,7 +281,7 @@ describe('Query Tool Tests', () => {
       } else {
         fail('Expected result type to be dependencies');
       }
-      expect(mockMemoryService.getComponentDependencies).toHaveBeenCalled();
+      expect(mockGraphQueryService.getComponentDependencies).toHaveBeenCalled();
     });
 
     it('should get component dependents', async () => {
@@ -275,7 +289,7 @@ describe('Query Tool Tests', () => {
         componentId: 'comp-1',
         dependents: [{ id: 'comp-3', name: 'Component 3', type: 'Component' }],
       };
-      mockMemoryService.getComponentDependents.mockResolvedValue(mockResult as any);
+      mockGraphQueryService.getComponentDependents.mockResolvedValue(mockResult as any);
 
       const result = (await queryHandler(
         {
@@ -295,7 +309,7 @@ describe('Query Tool Tests', () => {
       } else {
         fail('Expected result type to be dependencies');
       }
-      expect(mockMemoryService.getComponentDependents).toHaveBeenCalled();
+      expect(mockGraphQueryService.getComponentDependents).toHaveBeenCalled();
     });
 
     it('should throw error if componentId or direction is missing', async () => {
@@ -320,7 +334,7 @@ describe('Query Tool Tests', () => {
         decisions: [{ id: 'dec-1', name: 'Decision 1' }],
         rules: [{ id: 'rule-1', name: 'Rule 1' }],
       };
-      mockMemoryService.getGoverningItemsForComponent.mockResolvedValue(mockResult as any);
+      mockGraphQueryService.getGoverningItemsForComponent.mockResolvedValue(mockResult as any);
 
       const result = (await queryHandler(
         {
@@ -366,7 +380,7 @@ describe('Query Tool Tests', () => {
           { id: 'ctx-2', summary: 'Updated component' },
         ],
       };
-      mockMemoryService.getItemContextualHistory.mockResolvedValue(mockResult as any);
+      mockGraphQueryService.getItemContextualHistory.mockResolvedValue(mockResult as any);
 
       const result = (await queryHandler(
         {
@@ -414,7 +428,7 @@ describe('Query Tool Tests', () => {
           { id: 'rule-1', type: 'Rule' },
         ],
       };
-      mockMemoryService.findItemsByTag.mockResolvedValue(mockResult);
+      mockGraphQueryService.findItemsByTag.mockResolvedValue(mockResult);
 
       const result = (await queryHandler(
         {
@@ -442,7 +456,7 @@ describe('Query Tool Tests', () => {
         tagId: 'tag-security',
         items: [{ id: 'comp-1', type: 'Component' }],
       };
-      mockMemoryService.findItemsByTag.mockResolvedValue(mockResult);
+      mockGraphQueryService.findItemsByTag.mockResolvedValue(mockResult);
 
       await queryHandler(
         {
@@ -455,7 +469,7 @@ describe('Query Tool Tests', () => {
         mockMemoryService,
       );
 
-      expect(mockMemoryService.findItemsByTag).toHaveBeenCalledWith(
+      expect(mockGraphQueryService.findItemsByTag).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -511,7 +525,7 @@ describe('Query Tool Tests', () => {
   describe('Error Handling', () => {
     it('should handle and rethrow service errors', async () => {
       const error = new Error('Service error');
-      mockMemoryService.getLatestContexts.mockRejectedValue(error);
+      mockContextService.getLatestContexts.mockRejectedValue(error);
 
       await expect(
         queryHandler(

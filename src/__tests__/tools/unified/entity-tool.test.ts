@@ -1,10 +1,12 @@
 import { entityHandler } from '../../../mcp/services/handlers/unified/entity-handler';
 import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { EntityService } from '../../../services/domain/entity.service';
 import { MemoryService } from '../../../services/memory.service';
 
 describe('entity tool handler', () => {
   let mockContext: EnrichedRequestHandlerExtra;
   let mockMemoryService: jest.Mocked<MemoryService>;
+  let mockEntityService: jest.Mocked<EntityService>;
 
   beforeEach(() => {
     // Reset mocks
@@ -26,8 +28,7 @@ describe('entity tool handler', () => {
       sendProgress: jest.fn(),
     } as unknown as EnrichedRequestHandlerExtra;
 
-    // Create mock memory service
-    mockMemoryService = {
+    mockEntityService = {
       upsertComponent: jest.fn(),
       upsertDecision: jest.fn(),
       upsertRule: jest.fn(),
@@ -48,6 +49,13 @@ describe('entity tool handler', () => {
       deleteRule: jest.fn(),
       deleteFile: jest.fn(),
       deleteTag: jest.fn(),
+    } as unknown as jest.Mocked<EntityService>;
+
+    // Create mock memory service
+    mockMemoryService = {
+      services: {
+        entity: mockEntityService,
+      },
     } as unknown as jest.Mocked<MemoryService>;
   });
 
@@ -69,7 +77,7 @@ describe('entity tool handler', () => {
 
       const result = await entityHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.upsertComponent).toHaveBeenCalledWith(
+      expect(mockEntityService.upsertComponent).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -111,7 +119,7 @@ describe('entity tool handler', () => {
 
       const result = await entityHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.upsertDecision).toHaveBeenCalledWith(
+      expect(mockEntityService.upsertDecision).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -151,7 +159,7 @@ describe('entity tool handler', () => {
 
       const result = await entityHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.upsertRule).toHaveBeenCalledWith(
+      expect(mockEntityService.upsertRule).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -191,7 +199,7 @@ describe('entity tool handler', () => {
 
       const result = await entityHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.addFile).toHaveBeenCalledWith(
+      expect(mockEntityService.addFile).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -231,7 +239,7 @@ describe('entity tool handler', () => {
 
       const result = await entityHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.addTag).toHaveBeenCalledWith(
+      expect(mockEntityService.addTag).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -266,7 +274,7 @@ describe('entity tool handler', () => {
         repository: 'test-repo:main',
         branch: 'main',
       };
-      mockMemoryService.getComponent.mockResolvedValueOnce(mockComponent);
+      mockEntityService.getComponent.mockResolvedValueOnce(mockComponent);
 
       const params = {
         operation: 'get',
@@ -278,7 +286,7 @@ describe('entity tool handler', () => {
 
       const result = await entityHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.getComponent).toHaveBeenCalledWith(
+      expect(mockEntityService.getComponent).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -293,7 +301,7 @@ describe('entity tool handler', () => {
     });
 
     it('should handle not found entity', async () => {
-      mockMemoryService.getDecision.mockResolvedValueOnce(null);
+      mockEntityService.getDecision.mockResolvedValueOnce(null);
 
       const params = {
         operation: 'get',
@@ -324,7 +332,7 @@ describe('entity tool handler', () => {
         repository: 'test-repo:main',
         branch: 'main',
       };
-      mockMemoryService.updateComponent.mockResolvedValueOnce(updatedComponent);
+      mockEntityService.updateComponent.mockResolvedValueOnce(updatedComponent);
 
       const params = {
         operation: 'update',
@@ -340,7 +348,7 @@ describe('entity tool handler', () => {
 
       const result = await entityHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.updateComponent).toHaveBeenCalledWith(
+      expect(mockEntityService.updateComponent).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -360,7 +368,7 @@ describe('entity tool handler', () => {
     });
 
     it('should handle update of non-existent entity', async () => {
-      mockMemoryService.updateRule.mockResolvedValueOnce(null);
+      mockEntityService.updateRule.mockResolvedValueOnce(null);
 
       const params = {
         operation: 'update',
@@ -384,7 +392,7 @@ describe('entity tool handler', () => {
 
   describe('delete operation', () => {
     it('should delete a component successfully', async () => {
-      mockMemoryService.deleteComponent.mockResolvedValueOnce(true);
+      mockEntityService.deleteComponent.mockResolvedValueOnce(true);
 
       const params = {
         operation: 'delete',
@@ -396,7 +404,7 @@ describe('entity tool handler', () => {
 
       const result = await entityHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.deleteComponent).toHaveBeenCalledWith(
+      expect(mockEntityService.deleteComponent).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -411,7 +419,7 @@ describe('entity tool handler', () => {
     });
 
     it('should handle delete of non-existent entity', async () => {
-      mockMemoryService.deleteFile.mockResolvedValueOnce(false);
+      mockEntityService.deleteFile.mockResolvedValueOnce(false);
 
       const params = {
         operation: 'delete',
@@ -448,7 +456,7 @@ describe('entity tool handler', () => {
     });
 
     it('should handle service errors gracefully', async () => {
-      mockMemoryService.upsertComponent.mockRejectedValueOnce(new Error('Database error'));
+      mockEntityService.upsertComponent.mockRejectedValueOnce(new Error('Database error'));
 
       const params = {
         operation: 'create',
