@@ -2746,6 +2746,14 @@ export class MemoryService {
       let totalCount = 0;
       const deletedEntities: Array<{ type: string; id: string; name?: string }> = [];
 
+      // Verify tag exists
+      const tagExistsQuery = `MATCH (t:Tag {id: $tagId}) RETURN count(t) as tagCount`;
+      const tagExistsResult = await kuzuClient.executeQuery(tagExistsQuery, { tagId });
+      if (!tagExistsResult[0]?.tagCount) {
+        warnings.push(`Tag with ID ${tagId} not found`);
+        return { count: 0, entities: [], warnings };
+      }
+
       // Find all entities tagged with the specified tag
       const findQuery = `
         MATCH (t:Tag {id: $tagId})-[:TAGGED_WITH]-(n)
