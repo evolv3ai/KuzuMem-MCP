@@ -2567,7 +2567,7 @@ export class MemoryService {
 
   private async handleTagDeletion(
     kuzuClient: any,
-    dryRun: boolean
+    dryRun: boolean,
   ): Promise<{
     entities: Array<{ type: string; id: string; name?: string }>;
     count: number;
@@ -2612,7 +2612,7 @@ export class MemoryService {
     entityTypes: string[],
     repositoryName: string,
     branch: string,
-    dryRun: boolean
+    dryRun: boolean,
   ): Promise<{
     entities: Array<{ type: string; id: string; name?: string }>;
     count: number;
@@ -2698,7 +2698,7 @@ export class MemoryService {
           entityTypes,
           repositoryName,
           branch,
-          options.dryRun || false
+          options.dryRun || false,
         );
         deletedEntities.push(...scopedResult.entities);
         totalCount += scopedResult.count;
