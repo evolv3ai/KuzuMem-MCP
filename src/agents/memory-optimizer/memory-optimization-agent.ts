@@ -755,37 +755,86 @@ export class MemoryOptimizationAgent {
     action: any,
     logger: any
   ): Promise<void> {
+    // Extract entity information
     const entityId = action.entityId;
-
-    // Determine entity type from the entityId or action metadata
     const entityType = this.determineEntityType(entityId, action);
 
-    logger.info(`Deleting ${entityType} entity: ${entityId}`);
+    logger.info(`Deleting ${entityType} entity: ${entityId}`, {
+      entityId,
+      entityType,
+      actionType: action.type,
+    });
 
+    // Execute deletion based on entity type
     switch (entityType) {
       case 'component':
-        await this.memoryService.deleteComponent(mcpContext, clientProjectRoot, repository, branch, entityId);
+        await this.memoryService.deleteComponent(
+          mcpContext,
+          clientProjectRoot,
+          repository,
+          branch,
+          entityId
+        );
         break;
+
       case 'decision':
-        await this.memoryService.deleteDecision(mcpContext, clientProjectRoot, repository, branch, entityId);
+        await this.memoryService.deleteDecision(
+          mcpContext,
+          clientProjectRoot,
+          repository,
+          branch,
+          entityId
+        );
         break;
+
       case 'rule':
-        await this.memoryService.deleteRule(mcpContext, clientProjectRoot, repository, branch, entityId);
+        await this.memoryService.deleteRule(
+          mcpContext,
+          clientProjectRoot,
+          repository,
+          branch,
+          entityId
+        );
         break;
+
       case 'file':
-        await this.memoryService.deleteFile(mcpContext, clientProjectRoot, repository, branch, entityId);
+        await this.memoryService.deleteFile(
+          mcpContext,
+          clientProjectRoot,
+          repository,
+          branch,
+          entityId
+        );
         break;
+
       case 'context':
-        await this.memoryService.deleteContext(mcpContext, clientProjectRoot, repository, branch, entityId);
+        await this.memoryService.deleteContext(
+          mcpContext,
+          clientProjectRoot,
+          repository,
+          branch,
+          entityId
+        );
         break;
+
       case 'tag':
-        await this.memoryService.deleteTag(mcpContext, clientProjectRoot, repository, branch, entityId);
+        await this.memoryService.deleteTag(
+          mcpContext,
+          clientProjectRoot,
+          repository,
+          branch,
+          entityId
+        );
         break;
+
       default:
         throw new Error(`Unsupported entity type for deletion: ${entityType}`);
     }
 
-    logger.info(`Successfully deleted ${entityType} entity: ${entityId}`);
+    logger.info(`Successfully deleted ${entityType} entity: ${entityId}`, {
+      entityId,
+      entityType,
+    });
   }
 
   /**
