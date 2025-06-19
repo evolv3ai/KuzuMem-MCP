@@ -1,21 +1,31 @@
+// External dependencies
 import { generateObject } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
+
+// Internal services and utilities
 import { MemoryService } from '../../services/memory.service';
-import { MemoryContextBuilder } from './context-builder';
-import { PromptManager, type AgentRole, type OptimizationStrategy } from './prompt-manager';
-import { MCPSamplingManager } from './mcp-sampling-manager';
 import { logger } from '../../utils/logger';
+
+// Memory optimizer components
+import { MemoryContextBuilder } from './context-builder';
+import { PromptManager } from './prompt-manager';
+import { MCPSamplingManager } from './mcp-sampling-manager';
+
+// Type imports
 import type { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import type { AgentRole, OptimizationStrategy } from './prompt-manager';
 import type {
   MemoryContext,
   AnalysisResult,
   OptimizationPlan,
-  OptimizationResult
+  OptimizationResult,
 } from '../../schemas/optimization/types';
+
+// Schema imports
 import {
   AnalysisResultSchema,
-  OptimizationPlanSchema
+  OptimizationPlanSchema,
 } from '../../schemas/optimization/types';
 
 export interface MemoryOptimizationConfig {
