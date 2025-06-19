@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { KuzuDBClient } from '../../db/kuzu';
 import { RepositoryProvider } from '../../db/repository-provider';
 import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
-import { Decision } from '../../types';
+import { Decision, DecisionInput } from '../../types';
 import * as decisionOps from '../memory-operations/decision.ops';
 import { SnapshotService } from '../snapshot.service';
 import { BaseEntityService } from './base-entity.service';
@@ -49,7 +49,7 @@ export class DecisionService extends BaseEntityService {
     const decisionRepo = this.repositoryProvider.getDecisionRepository(clientProjectRoot);
 
     // Construct the data object expected by decisionOps.upsertDecisionOp
-    const decisionOpData = {
+    const decisionOpData: DecisionInput = {
       ...decisionData,
       repository: repositoryName,
       branch: branch,
@@ -59,10 +59,10 @@ export class DecisionService extends BaseEntityService {
       mcpContext,
       repositoryName,
       branch,
-      decisionOpData as any,
+      decisionOpData,
       repositoryRepo,
       decisionRepo,
-    ) as Promise<Decision | null>;
+    );
   }
 
   /**
