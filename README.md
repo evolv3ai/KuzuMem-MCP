@@ -4,18 +4,21 @@ A TypeScript implementation of a distributed memory bank as an MCP (Model Contex
 
 ## Key Features
 
-- **🧠 AI-Powered Memory Optimization** - Advanced reasoning models (OpenAI o1/o3, Claude) for intelligent memory management
-- **Unified Tool Architecture** - 12 consolidated tools covering all memory bank operations
-- **Thread-Safe Singleton Pattern** - Ensures each resource is instantiated only once, with proper thread safety
-- **Distributed Graph Structure** - Follows the advanced memory bank specification using a KùzuDB graph
-- **Repository & Branch Awareness** - All operations are contextualized by repository name and branch
-- **Asynchronous Operations** - Uses async/await for better performance
-- **Multiple Access Interfaces** - Access via CLI and multiple MCP server implementations
-- **KùzuDB Backend** - Utilizes KùzuDB for graph-based memory storage and querying
-- **Fully MCP Compliant** - All tools follow the Model Context Protocol for client integration
-- **Progressive Results Streaming** - Supports streaming for long-running graph operations
-- **Client Project Root Isolation** - Each client project gets its own isolated database instance
-- **High-Reasoning Analysis** - Leverages OpenAI HIGH reasoning and Anthropic extended thinking for memory optimization
+- **🧠 AI-Powered Memory Optimization** - Advanced reasoning models (OpenAI o1/o3, Claude) with MCP sampling for intelligent memory management
+- **🛡️ Production-Ready Safety** - Automatic snapshot system with guaranteed rollback capabilities
+- **🎯 Context-Aware Intelligence** - MCP sampling analyzes actual memory state for adaptive optimization strategies
+- **🔧 Unified Tool Architecture** - 12 consolidated tools covering all memory bank operations
+- **🧵 Thread-Safe Singleton Pattern** - Ensures each resource is instantiated only once, with proper thread safety
+- **📊 Distributed Graph Structure** - Follows the advanced memory bank specification using a KùzuDB graph
+- **🌿 Repository & Branch Awareness** - All operations are contextualized by repository name and branch
+- **⚡ Asynchronous Operations** - Uses async/await for better performance
+- **🔌 Multiple Access Interfaces** - Access via CLI and multiple MCP server implementations
+- **💾 KùzuDB Backend** - Utilizes KùzuDB for graph-based memory storage and querying
+- **✅ Fully MCP Compliant** - All tools follow the Model Context Protocol for client integration
+- **📡 Progressive Results Streaming** - Supports streaming for long-running graph operations
+- **🏠 Client Project Root Isolation** - Each client project gets its own isolated database instance
+- **🧠 High-Reasoning Analysis** - Leverages OpenAI HIGH reasoning and Anthropic extended thinking for memory optimization
+- **🗑️ Safe Bulk Operations** - Advanced bulk deletion with dependency validation and dry-run capabilities
 
 ## Unified Tools
 
@@ -31,8 +34,8 @@ The system currently broadcasts **12** unified tools that consolidate all memory
 8. **detect** - Detect patterns (strongly/weakly connected components)
 9. **bulk-import** - Efficient bulk entity import
 10. **search** - Full-text search across all entity types with KuzuDB FTS integration
-11. **delete** - Safe deletion of entities with dependency validation
-12. **memory-optimizer** - 🧠 **AI-powered core memory optimization with advanced reasoning**
+11. **delete** - Safe deletion of entities with dependency validation and bulk operations
+12. **memory-optimizer** - 🧠 **AI-powered core memory optimization with MCP sampling, snapshots, and rollback**
 
 For detailed tool documentation, see [Unified Tools Documentation](docs/unified-tools.md).
 
@@ -173,19 +176,23 @@ Add to your IDE's MCP configuration:
 
 ## 🧠 Core Memory Optimization Agent
 
-The **Core Memory Optimization Agent** provides AI-powered memory graph optimization with advanced reasoning capabilities:
+The **Core Memory Optimization Agent** provides AI-powered memory graph optimization with advanced reasoning capabilities and production-ready safety features:
 
 ### Features
-- **High-Reasoning Analysis**: Uses OpenAI o1/o3 (HIGH reasoning) or Claude (extended thinking) for intelligent memory analysis
-- **Safe Optimization**: Conservative, balanced, and aggressive strategies with safety validation
-- **Stale Entity Detection**: Identifies outdated entities based on age and usage patterns
-- **Redundancy Removal**: Finds and consolidates duplicate or redundant entities
-- **Dependency Optimization**: Optimizes relationship chains while preserving integrity
-- **Dry-Run Mode**: Preview optimizations without making changes
+- **🧠 High-Reasoning Analysis**: Uses OpenAI o1/o3 (HIGH reasoning) or Claude (extended thinking) for intelligent memory analysis
+- **🎯 MCP Sampling**: Context-aware prompts that adapt to actual memory state and project characteristics
+- **🛡️ Automatic Snapshots**: Production-ready safety with automatic backup before optimization
+- **🔄 Guaranteed Rollback**: Complete state restoration with transactional safety
+- **⚖️ Safe Optimization**: Conservative, balanced, and aggressive strategies with safety validation
+- **🔍 Stale Entity Detection**: Identifies outdated entities based on age and usage patterns
+- **🔗 Redundancy Removal**: Finds and consolidates duplicate or redundant entities
+- **📊 Dependency Optimization**: Optimizes relationship chains while preserving integrity
+- **👀 Dry-Run Mode**: Preview optimizations without making changes
+- **📈 Project Intelligence**: Automatic project maturity, activity, and complexity analysis
 
 ### Quick Start
 
-#### 1. Analyze Memory Graph
+#### 1. Analyze Memory Graph (with MCP Sampling)
 ```json
 {
   "tool": "memory-optimizer",
@@ -194,7 +201,9 @@ The **Core Memory Optimization Agent** provides AI-powered memory graph optimiza
   "branch": "main",
   "llmProvider": "openai",
   "model": "o1-mini",
-  "strategy": "conservative"
+  "strategy": "conservative",
+  "enableMCPSampling": true,
+  "samplingStrategy": "representative"
 }
 ```
 
@@ -210,7 +219,7 @@ The **Core Memory Optimization Agent** provides AI-powered memory graph optimiza
 }
 ```
 
-#### 3. Execute Optimization
+#### 3. Execute Optimization (with Automatic Snapshot)
 ```json
 {
   "tool": "memory-optimizer",
@@ -223,12 +232,48 @@ The **Core Memory Optimization Agent** provides AI-powered memory graph optimiza
 }
 ```
 
+#### 4. List Available Snapshots
+```json
+{
+  "tool": "memory-optimizer",
+  "operation": "list-snapshots",
+  "repository": "my-app",
+  "branch": "main"
+}
+```
+
+#### 5. Rollback to Previous State
+```json
+{
+  "tool": "memory-optimizer",
+  "operation": "rollback",
+  "repository": "my-app",
+  "branch": "main",
+  "snapshotId": "snapshot-1703123456789-xyz789"
+}
+```
+
 ### Optimization Strategies
 - **Conservative**: Max 5 deletions, 6-month stale threshold (recommended for production)
 - **Balanced**: Max 20 deletions, 3-month stale threshold (recommended for development)
 - **Aggressive**: Max 50 deletions, 1-month stale threshold (use with caution)
 
-For complete setup and usage instructions, see [Core Memory Optimization Setup Guide](CORE_MEMORY_OPTIMIZATION_SETUP.md).
+### MCP Sampling Strategies
+- **Representative**: Balanced sample across all entity types (default)
+- **Problematic**: Focus on stale, disconnected, or deprecated entities
+- **Recent**: Sample newly created entities (< 30 days) for safety analysis
+- **Diverse**: Ensure representation from all entity types for complex systems
+
+### Safety Features
+- **🛡️ Automatic Snapshots**: Created before every optimization (unless dry-run)
+- **🔄 Transactional Rollback**: Complete state restoration with database consistency
+- **✅ Validation System**: Snapshot integrity checks before rollback operations
+- **📊 Context-Aware Safety**: Activity-level and complexity-based safety measures
+
+For complete setup and usage instructions, see:
+- [Core Memory Optimization Setup Guide](CORE_MEMORY_OPTIMIZATION_SETUP.md)
+- [Snapshot System Usage Guide](SNAPSHOT_SYSTEM_USAGE.md)
+- [MCP Sampling Usage Guide](MCP_SAMPLING_USAGE.md)
 
 ## Testing
 
@@ -236,18 +281,29 @@ For complete setup and usage instructions, see [Core Memory Optimization Setup G
 # Run unit tests
 npm test
 
-# Run E2E tests
+# Run E2E tests (requires API keys)
 npm run test:e2e
 
-# Run specific E2E test
+# Run specific E2E tests
 npm run test:e2e:stdio
 npm run test:e2e:httpstream
+
+# Run memory optimizer E2E tests
+npm run test:e2e -- --testNamePattern="Memory Optimizer E2E Tests"
 
 # Run all tests
 npm run test:all
 ```
 
-**Note**: All core functionality is operational with the consolidated server implementations following official SDK patterns.
+### E2E Test Requirements
+
+For memory optimizer E2E tests, set environment variables:
+```bash
+export OPENAI_API_KEY="your-actual-openai-api-key"
+export ANTHROPIC_API_KEY="your-actual-anthropic-api-key"
+```
+
+**Note**: All core functionality is operational with comprehensive E2E test coverage for both stdio and HTTP stream protocols.
 
 ## Architecture
 
