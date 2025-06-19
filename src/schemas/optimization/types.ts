@@ -8,7 +8,11 @@ export const StaleEntitySchema = z.object({
   id: z.string(),
   type: EntityTypeSchema,
   name: z.string(),
-  staleness: z.number().min(0).max(1).describe('Staleness score from 0 (fresh) to 1 (completely stale)'),
+  staleness: z
+    .number()
+    .min(0)
+    .max(1)
+    .describe('Staleness score from 0 (fresh) to 1 (completely stale)'),
   reason: z.string().describe('Explanation of why this entity is considered stale'),
   safeToDelete: z.boolean().describe('Whether this entity can be safely deleted'),
   lastAccessed: z.string().optional().describe('Last access timestamp if available'),
@@ -27,20 +31,24 @@ export const RedundancyGroupSchema = z.object({
 
 // Optimization opportunities
 export const OptimizationOpportunitySchema = z.object({
-  type: z.enum([
-    'dependency-simplification',
-    'tag-consolidation', 
-    'relationship-cleanup',
-    'orphan-removal',
-    'circular-dependency-fix'
-  ]).describe('Type of optimization opportunity'),
+  type: z
+    .enum([
+      'dependency-simplification',
+      'tag-consolidation',
+      'relationship-cleanup',
+      'orphan-removal',
+      'circular-dependency-fix',
+    ])
+    .describe('Type of optimization opportunity'),
   impact: z.enum(['low', 'medium', 'high']).describe('Expected impact of this optimization'),
   description: z.string().describe('Detailed description of the optimization'),
   entities: z.array(z.string()).describe('Entity IDs affected by this optimization'),
-  estimatedSavings: z.object({
-    storage: z.number().optional().describe('Estimated storage savings in bytes'),
-    queryPerformance: z.number().optional().describe('Estimated query performance improvement %'),
-  }).optional(),
+  estimatedSavings: z
+    .object({
+      storage: z.number().optional().describe('Estimated storage savings in bytes'),
+      queryPerformance: z.number().optional().describe('Estimated query performance improvement %'),
+    })
+    .optional(),
 });
 
 // Memory context for analysis
@@ -112,11 +120,13 @@ export const OptimizationPlanSchema = z.object({
 export const OptimizationResultSchema = z.object({
   planId: z.string(),
   status: z.enum(['success', 'partial', 'failed']),
-  executedActions: z.array(z.object({
-    actionId: z.string(),
-    status: z.enum(['success', 'failed', 'skipped']),
-    error: z.string().optional(),
-  })),
+  executedActions: z.array(
+    z.object({
+      actionId: z.string(),
+      status: z.enum(['success', 'failed', 'skipped']),
+      error: z.string().optional(),
+    }),
+  ),
   summary: z.object({
     entitiesDeleted: z.number(),
     entitiesMerged: z.number(),

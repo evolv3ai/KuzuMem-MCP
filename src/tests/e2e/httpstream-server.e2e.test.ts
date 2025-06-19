@@ -1500,7 +1500,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       try {
         // Quick timeout to avoid hanging the test suite
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Tools list request timed out')), 5000)
+          setTimeout(() => reject(new Error('Tools list request timed out')), 5000),
         );
 
         const requestPromise = sendHttpRequest('tools/list', {});
@@ -1515,12 +1515,17 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
               inputSchema: expect.objectContaining({
                 properties: expect.objectContaining({
                   operation: expect.objectContaining({
-                    enum: expect.arrayContaining(['analyze', 'optimize', 'rollback', 'list-snapshots']),
+                    enum: expect.arrayContaining([
+                      'analyze',
+                      'optimize',
+                      'rollback',
+                      'list-snapshots',
+                    ]),
                   }),
                 }),
               }),
             }),
-          ])
+          ]),
         );
 
         console.log('Memory optimizer tool verified as available via HTTP stream');

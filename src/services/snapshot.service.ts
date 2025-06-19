@@ -51,7 +51,7 @@ export interface SnapshotData {
 
 /**
  * Snapshot Service for Core Memory Optimization Agent
- * 
+ *
  * Provides safe backup and restore capabilities for memory graphs,
  * enabling confident optimization with rollback guarantees.
  */
@@ -68,11 +68,11 @@ export class SnapshotService {
   async createSnapshot(
     repository: string,
     branch: string,
-    description: string = 'Memory optimization snapshot'
+    description: string = 'Memory optimization snapshot',
   ): Promise<SnapshotResult> {
     const snapshotId = `snapshot-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const created = new Date().toISOString();
-    
+
     const snapshotLogger = this.snapshotLogger.child({
       operation: 'createSnapshot',
       snapshotId,
@@ -272,7 +272,9 @@ export class SnapshotService {
       }
 
       // Validate relationship integrity
-      const relationshipValidation = await this.validateRelationshipIntegrity(snapshot.relationships);
+      const relationshipValidation = await this.validateRelationshipIntegrity(
+        snapshot.relationships,
+      );
       if (!relationshipValidation.valid) {
         issues.push(...relationshipValidation.issues);
       }
@@ -338,7 +340,9 @@ export class SnapshotService {
       await this.ensureSnapshotSchema();
 
       const snapshot = await this.getSnapshot(snapshotId);
-      if (!snapshot) return null;
+      if (!snapshot) {
+        return null;
+      }
 
       // Count entity types
       const entityTypes: Record<string, number> = {};
@@ -501,7 +505,9 @@ export class SnapshotService {
       `;
 
       const result = await this.kuzuClient.executeQuery(query, { snapshotId });
-      if (result.length === 0) return null;
+      if (result.length === 0) {
+        return null;
+      }
 
       const row = result[0];
       const parsedData = JSON.parse(row.data);
@@ -528,25 +534,31 @@ export class SnapshotService {
   private async clearRepositoryState(
     repository: string,
     branch: string,
-    tx?: { executeQuery: (query: string, params?: Record<string, any>) => Promise<any> }
+    tx?: { executeQuery: (query: string, params?: Record<string, any>) => Promise<any> },
   ): Promise<void> {
     const executor = tx || this.kuzuClient;
 
     // Delete all relationships first (to avoid constraint violations)
-    await executor.executeQuery(`
+    await executor.executeQuery(
+      `
       MATCH (a)-[r]->(b)
       WHERE a.repository = $repository AND a.branch = $branch
         AND b.repository = $repository AND b.branch = $branch
       DELETE r
-    `, { repository, branch });
+    `,
+      { repository, branch },
+    );
 
     // Delete all entities
-    await executor.executeQuery(`
+    await executor.executeQuery(
+      `
       MATCH (n)
       WHERE n.repository = $repository AND n.branch = $branch
         AND NOT n:Snapshot AND NOT n:Metadata
       DELETE n
-    `, { repository, branch });
+    `,
+      { repository, branch },
+    );
   }
 
   /**
@@ -554,7 +566,7 @@ export class SnapshotService {
    */
   private async restoreEntity(
     entity: any,
-    tx?: { executeQuery: (query: string, params?: Record<string, any>) => Promise<any> }
+    tx?: { executeQuery: (query: string, params?: Record<string, any>) => Promise<any> },
   ): Promise<void> {
     const executor = tx || this.kuzuClient;
     const nodeLabel = entity.nodeLabels?.[0] || 'Entity';
@@ -562,7 +574,7 @@ export class SnapshotService {
     // Build property assignments
     const properties = entity.properties || {};
     const propertyAssignments = Object.keys(properties)
-      .map(key => `${key}: $${key}`)
+      .map((key) => `${key}: $${key}`)
       .join(', ');
 
     const query = `
@@ -577,16 +589,19 @@ export class SnapshotService {
    */
   private async restoreRelationship(
     relationship: any,
-    tx?: { executeQuery: (query: string, params?: Record<string, any>) => Promise<any> }
+    tx?: { executeQuery: (query: string, params?: Record<string, any>) => Promise<any> },
   ): Promise<void> {
     const executor = tx || this.kuzuClient;
     const relType = relationship.relationshipType || 'RELATED_TO';
     const properties = relationship.properties || {};
 
     // Build property assignments for relationship
-    const propertyAssignments = Object.keys(properties).length > 0
-      ? `{${Object.keys(properties).map(key => `${key}: $${key}`).join(', ')}}`
-      : '';
+    const propertyAssignments =
+      Object.keys(properties).length > 0
+        ? `{${Object.keys(properties)
+            .map((key) => `${key}: $${key}`)
+            .join(', ')}}`
+        : '';
 
     const query = `
       MATCH (a {id: $fromId}), (b {id: $toId})
@@ -603,7 +618,9 @@ export class SnapshotService {
   /**
    * Validate entity integrity
    */
-  private async validateEntityIntegrity(entities: any[]): Promise<{ valid: boolean; issues: string[] }> {
+  private async validateEntityIntegrity(
+    entities: any[],
+  ): Promise<{ valid: boolean; issues: string[] }> {
     const issues: string[] = [];
 
     // Check for required fields
@@ -617,7 +634,7 @@ export class SnapshotService {
     }
 
     // Check for duplicate IDs
-    const ids = entities.map(e => e.id).filter(Boolean);
+    const ids = entities.map((e) => e.id).filter(Boolean);
     const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
     if (duplicateIds.length > 0) {
       issues.push(`Duplicate entity IDs found: ${duplicateIds.join(', ')}`);
@@ -629,7 +646,9 @@ export class SnapshotService {
   /**
    * Validate relationship integrity
    */
-  private async validateRelationshipIntegrity(relationships: any[]): Promise<{ valid: boolean; issues: string[] }> {
+  private async validateRelationshipIntegrity(
+    relationships: any[],
+  ): Promise<{ valid: boolean; issues: string[] }> {
     const issues: string[] = [];
 
     // Check for required fields

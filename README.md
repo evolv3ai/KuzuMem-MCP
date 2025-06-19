@@ -91,6 +91,7 @@ The Core Memory Optimization Agent requires API keys for high-reasoning models:
 - **Anthropic**: Get your API key from [Anthropic Console](https://console.anthropic.com/)
 
 **Supported Models:**
+
 - **OpenAI**: `o3`, `o1-mini` (with HIGH reasoning, 32,768 tokens)
 - **Anthropic**: `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022` (with extended thinking, 2,048 tokens)
 
@@ -179,6 +180,7 @@ Add to your IDE's MCP configuration:
 The **Core Memory Optimization Agent** provides AI-powered memory graph optimization with advanced reasoning capabilities and production-ready safety features:
 
 ### Features
+
 - **🧠 High-Reasoning Analysis**: Uses OpenAI o1/o3 (HIGH reasoning) or Claude (extended thinking) for intelligent memory analysis
 - **🎯 MCP Sampling**: Context-aware prompts that adapt to actual memory state and project characteristics
 - **🛡️ Automatic Snapshots**: Production-ready safety with automatic backup before optimization
@@ -193,6 +195,7 @@ The **Core Memory Optimization Agent** provides AI-powered memory graph optimiza
 ### Quick Start
 
 #### 1. Analyze Memory Graph (with MCP Sampling)
+
 ```json
 {
   "tool": "memory-optimizer",
@@ -208,6 +211,7 @@ The **Core Memory Optimization Agent** provides AI-powered memory graph optimiza
 ```
 
 #### 2. Preview Optimization (Dry Run)
+
 ```json
 {
   "tool": "memory-optimizer",
@@ -220,6 +224,7 @@ The **Core Memory Optimization Agent** provides AI-powered memory graph optimiza
 ```
 
 #### 3. Execute Optimization (with Automatic Snapshot)
+
 ```json
 {
   "tool": "memory-optimizer",
@@ -233,6 +238,7 @@ The **Core Memory Optimization Agent** provides AI-powered memory graph optimiza
 ```
 
 #### 4. List Available Snapshots
+
 ```json
 {
   "tool": "memory-optimizer",
@@ -243,6 +249,7 @@ The **Core Memory Optimization Agent** provides AI-powered memory graph optimiza
 ```
 
 #### 5. Rollback to Previous State
+
 ```json
 {
   "tool": "memory-optimizer",
@@ -254,23 +261,27 @@ The **Core Memory Optimization Agent** provides AI-powered memory graph optimiza
 ```
 
 ### Optimization Strategies
+
 - **Conservative**: Max 5 deletions, 6-month stale threshold (recommended for production)
 - **Balanced**: Max 20 deletions, 3-month stale threshold (recommended for development)
 - **Aggressive**: Max 50 deletions, 1-month stale threshold (use with caution)
 
 ### MCP Sampling Strategies
+
 - **Representative**: Balanced sample across all entity types (default)
 - **Problematic**: Focus on stale, disconnected, or deprecated entities
 - **Recent**: Sample newly created entities (< 30 days) for safety analysis
 - **Diverse**: Ensure representation from all entity types for complex systems
 
 ### Safety Features
+
 - **🛡️ Automatic Snapshots**: Created before every optimization (unless dry-run)
 - **🔄 Transactional Rollback**: Complete state restoration with database consistency
 - **✅ Validation System**: Snapshot integrity checks before rollback operations
 - **📊 Context-Aware Safety**: Activity-level and complexity-based safety measures
 
 For complete setup and usage instructions, see:
+
 - [Core Memory Optimization Setup Guide](CORE_MEMORY_OPTIMIZATION_SETUP.md)
 - [Snapshot System Usage Guide](SNAPSHOT_SYSTEM_USAGE.md)
 - [MCP Sampling Usage Guide](MCP_SAMPLING_USAGE.md)
@@ -298,6 +309,7 @@ npm run test:all
 ### E2E Test Requirements
 
 For memory optimizer E2E tests, set environment variables:
+
 ```bash
 export OPENAI_API_KEY="your-actual-openai-api-key"
 export ANTHROPIC_API_KEY="your-actual-anthropic-api-key"

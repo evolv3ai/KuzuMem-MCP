@@ -23,10 +23,7 @@ import type {
 } from '../../schemas/optimization/types';
 
 // Schema imports
-import {
-  AnalysisResultSchema,
-  OptimizationPlanSchema,
-} from '../../schemas/optimization/types';
+import { AnalysisResultSchema, OptimizationPlanSchema } from '../../schemas/optimization/types';
 
 export interface MemoryOptimizationConfig {
   llmProvider: 'openai' | 'anthropic';
@@ -40,7 +37,7 @@ export interface MemoryOptimizationConfig {
 
 /**
  * Dynamic Memory Optimization Agent
- * 
+ *
  * Uses LLM intelligence to analyze memory graphs and generate safe optimization plans.
  * Leverages existing KuzuMem-MCP infrastructure for data access and execution.
  */
@@ -58,8 +55,8 @@ export class MemoryOptimizationAgent {
       llmProvider: 'openai',
       enableMCPSampling: true,
       samplingStrategy: 'representative',
-      snapshotFailurePolicy: 'warn'
-    }
+      snapshotFailurePolicy: 'warn',
+    },
   ) {
     // Merge provided config with defaults
     const defaults: MemoryOptimizationConfig = {
@@ -97,7 +94,7 @@ export class MemoryOptimizationAgent {
     clientProjectRoot: string,
     repository: string,
     branch: string = 'main',
-    strategy: OptimizationStrategy = 'conservative'
+    strategy: OptimizationStrategy = 'conservative',
   ): Promise<AnalysisResult> {
     const analysisLogger = this.agentLogger.child({
       operation: 'analyzeMemory',
@@ -114,7 +111,7 @@ export class MemoryOptimizationAgent {
         mcpContext,
         clientProjectRoot,
         repository,
-        branch
+        branch,
       );
 
       // Get additional context for analysis
@@ -123,14 +120,14 @@ export class MemoryOptimizationAgent {
         clientProjectRoot,
         repository,
         branch,
-        this.getStaleDaysThreshold(strategy)
+        this.getStaleDaysThreshold(strategy),
       );
 
       const relationshipSummary = await this.contextBuilder.getRelationshipSummary(
         mcpContext,
         clientProjectRoot,
         repository,
-        branch
+        branch,
       );
 
       // Build prompts for LLM analysis (with optional MCP sampling)
@@ -143,7 +140,7 @@ export class MemoryOptimizationAgent {
             repository,
             branch,
             true,
-            this.config.samplingStrategy || 'representative'
+            this.config.samplingStrategy || 'representative',
           )
         : await this.promptManager.buildSystemPrompt('analyzer', strategy);
 
@@ -151,7 +148,7 @@ export class MemoryOptimizationAgent {
         'analysis',
         memoryContext,
         strategy,
-        JSON.stringify({ staleEntityCandidates, relationshipSummary })
+        JSON.stringify({ staleEntityCandidates, relationshipSummary }),
       );
 
       analysisLogger.debug('Sending analysis request to LLM', {
@@ -194,7 +191,7 @@ export class MemoryOptimizationAgent {
     repository: string,
     branch: string,
     analysisResult: AnalysisResult,
-    strategy: OptimizationStrategy = 'conservative'
+    strategy: OptimizationStrategy = 'conservative',
   ): Promise<OptimizationPlan> {
     const planLogger = this.agentLogger.child({
       operation: 'generateOptimizationPlan',
@@ -211,7 +208,7 @@ export class MemoryOptimizationAgent {
         mcpContext,
         clientProjectRoot,
         repository,
-        branch
+        branch,
       );
 
       // Build prompts for optimization planning (with optional MCP sampling)
@@ -224,7 +221,7 @@ export class MemoryOptimizationAgent {
             repository,
             branch,
             true,
-            this.config.samplingStrategy || 'representative'
+            this.config.samplingStrategy || 'representative',
           )
         : await this.promptManager.buildSystemPrompt('optimizer', strategy);
 
@@ -232,7 +229,7 @@ export class MemoryOptimizationAgent {
         'optimization',
         memoryContext,
         strategy,
-        JSON.stringify(analysisResult)
+        JSON.stringify(analysisResult),
       );
 
       planLogger.debug('Sending optimization request to LLM', {
@@ -253,10 +250,7 @@ export class MemoryOptimizationAgent {
       const optimizationPlan = result.object as OptimizationPlan;
 
       // Validate plan against strategy constraints
-      const validatedPlan = await this.validateOptimizationPlan(
-        optimizationPlan,
-        strategy
-      );
+      const validatedPlan = await this.validateOptimizationPlan(optimizationPlan, strategy);
 
       planLogger.info('Optimization plan generated', {
         planId: validatedPlan.id,
@@ -285,7 +279,7 @@ export class MemoryOptimizationAgent {
       requireConfirmation?: boolean;
       createSnapshot?: boolean;
       snapshotFailurePolicy?: 'abort' | 'continue' | 'warn';
-    } = {}
+    } = {},
   ): Promise<OptimizationResult> {
     const executeLogger = this.agentLogger.child({
       operation: 'executeOptimizationPlan',
@@ -309,13 +303,13 @@ export class MemoryOptimizationAgent {
         try {
           const snapshotService = await this.memoryService.getSnapshotService(
             mcpContext,
-            clientProjectRoot
+            clientProjectRoot,
           );
 
           const snapshotResult = await snapshotService.createSnapshot(
             repository,
             branch,
-            `Pre-optimization snapshot for plan ${plan.id}`
+            `Pre-optimization snapshot for plan ${plan.id}`,
           );
 
           snapshotId = snapshotResult.snapshotId;
@@ -330,37 +324,31 @@ export class MemoryOptimizationAgent {
 
           // Determine snapshot failure policy (options override config)
           const failurePolicy =
-            options.snapshotFailurePolicy ||
-            this.config.snapshotFailurePolicy ||
-            'warn';
+            options.snapshotFailurePolicy || this.config.snapshotFailurePolicy || 'warn';
 
           switch (failurePolicy) {
             case 'abort':
-              executeLogger.error(
-                'Aborting optimization due to snapshot failure (policy: abort)'
-              );
+              executeLogger.error('Aborting optimization due to snapshot failure (policy: abort)');
 
               throw new Error(
                 `Optimization aborted: Failed to create snapshot - ${snapshotError}. ` +
-                'Rollback will not be available.'
+                  'Rollback will not be available.',
               );
 
             case 'continue':
-              executeLogger.info(
-                'Continuing optimization without snapshot (policy: continue)'
-              );
+              executeLogger.info('Continuing optimization without snapshot (policy: continue)');
               break;
 
             case 'warn':
             default:
               executeLogger.warn(
                 'Proceeding with optimization without snapshot - ' +
-                'rollback will not be available (policy: warn)'
+                  'rollback will not be available (policy: warn)',
               );
 
               executeLogger.warn(
                 'Consider using snapshotFailurePolicy: "abort" for production ' +
-                'environments requiring guaranteed rollback'
+                  'environments requiring guaranteed rollback',
               );
               break;
           }
@@ -374,7 +362,7 @@ export class MemoryOptimizationAgent {
 
       // Execute actions in the specified order
       for (const actionId of plan.executionOrder) {
-        const action = plan.actions.find(a => a.entityId === actionId);
+        const action = plan.actions.find((a) => a.entityId === actionId);
 
         if (!action) {
           executeLogger.warn(`Action not found in plan: ${actionId}`);
@@ -393,7 +381,7 @@ export class MemoryOptimizationAgent {
             // Dry run execution path
             executeLogger.info(
               `DRY RUN: Would execute ${action.type} on ${action.entityId}`,
-              actionContext
+              actionContext,
             );
 
             this.recordSuccessfulAction(executedActions, action.entityId);
@@ -401,16 +389,10 @@ export class MemoryOptimizationAgent {
             // Actual execution path
             executeLogger.debug(
               `Executing ${action.type} action on ${action.entityId}`,
-              actionContext
+              actionContext,
             );
 
-            await this.executeAction(
-              mcpContext,
-              clientProjectRoot,
-              repository,
-              branch,
-              action
-            );
+            await this.executeAction(mcpContext, clientProjectRoot, repository, branch, action);
 
             this.recordSuccessfulAction(executedActions, action.entityId);
 
@@ -422,20 +404,17 @@ export class MemoryOptimizationAgent {
 
             executeLogger.info(
               `Successfully executed ${action.type} action on ${action.entityId}`,
-              actionContext
+              actionContext,
             );
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
 
-          executeLogger.error(
-            `Failed to execute ${action.type} action on ${action.entityId}`,
-            {
-              ...actionContext,
-              error: errorMessage,
-              stack: error instanceof Error ? error.stack : undefined,
-            }
-          );
+          executeLogger.error(`Failed to execute ${action.type} action on ${action.entityId}`, {
+            ...actionContext,
+            error: errorMessage,
+            stack: error instanceof Error ? error.stack : undefined,
+          });
 
           this.recordFailedAction(executedActions, action.entityId, errorMessage);
         }
@@ -443,9 +422,7 @@ export class MemoryOptimizationAgent {
 
       const result: OptimizationResult = {
         planId: plan.id,
-        status: executedActions.every(a => a.status === 'success')
-          ? 'success'
-          : 'partial',
+        status: executedActions.every((a) => a.status === 'success') ? 'success' : 'partial',
         executedActions,
         summary: {
           entitiesDeleted,
@@ -474,7 +451,7 @@ export class MemoryOptimizationAgent {
    */
   private recordSuccessfulAction(
     executedActions: OptimizationResult['executedActions'],
-    actionId: string
+    actionId: string,
   ): void {
     executedActions.push({
       actionId,
@@ -488,7 +465,7 @@ export class MemoryOptimizationAgent {
   private recordFailedAction(
     executedActions: OptimizationResult['executedActions'],
     actionId: string,
-    errorMessage: string
+    errorMessage: string,
   ): void {
     executedActions.push({
       actionId,
@@ -506,7 +483,7 @@ export class MemoryOptimizationAgent {
       entitiesDeleted: number;
       entitiesMerged: number;
       entitiesUpdated: number;
-    }
+    },
   ): void {
     switch (actionType) {
       case 'delete':
@@ -532,7 +509,7 @@ export class MemoryOptimizationAgent {
     clientProjectRoot: string,
     repository: string,
     branch: string,
-    snapshotId: string
+    snapshotId: string,
   ): Promise<{
     success: boolean;
     snapshotId: string;
@@ -554,16 +531,14 @@ export class MemoryOptimizationAgent {
       // Get snapshot service
       const snapshotService = await this.memoryService.getSnapshotService(
         mcpContext,
-        clientProjectRoot
+        clientProjectRoot,
       );
 
       // Validate snapshot before rollback
       const validation = await snapshotService.validateSnapshot(snapshotId);
 
       if (!validation.valid) {
-        throw new Error(
-          `Snapshot validation failed: ${validation.issues.join(', ')}`
-        );
+        throw new Error(`Snapshot validation failed: ${validation.issues.join(', ')}`);
       }
 
       rollbackLogger.info('Snapshot validation passed, executing rollback', {
@@ -585,9 +560,10 @@ export class MemoryOptimizationAgent {
         restoredEntities: rollbackResult.restoredEntities,
         restoredRelationships: rollbackResult.restoredRelationships,
         rollbackTime: rollbackResult.rollbackTime,
-        message: `Successfully rolled back to snapshot ${snapshotId}. ` +
-                 `Restored ${rollbackResult.restoredEntities} entities and ` +
-                 `${rollbackResult.restoredRelationships} relationships.`,
+        message:
+          `Successfully rolled back to snapshot ${snapshotId}. ` +
+          `Restored ${rollbackResult.restoredEntities} entities and ` +
+          `${rollbackResult.restoredRelationships} relationships.`,
       };
     } catch (error) {
       rollbackLogger.error('Rollback failed:', error);
@@ -602,10 +578,13 @@ export class MemoryOptimizationAgent {
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
     repository: string,
-    branch?: string
+    branch?: string,
   ): Promise<any[]> {
     try {
-      const snapshotService = await this.memoryService.getSnapshotService(mcpContext, clientProjectRoot);
+      const snapshotService = await this.memoryService.getSnapshotService(
+        mcpContext,
+        clientProjectRoot,
+      );
       return await snapshotService.listSnapshots(repository, branch);
     } catch (error) {
       this.agentLogger.error('Failed to list snapshots:', error);
@@ -630,8 +609,6 @@ export class MemoryOptimizationAgent {
         throw new Error(`Unsupported LLM provider: ${this.config.llmProvider}`);
     }
   }
-
-
 
   /**
    * Get reasoning configuration based on provider
@@ -664,9 +641,9 @@ export class MemoryOptimizationAgent {
       case 'conservative':
         return 180; // 6 months
       case 'balanced':
-        return 90;  // 3 months
+        return 90; // 3 months
       case 'aggressive':
-        return 30;  // 1 month
+        return 30; // 1 month
       default:
         return 90;
     }
@@ -677,10 +654,10 @@ export class MemoryOptimizationAgent {
    */
   private async validateOptimizationPlan(
     plan: OptimizationPlan,
-    strategy: OptimizationStrategy
+    strategy: OptimizationStrategy,
   ): Promise<OptimizationPlan> {
     const strategyConfig = await this.promptManager.getStrategyConfig(strategy);
-    
+
     // Limit actions based on strategy
     if (plan.actions.length > strategyConfig.maxDeletions) {
       plan.actions = plan.actions.slice(0, strategyConfig.maxDeletions);
@@ -703,7 +680,7 @@ export class MemoryOptimizationAgent {
     clientProjectRoot: string,
     repository: string,
     branch: string,
-    action: any
+    action: any,
   ): Promise<void> {
     const actionLogger = this.agentLogger.child({
       actionType: action.type,
@@ -725,7 +702,7 @@ export class MemoryOptimizationAgent {
             repository,
             branch,
             action,
-            actionLogger
+            actionLogger,
           );
           break;
 
@@ -736,7 +713,7 @@ export class MemoryOptimizationAgent {
             repository,
             branch,
             action,
-            actionLogger
+            actionLogger,
           );
           break;
 
@@ -747,7 +724,7 @@ export class MemoryOptimizationAgent {
             repository,
             branch,
             action,
-            actionLogger
+            actionLogger,
           );
           break;
 
@@ -758,7 +735,7 @@ export class MemoryOptimizationAgent {
             repository,
             branch,
             action,
-            actionLogger
+            actionLogger,
           );
           break;
 
@@ -766,14 +743,9 @@ export class MemoryOptimizationAgent {
           throw new Error(`Unsupported action type: ${action.type}`);
       }
 
-      actionLogger.info(
-        `Successfully executed ${action.type} action on ${action.entityId}`
-      );
+      actionLogger.info(`Successfully executed ${action.type} action on ${action.entityId}`);
     } catch (error) {
-      actionLogger.error(
-        `Failed to execute ${action.type} action on ${action.entityId}:`,
-        error
-      );
+      actionLogger.error(`Failed to execute ${action.type} action on ${action.entityId}:`, error);
       throw error;
     }
   }
@@ -787,7 +759,7 @@ export class MemoryOptimizationAgent {
     repository: string,
     branch: string,
     action: any,
-    logger: any
+    logger: any,
   ): Promise<void> {
     // Extract entity information
     const entityId = action.entityId;
@@ -807,7 +779,7 @@ export class MemoryOptimizationAgent {
           clientProjectRoot,
           repository,
           branch,
-          entityId
+          entityId,
         );
         break;
 
@@ -817,7 +789,7 @@ export class MemoryOptimizationAgent {
           clientProjectRoot,
           repository,
           branch,
-          entityId
+          entityId,
         );
         break;
 
@@ -827,7 +799,7 @@ export class MemoryOptimizationAgent {
           clientProjectRoot,
           repository,
           branch,
-          entityId
+          entityId,
         );
         break;
 
@@ -837,7 +809,7 @@ export class MemoryOptimizationAgent {
           clientProjectRoot,
           repository,
           branch,
-          entityId
+          entityId,
         );
         break;
 
@@ -847,7 +819,7 @@ export class MemoryOptimizationAgent {
           clientProjectRoot,
           repository,
           branch,
-          entityId
+          entityId,
         );
         break;
 
@@ -857,7 +829,7 @@ export class MemoryOptimizationAgent {
           clientProjectRoot,
           repository,
           branch,
-          entityId
+          entityId,
         );
         break;
 
@@ -880,15 +852,13 @@ export class MemoryOptimizationAgent {
     repository: string,
     branch: string,
     action: any,
-    logger: any
+    logger: any,
   ): Promise<void> {
     const sourceEntityId = action.entityId;
     const targetEntityId = action.targetEntityId;
 
     if (!targetEntityId) {
-      throw new Error(
-        `Merge action requires targetEntityId for entity ${sourceEntityId}`
-      );
+      throw new Error(`Merge action requires targetEntityId for entity ${sourceEntityId}`);
     }
 
     logger.info(`Merging entity ${sourceEntityId} into ${targetEntityId}`);
@@ -899,10 +869,7 @@ export class MemoryOptimizationAgent {
     // 3. Update relationships to point to the target entity
     // 4. Delete the source entity
 
-    const kuzuClient = await this.memoryService.getKuzuClient(
-      mcpContext,
-      clientProjectRoot
-    );
+    const kuzuClient = await this.memoryService.getKuzuClient(mcpContext, clientProjectRoot);
 
     // Get source entity data
     const sourceQuery = `
@@ -924,9 +891,7 @@ export class MemoryOptimizationAgent {
     const sourceLabels = sourceResult[0].sourceLabels;
 
     // Update relationships to point to target entity
-    const relationshipType = sourceLabels[0] === 'Component'
-      ? 'DEPENDS_ON'
-      : 'RELATED_TO';
+    const relationshipType = sourceLabels[0] === 'Component' ? 'DEPENDS_ON' : 'RELATED_TO';
 
     const updateRelationshipsQuery = `
       MATCH (source {id: $sourceId, repository: $repository, branch: $branch})-[r]-(other)
@@ -952,12 +917,10 @@ export class MemoryOptimizationAgent {
       repository,
       branch,
       { ...action, type: 'delete', entityId: sourceEntityId },
-      logger
+      logger,
     );
 
-    logger.info(
-      `Successfully merged entity ${sourceEntityId} into ${targetEntityId}`
-    );
+    logger.info(`Successfully merged entity ${sourceEntityId} into ${targetEntityId}`);
   }
 
   /**
@@ -969,7 +932,7 @@ export class MemoryOptimizationAgent {
     repository: string,
     branch: string,
     action: any,
-    logger: any
+    logger: any,
   ): Promise<void> {
     const entityId = action.entityId;
     const updates = action.updates || {};
@@ -980,7 +943,7 @@ export class MemoryOptimizationAgent {
 
     // Build update query
     const updateFields = Object.keys(updates)
-      .map(key => `n.${key} = $${key}`)
+      .map((key) => `n.${key} = $${key}`)
       .join(', ');
 
     if (updateFields.length === 0) {
@@ -1019,7 +982,7 @@ export class MemoryOptimizationAgent {
     repository: string,
     branch: string,
     action: any,
-    logger: any
+    logger: any,
   ): Promise<void> {
     const entityId = action.entityId;
     const targetEntityId = action.targetEntityId;
@@ -1069,15 +1032,29 @@ export class MemoryOptimizationAgent {
     }
 
     // Try to determine from entity ID prefix
-    if (entityId.startsWith('comp-')) return 'component';
-    if (entityId.startsWith('dec-')) return 'decision';
-    if (entityId.startsWith('rule-')) return 'rule';
-    if (entityId.startsWith('file-')) return 'file';
-    if (entityId.startsWith('ctx-')) return 'context';
-    if (entityId.startsWith('tag-')) return 'tag';
+    if (entityId.startsWith('comp-')) {
+      return 'component';
+    }
+    if (entityId.startsWith('dec-')) {
+      return 'decision';
+    }
+    if (entityId.startsWith('rule-')) {
+      return 'rule';
+    }
+    if (entityId.startsWith('file-')) {
+      return 'file';
+    }
+    if (entityId.startsWith('ctx-')) {
+      return 'context';
+    }
+    if (entityId.startsWith('tag-')) {
+      return 'tag';
+    }
 
     // Default to component if we can't determine
-    this.agentLogger.warn(`Could not determine entity type for ${entityId}, defaulting to component`);
+    this.agentLogger.warn(
+      `Could not determine entity type for ${entityId}, defaulting to component`,
+    );
     return 'component';
   }
 }

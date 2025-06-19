@@ -194,7 +194,9 @@ export class MemoryService {
       );
     }
 
-    logger.debug(`[MemoryService.getSnapshotService] Retrieved SnapshotService for: ${clientProjectRoot}`);
+    logger.debug(
+      `[MemoryService.getSnapshotService] Retrieved SnapshotService for: ${clientProjectRoot}`,
+    );
     return snapshotService;
   }
 
@@ -2838,10 +2840,7 @@ export class MemoryService {
         warnings,
       };
     } catch (error: any) {
-      logger.error(
-        `[MemoryService.bulkDeleteByTag] Error bulk deleting by tag ${tagId}:`,
-        error,
-      );
+      logger.error(`[MemoryService.bulkDeleteByTag] Error bulk deleting by tag ${tagId}:`, error);
       throw error;
     }
   }
@@ -2973,9 +2972,7 @@ export class MemoryService {
         // For repository deletion, include branch info in entity names
         const entitiesWithBranch = result.entities.map((entity: any) => ({
           ...entity,
-          name: entity.name
-            ? `${entity.name} (multi-branch)`
-            : `${entity.id} (multi-branch)`,
+          name: entity.name ? `${entity.name} (multi-branch)` : `${entity.id} (multi-branch)`,
         }));
 
         deletedEntities.push(...entitiesWithBranch);

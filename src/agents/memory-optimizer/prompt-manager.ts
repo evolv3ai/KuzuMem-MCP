@@ -50,7 +50,7 @@ export class PromptManager {
 
   constructor(
     private promptsDir: string = './src/prompts',
-    private samplingManager?: MCPSamplingManager
+    private samplingManager?: MCPSamplingManager,
   ) {}
 
   /**
@@ -61,13 +61,13 @@ export class PromptManager {
       const configPath = path.join(this.promptsDir, version, 'system-prompts.json');
       const configData = await fs.readFile(configPath, 'utf-8');
       const config = JSON.parse(configData) as SystemPromptConfig;
-      
+
       // Validate configuration
       this.validatePromptConfig(config);
-      
+
       // Cache the configuration
       this.prompts.set(version, config);
-      
+
       logger.info(`[PromptManager] Loaded prompt configuration version ${version}`);
       return config;
     } catch (error) {
@@ -91,7 +91,7 @@ export class PromptManager {
    */
   async buildSystemPrompt(
     role: AgentRole,
-    strategy: OptimizationStrategy = 'conservative'
+    strategy: OptimizationStrategy = 'conservative',
   ): Promise<string> {
     const config = await this.getCurrentConfig();
     const strategyConfig = config.strategies[strategy];
@@ -103,7 +103,7 @@ export class PromptManager {
       config.roles[role],
       '',
       'SAFETY RULES:',
-      ...config.safetyRules.map(rule => `- ${rule}`),
+      ...config.safetyRules.map((rule) => `- ${rule}`),
       '',
       `STRATEGY: ${strategy.toUpperCase()} (${strategyConfig.description})`,
       `- Max Deletions: ${strategyConfig.maxDeletions}`,
@@ -111,9 +111,11 @@ export class PromptManager {
       `- Focus Areas: ${strategyConfig.focusAreas.join(', ')}`,
       '',
       'OUTPUT FORMAT:',
-      role === 'analyzer' ? config.outputFormats.analysis :
-      role === 'optimizer' ? config.outputFormats.optimization :
-      config.outputFormats.safety,
+      role === 'analyzer'
+        ? config.outputFormats.analysis
+        : role === 'optimizer'
+          ? config.outputFormats.optimization
+          : config.outputFormats.safety,
     ].join('\n');
 
     return systemPrompt;
@@ -130,7 +132,7 @@ export class PromptManager {
     repository: string,
     branch: string,
     enableSampling: boolean = true,
-    samplingStrategy: 'representative' | 'problematic' | 'recent' | 'diverse' = 'representative'
+    samplingStrategy: 'representative' | 'problematic' | 'recent' | 'diverse' = 'representative',
   ): Promise<string> {
     try {
       // Get base prompt
@@ -157,7 +159,7 @@ export class PromptManager {
         repository,
         branch,
         samplingStrategy,
-        20 // Sample size
+        20, // Sample size
       );
 
       // Build context-aware prompt
@@ -165,7 +167,7 @@ export class PromptManager {
         role,
         strategy,
         memorySample,
-        basePrompt
+        basePrompt,
       );
 
       logger.info('[PromptManager] Context-aware prompt built successfully', {
@@ -176,7 +178,10 @@ export class PromptManager {
 
       return contextAwarePrompt;
     } catch (error) {
-      logger.error('[PromptManager] Failed to build context-aware prompt, falling back to base prompt:', error);
+      logger.error(
+        '[PromptManager] Failed to build context-aware prompt, falling back to base prompt:',
+        error,
+      );
       // Fallback to base prompt if sampling fails
       return await this.buildSystemPrompt(role, strategy);
     }
@@ -197,57 +202,45 @@ export class PromptManager {
     type: 'analysis' | 'optimization',
     context: MemoryContext,
     strategy: OptimizationStrategy = 'conservative',
-    additionalContext?: string
+    additionalContext?: string,
   ): Promise<string> {
     const config = await this.getCurrentConfig();
-    
-    // Interpolate context templates
-    const repositoryContext = this.interpolateTemplate(
-      config.contextTemplates.repository,
-      {
-        repository: context.repository,
-        branch: context.branch,
-        totalEntities: context.totalEntities.toString(),
-        lastOptimization: context.lastOptimization || 'Never',
-      }
-    );
 
-    const entitySummary = this.interpolateTemplate(
-      config.contextTemplates.entitySummary,
-      {
-        components: context.entityCounts.components.toString(),
-        decisions: context.entityCounts.decisions.toString(),
-        rules: context.entityCounts.rules.toString(),
-        files: context.entityCounts.files.toString(),
-        contexts: context.entityCounts.contexts.toString(),
-        tags: context.entityCounts.tags.toString(),
-        relationshipCount: context.relationshipCount.toString(),
-        averageEntityAge: context.averageEntityAge?.toString() || 'Unknown',
-      }
-    );
+    // Interpolate context templates
+    const repositoryContext = this.interpolateTemplate(config.contextTemplates.repository, {
+      repository: context.repository,
+      branch: context.branch,
+      totalEntities: context.totalEntities.toString(),
+      lastOptimization: context.lastOptimization || 'Never',
+    });
+
+    const entitySummary = this.interpolateTemplate(config.contextTemplates.entitySummary, {
+      components: context.entityCounts.components.toString(),
+      decisions: context.entityCounts.decisions.toString(),
+      rules: context.entityCounts.rules.toString(),
+      files: context.entityCounts.files.toString(),
+      contexts: context.entityCounts.contexts.toString(),
+      tags: context.entityCounts.tags.toString(),
+      relationshipCount: context.relationshipCount.toString(),
+      averageEntityAge: context.averageEntityAge?.toString() || 'Unknown',
+    });
 
     let userPrompt: string;
-    
+
     if (type === 'analysis') {
-      userPrompt = this.interpolateTemplate(
-        config.contextTemplates.analysisContext,
-        {
-          repository: repositoryContext,
-          entitySummary,
-          focusAreas: config.strategies[strategy].focusAreas.join(', '),
-          strategy: strategy,
-        }
-      );
+      userPrompt = this.interpolateTemplate(config.contextTemplates.analysisContext, {
+        repository: repositoryContext,
+        entitySummary,
+        focusAreas: config.strategies[strategy].focusAreas.join(', '),
+        strategy: strategy,
+      });
     } else {
-      userPrompt = this.interpolateTemplate(
-        config.contextTemplates.optimizationContext,
-        {
-          repository: repositoryContext,
-          entitySummary,
-          analysisResults: additionalContext || 'No analysis provided',
-          strategy: strategy,
-        }
-      );
+      userPrompt = this.interpolateTemplate(config.contextTemplates.optimizationContext, {
+        repository: repositoryContext,
+        entitySummary,
+        analysisResults: additionalContext || 'No analysis provided',
+        strategy: strategy,
+      });
     }
 
     return userPrompt;
@@ -277,8 +270,8 @@ export class PromptManager {
     try {
       const entries = await fs.readdir(this.promptsDir, { withFileTypes: true });
       return entries
-        .filter(entry => entry.isDirectory() && entry.name.startsWith('v'))
-        .map(entry => entry.name)
+        .filter((entry) => entry.isDirectory() && entry.name.startsWith('v'))
+        .map((entry) => entry.name)
         .sort();
     } catch (error) {
       logger.error('[PromptManager] Failed to list prompt versions:', error);
@@ -303,7 +296,8 @@ export class PromptManager {
       const sanitizedValue = this.sanitizeVariableValue(value);
 
       // Validate sanitized value length
-      if (sanitizedValue.length > 10000) { // Reasonable limit for prompt variables
+      if (sanitizedValue.length > 10000) {
+        // Reasonable limit for prompt variables
         logger.warn(`[PromptManager] Variable value too long, truncating: ${key}`);
         const truncatedValue = sanitizedValue.substring(0, 10000) + '... [truncated]';
         const regex = new RegExp(`{{${this.escapeRegex(key)}}}`, 'g');
@@ -387,8 +381,15 @@ export class PromptManager {
    * Validate prompt configuration
    */
   private validatePromptConfig(config: SystemPromptConfig): void {
-    const requiredFields = ['version', 'basePrompt', 'roles', 'safetyRules', 'contextTemplates', 'strategies'];
-    
+    const requiredFields = [
+      'version',
+      'basePrompt',
+      'roles',
+      'safetyRules',
+      'contextTemplates',
+      'strategies',
+    ];
+
     for (const field of requiredFields) {
       if (!(field in config)) {
         throw new Error(`Missing required field in prompt configuration: ${field}`);

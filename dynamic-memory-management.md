@@ -7,6 +7,7 @@ This document outlines a revolutionary approach to autonomous memory management 
 ## 🎯 Core Concept
 
 Using MCP's sampling feature to create an autonomous memory management agent that:
+
 - Analyzes memory graph patterns and relationships
 - Makes intelligent decisions about what to prune
 - Uses sampling to explore multiple optimization strategies
@@ -15,12 +16,14 @@ Using MCP's sampling feature to create an autonomous memory management agent tha
 ## 🚀 Why This Approach Is Powerful
 
 ### Perfect Use Case for Sampling
+
 - **Autonomous Decision Making**: Agent analyzes memory graph and makes informed decisions
 - **Context-Aware**: Understands relationships, dependencies, and usage patterns
 - **Iterative Refinement**: Samples multiple strategies and picks the best approach
 - **Safety Through Intelligence**: Much smarter than rule-based pruning
 
 ### Memory Graph Optimization Challenges This Solves
+
 1. **Stale Data Detection**: Identifying outdated components, decisions, or files
 2. **Orphaned Relationships**: Finding broken or meaningless connections
 3. **Redundancy Elimination**: Detecting duplicate or near-duplicate entities
@@ -30,6 +33,7 @@ Using MCP's sampling feature to create an autonomous memory management agent tha
 ## 🎯 Implementation Strategy
 
 ### Phase 1: Memory Analysis Agent
+
 ```typescript
 // New tool: memory-optimizer
 {
@@ -43,16 +47,19 @@ Using MCP's sampling feature to create an autonomous memory management agent tha
 ```
 
 ### Phase 2: Sampling-Driven Decision Making
+
 The agent uses sampling to:
+
 1. **Generate multiple optimization strategies**
 2. **Evaluate each strategy's impact**
 3. **Select the safest, most effective approach**
 4. **Present recommendations with confidence scores**
 
 ### Phase 3: Autonomous Execution
+
 ```typescript
 {
-  "tool": "memory-optimizer", 
+  "tool": "memory-optimizer",
   "operation": "optimize",
   "repository": "my-repo",
   "autoApprove": false, // Start with human approval
@@ -65,24 +72,28 @@ The agent uses sampling to:
 ## 🔍 Agent Capabilities
 
 ### 1. Intelligent Stale Detection
+
 - Analyze component usage patterns
 - Identify decisions that are no longer relevant
 - Detect files that haven't been referenced in months
 - Consider project lifecycle stages
 
 ### 2. Relationship Graph Optimization
+
 - Find circular dependencies that can be simplified
 - Identify redundant relationship paths
 - Detect orphaned nodes with no meaningful connections
 - Optimize tag usage and categorization
 
 ### 3. Context-Aware Pruning
+
 - Understand project phases (development vs maintenance)
 - Preserve historically significant decisions
 - Maintain architectural knowledge while removing implementation details
 - Balance between memory efficiency and knowledge retention
 
 ### 4. Predictive Analysis
+
 - Predict which entities are likely to become stale
 - Suggest proactive archiving strategies
 - Identify patterns in memory growth
@@ -109,15 +120,15 @@ The agent uses sampling to:
 // Leverage existing MemoryService and KuzuDBClient
 class MemoryOptimizationAgent {
   constructor(
-    private memoryService: MemoryService,  // ✅ Use existing service
-    private llmClient: LLMClient
+    private memoryService: MemoryService, // ✅ Use existing service
+    private llmClient: LLMClient,
   ) {}
 
   async analyzeMemory(
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
     repository: string,
-    branch: string
+    branch: string,
   ): Promise<AnalysisResult> {
     // ✅ Use existing KuzuDB client
     const kuzuClient = await this.memoryService.getKuzuClient(mcpContext, clientProjectRoot);
@@ -128,13 +139,17 @@ class MemoryOptimizationAgent {
 
     // ✅ Use existing graph analysis
     const graphAnalysis = await this.memoryService.pageRankAnalysis(mcpContext, clientProjectRoot, {
-      repository, branch, nodeTableNames: ['Component', 'Decision'],
-      relationshipTableNames: ['DEPENDS_ON']
+      repository,
+      branch,
+      nodeTableNames: ['Component', 'Decision'],
+      relationshipTableNames: ['DEPENDS_ON'],
     });
 
     // 🆕 Add LLM analysis
     return this.llmClient.analyzeMemoryGraph({
-      entityCounts, relationships, graphAnalysis
+      entityCounts,
+      relationships,
+      graphAnalysis,
     });
   }
 }
@@ -162,12 +177,13 @@ class CoreMemoryOptimizationAgent {
       prompt: this.buildAnalysisPrompt(context),
       schema: OptimizationPlanSchema,
       // High reasoning configuration
-      reasoning: 'high',              // OpenAI o1/o3 HIGH reasoning
-      maxReasoningTokens: 32768,      // Maximum reasoning capacity
-      thinking: {                     // Anthropic extended thinking
+      reasoning: 'high', // OpenAI o1/o3 HIGH reasoning
+      maxReasoningTokens: 32768, // Maximum reasoning capacity
+      thinking: {
+        // Anthropic extended thinking
         enabled: true,
-        maxTokens: 2048              // 2048 token thinking budget
-      }
+        maxTokens: 2048, // 2048 token thinking budget
+      },
     });
     return result.object;
   }
@@ -175,6 +191,7 @@ class CoreMemoryOptimizationAgent {
 ```
 
 **Why Vercel AI SDK + High-Reasoning Models:**
+
 - ✅ **Advanced reasoning** - Supports OpenAI o1/o3 HIGH reasoning and Claude extended thinking
 - ✅ **Serverless-optimized** - Works perfectly in edge/serverless environments
 - ✅ **Provider-agnostic** - Easy to switch between OpenAI, Anthropic, etc.
@@ -185,12 +202,12 @@ class CoreMemoryOptimizationAgent {
 
 **Supported High-Reasoning Models:**
 
-| Provider | Model | Reasoning Type | Configuration |
-|----------|-------|----------------|---------------|
-| **OpenAI** | `o3` | HIGH reasoning | `reasoning: 'high'`, `maxReasoningTokens: 32768` |
-| **OpenAI** | `o1-mini` | HIGH reasoning | `reasoning: 'high'`, `maxReasoningTokens: 32768` |
-| **Anthropic** | `claude-3-5-sonnet-20241022` | Extended thinking | `thinking: { enabled: true, maxTokens: 2048 }` |
-| **Anthropic** | `claude-3-5-haiku-20241022` | Extended thinking | `thinking: { enabled: true, maxTokens: 2048 }` |
+| Provider      | Model                        | Reasoning Type    | Configuration                                    |
+| ------------- | ---------------------------- | ----------------- | ------------------------------------------------ |
+| **OpenAI**    | `o3`                         | HIGH reasoning    | `reasoning: 'high'`, `maxReasoningTokens: 32768` |
+| **OpenAI**    | `o1-mini`                    | HIGH reasoning    | `reasoning: 'high'`, `maxReasoningTokens: 32768` |
+| **Anthropic** | `claude-3-5-sonnet-20241022` | Extended thinking | `thinking: { enabled: true, maxTokens: 2048 }`   |
+| **Anthropic** | `claude-3-5-haiku-20241022`  | Extended thinking | `thinking: { enabled: true, maxTokens: 2048 }`   |
 
 #### 2. System Prompt Management Strategy
 
@@ -227,13 +244,14 @@ class PromptManager {
     return [
       config.basePrompt,
       config.roleSpecificPrompts[role],
-      this.interpolateContext(config.contextTemplates, context)
+      this.interpolateContext(config.contextTemplates, context),
     ].join('\n\n');
   }
 }
 ```
 
 **Prompt Storage Structure:**
+
 ```
 src/
 ├── prompts/
@@ -252,9 +270,9 @@ src/
 
 ```typescript
 enum PromptDeliveryMode {
-  STATIC_COMPLETE = 'static',      // Full prompt embedded in agent
+  STATIC_COMPLETE = 'static', // Full prompt embedded in agent
   MCP_BROADCAST = 'mcp-broadcast', // Prompt sent via MCP sampling
-  CLIENT_DYNAMIC = 'client-dynamic' // Client builds prompt dynamically
+  CLIENT_DYNAMIC = 'client-dynamic', // Client builds prompt dynamically
 }
 
 class DynamicMemoryAgent {
@@ -281,7 +299,7 @@ class DynamicMemoryAgent {
     return this.llmClient.generateOptimization({
       system: systemPrompt,
       user: userPrompt,
-      context: this.serializeMemoryGraph(context)
+      context: this.serializeMemoryGraph(context),
     });
   }
 
@@ -290,13 +308,13 @@ class DynamicMemoryAgent {
     const promptRequest = await this.mcpClient.sample({
       type: 'memory-optimization-prompt',
       context: context.summary,
-      capabilities: this.getAgentCapabilities()
+      capabilities: this.getAgentCapabilities(),
     });
 
     return this.llmClient.generateOptimization({
       system: promptRequest.systemPrompt,
       user: promptRequest.userPrompt,
-      context: promptRequest.contextData
+      context: promptRequest.contextData,
     });
   }
 
@@ -307,7 +325,7 @@ class DynamicMemoryAgent {
     return this.llmClient.generateOptimization({
       system: request.systemPrompt,
       user: request.userPrompt,
-      context: request.contextData
+      context: request.contextData,
     });
   }
 }
@@ -316,9 +334,13 @@ class DynamicMemoryAgent {
 ### New Components Needed
 
 #### 1. Memory Analyzer Service
+
 ```typescript
 class MemoryAnalyzer {
-  constructor(private llmClient: LLMClient, private promptManager: PromptManager) {}
+  constructor(
+    private llmClient: LLMClient,
+    private promptManager: PromptManager,
+  ) {}
 
   async analyzeGraph(repository: string, branch: string): Promise<GraphAnalysis> {
     const context = await this.buildMemoryContext(repository, branch);
@@ -328,37 +350,40 @@ class MemoryAnalyzer {
       model: this.model,
       system: systemPrompt,
       prompt: `Analyze this memory graph for optimization opportunities: ${JSON.stringify(context)}`,
-      schema: GraphAnalysisSchema
+      schema: GraphAnalysisSchema,
     });
   }
 
-  detectStaleEntities(timeThreshold: Date): StaleEntity[]
-  findRedundancies(): RedundancyGroup[]
-  optimizeDependencies(): OptimizationPlan[]
+  detectStaleEntities(timeThreshold: Date): StaleEntity[];
+  findRedundancies(): RedundancyGroup[];
+  optimizeDependencies(): OptimizationPlan[];
 }
 ```
 
 #### 2. Sampling Integration
+
 ```typescript
 class MemoryOptimizationAgent {
-  async generateOptimizationStrategies(): Promise<OptimizationStrategy[]>
-  async evaluateStrategy(strategy: OptimizationStrategy): Promise<StrategyEvaluation>
-  async selectBestStrategy(evaluations: StrategyEvaluation[]): Promise<OptimizationPlan>
+  async generateOptimizationStrategies(): Promise<OptimizationStrategy[]>;
+  async evaluateStrategy(strategy: OptimizationStrategy): Promise<StrategyEvaluation>;
+  async selectBestStrategy(evaluations: StrategyEvaluation[]): Promise<OptimizationPlan>;
 }
 ```
 
 #### 3. Safety & Rollback System
+
 ```typescript
 class OptimizationSafetyNet {
-  createSnapshot(repository: string): SnapshotId
-  validateOptimization(plan: OptimizationPlan): ValidationResult
-  rollback(snapshotId: SnapshotId): Promise<void>
+  createSnapshot(repository: string): SnapshotId;
+  validateOptimization(plan: OptimizationPlan): ValidationResult;
+  rollback(snapshotId: SnapshotId): Promise<void>;
 }
 ```
 
 ## 🎮 User Experience Flow
 
 ### Automated Mode
+
 ```bash
 # Agent runs periodically, suggests optimizations
 mcp-tool memory-optimizer --mode=suggest --schedule=weekly
@@ -370,6 +395,7 @@ mcp-tool memory-optimizer --approve=optimization-plan-123
 ```
 
 ### Interactive Mode
+
 ```bash
 # User requests analysis
 mcp-tool memory-optimizer --analyze --interactive
@@ -382,17 +408,20 @@ mcp-tool memory-optimizer --analyze --interactive
 ## 🔒 Safety Mechanisms
 
 ### 1. Multi-Level Approval
+
 - **Conservative**: Requires explicit approval for each deletion
 - **Balanced**: Batch approval with review summaries
 - **Aggressive**: Auto-approve with rollback capability
 
 ### 2. Preservation Rules
+
 - Never delete entities tagged as "critical"
 - Preserve recent decisions (< 30 days)
 - Maintain dependency integrity
 - Keep audit trails
 
 ### 3. Rollback Capabilities
+
 - Full graph snapshots before optimization
 - Incremental rollback of specific changes
 - Recovery from backup repositories
@@ -400,21 +429,25 @@ mcp-tool memory-optimizer --analyze --interactive
 ## 🚀 Implementation Phases
 
 ### Phase 1: Foundation (2-3 weeks)
+
 - Build memory analysis service
 - Implement basic stale detection
 - Create safety snapshot system
 
 ### Phase 2: Sampling Integration (2-3 weeks)
+
 - Integrate MCP sampling for strategy generation
 - Build strategy evaluation framework
 - Implement recommendation engine
 
 ### Phase 3: Autonomous Agent (3-4 weeks)
+
 - Create full optimization agent
 - Add scheduling and automation
 - Implement comprehensive safety nets
 
 ### Phase 4: Advanced Features (ongoing)
+
 - Machine learning for pattern recognition
 - Predictive optimization
 - Cross-repository optimization
@@ -423,12 +456,15 @@ mcp-tool memory-optimizer --analyze --interactive
 ## 💡 Potential Challenges & Solutions
 
 ### Challenge: Over-Optimization
+
 **Solution**: Conservative defaults, user-defined preservation rules, rollback capabilities
 
 ### Challenge: Context Loss
+
 **Solution**: Semantic analysis of entity importance, relationship preservation, audit trails
 
 ### Challenge: Performance Impact
+
 **Solution**: Background processing, incremental analysis, caching strategies
 
 ## 🎯 Success Metrics
@@ -443,29 +479,30 @@ mcp-tool memory-optimizer --analyze --interactive
 
 ### 1. LLM Framework Comparison
 
-| Framework | Pros | Cons | Serverless Ready | Complexity |
-|-----------|------|------|------------------|------------|
-| **Vercel AI SDK** ✅ | Provider-agnostic, TypeScript-first, streaming | Newer ecosystem | ✅ Excellent | Low |
-| LangChain | Mature, many integrations | Heavy, complex | ⚠️ Moderate | High |
-| OpenAI SDK Direct | Simple, direct | Vendor lock-in | ✅ Good | Low |
-| Anthropic SDK Direct | Claude-optimized | Vendor lock-in | ✅ Good | Low |
+| Framework            | Pros                                           | Cons            | Serverless Ready | Complexity |
+| -------------------- | ---------------------------------------------- | --------------- | ---------------- | ---------- |
+| **Vercel AI SDK** ✅ | Provider-agnostic, TypeScript-first, streaming | Newer ecosystem | ✅ Excellent     | Low        |
+| LangChain            | Mature, many integrations                      | Heavy, complex  | ⚠️ Moderate      | High       |
+| OpenAI SDK Direct    | Simple, direct                                 | Vendor lock-in  | ✅ Good          | Low        |
+| Anthropic SDK Direct | Claude-optimized                               | Vendor lock-in  | ✅ Good          | Low        |
 
 **Recommendation: Vercel AI SDK** - Best balance of simplicity, flexibility, and serverless optimization.
 
 ### 2. System Prompt Management Comparison
 
-| Approach | Pros | Cons | Maintainability | Flexibility |
-|----------|------|------|-----------------|-------------|
-| **Versioned Files** ✅ | Version control, easy updates | File management | ✅ High | ✅ High |
-| Database Storage | Dynamic updates | Infrastructure dependency | ⚠️ Medium | ✅ High |
-| Hardcoded | Simple, fast | Hard to update | ❌ Low | ❌ Low |
-| Environment Variables | Easy deployment | Limited size, no versioning | ⚠️ Medium | ❌ Low |
+| Approach               | Pros                          | Cons                        | Maintainability | Flexibility |
+| ---------------------- | ----------------------------- | --------------------------- | --------------- | ----------- |
+| **Versioned Files** ✅ | Version control, easy updates | File management             | ✅ High         | ✅ High     |
+| Database Storage       | Dynamic updates               | Infrastructure dependency   | ⚠️ Medium       | ✅ High     |
+| Hardcoded              | Simple, fast                  | Hard to update              | ❌ Low          | ❌ Low      |
+| Environment Variables  | Easy deployment               | Limited size, no versioning | ⚠️ Medium       | ❌ Low      |
 
 **Recommendation: Versioned Files** - Best for development velocity and maintainability.
 
 ### 3. Prompt Delivery Strategy Analysis
 
 #### Option A: Static Complete Prompt ✅ **RECOMMENDED**
+
 ```typescript
 // Agent contains all prompt logic
 const systemPrompt = `
@@ -489,6 +526,7 @@ CONTEXT: ${JSON.stringify(memoryContext)}
 ```
 
 **Pros:**
+
 - ✅ **Simplest implementation** - Self-contained agent
 - ✅ **Fastest execution** - No network calls for prompts
 - ✅ **Most reliable** - No dependency on external prompt sources
@@ -496,45 +534,52 @@ CONTEXT: ${JSON.stringify(memoryContext)}
 - ✅ **Better security** - Prompts not transmitted over network
 
 **Cons:**
+
 - ❌ **Less flexible** - Requires code updates for prompt changes
 - ❌ **Harder to A/B test** - Can't easily try different prompts
 
 #### Option B: MCP Broadcast Prompts
+
 ```typescript
 // Client sends prompts via MCP sampling
 const promptRequest = await mcpClient.sample({
   type: 'memory-optimization-prompt',
   context: { repository, branch, entityCount: 150 },
-  capabilities: ['stale-detection', 'redundancy-removal']
+  capabilities: ['stale-detection', 'redundancy-removal'],
 });
 ```
 
 **Pros:**
+
 - ✅ **Dynamic prompts** - Client can customize based on context
 - ✅ **A/B testing** - Easy to experiment with different prompts
 - ✅ **Context-aware** - Client knows current project state
 
 **Cons:**
+
 - ❌ **More complex** - Requires MCP sampling implementation
 - ❌ **Network dependency** - Additional latency and failure points
 - ❌ **Harder to debug** - Prompt generation logic distributed
 
 #### Option C: Client Dynamic Prompts
+
 ```typescript
 // Client builds complete prompt dynamically
 const request = {
   systemPrompt: buildSystemPrompt(projectContext),
   userPrompt: buildUserPrompt(optimizationGoals),
-  contextData: serializeMemoryGraph(repository, branch)
+  contextData: serializeMemoryGraph(repository, branch),
 };
 ```
 
 **Pros:**
+
 - ✅ **Maximum flexibility** - Client has full control
 - ✅ **Context-rich** - Can include real-time project information
 - ✅ **Customizable** - Different clients can have different strategies
 
 **Cons:**
+
 - ❌ **Most complex** - Requires sophisticated client implementation
 - ❌ **Inconsistent** - Different clients may behave differently
 - ❌ **Harder to maintain** - Prompt logic scattered across clients
@@ -542,6 +587,7 @@ const request = {
 ### 4. Final Architectural Recommendations
 
 #### Phase 1: Start Simple (Recommended)
+
 ```typescript
 // Use static prompts with versioned configuration
 class MemoryOptimizationAgent {
@@ -556,13 +602,14 @@ class MemoryOptimizationAgent {
     return this.llmClient.generateOptimization({
       system: systemPrompt,
       user: userPrompt,
-      schema: OptimizationPlanSchema
+      schema: OptimizationPlanSchema,
     });
   }
 }
 ```
 
 #### Phase 2: Add Flexibility (Future)
+
 - Add MCP sampling support for dynamic prompts
 - Implement A/B testing framework for prompt optimization
 - Add client-specific prompt customization
@@ -581,6 +628,7 @@ class MemoryOptimizationAgent {
 ### Phase 1: Foundation Setup (Week 1-2)
 
 #### 1.1 LLM Integration Setup
+
 ```bash
 # Install dependencies
 npm install ai @ai-sdk/openai @ai-sdk/anthropic zod
@@ -592,21 +640,23 @@ mkdir -p src/schemas/optimization
 ```
 
 #### 1.2 Basic Agent Structure
+
 ```typescript
 // src/agents/memory-optimizer/agent.ts
 export class MemoryOptimizationAgent {
   constructor(
     private llmProvider: 'openai' | 'anthropic' = 'openai',
-    private promptVersion: string = 'v1.0'
+    private promptVersion: string = 'v1.0',
   ) {}
 
-  async analyzeMemory(context: MemoryContext): Promise<AnalysisResult>
-  async generateOptimizationPlan(analysis: AnalysisResult): Promise<OptimizationPlan>
-  async executeOptimization(plan: OptimizationPlan): Promise<OptimizationResult>
+  async analyzeMemory(context: MemoryContext): Promise<AnalysisResult>;
+  async generateOptimizationPlan(analysis: AnalysisResult): Promise<OptimizationPlan>;
+  async executeOptimization(plan: OptimizationPlan): Promise<OptimizationResult>;
 }
 ```
 
 #### 1.3 Prompt Management System
+
 ```typescript
 // src/prompts/v1.0/system-prompts.json
 {
@@ -623,6 +673,7 @@ export class MemoryOptimizationAgent {
 ### Phase 2: Core Analysis Engine (Week 3-4)
 
 #### 2.1 Memory Context Builder
+
 ```typescript
 interface MemoryContext {
   repository: string;
@@ -641,42 +692,51 @@ interface MemoryContext {
 ```
 
 #### 2.2 Analysis Schemas
+
 ```typescript
 // src/schemas/optimization/analysis-schema.ts
 export const AnalysisResultSchema = z.object({
-  staleEntities: z.array(z.object({
-    id: z.string(),
-    type: z.enum(['component', 'decision', 'file', 'context']),
-    staleness: z.number().min(0).max(1),
-    reason: z.string(),
-    safeToDelete: z.boolean()
-  })),
-  redundancies: z.array(z.object({
-    entities: z.array(z.string()),
-    similarity: z.number().min(0).max(1),
-    mergeRecommendation: z.string().optional()
-  })),
-  optimizationOpportunities: z.array(z.object({
-    type: z.enum(['dependency-simplification', 'tag-consolidation', 'relationship-cleanup']),
-    impact: z.enum(['low', 'medium', 'high']),
-    description: z.string(),
-    entities: z.array(z.string())
-  }))
+  staleEntities: z.array(
+    z.object({
+      id: z.string(),
+      type: z.enum(['component', 'decision', 'file', 'context']),
+      staleness: z.number().min(0).max(1),
+      reason: z.string(),
+      safeToDelete: z.boolean(),
+    }),
+  ),
+  redundancies: z.array(
+    z.object({
+      entities: z.array(z.string()),
+      similarity: z.number().min(0).max(1),
+      mergeRecommendation: z.string().optional(),
+    }),
+  ),
+  optimizationOpportunities: z.array(
+    z.object({
+      type: z.enum(['dependency-simplification', 'tag-consolidation', 'relationship-cleanup']),
+      impact: z.enum(['low', 'medium', 'high']),
+      description: z.string(),
+      entities: z.array(z.string()),
+    }),
+  ),
 });
 ```
 
 ### Phase 3: Safety & Execution (Week 5-6)
 
 #### 3.1 Snapshot System
+
 ```typescript
 class MemorySnapshotManager {
-  async createSnapshot(repository: string, branch: string): Promise<SnapshotId>
-  async validateSnapshot(snapshotId: SnapshotId): Promise<ValidationResult>
-  async rollbackToSnapshot(snapshotId: SnapshotId): Promise<RollbackResult>
+  async createSnapshot(repository: string, branch: string): Promise<SnapshotId>;
+  async validateSnapshot(snapshotId: SnapshotId): Promise<ValidationResult>;
+  async rollbackToSnapshot(snapshotId: SnapshotId): Promise<RollbackResult>;
 }
 ```
 
 #### 3.2 Safe Execution Engine
+
 ```typescript
 class SafeOptimizationExecutor {
   async executeWithSafety(
@@ -685,14 +745,15 @@ class SafeOptimizationExecutor {
       dryRun: boolean;
       maxDeletions: number;
       requireConfirmation: boolean;
-    }
-  ): Promise<OptimizationResult>
+    },
+  ): Promise<OptimizationResult>;
 }
 ```
 
 ### Phase 4: MCP Tool Integration (Week 7-8)
 
 #### 4.1 New MCP Tool: memory-optimizer
+
 ```typescript
 // src/mcp/tools/unified/memory-optimizer-tool.ts
 export const memoryOptimizerTool: Tool = {
@@ -704,38 +765,39 @@ export const memoryOptimizerTool: Tool = {
       operation: {
         type: 'string',
         enum: ['analyze', 'optimize', 'rollback'],
-        description: 'Operation to perform'
+        description: 'Operation to perform',
       },
       repository: { type: 'string' },
       branch: { type: 'string' },
       strategy: {
         type: 'string',
         enum: ['conservative', 'balanced', 'aggressive'],
-        default: 'conservative'
+        default: 'conservative',
       },
       dryRun: { type: 'boolean', default: true },
-      maxDeletions: { type: 'number', default: 10 }
+      maxDeletions: { type: 'number', default: 10 },
     },
-    required: ['operation', 'repository', 'branch']
-  }
+    required: ['operation', 'repository', 'branch'],
+  },
 };
 ```
 
 ### Phase 5: Advanced Features (Week 9+)
 
 #### 5.1 Multi-Provider Support
+
 ```typescript
 class MultiProviderAgent {
   private providers = {
     openai: new OpenAIProvider(),
     anthropic: new AnthropicProvider(),
-    local: new OllamaProvider()
+    local: new OllamaProvider(),
   };
 
   async optimizeWithConsensus(context: MemoryContext): Promise<OptimizationPlan> {
     const results = await Promise.all([
       this.providers.openai.analyze(context),
-      this.providers.anthropic.analyze(context)
+      this.providers.anthropic.analyze(context),
     ]);
 
     return this.buildConsensusOptimization(results);
@@ -744,15 +806,16 @@ class MultiProviderAgent {
 ```
 
 #### 5.2 Learning & Improvement
+
 ```typescript
 class OptimizationLearningSystem {
   async recordOptimizationOutcome(
     plan: OptimizationPlan,
     result: OptimizationResult,
-    userFeedback: UserFeedback
-  ): Promise<void>
+    userFeedback: UserFeedback,
+  ): Promise<void>;
 
-  async improvePrompts(learningData: LearningData[]): Promise<PromptImprovements>
+  async improvePrompts(learningData: LearningData[]): Promise<PromptImprovements>;
 }
 ```
 

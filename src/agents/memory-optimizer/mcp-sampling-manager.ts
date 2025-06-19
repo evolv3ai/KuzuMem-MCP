@@ -23,9 +23,9 @@ export interface ContextAnalysis {
   entityTypes: Record<string, number>;
   relationshipDensity: number;
   ageDistribution: {
-    recent: number;    // < 30 days
-    medium: number;    // 30-90 days
-    old: number;       // > 90 days
+    recent: number; // < 30 days
+    medium: number; // 30-90 days
+    old: number; // > 90 days
   };
   complexityScore: number;
   recommendedStrategy: OptimizationStrategy;
@@ -41,7 +41,7 @@ export type SamplingStrategy = 'representative' | 'problematic' | 'recent' | 'di
 
 /**
  * MCP Sampling Manager for Core Memory Optimization Agent
- * 
+ *
  * Provides intelligent sampling of memory graphs to enable context-aware
  * prompt generation and adaptive optimization strategies.
  */
@@ -61,7 +61,7 @@ export class MCPSamplingManager {
     repository: string,
     branch: string,
     samplingStrategy: SamplingStrategy = 'representative',
-    sampleSize: number = 20
+    sampleSize: number = 20,
   ): Promise<MemorySample> {
     const samplingLogger = this.samplingLogger.child({
       operation: 'sampleMemoryContext',
@@ -87,22 +87,34 @@ export class MCPSamplingManager {
       switch (samplingStrategy) {
         case 'representative':
           ({ entities, relationships } = await this.sampleRepresentativeEntities(
-            kuzuClient, repository, branch, sampleSize
+            kuzuClient,
+            repository,
+            branch,
+            sampleSize,
           ));
           break;
         case 'problematic':
           ({ entities, relationships } = await this.sampleProblematicEntities(
-            kuzuClient, repository, branch, sampleSize
+            kuzuClient,
+            repository,
+            branch,
+            sampleSize,
           ));
           break;
         case 'recent':
           ({ entities, relationships } = await this.sampleRecentEntities(
-            kuzuClient, repository, branch, sampleSize
+            kuzuClient,
+            repository,
+            branch,
+            sampleSize,
           ));
           break;
         case 'diverse':
           ({ entities, relationships } = await this.sampleDiverseEntities(
-            kuzuClient, repository, branch, sampleSize
+            kuzuClient,
+            repository,
+            branch,
+            sampleSize,
           ));
           break;
         default:
@@ -164,17 +176,26 @@ export class MCPSamplingManager {
 
       // Determine project characteristics
       const projectCharacteristics = this.analyzeProjectCharacteristics(
-        sample, entityTypes, ageDistribution, complexityScore
+        sample,
+        entityTypes,
+        ageDistribution,
+        complexityScore,
       );
 
       // Recommend strategy based on analysis
       const recommendedStrategy = this.recommendStrategy(
-        entityTypes, relationshipDensity, complexityScore, projectCharacteristics
+        entityTypes,
+        relationshipDensity,
+        complexityScore,
+        projectCharacteristics,
       );
 
       // Identify focus areas
       const focusAreas = this.identifyFocusAreas(
-        sample, entityTypes, ageDistribution, projectCharacteristics
+        sample,
+        entityTypes,
+        ageDistribution,
+        projectCharacteristics,
       );
 
       const analysis: ContextAnalysis = {
@@ -207,7 +228,7 @@ export class MCPSamplingManager {
     role: 'analyzer' | 'optimizer' | 'safety',
     strategy: OptimizationStrategy,
     memorySample: MemorySample,
-    basePrompt: string
+    basePrompt: string,
   ): Promise<string> {
     try {
       // Analyze the memory sample
@@ -215,7 +236,10 @@ export class MCPSamplingManager {
 
       // Build context-specific additions to the prompt
       const contextualPrompt = this.buildContextualPromptAdditions(
-        role, strategy, memorySample, contextAnalysis
+        role,
+        strategy,
+        memorySample,
+        contextAnalysis,
       );
 
       // Combine base prompt with contextual additions
@@ -243,7 +267,7 @@ export class MCPSamplingManager {
   private async getTotalCounts(
     kuzuClient: KuzuDBClient,
     repository: string,
-    branch: string
+    branch: string,
   ): Promise<{ entities: number; relationships: number }> {
     try {
       // Count entities - KuzuDB compatible query
@@ -263,7 +287,10 @@ export class MCPSamplingManager {
           AND b.repository = $repository AND b.branch = $branch
         RETURN COUNT(r) AS relationshipCount
       `;
-      const relationshipResult = await kuzuClient.executeQuery(relationshipQuery, { repository, branch });
+      const relationshipResult = await kuzuClient.executeQuery(relationshipQuery, {
+        repository,
+        branch,
+      });
       const relationships = relationshipResult[0]?.relationshipCount || 0;
 
       return { entities, relationships };
@@ -280,7 +307,7 @@ export class MCPSamplingManager {
     kuzuClient: KuzuDBClient,
     repository: string,
     branch: string,
-    sampleSize: number
+    sampleSize: number,
   ): Promise<{ entities: any[]; relationships: any[] }> {
     try {
       // Get stratified sample across entity types
@@ -299,7 +326,10 @@ export class MCPSamplingManager {
 
       // Get relationships for sampled entities
       const relationships = await this.getSampleRelationships(
-        kuzuClient, entities.map((e: any) => e.id), repository, branch
+        kuzuClient,
+        entities.map((e: any) => e.id),
+        repository,
+        branch,
       );
 
       return { entities, relationships };
@@ -316,7 +346,7 @@ export class MCPSamplingManager {
     kuzuClient: KuzuDBClient,
     repository: string,
     branch: string,
-    sampleSize: number
+    sampleSize: number,
   ): Promise<{ entities: any[]; relationships: any[] }> {
     try {
       // KuzuDB compatible query - simplified problematic entity detection
@@ -335,7 +365,10 @@ export class MCPSamplingManager {
       const entities = await kuzuClient.executeQuery(query, { repository, branch, sampleSize });
 
       const relationships = await this.getSampleRelationships(
-        kuzuClient, entities.map((e: any) => e.id), repository, branch
+        kuzuClient,
+        entities.map((e: any) => e.id),
+        repository,
+        branch,
       );
 
       return { entities, relationships };
@@ -352,7 +385,7 @@ export class MCPSamplingManager {
     kuzuClient: KuzuDBClient,
     repository: string,
     branch: string,
-    sampleSize: number
+    sampleSize: number,
   ): Promise<{ entities: any[]; relationships: any[] }> {
     try {
       // KuzuDB compatible query - simplified recent entity detection
@@ -369,7 +402,10 @@ export class MCPSamplingManager {
       const entities = await kuzuClient.executeQuery(query, { repository, branch, sampleSize });
 
       const relationships = await this.getSampleRelationships(
-        kuzuClient, entities.map((e: any) => e.id), repository, branch
+        kuzuClient,
+        entities.map((e: any) => e.id),
+        repository,
+        branch,
       );
 
       return { entities, relationships };
@@ -386,7 +422,7 @@ export class MCPSamplingManager {
     kuzuClient: KuzuDBClient,
     repository: string,
     branch: string,
-    sampleSize: number
+    sampleSize: number,
   ): Promise<{ entities: any[]; relationships: any[] }> {
     try {
       // Get sample from each entity type
@@ -406,7 +442,9 @@ export class MCPSamplingManager {
         `;
 
         const typeEntities = await kuzuClient.executeQuery(query, {
-          repository, branch, perTypeSize
+          repository,
+          branch,
+          perTypeSize,
         });
         allEntities = allEntities.concat(typeEntities);
       }
@@ -417,7 +455,10 @@ export class MCPSamplingManager {
       }
 
       const relationships = await this.getSampleRelationships(
-        kuzuClient, allEntities.map((e: any) => e.id), repository, branch
+        kuzuClient,
+        allEntities.map((e: any) => e.id),
+        repository,
+        branch,
       );
 
       return { entities: allEntities, relationships };
@@ -434,9 +475,11 @@ export class MCPSamplingManager {
     kuzuClient: KuzuDBClient,
     entityIds: string[],
     repository: string,
-    branch: string
+    branch: string,
   ): Promise<any[]> {
-    if (entityIds.length === 0) return [];
+    if (entityIds.length === 0) {
+      return [];
+    }
 
     try {
       // KuzuDB compatible query - simplified relationship sampling
@@ -474,7 +517,9 @@ export class MCPSamplingManager {
    * Calculate relationship density (relationships per entity)
    */
   private calculateRelationshipDensity(sample: MemorySample): number {
-    if (sample.entities.length === 0) return 0;
+    if (sample.entities.length === 0) {
+      return 0;
+    }
     return sample.relationships.length / sample.entities.length;
   }
 
@@ -538,18 +583,23 @@ export class MCPSamplingManager {
     sample: MemorySample,
     entityTypes: Record<string, number>,
     ageDistribution: ContextAnalysis['ageDistribution'],
-    complexityScore: number
+    complexityScore: number,
   ): ContextAnalysis['projectCharacteristics'] {
     // Determine maturity
     let maturity: 'new' | 'developing' | 'mature' | 'legacy';
     const totalEntities = sample.metadata.totalEntities;
-    const recentRatio = ageDistribution.recent / (ageDistribution.recent + ageDistribution.medium + ageDistribution.old);
+    const recentRatio =
+      ageDistribution.recent /
+      (ageDistribution.recent + ageDistribution.medium + ageDistribution.old);
 
     if (totalEntities < 20) {
       maturity = 'new';
     } else if (totalEntities < 100 && recentRatio > 0.5) {
       maturity = 'developing';
-    } else if (recentRatio < 0.1 && ageDistribution.old > ageDistribution.recent + ageDistribution.medium) {
+    } else if (
+      recentRatio < 0.1 &&
+      ageDistribution.old > ageDistribution.recent + ageDistribution.medium
+    ) {
       maturity = 'legacy';
     } else {
       maturity = 'mature';
@@ -585,7 +635,7 @@ export class MCPSamplingManager {
     entityTypes: Record<string, number>,
     relationshipDensity: number,
     complexityScore: number,
-    projectCharacteristics: ContextAnalysis['projectCharacteristics']
+    projectCharacteristics: ContextAnalysis['projectCharacteristics'],
   ): OptimizationStrategy {
     // Conservative for new or high-activity projects
     if (projectCharacteristics.maturity === 'new' || projectCharacteristics.activity === 'high') {
@@ -608,7 +658,7 @@ export class MCPSamplingManager {
     sample: MemorySample,
     entityTypes: Record<string, number>,
     ageDistribution: ContextAnalysis['ageDistribution'],
-    projectCharacteristics: ContextAnalysis['projectCharacteristics']
+    projectCharacteristics: ContextAnalysis['projectCharacteristics'],
   ): string[] {
     const focusAreas: string[] = [];
 
@@ -653,12 +703,14 @@ export class MCPSamplingManager {
     role: 'analyzer' | 'optimizer' | 'safety',
     strategy: OptimizationStrategy,
     memorySample: MemorySample,
-    contextAnalysis: ContextAnalysis
+    contextAnalysis: ContextAnalysis,
   ): string {
     const additions = [
       `Project Characteristics: ${contextAnalysis.projectCharacteristics.maturity} project with ${contextAnalysis.projectCharacteristics.activity} activity`,
       `Complexity Score: ${contextAnalysis.complexityScore}/100 (${contextAnalysis.projectCharacteristics.complexity})`,
-      `Entity Distribution: ${Object.entries(contextAnalysis.entityTypes).map(([type, count]) => `${type}: ${count}`).join(', ')}`,
+      `Entity Distribution: ${Object.entries(contextAnalysis.entityTypes)
+        .map(([type, count]) => `${type}: ${count}`)
+        .join(', ')}`,
       `Age Distribution: Recent: ${contextAnalysis.ageDistribution.recent}, Medium: ${contextAnalysis.ageDistribution.medium}, Old: ${contextAnalysis.ageDistribution.old}`,
       `Relationship Density: ${contextAnalysis.relationshipDensity.toFixed(2)} relationships per entity`,
       `Recommended Strategy: ${contextAnalysis.recommendedStrategy}`,
@@ -673,14 +725,16 @@ export class MCPSamplingManager {
    */
   private buildAdaptiveInstructions(
     role: 'analyzer' | 'optimizer' | 'safety',
-    contextAnalysis: ContextAnalysis
+    contextAnalysis: ContextAnalysis,
   ): string {
     const instructions: string[] = [];
 
     // Role-specific adaptive instructions
     if (role === 'analyzer') {
       if (contextAnalysis.projectCharacteristics.maturity === 'legacy') {
-        instructions.push('- Focus heavily on identifying truly obsolete entities from the legacy codebase');
+        instructions.push(
+          '- Focus heavily on identifying truly obsolete entities from the legacy codebase',
+        );
         instructions.push('- Look for deprecated patterns and outdated architectural decisions');
       }
 
@@ -704,13 +758,17 @@ export class MCPSamplingManager {
 
     if (role === 'safety') {
       if (contextAnalysis.relationshipDensity > 3) {
-        instructions.push('- Pay extra attention to dependency chains in this highly connected graph');
-        instructions.push('- Validate that relationship cleanup won\'t break critical connections');
+        instructions.push(
+          '- Pay extra attention to dependency chains in this highly connected graph',
+        );
+        instructions.push("- Validate that relationship cleanup won't break critical connections");
       }
     }
 
     // General adaptive instructions
-    instructions.push(`- Adapt your approach for a ${contextAnalysis.projectCharacteristics.maturity} project with ${contextAnalysis.projectCharacteristics.complexity} complexity`);
+    instructions.push(
+      `- Adapt your approach for a ${contextAnalysis.projectCharacteristics.maturity} project with ${contextAnalysis.projectCharacteristics.complexity} complexity`,
+    );
     instructions.push(`- Focus on: ${contextAnalysis.focusAreas.join(', ')}`);
 
     return instructions.join('\n');

@@ -18,19 +18,25 @@ const MemoryOptimizerInputSchema = z.object({
   dryRun: z.boolean().default(true),
   confirm: z.boolean().default(false),
   maxDeletions: z.number().min(1).max(100).optional(),
-  focusAreas: z.array(z.enum([
-    'stale-detection',
-    'redundancy-removal',
-    'relationship-cleanup', 
-    'dependency-optimization',
-    'tag-consolidation',
-    'orphan-removal'
-  ])).optional(),
+  focusAreas: z
+    .array(
+      z.enum([
+        'stale-detection',
+        'redundancy-removal',
+        'relationship-cleanup',
+        'dependency-optimization',
+        'tag-consolidation',
+        'orphan-removal',
+      ]),
+    )
+    .optional(),
   preserveCategories: z.array(z.string()).optional(),
   snapshotId: z.string().optional(),
   analysisId: z.string().optional(),
   enableMCPSampling: z.boolean().default(true),
-  samplingStrategy: z.enum(['representative', 'problematic', 'recent', 'diverse']).default('representative'),
+  samplingStrategy: z
+    .enum(['representative', 'problematic', 'recent', 'diverse'])
+    .default('representative'),
   snapshotFailurePolicy: z.enum(['abort', 'continue', 'warn']).default('warn'),
 });
 
@@ -64,10 +70,7 @@ const analysisCache = new Map<string, any>();
  *
  * @returns Promise<any> - Tool execution result with success, operation, data, message, warnings
  */
-export async function memoryOptimizerHandler(
-  params: any,
-  context: any,
-): Promise<any> {
+export async function memoryOptimizerHandler(params: any, context: any): Promise<any> {
   // Internal type assertions for better type safety and IntelliSense
   const typedParams = params as {
     operation: 'analyze' | 'optimize' | 'rollback' | 'list-snapshots';
@@ -106,7 +109,7 @@ export async function memoryOptimizerHandler(
   try {
     // Validate input parameters using Zod schema
     const validatedParams = MemoryOptimizerInputSchema.parse(params);
-    
+
     // Validate session and get clientProjectRoot
     const clientProjectRoot = validateSession(context, 'memory-optimizer');
 
@@ -135,16 +138,36 @@ export async function memoryOptimizerHandler(
     // Route to appropriate operation handler
     switch (validatedParams.operation) {
       case 'analyze':
-        return await handleAnalyzeOperation(agent, validatedParams, context as EnrichedRequestHandlerExtra, handlerLogger);
-      
+        return await handleAnalyzeOperation(
+          agent,
+          validatedParams,
+          context as EnrichedRequestHandlerExtra,
+          handlerLogger,
+        );
+
       case 'optimize':
-        return await handleOptimizeOperation(agent, validatedParams, context as EnrichedRequestHandlerExtra, handlerLogger);
+        return await handleOptimizeOperation(
+          agent,
+          validatedParams,
+          context as EnrichedRequestHandlerExtra,
+          handlerLogger,
+        );
 
       case 'rollback':
-        return await handleRollbackOperation(agent, validatedParams, context as EnrichedRequestHandlerExtra, handlerLogger);
+        return await handleRollbackOperation(
+          agent,
+          validatedParams,
+          context as EnrichedRequestHandlerExtra,
+          handlerLogger,
+        );
 
       case 'list-snapshots':
-        return await handleListSnapshotsOperation(agent, validatedParams, context as EnrichedRequestHandlerExtra, handlerLogger);
+        return await handleListSnapshotsOperation(
+          agent,
+          validatedParams,
+          context as EnrichedRequestHandlerExtra,
+          handlerLogger,
+        );
 
       default:
         throw new Error(`Unsupported operation: ${validatedParams.operation}`);
@@ -219,9 +242,10 @@ async function handleAnalyzeOperation(
         riskAssessment: analysisResult.riskAssessment,
       },
       message: `Analysis completed. Found ${analysisResult.staleEntities.length} stale entities, ${analysisResult.redundancies.length} redundancy groups, and ${analysisResult.optimizationOpportunities.length} optimization opportunities.`,
-      warnings: analysisResult.riskAssessment.overallRisk === 'high' 
-        ? ['High risk detected - proceed with caution and use conservative strategy']
-        : [],
+      warnings:
+        analysisResult.riskAssessment.overallRisk === 'high'
+          ? ['High risk detected - proceed with caution and use conservative strategy']
+          : [],
     };
   } catch (error) {
     typedLogger.error('Memory analysis failed:', error);
@@ -315,9 +339,10 @@ async function handleOptimizeOperation(
     typedLogger.info('Optimization operation completed', {
       planId: optimizationResult.planId,
       status: optimizationResult.status,
-      entitiesAffected: optimizationResult.summary.entitiesDeleted +
-                       optimizationResult.summary.entitiesMerged +
-                       optimizationResult.summary.entitiesUpdated,
+      entitiesAffected:
+        optimizationResult.summary.entitiesDeleted +
+        optimizationResult.summary.entitiesMerged +
+        optimizationResult.summary.entitiesUpdated,
     });
 
     return {
@@ -330,12 +355,13 @@ async function handleOptimizeOperation(
         optimizationSummary: optimizationResult.summary,
         snapshotId: optimizationResult.snapshotId,
       },
-      message: params.dryRun 
+      message: params.dryRun
         ? `Dry run completed. Would affect ${optimizationResult.summary.entitiesDeleted + optimizationResult.summary.entitiesMerged + optimizationResult.summary.entitiesUpdated} entities.`
         : `Optimization completed with status: ${optimizationResult.status}. Affected ${optimizationResult.summary.entitiesDeleted + optimizationResult.summary.entitiesMerged + optimizationResult.summary.entitiesUpdated} entities.`,
-      warnings: optimizationResult.status === 'partial' 
-        ? ['Some optimization actions failed - check executedActions for details']
-        : [],
+      warnings:
+        optimizationResult.status === 'partial'
+          ? ['Some optimization actions failed - check executedActions for details']
+          : [],
     };
   } catch (error) {
     typedLogger.error('Optimization operation failed:', error);
@@ -378,7 +404,7 @@ async function handleRollbackOperation(
       params.clientProjectRoot,
       params.repository,
       params.branch,
-      snapshotId
+      snapshotId,
     );
 
     typedLogger.info('Rollback operation completed', {
@@ -437,7 +463,7 @@ async function handleListSnapshotsOperation(
       context,
       params.clientProjectRoot,
       params.repository,
-      params.branch
+      params.branch,
     );
 
     typedLogger.info('List snapshots operation completed', {

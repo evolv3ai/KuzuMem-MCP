@@ -58,7 +58,8 @@ The agent uses advanced reasoning to analyze entity relationships, usage pattern
       operation: {
         type: 'string',
         enum: ['analyze', 'optimize', 'rollback', 'list-snapshots'],
-        description: 'Operation to perform: analyze (identify opportunities), optimize (execute plan), rollback (restore snapshot), list-snapshots (show available snapshots)',
+        description:
+          'Operation to perform: analyze (identify opportunities), optimize (execute plan), rollback (restore snapshot), list-snapshots (show available snapshots)',
       },
       clientProjectRoot: {
         type: 'string',
@@ -75,7 +76,8 @@ The agent uses advanced reasoning to analyze entity relationships, usage pattern
       strategy: {
         type: 'string',
         enum: ['conservative', 'balanced', 'aggressive'],
-        description: 'Optimization strategy determining risk tolerance and scope (default: conservative)',
+        description:
+          'Optimization strategy determining risk tolerance and scope (default: conservative)',
       },
       llmProvider: {
         type: 'string',
@@ -84,7 +86,8 @@ The agent uses advanced reasoning to analyze entity relationships, usage pattern
       },
       model: {
         type: 'string',
-        description: 'Specific model to use. OpenAI: o3, o1-mini (with HIGH reasoning). Anthropic: claude-3-5-sonnet-20241022, claude-3-5-haiku-20241022 (with extended thinking, 2048 token budget)',
+        description:
+          'Specific model to use. OpenAI: o3, o1-mini (with HIGH reasoning). Anthropic: claude-3-5-sonnet-20241022, claude-3-5-haiku-20241022 (with extended thinking, 2048 token budget)',
       },
       dryRun: {
         type: 'boolean',
@@ -92,15 +95,18 @@ The agent uses advanced reasoning to analyze entity relationships, usage pattern
       },
       confirm: {
         type: 'boolean',
-        description: 'Confirm execution of optimization plan (required for non-dry-run, default: false)',
+        description:
+          'Confirm execution of optimization plan (required for non-dry-run, default: false)',
       },
       maxDeletions: {
         type: 'number',
-        description: 'Maximum number of entities to delete (overrides strategy default, range: 1-100)',
+        description:
+          'Maximum number of entities to delete (overrides strategy default, range: 1-100)',
       },
       focusAreas: {
         type: 'array',
-        description: 'Specific areas to focus optimization on (stale-detection, redundancy-removal, relationship-cleanup, dependency-optimization, tag-consolidation, orphan-removal)',
+        description:
+          'Specific areas to focus optimization on (stale-detection, redundancy-removal, relationship-cleanup, dependency-optimization, tag-consolidation, orphan-removal)',
       },
       preserveCategories: {
         type: 'array',
@@ -121,12 +127,14 @@ The agent uses advanced reasoning to analyze entity relationships, usage pattern
       samplingStrategy: {
         type: 'string',
         enum: ['representative', 'problematic', 'recent', 'diverse'],
-        description: 'MCP sampling strategy: representative (balanced sample), problematic (stale/disconnected), recent (new entities), diverse (all types)',
+        description:
+          'MCP sampling strategy: representative (balanced sample), problematic (stale/disconnected), recent (new entities), diverse (all types)',
       },
       snapshotFailurePolicy: {
         type: 'string',
         enum: ['abort', 'continue', 'warn'],
-        description: 'Snapshot failure policy: abort (stop on snapshot failure), continue (proceed silently), warn (proceed with warning)',
+        description:
+          'Snapshot failure policy: abort (stop on snapshot failure), continue (proceed silently), warn (proceed with warning)',
       },
     },
     required: ['operation', 'clientProjectRoot', 'repository'],
@@ -146,7 +154,6 @@ The agent uses advanced reasoning to analyze entity relationships, usage pattern
       data: {
         type: 'object',
         description: 'Operation-specific result data',
-
       },
       message: {
         type: 'string',

@@ -18,12 +18,12 @@ export class MemoryContextBuilder {
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
     repository: string,
-    branch: string = 'main'
+    branch: string = 'main',
   ): Promise<MemoryContext> {
-    const contextLogger = logger.child({ 
+    const contextLogger = logger.child({
       operation: 'buildMemoryContext',
       repository,
-      branch 
+      branch,
     });
 
     try {
@@ -37,28 +37,20 @@ export class MemoryContextBuilder {
         mcpContext,
         clientProjectRoot,
         repository,
-        branch
+        branch,
       );
 
       // Get relationship count
-      const relationshipCount = await this.getRelationshipCount(
-        kuzuClient,
-        repository,
-        branch
-      );
+      const relationshipCount = await this.getRelationshipCount(kuzuClient, repository, branch);
 
       // Calculate average entity age
-      const averageEntityAge = await this.calculateAverageEntityAge(
-        kuzuClient,
-        repository,
-        branch
-      );
+      const averageEntityAge = await this.calculateAverageEntityAge(kuzuClient, repository, branch);
 
       // Get last optimization timestamp (if any)
       const lastOptimization = await this.getLastOptimizationTimestamp(
         kuzuClient,
         repository,
-        branch
+        branch,
       );
 
       const totalEntities = Object.values(entityCounts).reduce((sum, count) => sum + count, 0);
@@ -93,7 +85,7 @@ export class MemoryContextBuilder {
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
     repository: string,
-    branch: string
+    branch: string,
   ): Promise<MemoryContext['entityCounts']> {
     const entityTypes = ['Component', 'Decision', 'Rule', 'File', 'Context', 'Tag'];
     const counts: MemoryContext['entityCounts'] = {
@@ -113,10 +105,10 @@ export class MemoryContextBuilder {
           clientProjectRoot,
           repository,
           branch,
-          entityType
+          entityType,
         );
-        
-        const key = entityType.toLowerCase() + 's' as keyof typeof counts;
+
+        const key = (entityType.toLowerCase() + 's') as keyof typeof counts;
         counts[key] = result.count;
       } catch (error) {
         logger.warn(`Failed to count ${entityType} entities:`, error);
@@ -133,7 +125,7 @@ export class MemoryContextBuilder {
   private async getRelationshipCount(
     kuzuClient: KuzuDBClient,
     repository: string,
-    branch: string
+    branch: string,
   ): Promise<number> {
     try {
       const query = `
@@ -157,7 +149,7 @@ export class MemoryContextBuilder {
   private async calculateAverageEntityAge(
     kuzuClient: KuzuDBClient,
     repository: string,
-    branch: string
+    branch: string,
   ): Promise<number | undefined> {
     try {
       // KuzuDB compatible query - get creation timestamps of all entities
@@ -209,7 +201,7 @@ export class MemoryContextBuilder {
   private async getLastOptimizationTimestamp(
     kuzuClient: KuzuDBClient,
     repository: string,
-    branch: string
+    branch: string,
   ): Promise<string | undefined> {
     try {
       // Look for optimization context entries
@@ -238,11 +230,11 @@ export class MemoryContextBuilder {
     clientProjectRoot: string,
     repository: string,
     branch: string,
-    staleDays: number = 90
+    staleDays: number = 90,
   ): Promise<any[]> {
     try {
       const kuzuClient = await this.memoryService.getKuzuClient(mcpContext, clientProjectRoot);
-      
+
       // KuzuDB compatible query - simplified stale detection
       const query = `
         MATCH (n)
@@ -272,11 +264,11 @@ export class MemoryContextBuilder {
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
     repository: string,
-    branch: string
+    branch: string,
   ): Promise<any[]> {
     try {
       const kuzuClient = await this.memoryService.getKuzuClient(mcpContext, clientProjectRoot);
-      
+
       // KuzuDB compatible query - simplified relationship summary
       const query = `
         MATCH (a)-[r]->(b)

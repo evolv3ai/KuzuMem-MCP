@@ -334,15 +334,19 @@ describe('Memory Optimizer E2E Tests', () => {
     let snapshotId: string;
 
     it('should analyze memory graph with MCP sampling', async () => {
-      const result = await callTool('memory-optimizer', {
-        operation: 'analyze',
-        clientProjectRoot: testProjectRoot,
-        repository: TEST_REPO,
-        branch: TEST_BRANCH,
-        strategy: 'conservative',
-        enableMCPSampling: true,
-        samplingStrategy: 'representative',
-      }, 30000); // Longer timeout for AI analysis
+      const result = await callTool(
+        'memory-optimizer',
+        {
+          operation: 'analyze',
+          clientProjectRoot: testProjectRoot,
+          repository: TEST_REPO,
+          branch: TEST_BRANCH,
+          strategy: 'conservative',
+          enableMCPSampling: true,
+          samplingStrategy: 'representative',
+        },
+        30000,
+      ); // Longer timeout for AI analysis
 
       expect(result).toMatchObject({
         success: true,
@@ -369,15 +373,19 @@ describe('Memory Optimizer E2E Tests', () => {
     }, 45000);
 
     it('should analyze with problematic sampling strategy', async () => {
-      const result = await callTool('memory-optimizer', {
-        operation: 'analyze',
-        clientProjectRoot: testProjectRoot,
-        repository: TEST_REPO,
-        branch: TEST_BRANCH,
-        strategy: 'balanced',
-        enableMCPSampling: true,
-        samplingStrategy: 'problematic',
-      }, 30000);
+      const result = await callTool(
+        'memory-optimizer',
+        {
+          operation: 'analyze',
+          clientProjectRoot: testProjectRoot,
+          repository: TEST_REPO,
+          branch: TEST_BRANCH,
+          strategy: 'balanced',
+          enableMCPSampling: true,
+          samplingStrategy: 'problematic',
+        },
+        30000,
+      );
 
       expect(result).toMatchObject({
         success: true,
@@ -394,15 +402,19 @@ describe('Memory Optimizer E2E Tests', () => {
     }, 45000);
 
     it('should analyze with recent sampling strategy', async () => {
-      const result = await callTool('memory-optimizer', {
-        operation: 'analyze',
-        clientProjectRoot: testProjectRoot,
-        repository: TEST_REPO,
-        branch: TEST_BRANCH,
-        strategy: 'conservative',
-        enableMCPSampling: true,
-        samplingStrategy: 'recent',
-      }, 30000);
+      const result = await callTool(
+        'memory-optimizer',
+        {
+          operation: 'analyze',
+          clientProjectRoot: testProjectRoot,
+          repository: TEST_REPO,
+          branch: TEST_BRANCH,
+          strategy: 'conservative',
+          enableMCPSampling: true,
+          samplingStrategy: 'recent',
+        },
+        30000,
+      );
 
       expect(result).toMatchObject({
         success: true,
@@ -415,14 +427,18 @@ describe('Memory Optimizer E2E Tests', () => {
     }, 45000);
 
     it('should analyze without MCP sampling (fallback)', async () => {
-      const result = await callTool('memory-optimizer', {
-        operation: 'analyze',
-        clientProjectRoot: testProjectRoot,
-        repository: TEST_REPO,
-        branch: TEST_BRANCH,
-        strategy: 'conservative',
-        enableMCPSampling: false,
-      }, 30000);
+      const result = await callTool(
+        'memory-optimizer',
+        {
+          operation: 'analyze',
+          clientProjectRoot: testProjectRoot,
+          repository: TEST_REPO,
+          branch: TEST_BRANCH,
+          strategy: 'conservative',
+          enableMCPSampling: false,
+        },
+        30000,
+      );
 
       expect(result).toMatchObject({
         success: true,
@@ -435,15 +451,19 @@ describe('Memory Optimizer E2E Tests', () => {
     }, 45000);
 
     it('should perform dry-run optimization', async () => {
-      const result = await callTool('memory-optimizer', {
-        operation: 'optimize',
-        clientProjectRoot: testProjectRoot,
-        repository: TEST_REPO,
-        branch: TEST_BRANCH,
-        analysisId: analysisId,
-        dryRun: true,
-        strategy: 'conservative',
-      }, 30000);
+      const result = await callTool(
+        'memory-optimizer',
+        {
+          operation: 'optimize',
+          clientProjectRoot: testProjectRoot,
+          repository: TEST_REPO,
+          branch: TEST_BRANCH,
+          analysisId: analysisId,
+          dryRun: true,
+          strategy: 'conservative',
+        },
+        30000,
+      );
 
       expect(result).toMatchObject({
         success: true,
@@ -466,16 +486,20 @@ describe('Memory Optimizer E2E Tests', () => {
     }, 45000);
 
     it('should perform actual optimization with snapshot creation', async () => {
-      const result = await callTool('memory-optimizer', {
-        operation: 'optimize',
-        clientProjectRoot: testProjectRoot,
-        repository: TEST_REPO,
-        branch: TEST_BRANCH,
-        analysisId: analysisId,
-        dryRun: false,
-        confirm: true,
-        strategy: 'conservative',
-      }, 30000);
+      const result = await callTool(
+        'memory-optimizer',
+        {
+          operation: 'optimize',
+          clientProjectRoot: testProjectRoot,
+          repository: TEST_REPO,
+          branch: TEST_BRANCH,
+          analysisId: analysisId,
+          dryRun: false,
+          confirm: true,
+          strategy: 'conservative',
+        },
+        30000,
+      );
 
       expect(result).toMatchObject({
         success: true,
@@ -541,13 +565,17 @@ describe('Memory Optimizer E2E Tests', () => {
         return;
       }
 
-      const result = await callTool('memory-optimizer', {
-        operation: 'rollback',
-        clientProjectRoot: testProjectRoot,
-        repository: TEST_REPO,
-        branch: TEST_BRANCH,
-        snapshotId: snapshotId,
-      }, 20000);
+      const result = await callTool(
+        'memory-optimizer',
+        {
+          operation: 'rollback',
+          clientProjectRoot: testProjectRoot,
+          repository: TEST_REPO,
+          branch: TEST_BRANCH,
+          snapshotId: snapshotId,
+        },
+        20000,
+      );
 
       expect(result).toMatchObject({
         success: true,
@@ -567,16 +595,20 @@ describe('Memory Optimizer E2E Tests', () => {
     }, 30000);
 
     it('should handle optimization without confirmation', async () => {
-      const result = await callTool('memory-optimizer', {
-        operation: 'optimize',
-        clientProjectRoot: testProjectRoot,
-        repository: TEST_REPO,
-        branch: TEST_BRANCH,
-        analysisId: analysisId,
-        dryRun: false,
-        confirm: false, // No confirmation
-        strategy: 'conservative',
-      }, 15000);
+      const result = await callTool(
+        'memory-optimizer',
+        {
+          operation: 'optimize',
+          clientProjectRoot: testProjectRoot,
+          repository: TEST_REPO,
+          branch: TEST_BRANCH,
+          analysisId: analysisId,
+          dryRun: false,
+          confirm: false, // No confirmation
+          strategy: 'conservative',
+        },
+        15000,
+      );
 
       expect(result).toMatchObject({
         success: false,
@@ -587,13 +619,17 @@ describe('Memory Optimizer E2E Tests', () => {
 
     it('should handle invalid snapshot rollback', async () => {
       try {
-        await callTool('memory-optimizer', {
-          operation: 'rollback',
-          clientProjectRoot: testProjectRoot,
-          repository: TEST_REPO,
-          branch: TEST_BRANCH,
-          snapshotId: 'invalid-snapshot-id',
-        }, 15000);
+        await callTool(
+          'memory-optimizer',
+          {
+            operation: 'rollback',
+            clientProjectRoot: testProjectRoot,
+            repository: TEST_REPO,
+            branch: TEST_BRANCH,
+            snapshotId: 'invalid-snapshot-id',
+          },
+          15000,
+        );
 
         // Should not reach here
         expect(true).toBe(false);
@@ -605,15 +641,19 @@ describe('Memory Optimizer E2E Tests', () => {
 
     it('should handle missing analysis ID for optimization', async () => {
       try {
-        await callTool('memory-optimizer', {
-          operation: 'optimize',
-          clientProjectRoot: testProjectRoot,
-          repository: TEST_REPO,
-          branch: TEST_BRANCH,
-          // Missing analysisId
-          dryRun: true,
-          strategy: 'conservative',
-        }, 15000);
+        await callTool(
+          'memory-optimizer',
+          {
+            operation: 'optimize',
+            clientProjectRoot: testProjectRoot,
+            repository: TEST_REPO,
+            branch: TEST_BRANCH,
+            // Missing analysisId
+            dryRun: true,
+            strategy: 'conservative',
+          },
+          15000,
+        );
 
         // Should still work - will perform new analysis
         expect(true).toBe(true);
@@ -641,12 +681,17 @@ describe('Memory Optimizer E2E Tests', () => {
             inputSchema: expect.objectContaining({
               properties: expect.objectContaining({
                 operation: expect.objectContaining({
-                  enum: expect.arrayContaining(['analyze', 'optimize', 'rollback', 'list-snapshots']),
+                  enum: expect.arrayContaining([
+                    'analyze',
+                    'optimize',
+                    'rollback',
+                    'list-snapshots',
+                  ]),
                 }),
               }),
             }),
           }),
-        ])
+        ]),
       );
     });
 
