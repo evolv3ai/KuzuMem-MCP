@@ -257,7 +257,7 @@ $ curl -X POST http://localhost:3000/tools/memory-optimizer \
     "enableMCPSampling": true,
     "samplingStrategy": "representative",
     "llmProvider": "openai",
-    "model": "o1-mini"
+    "model": "o4-mini"
   }'
 
 # Results include intelligent analysis with project-specific insights
@@ -350,7 +350,7 @@ $ curl -X POST http://localhost:3000/tools/memory-optimizer \
 
 ### Key Memory Optimization Features
 
-- **🧠 High-Reasoning Analysis**: Uses OpenAI o1/o3 or Claude with extended thinking for intelligent memory analysis
+- **🧠 High-Reasoning Analysis**: Uses OpenAI o3/o4-mini or Claude with extended thinking for intelligent memory analysis
 - **🎯 MCP Sampling**: Context-aware prompts that adapt to project characteristics (maturity, activity, complexity)
 - **🛡️ Automatic Snapshots**: Production-ready safety with guaranteed rollback capabilities
 - **📊 Project Intelligence**: Automatic detection of project patterns and optimization strategies

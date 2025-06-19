@@ -4,7 +4,7 @@ A TypeScript implementation of a distributed memory bank as an MCP (Model Contex
 
 ## Key Features
 
-- **🧠 AI-Powered Memory Optimization** - Advanced reasoning models (OpenAI o1/o3, Claude) with MCP sampling for intelligent memory management
+- **🧠 AI-Powered Memory Optimization** - Advanced reasoning models (OpenAI o3/o4-mini, Claude 4) with MCP sampling for intelligent memory management
 - **🛡️ Production-Ready Safety** - Automatic snapshot system with guaranteed rollback capabilities
 - **🎯 Context-Aware Intelligence** - MCP sampling analyzes actual memory state for adaptive optimization strategies
 - **🔧 Unified Tool Architecture** - 12 consolidated tools covering all memory bank operations
@@ -92,8 +92,8 @@ The Core Memory Optimization Agent requires API keys for high-reasoning models:
 
 **Supported Models:**
 
-- **OpenAI**: `o3`, `o1-mini` (with HIGH reasoning, 32,768 tokens)
-- **Anthropic**: `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022` (with extended thinking, 2,048 tokens)
+- **OpenAI**: `o3`, `o4-mini` (with HIGH reasoning, 32,768 tokens)
+- **Anthropic**: `claude-4` (with extended thinking, 2,048 tokens)
 
 For detailed setup instructions, see [Core Memory Optimization Setup Guide](CORE_MEMORY_OPTIMIZATION_SETUP.md).
 
@@ -181,7 +181,7 @@ The **Core Memory Optimization Agent** provides AI-powered memory graph optimiza
 
 ### Features
 
-- **🧠 High-Reasoning Analysis**: Uses OpenAI o1/o3 (HIGH reasoning) or Claude (extended thinking) for intelligent memory analysis
+- **🧠 High-Reasoning Analysis**: Uses OpenAI o3/o4-mini (HIGH reasoning) or Claude (extended thinking) for intelligent memory analysis
 - **🎯 MCP Sampling**: Context-aware prompts that adapt to actual memory state and project characteristics
 - **🛡️ Automatic Snapshots**: Production-ready safety with automatic backup before optimization
 - **🔄 Guaranteed Rollback**: Complete state restoration with transactional safety
@@ -203,7 +203,7 @@ The **Core Memory Optimization Agent** provides AI-powered memory graph optimiza
   "repository": "my-app",
   "branch": "main",
   "llmProvider": "openai",
-  "model": "o1-mini",
+  "model": "o4-mini",
   "strategy": "conservative",
   "enableMCPSampling": true,
   "samplingStrategy": "representative"
