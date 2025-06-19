@@ -1,7 +1,7 @@
 // External dependencies
-import { generateObject } from 'ai';
-import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
+import { openai } from '@ai-sdk/openai';
+import { generateObject } from 'ai';
 
 // Internal services and utilities
 import { MemoryService } from '../../services/memory.service';
@@ -9,18 +9,17 @@ import { logger } from '../../utils/logger';
 
 // Memory optimizer components
 import { MemoryContextBuilder } from './context-builder';
-import { PromptManager } from './prompt-manager';
 import { MCPSamplingManager } from './mcp-sampling-manager';
+import { PromptManager } from './prompt-manager';
 
 // Type imports
 import type { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
-import type { AgentRole, OptimizationStrategy } from './prompt-manager';
 import type {
-  MemoryContext,
   AnalysisResult,
   OptimizationPlan,
-  OptimizationResult,
+  OptimizationResult
 } from '../../schemas/optimization/types';
+import type { OptimizationStrategy } from './prompt-manager';
 
 // Schema imports
 import { AnalysisResultSchema, OptimizationPlanSchema } from '../../schemas/optimization/types';
@@ -604,7 +603,7 @@ export class MemoryOptimizationAgent {
         return openai(this.config.model || 'gpt-4o');
       case 'anthropic':
         // Use latest Claude models with extended thinking
-        return anthropic(this.config.model || 'claude-3-5-sonnet-20241022');
+        return anthropic(this.config.model || 'claude-sonnet-4-20250514');
       default:
         throw new Error(`Unsupported LLM provider: ${this.config.llmProvider}`);
     }
