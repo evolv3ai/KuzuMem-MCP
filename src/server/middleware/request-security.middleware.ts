@@ -40,65 +40,69 @@ export class RequestSecurityMiddleware extends BaseHttpStreamServer {
       }
     }
 
-    // Create a proxy that intercepts data events to track cumulative size
-    // This preserves the original request interface while adding size monitoring
-    const originalOn = req.on.bind(req);
-    const originalAddListener = req.addListener.bind(req);
-
     // Capture the config reference outside the closure
     const maxRequestSize = this.config.maxRequestSize;
 
-    // Override event listeners to intercept 'data' events
-    req.on = function (event: string | symbol, listener: GenericEventListener) {
-      if (event === 'data') {
-        // Wrap the data listener to track cumulative size
-        const wrappedListener: DataEventListener = (chunk: Buffer | string) => {
-          if (sizeLimitExceeded) {
-            return; // Don't process more data if limit already exceeded
-          }
+    // Create a Proxy to intercept method calls without mutating the original object
+    return new Proxy(req, {
+      get(target, prop, receiver) {
+        if (prop === 'on' || prop === 'addListener') {
+          return function (event: string | symbol, listener: GenericEventListener) {
+            if (event === 'data') {
+              // Wrap the data listener to track cumulative size
+              const wrappedListener: DataEventListener = (chunk: Buffer | string) => {
+                if (sizeLimitExceeded) {
+                  return; // Don't process more data if limit already exceeded
+                }
 
-          const chunkSize = Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk, 'utf8');
-          cumulativeSize += chunkSize;
+                const chunkSize = Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk, 'utf8');
+                cumulativeSize += chunkSize;
 
-          if (cumulativeSize > maxRequestSize) {
-            sizeLimitExceeded = true;
-            requestLogger.error(
-              { cumulativeSize, chunkSize, maxSize: maxRequestSize },
-              'Request size limit exceeded during streaming',
-            );
+                if (cumulativeSize > maxRequestSize) {
+                  sizeLimitExceeded = true;
+                  requestLogger.error(
+                    { cumulativeSize, chunkSize, maxSize: maxRequestSize },
+                    'Request size limit exceeded during streaming',
+                  );
 
-            // Emit an error to terminate the request processing
-            req.emit(
-              'error',
-              new Error(
-                `Request size ${cumulativeSize} bytes exceeds maximum allowed size ${maxRequestSize} bytes`,
-              ),
-            );
-            return;
-          }
+                  // Emit an error to terminate the request processing
+                  target.emit(
+                    'error',
+                    new Error(
+                      `Request size ${cumulativeSize} bytes exceeds maximum allowed size ${maxRequestSize} bytes`,
+                    ),
+                  );
+                  return;
+                }
 
-          requestLogger.debug(
-            { cumulativeSize, chunkSize, maxSize: maxRequestSize },
-            'Request chunk processed',
-          );
+                requestLogger.debug(
+                  { cumulativeSize, chunkSize, maxSize: maxRequestSize },
+                  'Request chunk processed',
+                );
 
-          // Call the original listener with the chunk (type-safe cast)
-          (listener as DataEventListener)(chunk);
-        };
+                // Call the original listener with the chunk
+                (listener as DataEventListener)(chunk);
+              };
 
-        return originalOn.call(this, event, wrappedListener);
-      }
+              // Use the original method safely
+              const originalMethod = target[prop as 'on' | 'addListener'];
+              if (typeof originalMethod === 'function') {
+                return originalMethod.call(target, event, wrappedListener);
+              }
+            }
 
-      // For all other events, use the original listener
-      return originalOn.call(this, event, listener);
-    };
+            // For all other events, use the original listener
+            const originalMethod = target[prop as 'on' | 'addListener'];
+            if (typeof originalMethod === 'function') {
+              return originalMethod.call(target, event, listener);
+            }
+          };
+        }
 
-    // Also override addListener (alias for on)
-    req.addListener = function (event: string | symbol, listener: GenericEventListener) {
-      return req.on(event, listener);
-    };
-
-    return req;
+        // For all other properties, return the original value
+        return Reflect.get(target, prop, receiver);
+      },
+    });
   }
 
   /**
@@ -110,7 +114,7 @@ export class RequestSecurityMiddleware extends BaseHttpStreamServer {
     requestLogger: Logger,
   ): { cleanup: () => void } {
     let requestCompleted = false;
-    
+
     const requestTimeout = setTimeout(() => {
       if (!requestCompleted && !res.headersSent) {
         requestLogger.warn('Request timeout - closing connection');
@@ -128,13 +132,16 @@ export class RequestSecurityMiddleware extends BaseHttpStreamServer {
       }
     }, this.config.requestTimeout);
 
-    // Monitor response completion to clear timeout
-    const originalEnd = res.end.bind(res);
-    res.end = function (chunk?: any, encoding?: any, cb?: any): ServerResponse {
+    // Use event listeners instead of overriding methods
+    res.on('finish', () => {
       requestCompleted = true;
       clearTimeout(requestTimeout);
-      return originalEnd.call(this, chunk, encoding, cb);
-    };
+    });
+
+    res.on('close', () => {
+      requestCompleted = true;
+      clearTimeout(requestTimeout);
+    });
 
     return {
       cleanup: () => {

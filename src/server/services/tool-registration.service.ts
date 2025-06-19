@@ -11,6 +11,31 @@ import { createZodRawShape } from '../../mcp/utils/schema-utils';
 import { MemoryService } from '../../services/memory.service';
 import { type ToolHandlerContext } from '../../mcp/types/sdk-custom';
 
+// Type definitions for better type safety
+interface BaseToolArguments extends Record<string, any> {
+  clientProjectRoot?: string;
+  repository?: string;
+  branch?: string;
+}
+
+interface MemoryBankInitArgs extends BaseToolArguments {
+  operation: 'init';
+  clientProjectRoot: string;
+  repository: string;
+  branch: string;
+}
+
+// Type guard functions
+function isMemoryBankInitArgs(args: ToolArguments): args is MemoryBankInitArgs & ToolArguments {
+  return typeof args === 'object' && args !== null &&
+         'operation' in args && args.operation === 'init' &&
+         'clientProjectRoot' in args && 'repository' in args;
+}
+
+function hasRepositoryInfo(args: ToolArguments): args is ToolArguments & { repository: string } {
+  return typeof args === 'object' && args !== null && 'repository' in args;
+}
+
 /**
  * Service responsible for registering MCP tools with the server
  * Handles tool registration, argument validation, and execution
@@ -95,11 +120,11 @@ export class ToolRegistrationService {
 
     try {
       // Handle clientProjectRoot storage for memory-bank init operations
-      if (toolName === 'memory-bank' && (args as any).operation === 'init') {
+      if (toolName === 'memory-bank' && isMemoryBankInitArgs(args)) {
         this.setRepositoryRoot(
-          (args as any).repository,
-          (args as any).branch,
-          (args as any).clientProjectRoot,
+          args.repository,
+          args.branch,
+          args.clientProjectRoot,
         );
       }
 
@@ -119,8 +144,8 @@ export class ToolRegistrationService {
       const enhancedArgs: EnhancedToolArguments = {
         ...args,
         clientProjectRoot: effectiveClientProjectRoot,
-        repository: ((args as any).repository as string) || 'unknown',
-        branch: ((args as any).branch as string) || 'main',
+        repository: hasRepositoryInfo(args) ? args.repository : 'unknown',
+        branch: (args as BaseToolArguments).branch || 'main',
       };
 
       // Get the tool handler directly
@@ -210,12 +235,13 @@ export class ToolRegistrationService {
    * Resolve client project root from arguments or stored map
    */
   private resolveClientProjectRoot(args: ToolArguments): string | undefined {
-    let effectiveClientProjectRoot = (args as any).clientProjectRoot;
-    
-    if (!effectiveClientProjectRoot && (args as any).repository) {
+    const baseArgs = args as BaseToolArguments;
+    let effectiveClientProjectRoot = baseArgs.clientProjectRoot;
+
+    if (!effectiveClientProjectRoot && hasRepositoryInfo(args)) {
       effectiveClientProjectRoot = this.getRepositoryRoot(
-        (args as any).repository,
-        (args as any).branch || 'main',
+        args.repository,
+        baseArgs.branch || 'main',
       );
     }
 

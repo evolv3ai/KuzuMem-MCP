@@ -30,14 +30,9 @@ export class MemoryBankService extends CoreService {
       percent: 25,
     });
 
-    if (!this.repositoryProvider) {
-      logger.error(
-        '[MemoryBankService.initMemoryBank] CRITICAL: RepositoryProvider is NOT INITIALIZED.',
-      );
-      return {
-        success: false,
-        message: 'Critical error: RepositoryProvider not initialized in MemoryBankService',
-      };
+    const validationResult = this.validateRepositoryProvider(logger);
+    if (!validationResult.success) {
+      return validationResult;
     }
 
     try {
@@ -55,41 +50,19 @@ export class MemoryBankService extends CoreService {
         percent: 60,
       });
 
-      const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
-      const metadataRepo = this.repositoryProvider.getMetadataRepository(clientProjectRoot);
-
-      let repository = await repositoryRepo.findByName(repositoryName, branch);
-
-      if (!repository) {
-        repository = await repositoryRepo.create({ name: repositoryName, branch });
-      }
-      if (!repository || !repository.id) {
-        throw new Error(`Repository ${repositoryName}:${branch} could not be found or created.`);
-      }
-
-      const existingMetadata = await metadataRepo.findMetadata(
-        mcpContext,
+      const repository = await this.ensureRepository(
+        clientProjectRoot,
         repositoryName,
         branch,
-        'meta',
       );
-      if (!existingMetadata) {
-        const today = new Date().toISOString().split('T')[0];
-        const metadataToCreate = {
-          repository: repository.id,
-          branch: branch,
-          id: 'meta',
-          name: repositoryName,
-          content: {
-            id: 'meta',
-            project: { name: repositoryName, created: today },
-            tech_stack: { language: 'Unknown', framework: 'Unknown', datastore: 'Unknown' },
-            architecture: 'unknown',
-            memory_spec_version: '3.0.0',
-          },
-        } as Metadata;
-        await metadataRepo.upsertMetadata(mcpContext, metadataToCreate);
-      }
+
+      await this.ensureMetadata(
+        mcpContext,
+        clientProjectRoot,
+        repository,
+        repositoryName,
+        branch,
+      );
 
       return {
         success: true,
@@ -110,6 +83,82 @@ export class MemoryBankService extends CoreService {
       return path.resolve(clientProjectRoot);
     }
     return clientProjectRoot;
+  }
+
+  /**
+   * Validate that the repository provider is initialized
+   */
+  protected validateRepositoryProvider(logger: any): z.infer<typeof toolSchemas.InitMemoryBankOutputSchema> | { success: true } {
+    if (!this.repositoryProvider) {
+      logger.error(
+        '[MemoryBankService.initMemoryBank] CRITICAL: RepositoryProvider is NOT INITIALIZED.',
+      );
+      return {
+        success: false,
+        message: 'Critical error: RepositoryProvider not initialized in MemoryBankService',
+      };
+    }
+    return { success: true };
+  }
+
+  /**
+   * Ensure repository exists, create if it doesn't
+   */
+  private async ensureRepository(
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+  ): Promise<Repository> {
+    const repositoryRepo = this.repositoryProvider!.getRepositoryRepository(clientProjectRoot);
+
+    let repository = await repositoryRepo.findByName(repositoryName, branch);
+
+    if (!repository) {
+      repository = await repositoryRepo.create({ name: repositoryName, branch });
+    }
+    if (!repository || !repository.id) {
+      throw new Error(`Repository ${repositoryName}:${branch} could not be found or created.`);
+    }
+
+    return repository;
+  }
+
+  /**
+   * Ensure metadata exists for the repository
+   */
+  private async ensureMetadata(
+    mcpContext: EnrichedRequestHandlerExtra,
+    clientProjectRoot: string,
+    repository: Repository,
+    repositoryName: string,
+    branch: string,
+  ): Promise<void> {
+    const metadataRepo = this.repositoryProvider!.getMetadataRepository(clientProjectRoot);
+
+    const existingMetadata = await metadataRepo.findMetadata(
+      mcpContext,
+      repositoryName,
+      branch,
+      'meta',
+    );
+
+    if (!existingMetadata) {
+      const today = new Date().toISOString().split('T')[0];
+      const metadataToCreate = {
+        repository: repository.id,
+        branch: branch,
+        id: 'meta',
+        name: repositoryName,
+        content: {
+          id: 'meta',
+          project: { name: repositoryName, created: today },
+          tech_stack: { language: 'Unknown', framework: 'Unknown', datastore: 'Unknown' },
+          architecture: 'unknown',
+          memory_spec_version: '3.0.0',
+        },
+      } as Metadata;
+      await metadataRepo.upsertMetadata(mcpContext, metadataToCreate);
+    }
   }
 
   async getOrCreateRepository(
