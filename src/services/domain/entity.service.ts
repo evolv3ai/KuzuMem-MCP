@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { KuzuDBClient } from '../../db/kuzu';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
 import {
@@ -313,8 +314,8 @@ export class EntityService extends CoreService {
       const updatedData = {
         ...existing,
         ...updates,
-        // Convert null to undefined
-        context: updates.context === null ? undefined : updates.context,
+        // Use helper to consistently handle null/undefined
+        context: this._resolveUpdateField(updates.context, existing.context),
       };
 
       // Use upsert method to update
@@ -363,9 +364,9 @@ export class EntityService extends CoreService {
       const updatedData = {
         ...existing,
         ...updates,
-        // Convert null to undefined
-        content: updates.content === null ? undefined : updates.content,
-        triggers: updates.triggers === null ? undefined : updates.triggers,
+        // Use helper to consistently handle null/undefined
+        content: this._resolveUpdateField(updates.content, existing.content),
+        triggers: this._resolveUpdateField(updates.triggers, existing.triggers),
       };
 
       // Use upsert method to update
@@ -826,7 +827,7 @@ export class EntityService extends CoreService {
 
   // Helper methods for bulk deletion
   private async executeBulkDeletion(
-    kuzuClient: any,
+    kuzuClient: KuzuDBClient,
     entityType: string,
     whereClause: string,
     params: Record<string, any>,
@@ -856,7 +857,7 @@ export class EntityService extends CoreService {
   }
 
   private async handleTagDeletion(
-    kuzuClient: any,
+    kuzuClient: KuzuDBClient,
     dryRun: boolean,
   ): Promise<{
     entities: Array<{ type: string; id: string; name?: string }>;
@@ -879,7 +880,7 @@ export class EntityService extends CoreService {
   }
 
   private async processRepositoryScopedEntities(
-    kuzuClient: any,
+    kuzuClient: KuzuDBClient,
     entityTypes: string[],
     repositoryName: string,
     branch: string,

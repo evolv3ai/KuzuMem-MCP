@@ -1199,7 +1199,7 @@ export class ComponentRepository {
       const repositoryNodeId = String(component.repository);
 
       const repoIdParts = repositoryNodeId.split(':');
-      if (repoIdParts.length === 0) {
+      if (repoIdParts.length < 2) {
         throw new Error(
           `Invalid repositoryNodeId format in component.repository: ${repositoryNodeId}`,
         );
