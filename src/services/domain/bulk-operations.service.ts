@@ -54,7 +54,7 @@ export class BulkOperationsService extends BaseEntityService {
       if (entityType === 'all') {
         // Handle deletion of all entity types
         const entityTypes = ['Component', 'Decision', 'Rule', 'File', 'Context'];
-        
+
         for (const type of entityTypes) {
           const result = await this.processEntityTypeDeletion(
             kuzuClient,

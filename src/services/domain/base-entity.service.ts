@@ -127,19 +127,62 @@ export abstract class BaseEntityService extends CoreService {
       switch (repositoryType) {
         case 'component': {
           const { deleteComponentOp } = await import('../memory-operations/component.ops');
-          return await deleteComponentOp(mcpContext, kuzuClient, repositoryRepo, repositoryName, branch, entityId);
+          return await deleteComponentOp(
+            mcpContext,
+            kuzuClient,
+            repositoryRepo,
+            repositoryName,
+            branch,
+            entityId,
+          );
         }
         case 'decision': {
           const { deleteDecisionOp } = await import('../memory-operations/decision.ops');
-          return await deleteDecisionOp(mcpContext, kuzuClient, repositoryRepo, repositoryName, branch, entityId);
+          return await deleteDecisionOp(
+            mcpContext,
+            kuzuClient,
+            repositoryRepo,
+            repositoryName,
+            branch,
+            entityId,
+          );
         }
         case 'rule': {
           const { deleteRuleOp } = await import('../memory-operations/rule.ops');
-          return await deleteRuleOp(mcpContext, kuzuClient, repositoryRepo, repositoryName, branch, entityId);
+          return await deleteRuleOp(
+            mcpContext,
+            kuzuClient,
+            repositoryRepo,
+            repositoryName,
+            branch,
+            entityId,
+          );
         }
         case 'file': {
           const { deleteFileOp } = await import('../memory-operations/file.ops');
-          return await deleteFileOp(mcpContext, kuzuClient, repositoryRepo, repositoryName, branch, entityId);
+          return await deleteFileOp(
+            mcpContext,
+            kuzuClient,
+            repositoryRepo,
+            repositoryName,
+            branch,
+            entityId,
+          );
+        }
+        case 'tag': {
+          const { deleteTagOp } = await import('../memory-operations/tag.ops');
+          return await deleteTagOp(mcpContext, kuzuClient, entityId);
+        }
+        case 'context': {
+          const { deleteContextOp } = await import('../memory-operations/context.ops');
+          return await deleteContextOp(
+            mcpContext,
+            kuzuClient,
+            repositoryRepo,
+            repositoryName,
+            branch,
+            entityId,
+          );
         }
         default:
           throw new Error(`Delete operation not implemented for ${repositoryType}`);

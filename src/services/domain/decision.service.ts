@@ -170,11 +170,25 @@ export class DecisionService extends BaseEntityService {
     this.validateRepositoryProvider('getAllDecisions');
 
     try {
+      const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
       const decisionRepo = this.repositoryProvider.getDecisionRepository(clientProjectRoot);
-      // Note: This method may need to be implemented in DecisionRepository
-      // For now, we'll return an empty array as a placeholder
-      logger.warn('[DecisionService.getAllDecisions] Method not fully implemented - returning empty array');
-      return [];
+
+      // Get the repository to find its ID
+      const repository = await repositoryRepo.findByName(repositoryName, branch);
+      if (!repository || !repository.id) {
+        logger.warn(
+          `[DecisionService.getAllDecisions] Repository not found: ${repositoryName}/${branch}`,
+        );
+        return [];
+      }
+
+      // Use the repository's getAllDecisions method
+      const decisions = await decisionRepo.getAllDecisions(repository.id, branch);
+      logger.debug(
+        `[DecisionService.getAllDecisions] Found ${decisions.length} decisions for ${repositoryName}:${branch}`,
+      );
+
+      return decisions;
     } catch (error: any) {
       this.handleEntityError(error, 'getAllDecisions', 'decision', 'all', logger);
       throw error;

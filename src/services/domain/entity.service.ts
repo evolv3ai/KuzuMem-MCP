@@ -41,9 +41,21 @@ export class EntityService extends CoreService {
     super(repositoryProvider, getKuzuClient, getSnapshotService);
 
     // Initialize specialized services
-    this.componentService = new ComponentService(repositoryProvider, getKuzuClient, getSnapshotService);
-    this.decisionService = new DecisionService(repositoryProvider, getKuzuClient, getSnapshotService);
-    this.bulkOperationsService = new BulkOperationsService(repositoryProvider, getKuzuClient, getSnapshotService);
+    this.componentService = new ComponentService(
+      repositoryProvider,
+      getKuzuClient,
+      getSnapshotService,
+    );
+    this.decisionService = new DecisionService(
+      repositoryProvider,
+      getKuzuClient,
+      getSnapshotService,
+    );
+    this.bulkOperationsService = new BulkOperationsService(
+      repositoryProvider,
+      getKuzuClient,
+      getSnapshotService,
+    );
   }
 
   /**
