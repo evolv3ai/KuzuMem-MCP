@@ -341,47 +341,69 @@ export class MemoryOptimizationAgent {
       // Execute actions in the specified order
       for (const actionId of plan.executionOrder) {
         const action = plan.actions.find(a => a.entityId === actionId);
+
         if (!action) {
-          executeLogger.warn(`Action not found: ${actionId}`);
+          executeLogger.warn(`Action not found in plan: ${actionId}`);
           continue;
         }
 
+        const actionContext = {
+          actionId: action.entityId,
+          actionType: action.type,
+          targetEntityId: action.targetEntityId,
+          reason: action.reason,
+        };
+
         try {
           if (options.dryRun) {
-            executeLogger.info(`DRY RUN: Would execute ${action.type} on ${action.entityId}`);
-            executedActions.push({
-              actionId: action.entityId,
-              status: 'success',
-            });
-          } else {
-            // Execute actual action using existing MemoryService methods
-            await this.executeAction(mcpContext, clientProjectRoot, repository, branch, action);
-            
-            executedActions.push({
-              actionId: action.entityId,
-              status: 'success',
-            });
+            // Dry run execution path
+            executeLogger.info(
+              `DRY RUN: Would execute ${action.type} on ${action.entityId}`,
+              actionContext
+            );
 
-            // Update counters
-            switch (action.type) {
-              case 'delete':
-                entitiesDeleted++;
-                break;
-              case 'merge':
-                entitiesMerged++;
-                break;
-              case 'update':
-                entitiesUpdated++;
-                break;
-            }
+            this.recordSuccessfulAction(executedActions, action.entityId);
+          } else {
+            // Actual execution path
+            executeLogger.debug(
+              `Executing ${action.type} action on ${action.entityId}`,
+              actionContext
+            );
+
+            await this.executeAction(
+              mcpContext,
+              clientProjectRoot,
+              repository,
+              branch,
+              action
+            );
+
+            this.recordSuccessfulAction(executedActions, action.entityId);
+
+            const counters = { entitiesDeleted, entitiesMerged, entitiesUpdated };
+            this.updateActionCounters(action.type, counters);
+            entitiesDeleted = counters.entitiesDeleted;
+            entitiesMerged = counters.entitiesMerged;
+            entitiesUpdated = counters.entitiesUpdated;
+
+            executeLogger.info(
+              `Successfully executed ${action.type} action on ${action.entityId}`,
+              actionContext
+            );
           }
         } catch (error) {
-          executeLogger.error(`Failed to execute action ${action.entityId}:`, error);
-          executedActions.push({
-            actionId: action.entityId,
-            status: 'failed',
-            error: String(error),
-          });
+          const errorMessage = error instanceof Error ? error.message : String(error);
+
+          executeLogger.error(
+            `Failed to execute ${action.type} action on ${action.entityId}`,
+            {
+              ...actionContext,
+              error: errorMessage,
+              stack: error instanceof Error ? error.stack : undefined,
+            }
+          );
+
+          this.recordFailedAction(executedActions, action.entityId, errorMessage);
         }
       }
 
@@ -410,6 +432,61 @@ export class MemoryOptimizationAgent {
     } catch (error) {
       executeLogger.error('Optimization plan execution failed', error);
       throw new Error(`Optimization plan execution failed: ${error}`);
+    }
+  }
+
+  /**
+   * Record a successful action execution
+   */
+  private recordSuccessfulAction(
+    executedActions: OptimizationResult['executedActions'],
+    actionId: string
+  ): void {
+    executedActions.push({
+      actionId,
+      status: 'success',
+    });
+  }
+
+  /**
+   * Record a failed action execution
+   */
+  private recordFailedAction(
+    executedActions: OptimizationResult['executedActions'],
+    actionId: string,
+    errorMessage: string
+  ): void {
+    executedActions.push({
+      actionId,
+      status: 'failed',
+      error: errorMessage,
+    });
+  }
+
+  /**
+   * Update action counters based on action type
+   */
+  private updateActionCounters(
+    actionType: string,
+    counters: {
+      entitiesDeleted: number;
+      entitiesMerged: number;
+      entitiesUpdated: number;
+    }
+  ): void {
+    switch (actionType) {
+      case 'delete':
+        counters.entitiesDeleted++;
+        break;
+      case 'merge':
+        counters.entitiesMerged++;
+        break;
+      case 'update':
+        counters.entitiesUpdated++;
+        break;
+      default:
+        // No counter update for unknown action types
+        break;
     }
   }
 
