@@ -287,15 +287,100 @@ export class PromptManager {
   }
 
   /**
-   * Interpolate template variables
+   * Interpolate template variables with security validation and sanitization
    */
   private interpolateTemplate(template: string, variables: Record<string, string>): string {
     let result = template;
+
     for (const [key, value] of Object.entries(variables)) {
-      const regex = new RegExp(`{{${key}}}`, 'g');
-      result = result.replace(regex, value);
+      // Validate variable key format
+      if (!this.isValidVariableKey(key)) {
+        logger.warn(`[PromptManager] Invalid variable key detected: ${key}`);
+        continue; // Skip invalid keys
+      }
+
+      // Sanitize variable value
+      const sanitizedValue = this.sanitizeVariableValue(value);
+
+      // Validate sanitized value length
+      if (sanitizedValue.length > 10000) { // Reasonable limit for prompt variables
+        logger.warn(`[PromptManager] Variable value too long, truncating: ${key}`);
+        const truncatedValue = sanitizedValue.substring(0, 10000) + '... [truncated]';
+        const regex = new RegExp(`{{${this.escapeRegex(key)}}}`, 'g');
+        result = result.replace(regex, truncatedValue);
+      } else {
+        const regex = new RegExp(`{{${this.escapeRegex(key)}}}`, 'g');
+        result = result.replace(regex, sanitizedValue);
+      }
     }
+
     return result;
+  }
+
+  /**
+   * Validate variable key format (alphanumeric, underscore, hyphen only)
+   */
+  private isValidVariableKey(key: string): boolean {
+    const validKeyPattern = /^[a-zA-Z0-9_-]+$/;
+    return validKeyPattern.test(key) && key.length <= 100;
+  }
+
+  /**
+   * Sanitize variable value to prevent injection attacks
+   */
+  private sanitizeVariableValue(value: string): string {
+    if (typeof value !== 'string') {
+      logger.warn(`[PromptManager] Non-string variable value detected, converting to string`);
+      value = String(value);
+    }
+
+    // Remove or escape potentially dangerous patterns
+    let sanitized = value
+      // Remove null bytes and control characters (except newlines and tabs)
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+      // Remove potential script injection patterns BEFORE HTML escaping
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '[SCRIPT_REMOVED]')
+      .replace(/javascript:/gi, 'javascript_removed:')
+      .replace(/data:/gi, 'data_removed:')
+      // Escape HTML/XML special characters to prevent injection
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;')
+      // Remove potential prompt injection patterns
+      .replace(/\{\{.*?\}\}/g, '[TEMPLATE_VAR_REMOVED]')
+      // Limit consecutive newlines to prevent prompt structure manipulation
+      .replace(/\n{4,}/g, '\n\n\n');
+
+    // Additional validation for common injection patterns
+    const suspiciousPatterns = [
+      /system\s*:/i,
+      /assistant\s*:/i,
+      /user\s*:/i,
+      /human\s*:/i,
+      /ai\s*:/i,
+      /ignore\s+previous\s+instructions/i,
+      /forget\s+everything/i,
+      /new\s+instructions/i,
+      /override\s+instructions/i,
+    ];
+
+    for (const pattern of suspiciousPatterns) {
+      if (pattern.test(sanitized)) {
+        logger.warn(`[PromptManager] Suspicious pattern detected in variable value, sanitizing`);
+        sanitized = sanitized.replace(pattern, '[SUSPICIOUS_CONTENT_REMOVED]');
+      }
+    }
+
+    return sanitized;
+  }
+
+  /**
+   * Escape special regex characters in variable keys
+   */
+  private escapeRegex(key: string): string {
+    return key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   /**
