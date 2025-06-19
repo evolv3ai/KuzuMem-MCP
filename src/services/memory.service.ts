@@ -2647,7 +2647,9 @@ export class MemoryService {
     const allEntities: Array<{ type: string; id: string; name?: string }> = [];
 
     for (const type of entityTypes) {
-      if (type === 'Tag') continue; // Tags are handled separately
+      if (type === 'Tag') {
+        continue; // Tags are handled separately
+      }
 
       const whereClause = 'n.repository = $repositoryName AND n.branch = $branch';
       const params = { repositoryName, branch };
