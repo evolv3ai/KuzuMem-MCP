@@ -598,28 +598,61 @@ export class MemoryOptimizationAgent {
     try {
       switch (action.type) {
         case 'delete':
-          await this.executeDeleteAction(mcpContext, clientProjectRoot, repository, branch, action, actionLogger);
+          await this.executeDeleteAction(
+            mcpContext,
+            clientProjectRoot,
+            repository,
+            branch,
+            action,
+            actionLogger
+          );
           break;
 
         case 'merge':
-          await this.executeMergeAction(mcpContext, clientProjectRoot, repository, branch, action, actionLogger);
+          await this.executeMergeAction(
+            mcpContext,
+            clientProjectRoot,
+            repository,
+            branch,
+            action,
+            actionLogger
+          );
           break;
 
         case 'update':
-          await this.executeUpdateAction(mcpContext, clientProjectRoot, repository, branch, action, actionLogger);
+          await this.executeUpdateAction(
+            mcpContext,
+            clientProjectRoot,
+            repository,
+            branch,
+            action,
+            actionLogger
+          );
           break;
 
         case 'move':
-          await this.executeMoveAction(mcpContext, clientProjectRoot, repository, branch, action, actionLogger);
+          await this.executeMoveAction(
+            mcpContext,
+            clientProjectRoot,
+            repository,
+            branch,
+            action,
+            actionLogger
+          );
           break;
 
         default:
           throw new Error(`Unsupported action type: ${action.type}`);
       }
 
-      actionLogger.info(`Successfully executed ${action.type} action on ${action.entityId}`);
+      actionLogger.info(
+        `Successfully executed ${action.type} action on ${action.entityId}`
+      );
     } catch (error) {
-      actionLogger.error(`Failed to execute ${action.type} action on ${action.entityId}:`, error);
+      actionLogger.error(
+        `Failed to execute ${action.type} action on ${action.entityId}:`,
+        error
+      );
       throw error;
     }
   }
