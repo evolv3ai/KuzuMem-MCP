@@ -51,25 +51,35 @@ export class ComponentGraphRepository extends BaseComponentRepository {
       arrowRight = '-';
     }
 
-    const startGraphUniqueId = this.createGraphUniqueId(repositoryName, startNodeBranch, startNodeId);
+    const startGraphUniqueId = this.createGraphUniqueId(
+      repositoryName,
+      startNodeBranch,
+      startNodeId,
+    );
     const endGraphUniqueId = this.createGraphUniqueId(repositoryName, startNodeBranch, endNodeId);
-
-    const escapedStartGraphUniqueId = this.escapeStr(startGraphUniqueId);
-    const escapedEndGraphUniqueId = this.escapeStr(endGraphUniqueId);
 
     const query = `
       MATCH p = (startNode:Component)${arrowLeft}${relationshipPattern}${arrowRight}(endNode:Component)
-      WHERE startNode.graph_unique_id = '${escapedStartGraphUniqueId}'
-        AND endNode.graph_unique_id = '${escapedEndGraphUniqueId}'
-        AND startNode.branch = '${this.escapeStr(startNodeBranch)}'
-        AND endNode.branch = '${this.escapeStr(startNodeBranch)}'
+      WHERE startNode.graph_unique_id = $startGraphUniqueId
+        AND endNode.graph_unique_id = $endGraphUniqueId
+        AND startNode.branch = $startNodeBranch
+        AND endNode.branch = $endNodeBranch
       RETURN p AS path, length(p) AS path_length
       ORDER BY path_length ASC
       LIMIT 1
     `;
 
     try {
-      const result = await this.executeQueryWithLogging(query, {}, 'findShortestPath');
+      const result = await this.executeQueryWithLogging(
+        query,
+        {
+          startGraphUniqueId,
+          endGraphUniqueId,
+          startNodeBranch,
+          endNodeBranch: startNodeBranch,
+        },
+        'findShortestPath',
+      );
 
       if (result.length === 0) {
         this.logger.debug(`No path found by query for ${startNodeId} -> ${endNodeId}`);
@@ -130,18 +140,20 @@ export class ComponentGraphRepository extends BaseComponentRepository {
       componentBranch,
       componentId,
     );
-    const escapedStartNodeGraphUniqueId = this.escapeStr(startNodeGraphUniqueId);
-    const escapedComponentBranch = this.escapeStr(componentBranch);
 
     const query = `
-      MATCH (c:Component {graph_unique_id: '${escapedStartNodeGraphUniqueId}'})
+      MATCH (c:Component {graph_unique_id: $startNodeGraphUniqueId})
       MATCH (c)-[:DEPENDS_ON]->(dep:Component)
-      WHERE dep.branch = '${escapedComponentBranch}' 
+      WHERE dep.branch = $componentBranch
       RETURN DISTINCT dep
     `;
 
     try {
-      const result = await this.executeQueryWithLogging(query, {}, 'getComponentDependencies');
+      const result = await this.executeQueryWithLogging(
+        query,
+        { startNodeGraphUniqueId, componentBranch },
+        'getComponentDependencies',
+      );
 
       if (result.length === 0) {
         return [];
@@ -156,10 +168,7 @@ export class ComponentGraphRepository extends BaseComponentRepository {
         } as Component;
       });
     } catch (error: any) {
-      this.logger.error(
-        `Error in getComponentDependencies for ${componentId}:`,
-        error,
-      );
+      this.logger.error(`Error in getComponentDependencies for ${componentId}:`, error);
       throw error;
     }
   }
@@ -177,18 +186,20 @@ export class ComponentGraphRepository extends BaseComponentRepository {
       componentBranch,
       componentId,
     );
-    const escapedTargetNodeGraphUniqueId = this.escapeStr(targetNodeGraphUniqueId);
-    const escapedComponentBranch = this.escapeStr(componentBranch);
 
     const query = `
-      MATCH (targetComp:Component {graph_unique_id: '${escapedTargetNodeGraphUniqueId}'})
+      MATCH (targetComp:Component {graph_unique_id: $targetNodeGraphUniqueId})
       MATCH (dependentComp:Component)-[:DEPENDS_ON]->(targetComp)
-      WHERE dependentComp.branch = '${escapedComponentBranch}'
+      WHERE dependentComp.branch = $componentBranch
       RETURN DISTINCT dependentComp
     `;
 
     try {
-      const result = await this.executeQueryWithLogging(query, {}, 'getComponentDependents');
+      const result = await this.executeQueryWithLogging(
+        query,
+        { targetNodeGraphUniqueId, componentBranch },
+        'getComponentDependents',
+      );
 
       if (result.length === 0) {
         return [];
@@ -203,10 +214,7 @@ export class ComponentGraphRepository extends BaseComponentRepository {
         } as Component;
       });
     } catch (error: any) {
-      this.logger.error(
-        `Error in getComponentDependents for ${componentId}:`,
-        error,
-      );
+      this.logger.error(`Error in getComponentDependents for ${componentId}:`, error);
       throw error;
     }
   }
@@ -248,17 +256,20 @@ export class ComponentGraphRepository extends BaseComponentRepository {
       componentBranch,
       componentId,
     );
-    const escapedStartNodeGraphUniqueId = this.escapeStr(startNodeGraphUniqueId);
 
     const query = `
-      MATCH (startNode:Component {graph_unique_id: '${escapedStartNodeGraphUniqueId}'})
+      MATCH (startNode:Component {graph_unique_id: $startNodeGraphUniqueId})
       MATCH (startNode)${pathRelationship}(relatedItem:Component)
-      WHERE relatedItem.branch = '${escapedComponentBranch}'
+      WHERE relatedItem.branch = $componentBranch
       RETURN DISTINCT relatedItem
     `;
 
     try {
-      const result = await this.executeQueryWithLogging(query, {}, 'getRelatedItems');
+      const result = await this.executeQueryWithLogging(
+        query,
+        { startNodeGraphUniqueId, componentBranch },
+        'getRelatedItems',
+      );
 
       if (result.length === 0) {
         return [];
@@ -273,10 +284,7 @@ export class ComponentGraphRepository extends BaseComponentRepository {
         } as Component;
       });
     } catch (error: any) {
-      this.logger.error(
-        `Error executing getRelatedItems query for ${componentId}:`,
-        error,
-      );
+      this.logger.error(`Error executing getRelatedItems query for ${componentId}:`, error);
       throw error;
     }
   }
@@ -291,35 +299,34 @@ export class ComponentGraphRepository extends BaseComponentRepository {
     itemType: 'Component' | 'Decision' | 'Rule',
   ): Promise<Context[]> {
     const itemGraphUniqueId = this.createGraphUniqueId(repositoryName, itemBranch, itemId);
-    const escapedItemGraphUniqueId = this.escapeStr(itemGraphUniqueId);
-    const escapedItemBranch = this.escapeStr(itemBranch);
 
     let itemMatchClause = '';
     let relationshipMatchClause = '';
 
     switch (itemType) {
       case 'Component':
-        itemMatchClause = `(item:Component {graph_unique_id: '${escapedItemGraphUniqueId}'})`;
+        itemMatchClause = `(item:Component {graph_unique_id: $itemGraphUniqueId})`;
         relationshipMatchClause = `(ctx)-[:CONTEXT_OF]->(item)`;
         break;
       case 'Decision':
-        itemMatchClause = `(item:Decision {graph_unique_id: '${escapedItemGraphUniqueId}'})`;
+        itemMatchClause = `(item:Decision {graph_unique_id: $itemGraphUniqueId})`;
         relationshipMatchClause = `(ctx)-[:CONTEXT_OF_DECISION]->(item)`;
         break;
       case 'Rule':
-        itemMatchClause = `(item:Rule {graph_unique_id: '${escapedItemGraphUniqueId}'})`;
+        itemMatchClause = `(item:Rule {graph_unique_id: $itemGraphUniqueId})`;
         relationshipMatchClause = `(ctx)-[:CONTEXT_OF_RULE]->(item)`;
         break;
-      default:
+      default: {
         const exhaustiveCheck: never = itemType;
         this.logger.error(`Unsupported itemType for getItemContextualHistory: ${exhaustiveCheck}`);
         return [];
+      }
     }
 
     const query = `
       MATCH ${itemMatchClause}
       MATCH (ctx:Context)
-      WHERE ctx.branch = '${escapedItemBranch}' AND ctx.repository = '${this.escapeStr(repositoryName)}'
+      WHERE ctx.branch = $itemBranch AND ctx.repository = $repositoryName
       MATCH ${relationshipMatchClause}
       RETURN DISTINCT ctx
       ORDER BY ctx.created_at DESC
@@ -327,7 +334,11 @@ export class ComponentGraphRepository extends BaseComponentRepository {
     `;
 
     try {
-      const result = await this.executeQueryWithLogging(query, {}, 'getItemContextualHistory');
+      const result = await this.executeQueryWithLogging(
+        query,
+        { itemGraphUniqueId, itemBranch, repositoryName },
+        'getItemContextualHistory',
+      );
 
       if (result.length === 0) {
         return [];
@@ -338,10 +349,7 @@ export class ComponentGraphRepository extends BaseComponentRepository {
         return { ...ctxData, id: ctxData.id, graph_unique_id: undefined } as Context;
       });
     } catch (error: any) {
-      this.logger.error(
-        `Error executing getItemContextualHistory for ${itemId}:`,
-        error,
-      );
+      this.logger.error(`Error executing getItemContextualHistory for ${itemId}:`, error);
       throw error;
     }
   }
@@ -359,17 +367,19 @@ export class ComponentGraphRepository extends BaseComponentRepository {
       componentBranch,
       componentId,
     );
-    const escapedComponentGraphUniqueId = this.escapeStr(componentGraphUniqueId);
-    const escapedComponentBranch = this.escapeStr(componentBranch);
 
     const query = `
-      MATCH (comp:Component {graph_unique_id: '${escapedComponentGraphUniqueId}'})
-      MATCH (dec:Decision {branch: '${escapedComponentBranch}'})-[:DECISION_ON]->(comp)
+      MATCH (comp:Component {graph_unique_id: $componentGraphUniqueId})
+      MATCH (dec:Decision {branch: $componentBranch})-[:DECISION_ON]->(comp)
       RETURN DISTINCT dec
     `;
 
     try {
-      const result = await this.executeQueryWithLogging(query, {}, 'getGoverningItemsForComponent');
+      const result = await this.executeQueryWithLogging(
+        query,
+        { componentGraphUniqueId, componentBranch },
+        'getGoverningItemsForComponent',
+      );
 
       if (result.length === 0) {
         return [];
@@ -380,10 +390,7 @@ export class ComponentGraphRepository extends BaseComponentRepository {
         return { ...decData, id: decData.id, graph_unique_id: undefined } as Decision;
       });
     } catch (error: any) {
-      this.logger.error(
-        `Error executing getGoverningItemsForComponent for ${componentId}:`,
-        error,
-      );
+      this.logger.error(`Error executing getGoverningItemsForComponent for ${componentId}:`, error);
       throw error;
     }
   }

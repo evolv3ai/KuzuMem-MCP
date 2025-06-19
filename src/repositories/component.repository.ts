@@ -42,13 +42,7 @@ export class ComponentRepository {
     this.complexRepo = new ComponentComplexRepository(kuzuClient, repositoryRepo);
   }
 
-  // Helper to escape strings for Cypher queries to prevent injection
-  private escapeStr(value: string): string {
-    if (typeof value !== 'string') {
-      return '';
-    }
-    return value.replace(/'/g, "\\'");
-  }
+
 
   // === CRUD Operations - Delegated to ComponentCrudRepository ===
 
