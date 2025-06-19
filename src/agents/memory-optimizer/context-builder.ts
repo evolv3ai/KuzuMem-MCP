@@ -160,20 +160,43 @@ export class MemoryContextBuilder {
     branch: string
   ): Promise<number | undefined> {
     try {
-      // KuzuDB compatible query - simplified age calculation
+      // KuzuDB compatible query - get creation timestamps of all entities
       const query = `
         MATCH (n)
         WHERE n.repository = $repository AND n.branch = $branch
-          AND n.created IS NOT NULL AND n.created <> ''
-          AND n.created CONTAINS 'T'
-        RETURN COUNT(n) AS entityCount
+          AND n.created_at IS NOT NULL AND n.created_at <> ''
+          AND n.created_at CONTAINS 'T'
+        RETURN n.created_at AS createdAt
       `;
 
       const result = await kuzuClient.executeQuery(query, { repository, branch });
-      const entityCount = result[0]?.entityCount || 0;
 
-      // Return a reasonable default age estimate based on entity count
-      return entityCount > 0 ? 30.0 : undefined;
+      if (!result || result.length === 0) {
+        return undefined;
+      }
+
+      // Calculate age in days for each entity and compute average
+      const currentTime = new Date().getTime();
+      let totalAgeInDays = 0;
+      let validEntityCount = 0;
+
+      for (const row of result) {
+        try {
+          const createdAt = new Date(row.createdAt);
+          if (!isNaN(createdAt.getTime())) {
+            const ageInMs = currentTime - createdAt.getTime();
+            const ageInDays = ageInMs / (1000 * 60 * 60 * 24); // Convert ms to days
+            totalAgeInDays += ageInDays;
+            validEntityCount++;
+          }
+        } catch (parseError) {
+          // Skip entities with invalid timestamps
+          continue;
+        }
+      }
+
+      // Return average age in days, or undefined if no valid entities found
+      return validEntityCount > 0 ? totalAgeInDays / validEntityCount : undefined;
     } catch (error) {
       logger.warn('Failed to calculate average entity age:', error);
       return undefined;
