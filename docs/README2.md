@@ -2,7 +2,7 @@
 
 > **Enhance AI coding assistants with persistent, graph-based knowledge**
 
-The KuzuMem-MCP server provides a structured approach to storing and retrieving repository knowledge, enabling AI coding assistants to maintain context across sessions and branches. Recently consolidated from 29 individual tools to 11 unified tools (10 currently active) for improved maintainability and user experience.
+The KuzuMem-MCP server provides a structured approach to storing and retrieving repository knowledge, enabling AI coding assistants to maintain context across sessions and branches. Recently consolidated from 29 individual tools to 12 unified tools with advanced AI-powered memory optimization, production-ready safety features, and intelligent context-aware analysis.
 
 ## 🎯 Purpose & Goals
 
@@ -15,6 +15,8 @@ This project addresses several key challenges in AI-assisted development:
 - **Enable AI tools** to understand project architecture
 - **Client isolation** for supporting multiple client projects with dedicated memory banks
 - **Unified tool interface** for simplified integration and usage
+- **AI-powered optimization** with advanced reasoning models and context-aware analysis
+- **Production-ready safety** with automatic snapshots and guaranteed rollback capabilities
 
 ## ✨ Key Benefits
 
@@ -46,10 +48,11 @@ The implementation supports branch-based workflows:
 
 The recent consolidation provides:
 
-- Reduced complexity from 29 to 11 tools (10 active, 1 planned)
+- Reduced complexity from 29 to 12 unified tools
 - Consistent parameter patterns across all tools
 - Simplified learning curve for new users
 - Better maintainability and testing
+- Advanced AI-powered memory optimization with production safety
 
 ### 🏢 Client Project Isolation
 
@@ -236,6 +239,126 @@ $ curl -X POST http://localhost:3000/tools/detect \
 
 These examples demonstrate how the graph-based architecture enables complex queries about component relationships, architectural decisions, and system structure that would be difficult or impossible with traditional databases. AI assistants can use these insights to provide more informed guidance about code changes, architectural evolution, and potential design weaknesses.
 
+## 🧠 AI-Powered Memory Optimization
+
+The **Core Memory Optimization Agent** provides intelligent, context-aware memory graph optimization with production-ready safety features:
+
+### 8. Intelligent Memory Analysis
+
+```bash
+# Analyze memory graph with context-aware AI reasoning
+$ curl -X POST http://localhost:3000/tools/memory-optimizer \
+  -H "Content-Type: application/json" \
+  -d '{
+    "operation": "analyze",
+    "repository": "my-app",
+    "branch": "main",
+    "strategy": "conservative",
+    "enableMCPSampling": true,
+    "samplingStrategy": "representative",
+    "llmProvider": "openai",
+    "model": "o1-mini"
+  }'
+
+# Results include intelligent analysis with project-specific insights
+{
+  "success": true,
+  "operation": "analyze",
+  "data": {
+    "analysisId": "analysis-1234567890-abc123",
+    "summary": {
+      "totalEntitiesAnalyzed": 150,
+      "staleEntitiesFound": 12,
+      "redundancyGroupsFound": 3,
+      "optimizationOpportunities": 8,
+      "overallHealthScore": 85
+    },
+    "staleEntities": [
+      {"id": "comp-legacy-auth", "reason": "Deprecated 180 days ago, no recent usage"},
+      {"id": "dec-old-framework", "reason": "Decision superseded by newer architecture"}
+    ],
+    "redundancies": [
+      {"group": ["comp-user-service-v1", "comp-user-service-v2"], "similarity": 0.95}
+    ],
+    "recommendations": [
+      "Remove deprecated authentication components",
+      "Consolidate duplicate user service implementations"
+    ]
+  }
+}
+```
+
+### 9. Safe Memory Optimization with Snapshots
+
+```bash
+# Execute optimization with automatic snapshot creation
+$ curl -X POST http://localhost:3000/tools/memory-optimizer \
+  -H "Content-Type: application/json" \
+  -d '{
+    "operation": "optimize",
+    "repository": "my-app",
+    "branch": "main",
+    "analysisId": "analysis-1234567890-abc123",
+    "dryRun": false,
+    "confirm": true,
+    "strategy": "conservative"
+  }'
+
+# Results include optimization summary and snapshot for rollback
+{
+  "success": true,
+  "operation": "optimize",
+  "data": {
+    "planId": "plan-1234567890-def456",
+    "status": "success",
+    "executedActions": [
+      {"actionId": "comp-legacy-auth", "status": "success"},
+      {"actionId": "dec-old-framework", "status": "success"}
+    ],
+    "optimizationSummary": {
+      "entitiesDeleted": 5,
+      "entitiesMerged": 2,
+      "entitiesUpdated": 1
+    },
+    "snapshotId": "snapshot-1703123456789-xyz789"
+  }
+}
+```
+
+### 10. Rollback and Snapshot Management
+
+```bash
+# List available snapshots
+$ curl -X POST http://localhost:3000/tools/memory-optimizer \
+  -H "Content-Type: application/json" \
+  -d '{
+    "operation": "list-snapshots",
+    "repository": "my-app",
+    "branch": "main"
+  }'
+
+# Rollback to previous state if needed
+$ curl -X POST http://localhost:3000/tools/memory-optimizer \
+  -H "Content-Type: application/json" \
+  -d '{
+    "operation": "rollback",
+    "repository": "my-app",
+    "branch": "main",
+    "snapshotId": "snapshot-1703123456789-xyz789"
+  }'
+```
+
+### Key Memory Optimization Features
+
+- **🧠 High-Reasoning Analysis**: Uses OpenAI o1/o3 or Claude with extended thinking for intelligent memory analysis
+- **🎯 MCP Sampling**: Context-aware prompts that adapt to project characteristics (maturity, activity, complexity)
+- **🛡️ Automatic Snapshots**: Production-ready safety with guaranteed rollback capabilities
+- **📊 Project Intelligence**: Automatic detection of project patterns and optimization strategies
+- **⚖️ Multiple Strategies**: Conservative, balanced, and aggressive optimization approaches
+- **🔍 Smart Detection**: Identifies stale entities, redundancies, and optimization opportunities
+- **👀 Dry-Run Mode**: Preview optimizations without making changes
+- **🔄 Transactional Safety**: Complete success or complete failure with database consistency
+
 ### 7. Full-Text Search Across All Entities
 
 ```bash
@@ -333,7 +456,11 @@ This server implements Model Context Protocol standards:
 - **🔄 JSON-RPC Communication** - Standard protocol support
 - **🗺️ Graph Traversal Tools** - Path finding and dependency analysis
 - **🔐 Client Project Isolation** - Each client project gets its own memory bank
-- **🎯 Unified Tool Architecture** - 9 active (11 planned) consolidated tools from original 29
+- **🎯 Unified Tool Architecture** - 12 unified tools with advanced AI capabilities
+- **🧠 AI-Powered Memory Optimization** - High-reasoning models with context-aware analysis
+- **🛡️ Production-Ready Safety** - Automatic snapshots with guaranteed rollback capabilities
+- **🎯 MCP Sampling** - Intelligent memory analysis with adaptive optimization strategies
+- **🗑️ Advanced Bulk Operations** - Safe bulk deletion with dependency validation
 
 ## 📅 Feature Timeline
 
@@ -351,15 +478,25 @@ This server implements Model Context Protocol standards:
 - ✅ **Lazy Database Initialization** - Databases only created when explicitly requested
 - ✅ **Improved Error Handling** - Better error messages for database path issues
 
-### Fall 2025 - Tool Consolidation
+### Fall 2025 - Tool Consolidation & AI Enhancement
 
-- ✅ **Tool Consolidation** - Reduced from 29 individual tools to 11 unified tools (10 active)
+- ✅ **Tool Consolidation** - Reduced from 29 individual tools to 12 unified tools
 - ✅ **Unified Parameter Patterns** - Consistent interface across all tools
 - ✅ **Memory Operations Refactoring** - Removed Zod dependencies from core operations
 - ✅ **E2E Testing Infrastructure** - Comprehensive tests for stdio and HTTP streaming
 - ✅ **TypeScript Compilation** - All compilation errors resolved
 - ✅ **Documentation Updates** - Basic documentation for unified tools
 - ✅ **Full-Text Search Implementation** - Replaced semantic search placeholder with working KuzuDB FTS integration
+
+### Winter 2025 - AI-Powered Memory Optimization
+
+- ✅ **Core Memory Optimization Agent** - AI-powered memory graph optimization with high-reasoning models
+- ✅ **MCP Sampling System** - Context-aware prompts that adapt to actual memory state and project characteristics
+- ✅ **Production Safety System** - Automatic snapshot creation with guaranteed rollback capabilities
+- ✅ **Advanced Bulk Operations** - Safe bulk deletion with dependency validation and dry-run capabilities
+- ✅ **Comprehensive E2E Testing** - Full test coverage for memory optimization features
+- ✅ **Project Intelligence Analysis** - Automatic detection of project maturity, activity, and complexity
+- ✅ **Multiple Sampling Strategies** - Representative, problematic, recent, and diverse sampling approaches
 
 ## 💡 Use Cases
 
@@ -371,6 +508,10 @@ This server implements Model Context Protocol standards:
 - **Onboarding** - Help new team members understand system structure
 - **Multi-Project Support** - Maintain separate memory banks for different projects
 - **Code Review Assistance** - Use governance queries to ensure compliance with rules
+- **🧠 Intelligent Memory Optimization** - AI-powered cleanup of stale, redundant, or obsolete entities
+- **🛡️ Safe Memory Management** - Production-ready optimization with automatic snapshots and rollback
+- **📊 Project Health Analysis** - Automatic assessment of memory graph complexity and optimization opportunities
+- **🎯 Context-Aware Optimization** - Adaptive strategies based on project characteristics and activity levels
 
 ## 🔧 Installation & Usage
 
@@ -409,7 +550,15 @@ DEBUG=1
 
 ### MCP Tools
 
-The server currently provides 10 broadcasted tools for repository operations, memory management, and graph traversal (one additional tool is planned and not yet broadcast). See [README.md](../README.md) for the complete tool list.
+The server currently provides 12 unified tools for repository operations, memory management, graph traversal, and AI-powered memory optimization. Key tools include:
+
+- **memory-optimizer** - AI-powered memory optimization with MCP sampling, snapshots, and rollback
+- **delete** - Safe deletion with dependency validation and bulk operations
+- **search** - Full-text search across all entity types with KuzuDB FTS
+- **query** - Advanced graph queries and dependency analysis
+- **analyze** - Graph algorithms (PageRank, Louvain, shortest path)
+
+See [README.md](../README.md) for the complete tool list and usage examples.
 
 ## 🏗️ Architecture
 

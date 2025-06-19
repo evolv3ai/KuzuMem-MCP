@@ -756,6 +756,159 @@ describe('MCP Stdio Server E2E Tests', () => {
     }, 20000);
   });
 
+  describe('Tool 11: delete', () => {
+    // First create some test entities to delete
+    beforeAll(async () => {
+      // Create test components for deletion
+      await callTool('entity', {
+        operation: 'create',
+        entityType: 'component',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        id: 'comp-delete-test-1',
+        data: {
+          name: 'Delete Test Component 1',
+          kind: 'service',
+          status: 'active',
+        },
+      });
+
+      await callTool('entity', {
+        operation: 'create',
+        entityType: 'component',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        id: 'comp-delete-test-2',
+        data: {
+          name: 'Delete Test Component 2',
+          kind: 'service',
+          status: 'deprecated',
+        },
+      });
+
+      // Create a test tag
+      await callTool('entity', {
+        operation: 'create',
+        entityType: 'tag',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        id: 'tag-delete-test',
+        data: {
+          name: 'Delete Test Tag',
+          color: '#ff0000',
+          description: 'Tag for deletion testing',
+        },
+      });
+
+      // Tag one of the components
+      await callTool('associate', {
+        type: 'tag-item',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        tagId: 'tag-delete-test',
+        itemId: 'comp-delete-test-1',
+        itemType: 'Component',
+      });
+    }, 30000);
+
+    it('should perform dry run for single entity deletion', async () => {
+      const result = await callTool('delete', {
+        operation: 'single',
+        entityType: 'component',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        id: 'comp-delete-test-1',
+        dryRun: true,
+      });
+
+      expect(result).toMatchObject({
+        success: true,
+        operation: 'single',
+        message: expect.stringContaining('Would delete'),
+        deletedCount: 1,
+        dryRun: true,
+      });
+    }, 10000);
+
+    it('should delete a single component', async () => {
+      const result = await callTool('delete', {
+        operation: 'single',
+        entityType: 'component',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        id: 'comp-delete-test-2',
+      });
+
+      expect(result).toMatchObject({
+        success: true,
+        operation: 'single',
+        message: expect.stringContaining('deleted successfully'),
+        deletedCount: 1,
+      });
+
+      // Verify the component is actually deleted
+      const queryResult = await callTool('entity', {
+        operation: 'get',
+        entityType: 'component',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        id: 'comp-delete-test-2',
+      });
+
+      expect(queryResult.success).toBe(false);
+    }, 15000);
+
+    it('should perform dry run for bulk deletion by tag', async () => {
+      const result = await callTool('delete', {
+        operation: 'bulk-by-tag',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        tagId: 'tag-delete-test',
+        dryRun: true,
+      });
+
+      expect(result).toMatchObject({
+        success: true,
+        operation: 'bulk-by-tag',
+        message: expect.stringContaining('Would delete'),
+        dryRun: true,
+      });
+    }, 10000);
+
+    it('should require confirmation for bulk operations', async () => {
+      const result = await callTool('delete', {
+        operation: 'bulk-by-type',
+        targetType: 'component',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+      });
+
+      expect(result).toMatchObject({
+        success: false,
+        operation: 'bulk-by-type',
+        message: expect.stringContaining('confirm=true is required'),
+        deletedCount: 0,
+      });
+    }, 10000);
+
+    it('should handle non-existent entity deletion gracefully', async () => {
+      const result = await callTool('delete', {
+        operation: 'single',
+        entityType: 'component',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+        id: 'comp-nonexistent',
+      });
+
+      expect(result).toMatchObject({
+        success: false,
+        operation: 'single',
+        message: expect.stringContaining('not found'),
+        deletedCount: 0,
+      });
+    }, 10000);
+  });
+
   describe('Cleanup verification', () => {
     it('should verify all test data exists', async () => {
       // Query all components to ensure our test data is present

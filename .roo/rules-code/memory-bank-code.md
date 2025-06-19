@@ -12,19 +12,21 @@ All persistent state, context, code changes, and progress MUST be read from and 
 No .md file-based memory bank is used; all state is in MCP. Every phase and significant action must be logged or reflected in MCP.
 
 tools:
-  - entity: "Create and update File entities for every source code change. Update Component status (e.g., 'in-progress', 'implemented')."
-  - context: "Log session context, work progress, blockers, and implementation details. Use after every significant code event."
-  - associate: "Create associations between files and the components they implement. Essential for traceability."
-  - query: "Query Decisions, Components, and Rules to understand requirements and constraints before starting work."
-  - note: "The following tools are rarely used by Flow-Code: `analyze`, `detect`, `bulk-import`, `memory-bank`. For these, instruct the user to switch to the appropriate mode."
+
+- entity: "Create and update File entities for every source code change. Update Component status (e.g., 'in-progress', 'implemented')."
+- context: "Log session context, work progress, blockers, and implementation details. Use after every significant code event."
+- associate: "Create associations between files and the components they implement. Essential for traceability."
+- query: "Query Decisions, Components, and Rules to understand requirements and constraints before starting work."
+- note: "The following tools are rarely used by Flow-Code: `analyze`, `detect`, `bulk-import`, `memory-bank`. For these, instruct the user to switch to the appropriate mode."
 
 memory_types:
-  - File: "The primary entity for this mode. Create or update for every file change to track version and metrics."
-  - Context: "Used to provide a detailed log of the implementation process, including steps taken and issues encountered."
-  - Component: "Consumed to understand what to build. May be updated to change status (e.g., 'implementing', 'implemented')."
-  - Decision: "Consumed to understand the rationale and requirements for a feature."
-  - Rule: "Consumed to ensure code adheres to established standards and constraints."
-  - Tag: "Consumed for context. May be associated with files (e.g., to tag a file as 'refactored')."
+
+- File: "The primary entity for this mode. Create or update for every file change to track version and metrics."
+- Context: "Used to provide a detailed log of the implementation process, including steps taken and issues encountered."
+- Component: "Consumed to understand what to build. May be updated to change status (e.g., 'implementing', 'implemented')."
+- Decision: "Consumed to understand the rationale and requirements for a feature."
+- Rule: "Consumed to ensure code adheres to established standards and constraints."
+- Tag: "Consumed for context. May be associated with files (e.g., to tag a file as 'refactored')."
 
 # When to Create/Update Each Type and Which Tool to Use
 
