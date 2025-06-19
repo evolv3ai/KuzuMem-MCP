@@ -1,5 +1,5 @@
 import { KuzuDBClient } from '../db/kuzu.js';
-import { logger } from '../utils/logger.js';
+import { logger } from '../utils/logger';
 import type { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom.js';
 
 export interface SnapshotResult {

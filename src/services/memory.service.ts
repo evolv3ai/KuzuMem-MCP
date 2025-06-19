@@ -2286,8 +2286,9 @@ export class MemoryService {
       // Delete all relationships and the component node
       const deleteQuery = `
         MATCH (c:Component {graph_unique_id: $graphUniqueId})
-        OPTIONAL MATCH (c)-[r]-()
-        DELETE r, c
+        OPTIONAL MATCH (c)-[r_out]->()
+        OPTIONAL MATCH (c)<-[r_in]-()
+        DELETE r_out, r_in, c
         RETURN count(c) as deletedCount
       `;
 
@@ -2339,8 +2340,9 @@ export class MemoryService {
       // Delete all relationships and the decision node
       const deleteQuery = `
         MATCH (d:Decision {graph_unique_id: $graphUniqueId})
-        OPTIONAL MATCH (d)-[r]-()
-        DELETE r, d
+        OPTIONAL MATCH (d)-[r_out]->()
+        OPTIONAL MATCH (d)<-[r_in]-()
+        DELETE r_out, r_in, d
         RETURN count(d) as deletedCount
       `;
 
@@ -2387,8 +2389,9 @@ export class MemoryService {
       // Delete all relationships and the rule node
       const deleteQuery = `
         MATCH (r:Rule {graph_unique_id: $graphUniqueId})
-        OPTIONAL MATCH (r)-[rel]-()
-        DELETE rel, r
+        OPTIONAL MATCH (r)-[rel_out]->()
+        OPTIONAL MATCH (r)<-[rel_in]-()
+        DELETE rel_out, rel_in, r
         RETURN count(r) as deletedCount
       `;
 
@@ -2433,8 +2436,9 @@ export class MemoryService {
       // Delete all relationships and the file node
       const deleteQuery = `
         MATCH (f:File {graph_unique_id: $graphUniqueId})
-        OPTIONAL MATCH (f)-[r]-()
-        DELETE r, f
+        OPTIONAL MATCH (f)-[r_out]->()
+        OPTIONAL MATCH (f)<-[r_in]-()
+        DELETE r_out, r_in, f
         RETURN count(f) as deletedCount
       `;
 
@@ -2469,8 +2473,9 @@ export class MemoryService {
       // Delete all relationships and the tag node
       const deleteQuery = `
         MATCH (t:Tag {id: $tagId})
-        OPTIONAL MATCH (t)-[r]-()
-        DELETE r, t
+        OPTIONAL MATCH (t)-[r_out]->()
+        OPTIONAL MATCH (t)<-[r_in]-()
+        DELETE r_out, r_in, t
         RETURN count(t) as deletedCount
       `;
 
@@ -2517,8 +2522,9 @@ export class MemoryService {
       // Delete all relationships and the context node
       const deleteQuery = `
         MATCH (c:Context {graph_unique_id: $graphUniqueId})
-        OPTIONAL MATCH (c)-[r]-()
-        DELETE r, c
+        OPTIONAL MATCH (c)-[r_out]->()
+        OPTIONAL MATCH (c)<-[r_in]-()
+        DELETE r_out, r_in, c
         RETURN count(c) as deletedCount
       `;
 
@@ -2579,8 +2585,9 @@ export class MemoryService {
       // Then perform bulk deletion
       const deleteQuery = `
         MATCH (n:${entityType}) WHERE ${whereClause}
-        OPTIONAL MATCH (n)-[r]-()
-        DELETE r, n
+        OPTIONAL MATCH (n)-[r_out]->()
+        OPTIONAL MATCH (n)<-[r_in]-()
+        DELETE r_out, r_in, n
         RETURN count(n) as deletedCount
       `;
 
@@ -2623,8 +2630,9 @@ export class MemoryService {
       // Then perform bulk deletion
       const tagDeleteQuery = `
         MATCH (t:Tag)
-        OPTIONAL MATCH (t)-[r]-()
-        DELETE r, t
+        OPTIONAL MATCH (t)-[r_out]->()
+        OPTIONAL MATCH (t)<-[r_in]-()
+        DELETE r_out, r_in, t
       `;
 
       await kuzuClient.executeQuery(tagDeleteQuery, {});
@@ -2814,8 +2822,9 @@ export class MemoryService {
         const bulkDeleteQuery = `
           MATCH (t:Tag {id: $tagId})-[:TAGGED_WITH]-(n)
           WHERE n.repository = $repositoryName AND n.branch = $branch
-          OPTIONAL MATCH (n)-[r]-()
-          DELETE r, n
+          OPTIONAL MATCH (n)-[r_out]->()
+          OPTIONAL MATCH (n)<-[r_in]-()
+          DELETE r_out, r_in, n
         `;
 
         await kuzuClient.executeQuery(bulkDeleteQuery, {
