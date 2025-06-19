@@ -25,6 +25,7 @@ export interface MemoryOptimizationConfig {
   defaultStrategy?: OptimizationStrategy;
   enableMCPSampling?: boolean;
   samplingStrategy?: 'representative' | 'problematic' | 'recent' | 'diverse';
+  snapshotFailurePolicy?: 'abort' | 'continue' | 'warn';
 }
 
 /**
@@ -39,15 +40,25 @@ export class MemoryOptimizationAgent {
   private promptManager: PromptManager;
   private samplingManager: MCPSamplingManager;
   private agentLogger = logger.child({ component: 'MemoryOptimizationAgent' });
+  private config: MemoryOptimizationConfig;
 
   constructor(
     private memoryService: MemoryService,
-    private config: MemoryOptimizationConfig = {
+    config: MemoryOptimizationConfig = {
       llmProvider: 'openai',
       enableMCPSampling: true,
-      samplingStrategy: 'representative'
+      samplingStrategy: 'representative',
+      snapshotFailurePolicy: 'warn'
     }
   ) {
+    // Merge provided config with defaults
+    const defaults: MemoryOptimizationConfig = {
+      llmProvider: 'openai',
+      enableMCPSampling: true,
+      samplingStrategy: 'representative',
+      snapshotFailurePolicy: 'warn',
+    };
+    this.config = { ...defaults, ...config };
     // Initialize LLM client based on provider
     this.llmClient = this.initializeLLMClient();
 
@@ -60,10 +71,11 @@ export class MemoryOptimizationAgent {
     this.promptManager.setSamplingManager(this.samplingManager);
 
     this.agentLogger.info('Memory Optimization Agent initialized', {
-      provider: config.llmProvider,
-      model: config.model,
-      mcpSampling: config.enableMCPSampling,
-      samplingStrategy: config.samplingStrategy,
+      provider: this.config.llmProvider,
+      model: this.config.model,
+      mcpSampling: this.config.enableMCPSampling,
+      samplingStrategy: this.config.samplingStrategy,
+      snapshotFailurePolicy: this.config.snapshotFailurePolicy,
     });
   }
 
@@ -259,6 +271,7 @@ export class MemoryOptimizationAgent {
       dryRun?: boolean;
       requireConfirmation?: boolean;
       createSnapshot?: boolean;
+      snapshotFailurePolicy?: 'abort' | 'continue' | 'warn';
     } = {}
   ): Promise<OptimizationResult> {
     const executeLogger = this.agentLogger.child({
@@ -295,8 +308,25 @@ export class MemoryOptimizationAgent {
           });
         } catch (snapshotError) {
           executeLogger.error('Failed to create snapshot:', snapshotError);
-          // Continue without snapshot but log the warning
-          executeLogger.warn('Proceeding with optimization without snapshot - rollback will not be available');
+
+          // Determine snapshot failure policy (options override config)
+          const failurePolicy = options.snapshotFailurePolicy || this.config.snapshotFailurePolicy || 'warn';
+
+          switch (failurePolicy) {
+            case 'abort':
+              executeLogger.error('Aborting optimization due to snapshot failure (policy: abort)');
+              throw new Error(`Optimization aborted: Failed to create snapshot - ${snapshotError}. Rollback will not be available.`);
+
+            case 'continue':
+              executeLogger.info('Continuing optimization without snapshot (policy: continue)');
+              break;
+
+            case 'warn':
+            default:
+              executeLogger.warn('Proceeding with optimization without snapshot - rollback will not be available (policy: warn)');
+              executeLogger.warn('Consider using snapshotFailurePolicy: "abort" for production environments requiring guaranteed rollback');
+              break;
+          }
         }
       }
 

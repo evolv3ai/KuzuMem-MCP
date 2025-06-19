@@ -123,6 +123,11 @@ The agent uses advanced reasoning to analyze entity relationships, usage pattern
         enum: ['representative', 'problematic', 'recent', 'diverse'],
         description: 'MCP sampling strategy: representative (balanced sample), problematic (stale/disconnected), recent (new entities), diverse (all types)',
       },
+      snapshotFailurePolicy: {
+        type: 'string',
+        enum: ['abort', 'continue', 'warn'],
+        description: 'Snapshot failure policy: abort (stop on snapshot failure), continue (proceed silently), warn (proceed with warning)',
+      },
     },
     required: ['operation', 'clientProjectRoot', 'repository'],
   },

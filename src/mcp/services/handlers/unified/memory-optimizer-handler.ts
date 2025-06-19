@@ -31,6 +31,7 @@ const MemoryOptimizerInputSchema = z.object({
   analysisId: z.string().optional(),
   enableMCPSampling: z.boolean().default(true),
   samplingStrategy: z.enum(['representative', 'problematic', 'recent', 'diverse']).default('representative'),
+  snapshotFailurePolicy: z.enum(['abort', 'continue', 'warn']).default('warn'),
 });
 
 type MemoryOptimizerParams = z.infer<typeof MemoryOptimizerInputSchema>;
@@ -128,6 +129,7 @@ export async function memoryOptimizerHandler(
       defaultStrategy: validatedParams.strategy,
       enableMCPSampling: validatedParams.enableMCPSampling,
       samplingStrategy: validatedParams.samplingStrategy,
+      snapshotFailurePolicy: validatedParams.snapshotFailurePolicy,
     });
 
     // Route to appropriate operation handler
@@ -305,7 +307,8 @@ async function handleOptimizeOperation(
       {
         dryRun: params.dryRun,
         requireConfirmation: params.confirm,
-        createSnapshot: true, // Always create snapshot for safety
+        createSnapshot: !params.dryRun, // Only create snapshot for actual runs
+        snapshotFailurePolicy: params.snapshotFailurePolicy,
       },
     );
 
