@@ -1,22 +1,22 @@
 import { generateObject } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
-import { MemoryService } from '../../services/memory.service.js';
-import { MemoryContextBuilder } from './context-builder.js';
-import { PromptManager, type AgentRole, type OptimizationStrategy } from './prompt-manager.js';
-import { MCPSamplingManager } from './mcp-sampling-manager.js';
-import { logger } from '../../utils/logger.js';
-import type { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom.js';
+import { MemoryService } from '../../services/memory.service';
+import { MemoryContextBuilder } from './context-builder';
+import { PromptManager, type AgentRole, type OptimizationStrategy } from './prompt-manager';
+import { MCPSamplingManager } from './mcp-sampling-manager';
+import { logger } from '../../utils/logger';
+import type { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
 import type {
   MemoryContext,
   AnalysisResult,
   OptimizationPlan,
   OptimizationResult
-} from '../../schemas/optimization/types.js';
+} from '../../schemas/optimization/types';
 import {
   AnalysisResultSchema,
   OptimizationPlanSchema
-} from '../../schemas/optimization/types.js';
+} from '../../schemas/optimization/types';
 
 export interface MemoryOptimizationConfig {
   llmProvider: 'openai' | 'anthropic';

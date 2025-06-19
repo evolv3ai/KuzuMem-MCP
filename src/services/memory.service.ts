@@ -2336,13 +2336,12 @@ export class MemoryService {
       // Format the graph unique ID
       const graphUniqueId = `${repositoryName}:${branch}:${decisionId}`;
 
-      // Delete all relationships and the decision node
+      // Delete all relationships and the decision node - KuzuDB compatible
+      // Use DETACH DELETE to remove node and all its relationships
       const deleteQuery = `
         MATCH (d:Decision {graph_unique_id: $graphUniqueId})
-        OPTIONAL MATCH (d)-[r_out]->()
-        OPTIONAL MATCH (d)<-[r_in]-()
-        DELETE r_out, r_in, d
-        RETURN count(d) as deletedCount
+        DETACH DELETE d
+        RETURN 1 as deletedCount
       `;
 
       const result = await kuzuClient.executeQuery(deleteQuery, { graphUniqueId });
@@ -2431,13 +2430,12 @@ export class MemoryService {
       // Format the graph unique ID
       const graphUniqueId = `${repositoryName}:${branch}:${fileId}`;
 
-      // Delete all relationships and the file node
+      // Delete all relationships and the file node - KuzuDB compatible
+      // Use DETACH DELETE to remove node and all its relationships
       const deleteQuery = `
         MATCH (f:File {graph_unique_id: $graphUniqueId})
-        OPTIONAL MATCH (f)-[r_out]->()
-        OPTIONAL MATCH (f)<-[r_in]-()
-        DELETE r_out, r_in, f
-        RETURN count(f) as deletedCount
+        DETACH DELETE f
+        RETURN 1 as deletedCount
       `;
 
       const result = await kuzuClient.executeQuery(deleteQuery, { graphUniqueId });
@@ -2468,13 +2466,12 @@ export class MemoryService {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
 
       // Tags are global and not scoped to repository/branch, so we just need the ID
-      // Delete all relationships and the tag node
+      // Delete all relationships and the tag node - KuzuDB compatible
+      // Use DETACH DELETE to remove node and all its relationships
       const deleteQuery = `
         MATCH (t:Tag {id: $tagId})
-        OPTIONAL MATCH (t)-[r_out]->()
-        OPTIONAL MATCH (t)<-[r_in]-()
-        DELETE r_out, r_in, t
-        RETURN count(t) as deletedCount
+        DETACH DELETE t
+        RETURN 1 as deletedCount
       `;
 
       const result = await kuzuClient.executeQuery(deleteQuery, { tagId });
@@ -2517,13 +2514,12 @@ export class MemoryService {
       // Format the graph unique ID
       const graphUniqueId = `${repositoryName}:${branch}:${contextId}`;
 
-      // Delete all relationships and the context node
+      // Delete all relationships and the context node - KuzuDB compatible
+      // Use DETACH DELETE to remove node and all its relationships
       const deleteQuery = `
         MATCH (c:Context {graph_unique_id: $graphUniqueId})
-        OPTIONAL MATCH (c)-[r_out]->()
-        OPTIONAL MATCH (c)<-[r_in]-()
-        DELETE r_out, r_in, c
-        RETURN count(c) as deletedCount
+        DETACH DELETE c
+        RETURN 1 as deletedCount
       `;
 
       const result = await kuzuClient.executeQuery(deleteQuery, { graphUniqueId });
@@ -2580,13 +2576,12 @@ export class MemoryService {
         name: row.name,
       }));
 
-      // Then perform bulk deletion
+      // Then perform bulk deletion - KuzuDB compatible
+      // Use DETACH DELETE to remove nodes and all their relationships
       const deleteQuery = `
         MATCH (n:${entityType}) WHERE ${whereClause}
-        OPTIONAL MATCH (n)-[r_out]->()
-        OPTIONAL MATCH (n)<-[r_in]-()
-        DELETE r_out, r_in, n
-        RETURN count(n) as deletedCount
+        DETACH DELETE n
+        RETURN count(*) as deletedCount
       `;
 
       const deleteResult = await kuzuClient.executeQuery(deleteQuery, params);
@@ -2625,12 +2620,11 @@ export class MemoryService {
         name: row.name,
       }));
 
-      // Then perform bulk deletion
+      // Then perform bulk deletion - KuzuDB compatible
+      // Use DETACH DELETE to remove nodes and all their relationships
       const tagDeleteQuery = `
         MATCH (t:Tag)
-        OPTIONAL MATCH (t)-[r_out]->()
-        OPTIONAL MATCH (t)<-[r_in]-()
-        DELETE r_out, r_in, t
+        DETACH DELETE t
       `;
 
       await kuzuClient.executeQuery(tagDeleteQuery, {});

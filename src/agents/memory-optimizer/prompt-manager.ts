@@ -1,9 +1,9 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { logger } from '../../utils/logger.js';
-import type { MemoryContext } from '../../schemas/optimization/types.js';
-import type { MCPSamplingManager, MemorySample } from './mcp-sampling-manager.js';
-import type { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom.js';
+import { logger } from '../../utils/logger';
+import type { MemoryContext } from '../../schemas/optimization/types';
+import type { MCPSamplingManager, MemorySample } from './mcp-sampling-manager';
+import type { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
 
 export interface SystemPromptConfig {
   version: string;

@@ -1,8 +1,8 @@
-import { MemoryService } from '../../services/memory.service.js';
-import { KuzuDBClient } from '../../db/kuzu.js';
-import { logger } from '../../utils/logger.js';
-import type { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom.js';
-import type { MemoryContext } from '../../schemas/optimization/types.js';
+import { MemoryService } from '../../services/memory.service';
+import { KuzuDBClient } from '../../db/kuzu';
+import { logger } from '../../utils/logger';
+import type { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import type { MemoryContext } from '../../schemas/optimization/types';
 
 /**
  * Builds comprehensive memory context for optimization analysis

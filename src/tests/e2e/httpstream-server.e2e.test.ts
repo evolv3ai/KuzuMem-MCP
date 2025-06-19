@@ -1323,24 +1323,26 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     }, 10000);
 
     it('should require confirmation for bulk operations', async () => {
-      await expect(
-        callTool('delete', {
-          operation: 'bulk-by-type',
-          targetType: 'component',
-          repository: TEST_REPO,
-          branch: TEST_BRANCH,
-        }),
-      ).rejects.toThrow();
+      const result = await callTool('delete', {
+        operation: 'bulk-by-type',
+        targetType: 'component',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('confirm=true is required for bulk deletion operations');
     }, 10000);
 
     it('should handle missing required parameters', async () => {
-      await expect(
-        callTool('delete', {
-          operation: 'single',
-          repository: TEST_REPO,
-          branch: TEST_BRANCH,
-        }),
-      ).rejects.toThrow();
+      const result = await callTool('delete', {
+        operation: 'single',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('entityType and id are required for single deletion');
     }, 10000);
   });
 
