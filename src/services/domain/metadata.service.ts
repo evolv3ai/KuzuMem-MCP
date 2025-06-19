@@ -1,27 +1,10 @@
 import { z } from 'zod';
-import { KuzuDBClient } from '../../db/kuzu';
-import { RepositoryProvider } from '../../db/repository-provider';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
 import { CoreService } from '../core/core.service';
 import * as metadataOps from '../memory-operations/metadata.ops';
-import { SnapshotService } from '../snapshot.service';
 
 export class MetadataService extends CoreService {
-  constructor(
-    repositoryProvider: RepositoryProvider,
-    getKuzuClient: (
-      mcpContext: EnrichedRequestHandlerExtra,
-      clientProjectRoot: string,
-    ) => Promise<KuzuDBClient>,
-    getSnapshotService: (
-      mcpContext: EnrichedRequestHandlerExtra,
-      clientProjectRoot: string,
-    ) => Promise<SnapshotService>,
-  ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService);
-  }
-
   async getMetadata(
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,

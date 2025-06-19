@@ -1,7 +1,18 @@
 import { z } from 'zod';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
-import { Component, ComponentStatus, Decision, File as FileRecord, Rule, Tag } from '../../types';
+import {
+  Component,
+  ComponentStatus,
+  Decision,
+  DecisionInput,
+  FileInput,
+  File as FileRecord,
+  Rule,
+  RuleInput,
+  Tag,
+  TagInput,
+} from '../../types';
 import { CoreService } from '../core/core.service';
 import * as componentOps from '../memory-operations/component.ops';
 import * as contextOps from '../memory-operations/context.ops';
@@ -44,7 +55,7 @@ export class EntityService extends CoreService {
       mcpContext,
       repositoryName,
       branch,
-      ruleForOps as any,
+      ruleForOps as RuleInput,
       repositoryRepo,
       ruleRepo,
     ) as Promise<Rule | null>;
@@ -124,7 +135,7 @@ export class EntityService extends CoreService {
       mcpContext,
       repositoryName,
       branch,
-      decisionOpData as any,
+      decisionOpData as DecisionInput,
       repositoryRepo,
       decisionRepo,
     ) as Promise<Decision | null>;
@@ -574,7 +585,7 @@ export class EntityService extends CoreService {
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
-    fileData: any, // Remove schema reference
+    fileData: FileInput,
   ): Promise<z.infer<typeof toolSchemas.EntityCreateOutputSchema>> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
@@ -682,7 +693,7 @@ export class EntityService extends CoreService {
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
-    tagData: any, // Remove schema reference
+    tagData: TagInput,
   ): Promise<z.infer<typeof toolSchemas.EntityCreateOutputSchema>> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {

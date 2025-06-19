@@ -374,7 +374,7 @@ export class GraphQueryService extends CoreService {
         `[GraphQueryService.getActiveRules] Error for ${repositoryName}:${branch}: ${error.message}`,
         { error: error.toString() },
       );
-      return [];
+      throw error;
     }
   }
 
