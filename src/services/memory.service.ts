@@ -132,9 +132,22 @@ export class MemoryService {
 
       // Initialize SnapshotService for this client project root
       if (!this.snapshotServices.has(clientProjectRoot)) {
-        const snapshotService = new SnapshotService(newClient);
-        this.snapshotServices.set(clientProjectRoot, snapshotService);
-        logger.info(`[MemoryService.getKuzuClient] SnapshotService initialized for: ${clientProjectRoot}`);
+        try {
+          const snapshotService = new SnapshotService(newClient);
+          this.snapshotServices.set(clientProjectRoot, snapshotService);
+          logger.info(
+            `[MemoryService.getKuzuClient] SnapshotService initialized for: ${clientProjectRoot}`,
+          );
+        } catch (snapshotError) {
+          logger.error(
+            `[MemoryService.getKuzuClient] Failed to initialize SnapshotService for ${clientProjectRoot}:`,
+            snapshotError,
+          );
+          // Continue without SnapshotService - optimization operations will handle this gracefully
+          logger.warn(
+            `[MemoryService.getKuzuClient] Continuing without SnapshotService - snapshot operations will not be available for ${clientProjectRoot}`,
+          );
+        }
       }
 
       logger.info(
@@ -173,7 +186,12 @@ export class MemoryService {
     // Get cached SnapshotService
     const snapshotService = this.snapshotServices.get(clientProjectRoot);
     if (!snapshotService) {
-      throw new Error(`SnapshotService not found for project root: ${clientProjectRoot}`);
+      logger.error(
+        `[MemoryService.getSnapshotService] SnapshotService not found for project root: ${clientProjectRoot}`,
+      );
+      throw new Error(
+        `SnapshotService not available for project root: ${clientProjectRoot}. This may be due to initialization failure during KuzuDB client setup.`,
+      );
     }
 
     logger.debug(`[MemoryService.getSnapshotService] Retrieved SnapshotService for: ${clientProjectRoot}`);
