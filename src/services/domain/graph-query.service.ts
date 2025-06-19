@@ -100,7 +100,7 @@ export class GraphQueryService extends CoreService {
       branch,
       repositoryRepo,
       componentRepo,
-    ) as Promise<Component[]>;
+    );
   }
 
   async getComponentDependents(
@@ -306,7 +306,7 @@ export class GraphQueryService extends CoreService {
       return [];
     }
     try {
-      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+      await this.getKuzuClient(mcpContext, clientProjectRoot);
       const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
       const decisionRepo = this.repositoryProvider.getDecisionRepository(clientProjectRoot);
 

@@ -30,8 +30,9 @@ export class MetadataService extends CoreService {
   ): Promise<z.infer<typeof toolSchemas.GetMetadataOutputSchema> | null> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
-      logger.error('RepositoryProvider not initialized in getMetadata');
-      return null;
+      const errorMessage = 'RepositoryProvider not initialized in getMetadata';
+      logger.error(errorMessage);
+      throw new Error(errorMessage);
     }
     try {
       const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
@@ -67,7 +68,8 @@ export class MetadataService extends CoreService {
       logger.error(`Error in getMetadata for ${repositoryName}:${branch}: ${error.message}`, {
         error: error.toString(),
       });
-      return null;
+      // Re-throw the original error to maintain the stack trace and let the caller handle it
+      throw error;
     }
   }
 

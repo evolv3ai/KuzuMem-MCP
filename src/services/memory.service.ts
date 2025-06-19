@@ -1,8 +1,8 @@
-import * as path from 'path';
 import { KuzuDBClient } from '../db/kuzu';
 import { RepositoryProvider } from '../db/repository-provider';
 import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
 import { Mutex } from '../utils/mutex';
+import { ensureAbsolutePath } from '../utils/path.utils';
 import { ServiceRegistry } from './core/service-registry.service';
 import { SnapshotService } from './snapshot.service';
 
@@ -82,7 +82,7 @@ export class MemoryService {
     }
 
     // Ensure path is absolute
-    clientProjectRoot = this.ensureAbsoluteRoot(clientProjectRoot);
+    clientProjectRoot = ensureAbsolutePath(clientProjectRoot);
     logger.info(
       `[MemoryService.getKuzuClient] Using absolute clientProjectRoot: ${clientProjectRoot}`,
     );
@@ -162,7 +162,7 @@ export class MemoryService {
     const logger = mcpContext.logger || console;
 
     // Ensure absolute path
-    clientProjectRoot = this.ensureAbsoluteRoot(clientProjectRoot);
+    clientProjectRoot = ensureAbsolutePath(clientProjectRoot);
 
     // Ensure KuzuDB client is initialized (this also initializes SnapshotService)
     await this.getKuzuClient(mcpContext, clientProjectRoot);
@@ -220,13 +220,6 @@ export class MemoryService {
   // ------------------------------------------------------------------------
 
   // All file and tag methods have been moved to EntityService
-
-  private ensureAbsoluteRoot(clientProjectRoot: string): string {
-    if (!path.isAbsolute(clientProjectRoot)) {
-      return path.resolve(clientProjectRoot);
-    }
-    return clientProjectRoot;
-  }
 
   // Delete methods moved to EntityService
 

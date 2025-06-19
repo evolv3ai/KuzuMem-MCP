@@ -1,9 +1,7 @@
 import { z } from 'zod';
-import { KuzuDBClient } from '../../db/kuzu';
-import { RepositoryProvider } from '../../db/repository-provider';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
-import { Component, ComponentStatus, Decision, Rule } from '../../types';
+import { Component, ComponentStatus, Decision, File as FileRecord, Rule, Tag } from '../../types';
 import { CoreService } from '../core/core.service';
 import * as componentOps from '../memory-operations/component.ops';
 import * as contextOps from '../memory-operations/context.ops';
@@ -11,27 +9,10 @@ import * as decisionOps from '../memory-operations/decision.ops';
 import * as fileOps from '../memory-operations/file.ops';
 import * as ruleOps from '../memory-operations/rule.ops';
 import * as tagOps from '../memory-operations/tag.ops';
-import { SnapshotService } from '../snapshot.service';
 
-// Type definitions (temporary until proper types are created)
-type FileRecord = any;
-type Tag = any;
+// Type definitions are now properly imported
 
 export class EntityService extends CoreService {
-  constructor(
-    repositoryProvider: RepositoryProvider,
-    getKuzuClient: (
-      mcpContext: EnrichedRequestHandlerExtra,
-      clientProjectRoot: string,
-    ) => Promise<KuzuDBClient>,
-    getSnapshotService: (
-      mcpContext: EnrichedRequestHandlerExtra,
-      clientProjectRoot: string,
-    ) => Promise<SnapshotService>,
-  ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService);
-  }
-
   /**
    * Create or update a rule for a repository
    */
@@ -219,6 +200,22 @@ export class EntityService extends CoreService {
     }
   }
 
+  /**
+   * Resolves the final value for a field being updated.
+   * If an `updateValue` is provided, it takes precedence. Otherwise, `existingValue` is used.
+   * Explicit `null` values are converted to `undefined`.
+   * @param updateValue The new value from the update payload.
+   * @param existingValue The current value of the entity's field.
+   * @returns The resolved value for the update, or `undefined`.
+   */
+  private _resolveUpdateField<T>(
+    updateValue: T | undefined | null,
+    existingValue: T | undefined | null,
+  ): T | undefined {
+    const value = updateValue !== undefined ? updateValue : existingValue;
+    return value === null ? undefined : value;
+  }
+
   // Update methods for entities (distinct from upsert - only update existing)
   async updateComponent(
     mcpContext: EnrichedRequestHandlerExtra,
@@ -252,30 +249,9 @@ export class EntityService extends CoreService {
       const updatedData = {
         id: componentId,
         name: existing.name,
-        kind:
-          updates.kind !== undefined
-            ? updates.kind === null
-              ? undefined
-              : updates.kind
-            : existing.kind === null
-              ? undefined
-              : existing.kind,
-        depends_on:
-          updates.depends_on !== undefined
-            ? updates.depends_on === null
-              ? undefined
-              : updates.depends_on
-            : existing.depends_on === null
-              ? undefined
-              : existing.depends_on,
-        status:
-          updates.status !== undefined
-            ? updates.status === null
-              ? undefined
-              : updates.status
-            : existing.status === null
-              ? undefined
-              : existing.status,
+        kind: this._resolveUpdateField(updates.kind, existing.kind),
+        depends_on: this._resolveUpdateField(updates.depends_on, existing.depends_on),
+        status: this._resolveUpdateField(updates.status, existing.status),
       };
 
       return await this.upsertComponent(
@@ -848,49 +824,24 @@ export class EntityService extends CoreService {
     entities: Array<{ type: string; id: string; name?: string }>;
     count: number;
   }> {
-    if (dryRun) {
-      const query = `
-        MATCH (n:${entityType})
-        WHERE ${whereClause}
-        RETURN n.id as id, n.name as name
-      `;
-      const results = await kuzuClient.executeQuery(query, params);
+    const query = `
+      MATCH (n:${entityType})
+      WHERE ${whereClause}
+      ${dryRun ? '' : 'DETACH DELETE n'}
+      RETURN n.id as id, n.name as name, labels(n) as labels
+    `;
+    const results = await kuzuClient.executeQuery(query, params);
 
-      const entities = results.map((row: any) => ({
-        type: entityType.toLowerCase(),
-        id: row.id,
-        name: row.name,
-      }));
+    const entities = results.map((row: any) => ({
+      type:
+        (row.labels as string[])
+          .find((l) => l.toLowerCase() === entityType.toLowerCase())
+          ?.toLowerCase() || entityType.toLowerCase(),
+      id: row.id,
+      name: row.name,
+    }));
 
-      return { entities, count: entities.length };
-    } else {
-      // First get entity details before deletion
-      const selectQuery = `
-        MATCH (n:${entityType})
-        WHERE ${whereClause}
-        RETURN n.id as id, n.name as name
-      `;
-      const selectResults = await kuzuClient.executeQuery(selectQuery, params);
-
-      const entities = selectResults.map((row: any) => ({
-        type: entityType.toLowerCase(),
-        id: row.id,
-        name: row.name,
-      }));
-
-      // Then perform bulk deletion - KuzuDB compatible
-      // Use DETACH DELETE to remove nodes and all their relationships
-      const deleteQuery = `
-        MATCH (n:${entityType}) WHERE ${whereClause}
-        DETACH DELETE n
-        RETURN count(*) as deletedCount
-      `;
-
-      const deleteResult = await kuzuClient.executeQuery(deleteQuery, params);
-      const deletedCount = deleteResult[0]?.deletedCount || 0;
-
-      return { entities, count: deletedCount };
-    }
+    return { entities, count: entities.length };
   }
 
   private async handleTagDeletion(
@@ -900,39 +851,20 @@ export class EntityService extends CoreService {
     entities: Array<{ type: string; id: string; name?: string }>;
     count: number;
   }> {
-    if (dryRun) {
-      const tagQuery = `MATCH (t:Tag) RETURN t.id as id, t.name as name`;
-      const tagResults = await kuzuClient.executeQuery(tagQuery, {});
+    const query = `
+      MATCH (t:Tag)
+      ${dryRun ? '' : 'DETACH DELETE t'}
+      RETURN t.id as id, t.name as name
+    `;
+    const results = await kuzuClient.executeQuery(query, {});
 
-      const entities = tagResults.map((row: any) => ({
-        type: 'tag',
-        id: row.id,
-        name: row.name,
-      }));
+    const entities = results.map((row: any) => ({
+      type: 'tag',
+      id: row.id,
+      name: row.name,
+    }));
 
-      return { entities, count: entities.length };
-    } else {
-      // First get tag details before deletion
-      const tagSelectQuery = `MATCH (t:Tag) RETURN t.id as id, t.name as name`;
-      const tagSelectResults = await kuzuClient.executeQuery(tagSelectQuery, {});
-
-      const entities = tagSelectResults.map((row: any) => ({
-        type: 'tag',
-        id: row.id,
-        name: row.name,
-      }));
-
-      // Then perform bulk deletion - KuzuDB compatible
-      // Use DETACH DELETE to remove nodes and all their relationships
-      const tagDeleteQuery = `
-        MATCH (t:Tag)
-        DETACH DELETE t
-      `;
-
-      await kuzuClient.executeQuery(tagDeleteQuery, {});
-
-      return { entities, count: entities.length };
-    }
+    return { entities, count: entities.length };
   }
 
   private async processRepositoryScopedEntities(
@@ -1084,49 +1016,26 @@ export class EntityService extends CoreService {
         return { count: 0, entities: [], warnings };
       }
 
-      // Find all entities tagged with the specified tag
-      const findQuery = `
-        MATCH (t:Tag {id: $tagId})-[:TAGGED_WITH]-(n)
-        WHERE n.repository = $repositoryName AND n.branch = $branch
-        RETURN labels(n) as nodeLabels, n.id as id, n.name as name
+      const whereClause = 't.id = $tagId AND n.repository = $repositoryName AND n.branch = $branch';
+      const params = { tagId, repositoryName, branch };
+
+      const query = `
+        MATCH (t:Tag)-[:TAGGED_WITH]-(n)
+        WHERE ${whereClause}
+        ${options.dryRun ? '' : 'DETACH DELETE n'}
+        RETURN n.id as id, n.name as name, labels(n) as labels
       `;
 
-      const findResults = await kuzuClient.executeQuery(findQuery, {
-        tagId,
-        repositoryName,
-        branch,
-      });
+      const results = await kuzuClient.executeQuery(query, params);
 
-      // Process found entities
-      for (const row of findResults) {
-        const nodeLabels = row.nodeLabels || [];
-        const entityType =
-          nodeLabels
-            .find((label: string) =>
-              ['Component', 'Decision', 'Rule', 'File', 'Context'].includes(label),
-            )
-            ?.toLowerCase() || 'unknown';
+      const entities = results.map((row: any) => ({
+        type: (row.labels as string[]).find((l) => l !== 'Tag')?.toLowerCase() || 'unknown',
+        id: row.id,
+        name: row.name,
+      }));
 
-        deletedEntities.push({ type: entityType, id: row.id, name: row.name });
-        totalCount++;
-      }
-
-      // Perform actual deletion if not dry run
-      if (!options.dryRun && deletedEntities.length > 0) {
-        const bulkDeleteQuery = `
-          MATCH (t:Tag {id: $tagId})-[:TAGGED_WITH]-(n)
-          WHERE n.repository = $repositoryName AND n.branch = $branch
-          OPTIONAL MATCH (n)-[r_out]->()
-          OPTIONAL MATCH (n)<-[r_in]-()
-          DELETE r_out, r_in, n
-        `;
-
-        await kuzuClient.executeQuery(bulkDeleteQuery, {
-          tagId,
-          repositoryName,
-          branch,
-        });
-      }
+      totalCount = entities.length;
+      deletedEntities.push(...entities);
 
       logger.info(
         `[EntityService.bulkDeleteByTag] ${
