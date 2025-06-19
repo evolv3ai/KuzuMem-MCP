@@ -8,9 +8,6 @@ import { RepositoryRepository } from '../repository.repository';
  * Handles path finding, dependency queries, and relationship traversals
  */
 export class ComponentGraphRepository extends BaseComponentRepository {
-  constructor(kuzuClient: KuzuDBClient, repositoryRepo: RepositoryRepository) {
-    super(kuzuClient, repositoryRepo);
-  }
 
   /**
    * Find shortest path between two components

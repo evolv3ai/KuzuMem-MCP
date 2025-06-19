@@ -10,10 +10,6 @@ import { RepositoryRepository } from '../repository.repository';
 export class ComponentAlgorithmRepository extends BaseComponentRepository {
   private readonly globalProjectedGraphName = 'AllComponentsAndDependencies';
 
-  constructor(kuzuClient: KuzuDBClient, repositoryRepo: RepositoryRepository) {
-    super(kuzuClient, repositoryRepo);
-  }
-
   /**
    * K-core decomposition algorithm
    */
@@ -158,7 +154,6 @@ export class ComponentAlgorithmRepository extends BaseComponentRepository {
    */
   async getStronglyConnectedComponents(
     repositoryNodeId: string,
-    maxIterations?: number,
   ): Promise<any> {
     await this.ensureGraphProjection(this.globalProjectedGraphName);
 
@@ -198,7 +193,6 @@ export class ComponentAlgorithmRepository extends BaseComponentRepository {
    */
   async getWeaklyConnectedComponents(
     repositoryNodeId: string,
-    maxIterations?: number,
   ): Promise<any> {
     await this.ensureGraphProjection(this.globalProjectedGraphName);
 

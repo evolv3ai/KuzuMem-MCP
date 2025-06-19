@@ -186,7 +186,11 @@ export class ComponentRepository {
     componentId: string,
     componentBranch: string,
   ): Promise<Decision[]> {
-    return this.graphRepo.getGoverningItemsForComponent(repositoryName, componentId, componentBranch);
+    return this.graphRepo.getGoverningItemsForComponent(
+      repositoryName,
+      componentId,
+      componentBranch,
+    );
   }
 
   // === Algorithm Operations - Delegated to ComponentAlgorithmRepository ===
@@ -229,9 +233,8 @@ export class ComponentRepository {
    */
   async getStronglyConnectedComponents(
     repositoryNodeId: string,
-    maxIterations?: number,
   ): Promise<any> {
-    return this.algorithmRepo.getStronglyConnectedComponents(repositoryNodeId, maxIterations);
+    return this.algorithmRepo.getStronglyConnectedComponents(repositoryNodeId);
   }
 
   /**
@@ -239,9 +242,8 @@ export class ComponentRepository {
    */
   async getWeaklyConnectedComponents(
     repositoryNodeId: string,
-    maxIterations?: number,
   ): Promise<any> {
-    return this.algorithmRepo.getWeaklyConnectedComponents(repositoryNodeId, maxIterations);
+    return this.algorithmRepo.getWeaklyConnectedComponents(repositoryNodeId);
   }
 
   // === Complex Operations - Delegated to ComponentComplexRepository ===

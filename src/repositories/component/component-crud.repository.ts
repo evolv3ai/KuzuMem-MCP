@@ -8,9 +8,6 @@ import { RepositoryRepository } from '../repository.repository';
  * Handles create, read, update, delete operations for components
  */
 export class ComponentCrudRepository extends BaseComponentRepository {
-  constructor(kuzuClient: KuzuDBClient, repositoryRepo: RepositoryRepository) {
-    super(kuzuClient, repositoryRepo);
-  }
 
   /**
    * Get all active components for a specific repository and branch

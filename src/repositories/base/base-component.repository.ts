@@ -31,7 +31,14 @@ export abstract class BaseComponentRepository {
     if (typeof value !== 'string') {
       return '';
     }
-    return value.replace(/'/g, "\\'");
+    // Escape single quotes, backslashes, and other special characters
+    return value
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'")
+      .replace(/"/g, '\\"')
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\r')
+      .replace(/\x00/g, '\\x00');
   }
 
   /**
