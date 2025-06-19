@@ -2798,7 +2798,9 @@ export class MemoryService {
       }
 
       logger.info(
-        `[MemoryService.bulkDeleteByTag] ${options.dryRun ? 'Would delete' : 'Deleted'} ${totalCount} entities tagged with ${tagId} in ${repositoryName}:${branch}`,
+        `[MemoryService.bulkDeleteByTag] ${
+          options.dryRun ? 'Would delete' : 'Deleted'
+        } ${totalCount} entities tagged with ${tagId} in ${repositoryName}:${branch}`,
       );
 
       return {
@@ -2807,7 +2809,10 @@ export class MemoryService {
         warnings,
       };
     } catch (error: any) {
-      logger.error(`[MemoryService.bulkDeleteByTag] Error bulk deleting by tag ${tagId}:`, error);
+      logger.error(
+        `[MemoryService.bulkDeleteByTag] Error bulk deleting by tag ${tagId}:`,
+        error,
+      );
       throw error;
     }
   }
@@ -2847,7 +2852,7 @@ export class MemoryService {
         entityTypes,
         repositoryName,
         targetBranch,
-        options.dryRun || false
+        options.dryRun || false,
       );
       deletedEntities.push(...scopedResult.entities);
       totalCount += scopedResult.count;
@@ -2876,7 +2881,9 @@ export class MemoryService {
       }
 
       logger.info(
-        `[MemoryService.bulkDeleteByBranch] ${options.dryRun ? 'Would delete' : 'Deleted'} ${totalCount} entities from branch ${targetBranch} in repository ${repositoryName}`,
+        `[MemoryService.bulkDeleteByBranch] ${
+          options.dryRun ? 'Would delete' : 'Deleted'
+        } ${totalCount} entities from branch ${targetBranch} in repository ${repositoryName}`,
       );
 
       return {
@@ -2926,12 +2933,20 @@ export class MemoryService {
         const whereClause = 'n.repository = $repositoryName';
         const params = { repositoryName };
 
-        const result = await this.executeBulkDeletion(kuzuClient, entityType, whereClause, params, options.dryRun || false);
+        const result = await this.executeBulkDeletion(
+          kuzuClient,
+          entityType,
+          whereClause,
+          params,
+          options.dryRun || false,
+        );
 
         // For repository deletion, include branch info in entity names
         const entitiesWithBranch = result.entities.map((entity: any) => ({
           ...entity,
-          name: entity.name ? `${entity.name} (multi-branch)` : `${entity.id} (multi-branch)`,
+          name: entity.name
+            ? `${entity.name} (multi-branch)`
+            : `${entity.id} (multi-branch)`,
         }));
 
         deletedEntities.push(...entitiesWithBranch);
@@ -2946,7 +2961,9 @@ export class MemoryService {
           RETURN count(r) as deletedCount, collect(r.branch) as branches
         `;
 
-        const repoResult = await kuzuClient.executeQuery(repoDeleteQuery, { repositoryName });
+        const repoResult = await kuzuClient.executeQuery(repoDeleteQuery, {
+          repositoryName,
+        });
         const repoDeletedCount = repoResult[0]?.deletedCount || 0;
         const branches = repoResult[0]?.branches || [];
 
@@ -2963,7 +2980,9 @@ export class MemoryService {
       }
 
       logger.info(
-        `[MemoryService.bulkDeleteByRepository] ${options.dryRun ? 'Would delete' : 'Deleted'} ${totalCount} entities from repository ${repositoryName} (all branches)`,
+        `[MemoryService.bulkDeleteByRepository] ${
+          options.dryRun ? 'Would delete' : 'Deleted'
+        } ${totalCount} entities from repository ${repositoryName} (all branches)`,
       );
 
       return {
