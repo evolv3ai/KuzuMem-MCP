@@ -40,21 +40,70 @@ const analysisCache = new Map<string, any>();
 
 /**
  * Handler for memory optimizer tool operations
+ *
+ * @param params - Tool parameters (typed as any due to MCP signature requirements)
+ * @param params.operation - Operation type: 'analyze' | 'optimize' | 'rollback' | 'list-snapshots'
+ * @param params.repository - Repository name for memory operations
+ * @param params.branch - Branch name for memory operations
+ * @param params.clientProjectRoot - Optional client project root path
+ * @param params.strategy - Optimization strategy: 'conservative' | 'balanced' | 'aggressive'
+ * @param params.llmProvider - LLM provider: 'openai' | 'anthropic'
+ * @param params.model - Model name (e.g., 'o1-mini', 'claude-3-5-sonnet')
+ * @param params.dryRun - Whether to perform dry run (preview only)
+ * @param params.confirm - Confirmation for actual optimization
+ * @param params.analysisId - Analysis ID for optimization (from previous analyze)
+ * @param params.snapshotId - Snapshot ID for rollback operation
+ * @param params.enableMCPSampling - Enable MCP sampling for context-aware prompts
+ * @param params.samplingStrategy - MCP sampling strategy: 'representative' | 'problematic' | 'recent' | 'diverse'
+ *
+ * @param context - MCP request context (typed as any due to MCP signature requirements)
+ * @param context.session - Session information with clientProjectRoot, repository, branch
+ * @param context.requestId - Unique request identifier
+ * @param context.timestamp - Request timestamp
+ *
+ * @returns Promise<any> - Tool execution result with success, operation, data, message, warnings
  */
 export async function memoryOptimizerHandler(
   params: any,
   context: any,
 ): Promise<any> {
+  // Internal type assertions for better type safety and IntelliSense
+  const typedParams = params as {
+    operation: 'analyze' | 'optimize' | 'rollback' | 'list-snapshots';
+    repository: string;
+    branch: string;
+    clientProjectRoot?: string;
+    strategy?: 'conservative' | 'balanced' | 'aggressive';
+    llmProvider?: 'openai' | 'anthropic';
+    model?: string;
+    dryRun?: boolean;
+    confirm?: boolean;
+    analysisId?: string;
+    snapshotId?: string;
+    enableMCPSampling?: boolean;
+    samplingStrategy?: 'representative' | 'problematic' | 'recent' | 'diverse';
+  };
+
+  const typedContext = context as {
+    session: {
+      clientProjectRoot?: string;
+      repository?: string;
+      branch?: string;
+    };
+    requestId: string;
+    timestamp: string;
+  };
+
   const memoryService = await MemoryService.getInstance();
-  const handlerLogger = logger.child({ 
+  const handlerLogger = logger.child({
     tool: 'memory-optimizer',
-    operation: params.operation,
-    repository: params.repository,
-    branch: params.branch,
+    operation: typedParams.operation,
+    repository: typedParams.repository,
+    branch: typedParams.branch,
   });
 
   try {
-    // Validate input parameters
+    // Validate input parameters using Zod schema
     const validatedParams = MemoryOptimizerInputSchema.parse(params);
     
     // Validate session and get clientProjectRoot
@@ -106,6 +155,12 @@ export async function memoryOptimizerHandler(
 
 /**
  * Handle memory analysis operation
+ *
+ * @param agent - Memory optimization agent instance
+ * @param params - Validated memory optimizer parameters
+ * @param context - Enriched request handler context
+ * @param logger - Logger instance for operation tracking
+ * @returns Promise<any> - Analysis result with analysisId, summary, entities, recommendations
  */
 async function handleAnalyzeOperation(
   agent: MemoryOptimizationAgent,
@@ -113,7 +168,12 @@ async function handleAnalyzeOperation(
   context: EnrichedRequestHandlerExtra,
   logger: any,
 ): Promise<any> {
-  logger.info('Starting memory analysis operation');
+  // Internal type assertion for logger
+  const typedLogger = logger as {
+    info: (message: string, meta?: any) => void;
+    error: (message: string, error?: any) => void;
+  };
+  typedLogger.info('Starting memory analysis operation');
 
   try {
     // Perform memory analysis
@@ -137,7 +197,7 @@ async function handleAnalyzeOperation(
       }
     }
 
-    logger.info('Memory analysis completed successfully', {
+    typedLogger.info('Memory analysis completed successfully', {
       analysisId,
       staleEntities: analysisResult.staleEntities.length,
       redundancies: analysisResult.redundancies.length,
@@ -162,13 +222,19 @@ async function handleAnalyzeOperation(
         : [],
     };
   } catch (error) {
-    logger.error('Memory analysis failed:', error);
+    typedLogger.error('Memory analysis failed:', error);
     throw error;
   }
 }
 
 /**
  * Handle optimization operation
+ *
+ * @param agent - Memory optimization agent instance
+ * @param params - Validated memory optimizer parameters
+ * @param context - Enriched request handler context
+ * @param logger - Logger instance for operation tracking
+ * @returns Promise<any> - Optimization result with planId, status, actions, summary, snapshotId
  */
 async function handleOptimizeOperation(
   agent: MemoryOptimizationAgent,
@@ -176,7 +242,13 @@ async function handleOptimizeOperation(
   context: EnrichedRequestHandlerExtra,
   logger: any,
 ): Promise<any> {
-  logger.info('Starting optimization operation', {
+  // Internal type assertion for logger
+  const typedLogger = logger as {
+    info: (message: string, meta?: any) => void;
+    error: (message: string, error?: any) => void;
+  };
+
+  typedLogger.info('Starting optimization operation', {
     dryRun: params.dryRun,
     confirm: params.confirm,
   });
@@ -186,9 +258,9 @@ async function handleOptimizeOperation(
     let analysisResult;
     if (params.analysisId && analysisCache.has(params.analysisId)) {
       analysisResult = analysisCache.get(params.analysisId);
-      logger.info('Using cached analysis results', { analysisId: params.analysisId });
+      typedLogger.info('Using cached analysis results', { analysisId: params.analysisId });
     } else {
-      logger.info('No cached analysis found, performing new analysis');
+      typedLogger.info('No cached analysis found, performing new analysis');
       analysisResult = await agent.analyzeMemory(
         context,
         params.clientProjectRoot,
@@ -237,11 +309,11 @@ async function handleOptimizeOperation(
       },
     );
 
-    logger.info('Optimization operation completed', {
+    typedLogger.info('Optimization operation completed', {
       planId: optimizationResult.planId,
       status: optimizationResult.status,
-      entitiesAffected: optimizationResult.summary.entitiesDeleted + 
-                       optimizationResult.summary.entitiesMerged + 
+      entitiesAffected: optimizationResult.summary.entitiesDeleted +
+                       optimizationResult.summary.entitiesMerged +
                        optimizationResult.summary.entitiesUpdated,
     });
 
@@ -263,13 +335,19 @@ async function handleOptimizeOperation(
         : [],
     };
   } catch (error) {
-    logger.error('Optimization operation failed:', error);
+    typedLogger.error('Optimization operation failed:', error);
     throw error;
   }
 }
 
 /**
  * Handle rollback operation
+ *
+ * @param agent - Memory optimization agent instance
+ * @param params - Validated memory optimizer parameters
+ * @param context - Enriched request handler context
+ * @param logger - Logger instance for operation tracking
+ * @returns Promise<any> - Rollback result with status, restored counts, rollback time
  */
 async function handleRollbackOperation(
   agent: MemoryOptimizationAgent,
@@ -277,7 +355,13 @@ async function handleRollbackOperation(
   context: EnrichedRequestHandlerExtra,
   logger: any,
 ): Promise<any> {
-  logger.info('Starting rollback operation', { snapshotId: params.snapshotId });
+  // Internal type assertion for logger
+  const typedLogger = logger as {
+    info: (message: string, meta?: any) => void;
+    error: (message: string, error?: any) => void;
+  };
+
+  typedLogger.info('Starting rollback operation', { snapshotId: params.snapshotId });
 
   try {
     const snapshotId = params.snapshotId;
@@ -294,7 +378,7 @@ async function handleRollbackOperation(
       snapshotId
     );
 
-    logger.info('Rollback operation completed', {
+    typedLogger.info('Rollback operation completed', {
       snapshotId,
       restoredEntities: rollbackResult.restoredEntities,
       restoredRelationships: rollbackResult.restoredRelationships,
@@ -313,13 +397,19 @@ async function handleRollbackOperation(
       message: rollbackResult.message,
     };
   } catch (error) {
-    logger.error('Rollback operation failed:', error);
+    typedLogger.error('Rollback operation failed:', error);
     throw error;
   }
 }
 
 /**
  * Handle list snapshots operation
+ *
+ * @param agent - Memory optimization agent instance
+ * @param params - Validated memory optimizer parameters
+ * @param context - Enriched request handler context
+ * @param logger - Logger instance for operation tracking
+ * @returns Promise<any> - Snapshots list with count, repository, branch information
  */
 async function handleListSnapshotsOperation(
   agent: MemoryOptimizationAgent,
@@ -327,7 +417,13 @@ async function handleListSnapshotsOperation(
   context: EnrichedRequestHandlerExtra,
   logger: any,
 ): Promise<any> {
-  logger.info('Starting list snapshots operation', {
+  // Internal type assertion for logger
+  const typedLogger = logger as {
+    info: (message: string, meta?: any) => void;
+    error: (message: string, error?: any) => void;
+  };
+
+  typedLogger.info('Starting list snapshots operation', {
     repository: params.repository,
     branch: params.branch,
   });
@@ -341,7 +437,7 @@ async function handleListSnapshotsOperation(
       params.branch
     );
 
-    logger.info('List snapshots operation completed', {
+    typedLogger.info('List snapshots operation completed', {
       snapshotCount: snapshots.length,
     });
 
@@ -357,7 +453,7 @@ async function handleListSnapshotsOperation(
       message: `Found ${snapshots.length} snapshots for ${params.repository}${params.branch ? `:${params.branch}` : ''}`,
     };
   } catch (error) {
-    logger.error('List snapshots operation failed:', error);
+    typedLogger.error('List snapshots operation failed:', error);
     throw error;
   }
 }
