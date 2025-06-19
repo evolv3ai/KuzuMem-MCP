@@ -304,14 +304,20 @@ export class MemoryOptimizationAgent {
 
       // Create snapshot before optimization (if not dry run)
       let snapshotId: string | undefined;
+
       if (!options.dryRun && options.createSnapshot !== false) {
         try {
-          const snapshotService = await this.memoryService.getSnapshotService(mcpContext, clientProjectRoot);
+          const snapshotService = await this.memoryService.getSnapshotService(
+            mcpContext,
+            clientProjectRoot
+          );
+
           const snapshotResult = await snapshotService.createSnapshot(
             repository,
             branch,
             `Pre-optimization snapshot for plan ${plan.id}`
           );
+
           snapshotId = snapshotResult.snapshotId;
 
           executeLogger.info('Created pre-optimization snapshot', {
@@ -323,21 +329,39 @@ export class MemoryOptimizationAgent {
           executeLogger.error('Failed to create snapshot:', snapshotError);
 
           // Determine snapshot failure policy (options override config)
-          const failurePolicy = options.snapshotFailurePolicy || this.config.snapshotFailurePolicy || 'warn';
+          const failurePolicy =
+            options.snapshotFailurePolicy ||
+            this.config.snapshotFailurePolicy ||
+            'warn';
 
           switch (failurePolicy) {
             case 'abort':
-              executeLogger.error('Aborting optimization due to snapshot failure (policy: abort)');
-              throw new Error(`Optimization aborted: Failed to create snapshot - ${snapshotError}. Rollback will not be available.`);
+              executeLogger.error(
+                'Aborting optimization due to snapshot failure (policy: abort)'
+              );
+
+              throw new Error(
+                `Optimization aborted: Failed to create snapshot - ${snapshotError}. ` +
+                'Rollback will not be available.'
+              );
 
             case 'continue':
-              executeLogger.info('Continuing optimization without snapshot (policy: continue)');
+              executeLogger.info(
+                'Continuing optimization without snapshot (policy: continue)'
+              );
               break;
 
             case 'warn':
             default:
-              executeLogger.warn('Proceeding with optimization without snapshot - rollback will not be available (policy: warn)');
-              executeLogger.warn('Consider using snapshotFailurePolicy: "abort" for production environments requiring guaranteed rollback');
+              executeLogger.warn(
+                'Proceeding with optimization without snapshot - ' +
+                'rollback will not be available (policy: warn)'
+              );
+
+              executeLogger.warn(
+                'Consider using snapshotFailurePolicy: "abort" for production ' +
+                'environments requiring guaranteed rollback'
+              );
               break;
           }
         }
