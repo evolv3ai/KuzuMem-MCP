@@ -14,9 +14,9 @@ import { randomUUID } from 'node:crypto';
 import { toolHandlers } from './mcp/tool-handlers';
 import { MEMORY_BANK_MCP_TOOLS } from './mcp/tools/index';
 import { ToolHandlerContext } from './mcp/types/sdk-custom';
-import { MemoryService } from './services/memory.service';
-import { createZodRawShape } from './mcp/utils/schema-utils';
 import { createRepositoryBranchKey } from './mcp/utils/repository-utils';
+import { createZodRawShape } from './mcp/utils/schema-utils';
+import { MemoryService } from './services/memory.service';
 import {
   createPerformanceLogger,
   enforceStdioCompliance,
@@ -64,8 +64,11 @@ async function gracefulShutdown(signal: string): Promise<void> {
       // We'll try to get any existing instances to clean them up
       mcpStdioLogger.info('Starting cleanup process');
 
-      // Note: We can't easily get all MemoryService instances since they're created on-demand
-      // But the process exit will clean them up anyway
+      // Get the MemoryService instance and shut it down to ensure all KuzuDB connections are closed.
+      const memoryService = await MemoryService.getInstance();
+      if (memoryService) {
+        await memoryService.shutdown();
+      }
 
       mcpStdioLogger.info('Cleanup completed');
     } catch (error) {

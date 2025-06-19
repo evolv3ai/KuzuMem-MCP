@@ -23,7 +23,11 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
   let SERVER_URL: string;
 
   // Helper to send HTTP request to server
-  const sendHttpRequest = async (method: string, params: any): Promise<any> => {
+  const sendHttpRequest = async (
+    method: string,
+    params: any,
+    signal?: AbortSignal,
+  ): Promise<any> => {
     const currentMessageId = messageId++;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -44,6 +48,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         method,
         params,
       }),
+      signal,
     });
 
     if (!response.ok) {
@@ -1495,15 +1500,19 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     }, 15000);
 
     it('should handle memory optimizer tool availability via HTTP stream', async () => {
-      // This test can fail due to resource exhaustion after running all previous tests
-      // Skip if we detect we're running in a resource-constrained environment
+      const controller = new AbortController();
+      const signal = controller.signal;
+
       try {
         // Quick timeout to avoid hanging the test suite
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Tools list request timed out')), 5000),
+          setTimeout(() => {
+            controller.abort();
+            reject(new Error('Tools list request timed out'));
+          }, 5000),
         );
 
-        const requestPromise = sendHttpRequest('tools/list', {});
+        const requestPromise = sendHttpRequest('tools/list', {}, signal);
 
         const toolsResponse = await Promise.race([requestPromise, timeoutPromise]);
 

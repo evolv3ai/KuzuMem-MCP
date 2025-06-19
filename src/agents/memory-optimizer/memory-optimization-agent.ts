@@ -2,8 +2,8 @@
 import { MemoryService } from '../../services/memory.service';
 
 // Memory optimizer components
-import { MemoryContextBuilder } from './context-builder';
 import { MCPSamplingManager } from './mcp-sampling-manager';
+import { MemoryContextBuilder } from './memory-context-builder';
 import { PromptManager } from './prompt-manager';
 
 // Specialized services

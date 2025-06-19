@@ -1,27 +1,10 @@
 import { z } from 'zod';
-import { KuzuDBClient } from '../../db/kuzu';
-import { RepositoryProvider } from '../../db/repository-provider';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
 import { CoreService } from '../core/core.service';
 import * as metadataOps from '../memory-operations/metadata.ops';
-import { SnapshotService } from '../snapshot.service';
 
 export class MetadataService extends CoreService {
-  constructor(
-    repositoryProvider: RepositoryProvider,
-    getKuzuClient: (
-      mcpContext: EnrichedRequestHandlerExtra,
-      clientProjectRoot: string,
-    ) => Promise<KuzuDBClient>,
-    getSnapshotService: (
-      mcpContext: EnrichedRequestHandlerExtra,
-      clientProjectRoot: string,
-    ) => Promise<SnapshotService>,
-  ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService);
-  }
-
   async getMetadata(
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
@@ -30,8 +13,9 @@ export class MetadataService extends CoreService {
   ): Promise<z.infer<typeof toolSchemas.GetMetadataOutputSchema> | null> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
-      logger.error('RepositoryProvider not initialized in getMetadata');
-      return null;
+      const errorMessage = 'RepositoryProvider not initialized in getMetadata';
+      logger.error(errorMessage);
+      throw new Error(errorMessage);
     }
     try {
       const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
@@ -67,7 +51,8 @@ export class MetadataService extends CoreService {
       logger.error(`Error in getMetadata for ${repositoryName}:${branch}: ${error.message}`, {
         error: error.toString(),
       });
-      return null;
+      // Re-throw the original error to maintain the stack trace and let the caller handle it
+      throw error;
     }
   }
 
