@@ -4,24 +4,12 @@ import { KuzuDBClient } from '../../db/kuzu';
 import { RepositoryProvider } from '../../db/repository-provider';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
-import { Metadata } from '../../types';
+import { Metadata, Repository } from '../../types';
 import { CoreService } from '../core/core.service';
 import { SnapshotService } from '../snapshot.service';
 
 export class MemoryBankService extends CoreService {
-  constructor(
-    repositoryProvider: RepositoryProvider,
-    getKuzuClient: (
-      mcpContext: EnrichedRequestHandlerExtra,
-      clientProjectRoot: string,
-    ) => Promise<KuzuDBClient>,
-    getSnapshotService: (
-      mcpContext: EnrichedRequestHandlerExtra,
-      clientProjectRoot: string,
-    ) => Promise<SnapshotService>,
-  ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService);
-  }
+  // Constructor inherited from CoreService
 
   async initMemoryBank(
     mcpContext: EnrichedRequestHandlerExtra,
@@ -129,7 +117,7 @@ export class MemoryBankService extends CoreService {
     clientProjectRoot: string,
     name: string,
     branch: string = 'main',
-  ): Promise<any | null> {
+  ): Promise<Repository | null> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error('RepositoryProvider not initialized in getOrCreateRepository');

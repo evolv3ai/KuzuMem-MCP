@@ -1,11 +1,10 @@
 import { type IncomingMessage, type ServerResponse } from 'node:http';
 import { type Logger } from 'pino';
 
-import { 
-  BaseHttpStreamServer, 
-  type DataEventListener, 
-  type GenericEventListener,
-  MAX_REQUEST_SIZE 
+import {
+  BaseHttpStreamServer,
+  type DataEventListener,
+  type GenericEventListener
 } from '../base/base-httpstream-server';
 
 /**
@@ -46,6 +45,9 @@ export class RequestSecurityMiddleware extends BaseHttpStreamServer {
     const originalOn = req.on.bind(req);
     const originalAddListener = req.addListener.bind(req);
 
+    // Capture the config reference outside the closure
+    const maxRequestSize = this.config.maxRequestSize;
+
     // Override event listeners to intercept 'data' events
     req.on = function (event: string | symbol, listener: GenericEventListener) {
       if (event === 'data') {
@@ -58,10 +60,10 @@ export class RequestSecurityMiddleware extends BaseHttpStreamServer {
           const chunkSize = Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk, 'utf8');
           cumulativeSize += chunkSize;
 
-          if (cumulativeSize > MAX_REQUEST_SIZE) {
+          if (cumulativeSize > maxRequestSize) {
             sizeLimitExceeded = true;
             requestLogger.error(
-              { cumulativeSize, chunkSize, maxSize: MAX_REQUEST_SIZE },
+              { cumulativeSize, chunkSize, maxSize: maxRequestSize },
               'Request size limit exceeded during streaming',
             );
 
@@ -69,14 +71,14 @@ export class RequestSecurityMiddleware extends BaseHttpStreamServer {
             req.emit(
               'error',
               new Error(
-                `Request size ${cumulativeSize} bytes exceeds maximum allowed size ${MAX_REQUEST_SIZE} bytes`,
+                `Request size ${cumulativeSize} bytes exceeds maximum allowed size ${maxRequestSize} bytes`,
               ),
             );
             return;
           }
 
           requestLogger.debug(
-            { cumulativeSize, chunkSize, maxSize: MAX_REQUEST_SIZE },
+            { cumulativeSize, chunkSize, maxSize: maxRequestSize },
             'Request chunk processed',
           );
 

@@ -89,7 +89,6 @@ export class ToolRegistrationService {
    */
   private async executeToolHandler(toolName: string, args: ToolArguments): Promise<CallToolResult> {
     const toolPerfLogger = createPerformanceLogger(this.logger, `tool-${toolName}`);
-    const requestId = randomUUID();
     const toolLogger = this.createToolLogger(toolName);
 
     toolLogger.debug({ args }, `Executing tool: ${toolName}`);
