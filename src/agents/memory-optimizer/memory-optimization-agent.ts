@@ -439,12 +439,18 @@ export class MemoryOptimizationAgent {
       rollbackLogger.info('Starting rollback to snapshot');
 
       // Get snapshot service
-      const snapshotService = await this.memoryService.getSnapshotService(mcpContext, clientProjectRoot);
+      const snapshotService = await this.memoryService.getSnapshotService(
+        mcpContext,
+        clientProjectRoot
+      );
 
       // Validate snapshot before rollback
       const validation = await snapshotService.validateSnapshot(snapshotId);
+
       if (!validation.valid) {
-        throw new Error(`Snapshot validation failed: ${validation.issues.join(', ')}`);
+        throw new Error(
+          `Snapshot validation failed: ${validation.issues.join(', ')}`
+        );
       }
 
       rollbackLogger.info('Snapshot validation passed, executing rollback', {
@@ -466,7 +472,9 @@ export class MemoryOptimizationAgent {
         restoredEntities: rollbackResult.restoredEntities,
         restoredRelationships: rollbackResult.restoredRelationships,
         rollbackTime: rollbackResult.rollbackTime,
-        message: `Successfully rolled back to snapshot ${snapshotId}. Restored ${rollbackResult.restoredEntities} entities and ${rollbackResult.restoredRelationships} relationships.`,
+        message: `Successfully rolled back to snapshot ${snapshotId}. ` +
+                 `Restored ${rollbackResult.restoredEntities} entities and ` +
+                 `${rollbackResult.restoredRelationships} relationships.`,
       };
     } catch (error) {
       rollbackLogger.error('Rollback failed:', error);
