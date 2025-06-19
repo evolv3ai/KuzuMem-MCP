@@ -275,15 +275,23 @@ export class ActionExecutorService extends BaseMemoryAgent {
 
     const kuzuClient = await this.memoryService.getKuzuClient(mcpContext, clientProjectRoot);
 
-    // Build update query
-    const updateFields = Object.keys(updates)
-      .map((key) => `n.${key} = $${key}`)
-      .join(', ');
+    // Define allowed fields for updates
+    const allowedFields = ['name', 'description', 'status', 'metadata', 'updated_at', 'kind', 'depends_on', 'content', 'triggers', 'date', 'context'];
 
-    if (updateFields.length === 0) {
-      logger.warn(`No updates specified for entity ${entityId}`);
+    // Filter and validate fields
+    const validUpdates = Object.keys(updates)
+      .filter(key => allowedFields.includes(key))
+      .reduce((obj, key) => ({ ...obj, [key]: updates[key] }), {});
+
+    if (Object.keys(validUpdates).length === 0) {
+      logger.warn(`No valid updates specified for entity ${entityId}`);
       return;
     }
+
+    // Build update query
+    const updateFields = Object.keys(validUpdates)
+      .map((key) => `n.${key} = $${key}`)
+      .join(', ');
 
     const updateQuery = `
       MATCH (n {id: $entityId, repository: $repository, branch: $branch})
@@ -295,7 +303,7 @@ export class ActionExecutorService extends BaseMemoryAgent {
       entityId,
       repository,
       branch,
-      ...updates,
+      ...validUpdates,
     };
 
     const result = await kuzuClient.executeQuery(updateQuery, params);

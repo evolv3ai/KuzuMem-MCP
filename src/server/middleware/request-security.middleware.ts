@@ -189,19 +189,51 @@ export class RequestSecurityMiddleware extends BaseHttpStreamServer {
   }
 
   /**
-   * Validate request headers for security
+   * Log request headers for debugging
    */
-  validateRequestHeaders(req: IncomingMessage, requestLogger: Logger): boolean {
-    // Add any header validation logic here
-    // For now, just log the headers for debugging
+  logRequestHeaders(req: IncomingMessage, requestLogger: Logger): void {
     requestLogger.debug(
       {
         headers: req.headers,
         method: req.method,
         url: req.url,
       },
-      'Request headers validated',
+      'Request headers logged',
     );
+  }
+
+  /**
+   * Validate request headers for security
+   */
+  validateRequestHeaders(req: IncomingMessage, requestLogger: Logger): boolean {
+    // Log headers for debugging
+    this.logRequestHeaders(req, requestLogger);
+
+    // Validate Content-Type for POST requests
+    if (req.method === 'POST') {
+      const contentType = req.headers['content-type'];
+      if (!contentType || !contentType.includes('application/json')) {
+        requestLogger.warn(
+          { contentType },
+          'Invalid or missing Content-Type header for POST request'
+        );
+        return false;
+      }
+    }
+
+    // Validate required headers for MCP protocol
+    if (req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE') {
+      // Check for suspicious headers that might indicate attacks
+      const suspiciousHeaders = ['x-forwarded-for', 'x-real-ip'];
+      for (const header of suspiciousHeaders) {
+        if (req.headers[header]) {
+          requestLogger.debug(
+            { header, value: req.headers[header] },
+            'Proxy header detected'
+          );
+        }
+      }
+    }
 
     return true;
   }

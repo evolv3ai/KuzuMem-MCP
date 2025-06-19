@@ -33,6 +33,19 @@ export class EntityService extends CoreService {
   }
 
   /**
+   * Helper function to convert null to undefined for cleaner data handling
+   */
+  private convertNullToUndefined<T>(
+    value: T | null | undefined,
+    fallback?: T | null | undefined
+  ): T | undefined {
+    if (value !== undefined) {
+      return value === null ? undefined : value;
+    }
+    return fallback === null ? undefined : fallback;
+  }
+
+  /**
    * Create or update a rule for a repository
    */
   async upsertRule(
@@ -252,30 +265,9 @@ export class EntityService extends CoreService {
       const updatedData = {
         id: componentId,
         name: existing.name,
-        kind:
-          updates.kind !== undefined
-            ? updates.kind === null
-              ? undefined
-              : updates.kind
-            : existing.kind === null
-              ? undefined
-              : existing.kind,
-        depends_on:
-          updates.depends_on !== undefined
-            ? updates.depends_on === null
-              ? undefined
-              : updates.depends_on
-            : existing.depends_on === null
-              ? undefined
-              : existing.depends_on,
-        status:
-          updates.status !== undefined
-            ? updates.status === null
-              ? undefined
-              : updates.status
-            : existing.status === null
-              ? undefined
-              : existing.status,
+        kind: this.convertNullToUndefined(updates.kind, existing.kind),
+        depends_on: this.convertNullToUndefined(updates.depends_on, existing.depends_on),
+        status: this.convertNullToUndefined(updates.status, existing.status),
       };
 
       return await this.upsertComponent(
