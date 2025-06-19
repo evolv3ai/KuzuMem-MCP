@@ -380,6 +380,7 @@ export class SnapshotService {
           PRIMARY KEY (id)
         )
       `);
+      this.snapshotLogger.debug('Snapshot schema ensured successfully');
     } catch (error) {
       // Table might already exist, which is fine
       this.snapshotLogger.debug('Snapshot schema creation result:', error);

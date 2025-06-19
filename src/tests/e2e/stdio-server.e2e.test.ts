@@ -876,14 +876,19 @@ describe('MCP Stdio Server E2E Tests', () => {
     }, 10000);
 
     it('should require confirmation for bulk operations', async () => {
-      await expect(
-        callTool('delete', {
-          operation: 'bulk-by-type',
-          targetType: 'component',
-          repository: TEST_REPO,
-          branch: TEST_BRANCH,
-        }),
-      ).rejects.toThrow();
+      const result = await callTool('delete', {
+        operation: 'bulk-by-type',
+        targetType: 'component',
+        repository: TEST_REPO,
+        branch: TEST_BRANCH,
+      });
+
+      expect(result).toMatchObject({
+        success: false,
+        operation: 'bulk-by-type',
+        message: expect.stringContaining('confirm=true is required'),
+        deletedCount: 0,
+      });
     }, 10000);
 
     it('should handle non-existent entity deletion gracefully', async () => {

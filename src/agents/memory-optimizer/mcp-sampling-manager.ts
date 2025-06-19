@@ -246,11 +246,11 @@ export class MCPSamplingManager {
     branch: string
   ): Promise<{ entities: number; relationships: number }> {
     try {
-      // Count entities
+      // Count entities - KuzuDB compatible query
       const entityQuery = `
         MATCH (n)
         WHERE n.repository = $repository AND n.branch = $branch
-          AND NOT n:Snapshot
+          AND n.id IS NOT NULL
         RETURN COUNT(n) AS entityCount
       `;
       const entityResult = await kuzuClient.executeQuery(entityQuery, { repository, branch });
@@ -284,14 +284,15 @@ export class MCPSamplingManager {
   ): Promise<{ entities: any[]; relationships: any[] }> {
     try {
       // Get stratified sample across entity types
+      // KuzuDB compatible query - simplified representative sampling
       const query = `
         MATCH (n)
         WHERE n.repository = $repository AND n.branch = $branch
-          AND NOT n:Snapshot
-        WITH n, labels(n) AS nodeLabels, rand() AS r
-        ORDER BY nodeLabels[0], r
+          AND n.id IS NOT NULL
+        WITH n
+        ORDER BY n.id
         LIMIT $sampleSize
-        RETURN n.id, n.name, n.created, n.description, n.status, nodeLabels, properties(n) AS properties
+        RETURN n.id, n.name, n.created, n.description, n.status
       `;
 
       const entities = await kuzuClient.executeQuery(query, { repository, branch, sampleSize });
@@ -318,22 +319,17 @@ export class MCPSamplingManager {
     sampleSize: number
   ): Promise<{ entities: any[]; relationships: any[] }> {
     try {
+      // KuzuDB compatible query - simplified problematic entity detection
       const query = `
         MATCH (n)
         WHERE n.repository = $repository AND n.branch = $branch
-          AND NOT n:Snapshot
+          AND n.id IS NOT NULL
         OPTIONAL MATCH (n)-[r]-()
-        WITH n, labels(n) AS nodeLabels, COUNT(r) AS relationshipCount,
-             CASE
-               WHEN n.created IS NOT NULL AND n.created <> '' AND n.created CONTAINS 'T'
-               THEN (datetime() - datetime(n.created)) / 86400000000
-               ELSE 999
-             END AS ageInDays
-        WHERE ageInDays > 30 OR relationshipCount = 0 OR n.status = 'deprecated'
-        ORDER BY ageInDays DESC, relationshipCount ASC
+        WITH n, COUNT(r) AS relationshipCount
+        WHERE relationshipCount = 0 OR n.status = 'deprecated'
+        ORDER BY relationshipCount ASC
         LIMIT $sampleSize
-        RETURN n.id, n.name, n.created, n.description, n.status, nodeLabels,
-               properties(n) AS properties, ageInDays, relationshipCount
+        RETURN n.id, n.name, n.created, n.description, n.status, relationshipCount
       `;
 
       const entities = await kuzuClient.executeQuery(query, { repository, branch, sampleSize });
@@ -359,18 +355,15 @@ export class MCPSamplingManager {
     sampleSize: number
   ): Promise<{ entities: any[]; relationships: any[] }> {
     try {
+      // KuzuDB compatible query - simplified recent entity detection
       const query = `
         MATCH (n)
         WHERE n.repository = $repository AND n.branch = $branch
-          AND NOT n:Snapshot
+          AND n.id IS NOT NULL
           AND n.created IS NOT NULL AND n.created <> '' AND n.created CONTAINS 'T'
-        WITH n, labels(n) AS nodeLabels,
-             (datetime() - datetime(n.created)) / 86400000000 AS ageInDays
-        WHERE ageInDays <= 30
-        ORDER BY ageInDays ASC
+        ORDER BY n.created DESC
         LIMIT $sampleSize
-        RETURN n.id, n.name, n.created, n.description, n.status, nodeLabels,
-               properties(n) AS properties, ageInDays
+        RETURN n.id, n.name, n.created, n.description, n.status
       `;
 
       const entities = await kuzuClient.executeQuery(query, { repository, branch, sampleSize });
@@ -403,14 +396,13 @@ export class MCPSamplingManager {
       let allEntities: any[] = [];
 
       for (const entityType of entityTypes) {
+        // KuzuDB compatible query - simplified diverse sampling
         const query = `
           MATCH (n:${entityType})
           WHERE n.repository = $repository AND n.branch = $branch
-          WITH n, rand() AS r
-          ORDER BY r
+          ORDER BY n.id
           LIMIT $perTypeSize
-          RETURN n.id, n.name, n.created, n.description, n.status,
-                 labels(n) AS nodeLabels, properties(n) AS properties
+          RETURN n.id, n.name, n.created, n.description, n.status
         `;
 
         const typeEntities = await kuzuClient.executeQuery(query, {
@@ -447,13 +439,13 @@ export class MCPSamplingManager {
     if (entityIds.length === 0) return [];
 
     try {
+      // KuzuDB compatible query - simplified relationship sampling
       const query = `
         MATCH (a)-[r]->(b)
         WHERE a.repository = $repository AND a.branch = $branch
           AND b.repository = $repository AND b.branch = $branch
           AND (a.id IN $entityIds OR b.id IN $entityIds)
-        RETURN a.id AS fromId, b.id AS toId, type(r) AS relationshipType,
-               properties(r) AS properties
+        RETURN a.id AS fromId, b.id AS toId, 'RELATIONSHIP' AS relationshipType
         LIMIT 100
       `;
 

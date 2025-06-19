@@ -2283,13 +2283,12 @@ export class MemoryService {
       // Format the graph unique ID
       const graphUniqueId = `${repositoryName}:${branch}:${componentId}`;
 
-      // Delete all relationships and the component node
+      // Delete all relationships and the component node - KuzuDB compatible
+      // Use DETACH DELETE to remove node and all its relationships
       const deleteQuery = `
         MATCH (c:Component {graph_unique_id: $graphUniqueId})
-        OPTIONAL MATCH (c)-[r_out]->()
-        OPTIONAL MATCH (c)<-[r_in]-()
-        DELETE r_out, r_in, c
-        RETURN count(c) as deletedCount
+        DETACH DELETE c
+        RETURN 1 as deletedCount
       `;
 
       const result = await kuzuClient.executeQuery(deleteQuery, { graphUniqueId });
@@ -2386,13 +2385,12 @@ export class MemoryService {
       // Format the graph unique ID
       const graphUniqueId = `${repositoryName}:${branch}:${ruleId}`;
 
-      // Delete all relationships and the rule node
+      // Delete all relationships and the rule node - KuzuDB compatible
+      // Use DETACH DELETE to remove node and all its relationships
       const deleteQuery = `
         MATCH (r:Rule {graph_unique_id: $graphUniqueId})
-        OPTIONAL MATCH (r)-[rel_out]->()
-        OPTIONAL MATCH (r)<-[rel_in]-()
-        DELETE rel_out, rel_in, r
-        RETURN count(r) as deletedCount
+        DETACH DELETE r
+        RETURN 1 as deletedCount
       `;
 
       const result = await kuzuClient.executeQuery(deleteQuery, { graphUniqueId });

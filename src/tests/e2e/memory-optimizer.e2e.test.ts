@@ -295,37 +295,35 @@ describe('Memory Optimizer E2E Tests', () => {
     }, 30000);
 
     it('should create relationships between entities', async () => {
-      // Create some relationships for testing
-      const relationships = [
+      // Create tag-item associations (the only type currently supported by associate tool)
+      const associations = [
         {
-          fromId: 'comp-active-api',
-          toId: 'comp-old-legacy',
-          relationshipType: 'DEPENDS_ON',
+          type: 'tag-item',
+          itemId: 'comp-active-api',
+          tagId: 'tag-critical',
+          entityType: 'Component',
         },
         {
-          fromId: 'comp-duplicate-1',
-          toId: 'comp-duplicate-2',
-          relationshipType: 'SIMILAR_TO',
-        },
-        {
-          fromId: 'tag-critical',
-          toId: 'comp-active-api',
-          relationshipType: 'TAGS',
+          type: 'tag-item',
+          itemId: 'comp-old-legacy',
+          tagId: 'tag-test',
+          entityType: 'Component',
         },
       ];
 
-      for (const rel of relationships) {
+      for (const assoc of associations) {
         const result = await callTool('associate', {
-          operation: 'create',
+          type: assoc.type,
           repository: TEST_REPO,
           branch: TEST_BRANCH,
-          fromId: rel.fromId,
-          toId: rel.toId,
-          relationshipType: rel.relationshipType,
+          itemId: assoc.itemId,
+          tagId: assoc.tagId,
+          entityType: assoc.entityType,
         });
 
         expect(result).toMatchObject({
           success: true,
+          type: 'tag-item',
         });
       }
     }, 15000);

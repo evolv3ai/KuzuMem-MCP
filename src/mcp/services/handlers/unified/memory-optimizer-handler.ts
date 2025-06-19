@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import { MemoryService } from '../../../../services/memory.service.js';
-import { MemoryOptimizationAgent } from '../../../../agents/memory-optimizer/memory-optimization-agent.js';
-import { validateSession, logToolExecution, handleToolError } from '../../../utils/error-utils.js';
-import { logger } from '../../../../utils/logger.js';
-import type { EnrichedRequestHandlerExtra } from '../../../types/sdk-custom.js';
-import type { OptimizationStrategy } from '../../../../agents/memory-optimizer/prompt-manager.js';
+import { MemoryService } from '../../../../services/memory.service';
+import { MemoryOptimizationAgent } from '../../../../agents/memory-optimizer/memory-optimization-agent';
+import { validateSession, logToolExecution, handleToolError } from '../../../utils/error-utils';
+import { logger } from '../../../../utils/logger';
+import type { EnrichedRequestHandlerExtra } from '../../../types/sdk-custom';
+import type { OptimizationStrategy } from '../../../../agents/memory-optimizer/prompt-manager';
 
 // Input schema for memory optimizer tool
 const MemoryOptimizerInputSchema = z.object({
