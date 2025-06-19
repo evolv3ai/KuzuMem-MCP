@@ -387,7 +387,9 @@ export class MemoryOptimizationAgent {
 
       const result: OptimizationResult = {
         planId: plan.id,
-        status: executedActions.every(a => a.status === 'success') ? 'success' : 'partial',
+        status: executedActions.every(a => a.status === 'success')
+          ? 'success'
+          : 'partial',
         executedActions,
         summary: {
           entitiesDeleted,
@@ -406,7 +408,7 @@ export class MemoryOptimizationAgent {
 
       return result;
     } catch (error) {
-      executeLogger.error('Optimization plan execution failed:', error);
+      executeLogger.error('Optimization plan execution failed', error);
       throw new Error(`Optimization plan execution failed: ${error}`);
     }
   }
