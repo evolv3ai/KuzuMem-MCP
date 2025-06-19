@@ -243,7 +243,10 @@ export class MemoryOptimizationAgent {
       const optimizationPlan = result.object as OptimizationPlan;
 
       // Validate plan against strategy constraints
-      const validatedPlan = await this.validateOptimizationPlan(optimizationPlan, strategy);
+      const validatedPlan = await this.validateOptimizationPlan(
+        optimizationPlan,
+        strategy
+      );
 
       planLogger.info('Optimization plan generated', {
         planId: validatedPlan.id,
