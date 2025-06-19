@@ -1,5 +1,6 @@
 import { associateHandler } from '../../../mcp/services/handlers/unified/associate-handler';
 import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { EntityService } from '../../../services/domain/entity.service';
 import { MemoryService } from '../../../services/memory.service';
 
 // Define discriminated union type for associate handler results
@@ -19,12 +20,19 @@ type AssociateResult =
 
 describe('Associate Tool Tests', () => {
   let mockMemoryService: jest.Mocked<MemoryService>;
+  let mockEntityService: jest.Mocked<EntityService>;
   let mockContext: jest.Mocked<EnrichedRequestHandlerExtra>;
 
   beforeEach(() => {
-    mockMemoryService = {
+    mockEntityService = {
       associateFileWithComponent: jest.fn(),
       tagItem: jest.fn(),
+    } as any;
+
+    mockMemoryService = {
+      services: {
+        entity: mockEntityService,
+      },
     } as any;
 
     // Mock context with session
@@ -57,7 +65,7 @@ describe('Associate Tool Tests', () => {
           relationship: 'IMPLEMENTS',
         },
       };
-      mockMemoryService.associateFileWithComponent.mockResolvedValue(mockResult);
+      mockEntityService.associateFileWithComponent.mockResolvedValue(mockResult);
 
       const result = (await associateHandler(
         {
@@ -80,7 +88,7 @@ describe('Associate Tool Tests', () => {
       } else {
         fail('Expected result type to be file-component');
       }
-      expect(mockMemoryService.associateFileWithComponent).toHaveBeenCalledWith(
+      expect(mockEntityService.associateFileWithComponent).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -131,7 +139,7 @@ describe('Associate Tool Tests', () => {
           relationship: 'TAGGED_WITH',
         },
       };
-      mockMemoryService.tagItem.mockResolvedValue(mockResult);
+      mockEntityService.tagItem.mockResolvedValue(mockResult);
 
       const result = (await associateHandler(
         {
@@ -155,7 +163,7 @@ describe('Associate Tool Tests', () => {
       } else {
         fail('Expected result type to be tag-item');
       }
-      expect(mockMemoryService.tagItem).toHaveBeenCalledWith(
+      expect(mockEntityService.tagItem).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -244,7 +252,7 @@ describe('Associate Tool Tests', () => {
   describe('Error Handling', () => {
     it('should handle and rethrow service errors for file-component', async () => {
       const error = new Error('Service error');
-      mockMemoryService.associateFileWithComponent.mockRejectedValue(error);
+      mockEntityService.associateFileWithComponent.mockRejectedValue(error);
 
       await expect(
         associateHandler(
@@ -269,7 +277,7 @@ describe('Associate Tool Tests', () => {
 
     it('should handle and rethrow service errors for tag-item', async () => {
       const error = new Error('Tag service error');
-      mockMemoryService.tagItem.mockRejectedValue(error);
+      mockEntityService.tagItem.mockRejectedValue(error);
 
       await expect(
         associateHandler(
@@ -309,7 +317,7 @@ describe('Associate Tool Tests', () => {
 
   describe('Progress Reporting', () => {
     it('should report progress for file-component association', async () => {
-      mockMemoryService.associateFileWithComponent.mockResolvedValue({
+      mockEntityService.associateFileWithComponent.mockResolvedValue({
         type: 'file-component' as const,
         success: true,
         message: 'Associated',
@@ -346,7 +354,7 @@ describe('Associate Tool Tests', () => {
     });
 
     it('should report progress for tag-item association', async () => {
-      mockMemoryService.tagItem.mockResolvedValue({
+      mockEntityService.tagItem.mockResolvedValue({
         type: 'tag-item' as const,
         success: true,
         message: 'Tagged',

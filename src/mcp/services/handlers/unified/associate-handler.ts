@@ -1,6 +1,6 @@
-import { SdkToolHandler } from '../../../tool-handlers';
-import { handleToolError, validateSession, logToolExecution } from '../../../utils/error-utils';
 import { AssociateInputSchema } from '../../../schemas/unified-tool-schemas';
+import { SdkToolHandler } from '../../../tool-handlers';
+import { handleToolError, logToolExecution, validateSession } from '../../../utils/error-utils';
 
 // TypeScript interfaces for associate parameters
 interface AssociateParams {
@@ -26,6 +26,9 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
 
   // 2. Validate session and get clientProjectRoot
   const clientProjectRoot = validateSession(context, 'associate');
+  if (!memoryService.services) {
+    throw new Error('ServiceRegistry not initialized in MemoryService');
+  }
 
   // 3. Log the operation
   logToolExecution(context, `association: ${type}`, {
@@ -48,7 +51,7 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
         });
 
         // Call the service method
-        const result = await memoryService.associateFileWithComponent(
+        const result = await memoryService.services.entity.associateFileWithComponent(
           context,
           clientProjectRoot,
           repository,
@@ -86,7 +89,7 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
         });
 
         // Call the service method
-        const result = await memoryService.tagItem(
+        const result = await memoryService.services.entity.tagItem(
           context,
           clientProjectRoot,
           repository,

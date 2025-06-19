@@ -1,6 +1,6 @@
 import { ContextInputSchema } from '../../../schemas/unified-tool-schemas';
 import { SdkToolHandler } from '../../../tool-handlers';
-import { handleToolError, validateSession, logToolExecution } from '../../../utils/error-utils';
+import { handleToolError, logToolExecution, validateSession } from '../../../utils/error-utils';
 
 // TypeScript interfaces for context parameters
 interface ContextParams {
@@ -42,6 +42,9 @@ export const contextHandler: SdkToolHandler = async (params, context, memoryServ
 
     // 2. Validate session and get clientProjectRoot
     const clientProjectRoot = validateSession(context, 'context');
+    if (!memoryService.services) {
+      throw new Error('ServiceRegistry not initialized in MemoryService');
+    }
 
     // 3. Log the operation
     logToolExecution(context, `context operation: ${operation}`, {
@@ -61,7 +64,7 @@ export const contextHandler: SdkToolHandler = async (params, context, memoryServ
         });
 
         // Call memory service to update context
-        const result = await memoryService.updateContext(
+        const result = await memoryService.services.context.updateContext(
           context,
           clientProjectRoot,
           validatedParams,

@@ -1,6 +1,7 @@
+import { KuzuDBClient } from '../../db/kuzu';
+import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
 import { DecisionRepository, RepositoryRepository } from '../../repositories';
 import { Decision, DecisionInput } from '../../types';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
 
 /**
  * Creates or updates a decision in a repository.
@@ -108,4 +109,38 @@ function normalizeDecision(decision: Decision, repositoryName: string, branch: s
     repository: repositoryName,
     branch: branch,
   };
+}
+
+export async function deleteDecisionOp(
+  mcpContext: EnrichedRequestHandlerExtra,
+  kuzuClient: KuzuDBClient,
+  repositoryRepo: RepositoryRepository,
+  repositoryName: string,
+  branch: string,
+  decisionId: string,
+): Promise<boolean> {
+  const logger = mcpContext.logger;
+
+  const repository = await repositoryRepo.findByName(repositoryName, branch);
+  if (!repository || !repository.id) {
+    logger.warn(
+      `[decision.ops.deleteDecisionOp] Repository ${repositoryName}:${branch} not found.`,
+    );
+    return false;
+  }
+
+  const graphUniqueId = `${repositoryName}:${branch}:${decisionId}`;
+  const deleteQuery = `
+    MATCH (d:Decision {graph_unique_id: $graphUniqueId})
+    DETACH DELETE d
+    RETURN 1 as deletedCount
+  `;
+
+  const result = await kuzuClient.executeQuery(deleteQuery, { graphUniqueId });
+  const deletedCount = result[0]?.deletedCount || 0;
+
+  logger.info(
+    `[decision.ops.deleteDecisionOp] Deleted ${deletedCount} decision(s) with ID ${decisionId}`,
+  );
+  return deletedCount > 0;
 }

@@ -1,6 +1,7 @@
-import { RuleRepository, RepositoryRepository } from '../../repositories';
-import { Rule, RuleInput } from '../../types';
+import { KuzuDBClient } from '../../db/kuzu';
 import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { RepositoryRepository, RuleRepository } from '../../repositories';
+import { Rule, RuleInput } from '../../types';
 
 // Simple context type to avoid SDK import issues
 type McpContext = {
@@ -120,4 +121,34 @@ function normalizeRule(rule: Rule, repositoryName: string, branch: string): Rule
     repository: repositoryName,
     branch: branch,
   };
+}
+
+export async function deleteRuleOp(
+  mcpContext: EnrichedRequestHandlerExtra,
+  kuzuClient: KuzuDBClient,
+  repositoryRepo: RepositoryRepository,
+  repositoryName: string,
+  branch: string,
+  ruleId: string,
+): Promise<boolean> {
+  const logger = mcpContext.logger;
+
+  const repository = await repositoryRepo.findByName(repositoryName, branch);
+  if (!repository || !repository.id) {
+    logger.warn(`[rule.ops.deleteRuleOp] Repository ${repositoryName}:${branch} not found.`);
+    return false;
+  }
+
+  const graphUniqueId = `${repositoryName}:${branch}:${ruleId}`;
+  const deleteQuery = `
+    MATCH (r:Rule {graph_unique_id: $graphUniqueId})
+    DETACH DELETE r
+    RETURN 1 as deletedCount
+  `;
+
+  const result = await kuzuClient.executeQuery(deleteQuery, { graphUniqueId });
+  const deletedCount = result[0]?.deletedCount || 0;
+
+  logger.info(`[rule.ops.deleteRuleOp] Deleted ${deletedCount} rule(s) with ID ${ruleId}`);
+  return deletedCount > 0;
 }

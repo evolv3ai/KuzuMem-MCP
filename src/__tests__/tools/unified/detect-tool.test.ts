@@ -1,5 +1,6 @@
 import { detectHandler } from '../../../mcp/services/handlers/unified/detect-handler';
 import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { GraphAnalysisService } from '../../../services/domain/graph-analysis.service';
 import { MemoryService } from '../../../services/memory.service';
 
 // Define discriminated union type for detect handler results
@@ -29,12 +30,20 @@ type DetectResult =
 
 describe('Detect Tool Tests', () => {
   let mockMemoryService: jest.Mocked<MemoryService>;
+  let mockGraphAnalysisService: jest.Mocked<GraphAnalysisService>;
   let mockContext: jest.Mocked<EnrichedRequestHandlerExtra>;
 
   beforeEach(() => {
-    mockMemoryService = {
+    mockGraphAnalysisService = {
       getStronglyConnectedComponents: jest.fn(),
       getWeaklyConnectedComponents: jest.fn(),
+      shortestPath: jest.fn(),
+    } as any;
+
+    mockMemoryService = {
+      services: {
+        graphAnalysis: mockGraphAnalysisService,
+      },
     } as any;
 
     // Mock context with session
@@ -68,7 +77,7 @@ describe('Detect Tool Tests', () => {
         totalComponents: 2,
         message: 'Found circular dependencies',
       };
-      mockMemoryService.getStronglyConnectedComponents.mockResolvedValue(mockResult);
+      mockGraphAnalysisService.getStronglyConnectedComponents.mockResolvedValue(mockResult);
 
       const result = (await detectHandler(
         {
@@ -95,7 +104,7 @@ describe('Detect Tool Tests', () => {
       } else {
         fail('Expected result to be strongly-connected with complete status');
       }
-      expect(mockMemoryService.getStronglyConnectedComponents).toHaveBeenCalledWith(
+      expect(mockGraphAnalysisService.getStronglyConnectedComponents).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         {
@@ -110,7 +119,7 @@ describe('Detect Tool Tests', () => {
     });
 
     it('should handle empty results', async () => {
-      mockMemoryService.getStronglyConnectedComponents.mockResolvedValue({
+      mockGraphAnalysisService.getStronglyConnectedComponents.mockResolvedValue({
         type: 'strongly-connected' as const,
         status: 'complete',
         projectedGraphName: 'deps',
@@ -153,7 +162,7 @@ describe('Detect Tool Tests', () => {
         totalComponents: 3,
         message: 'Found isolated subsystems',
       };
-      mockMemoryService.getWeaklyConnectedComponents.mockResolvedValue(mockResult);
+      mockGraphAnalysisService.getWeaklyConnectedComponents.mockResolvedValue(mockResult);
 
       const result = (await detectHandler(
         {
@@ -216,7 +225,7 @@ describe('Detect Tool Tests', () => {
   describe('Error Handling', () => {
     it('should handle and rethrow service errors', async () => {
       const error = new Error('Detection service error');
-      mockMemoryService.getStronglyConnectedComponents.mockRejectedValue(error);
+      mockGraphAnalysisService.getStronglyConnectedComponents.mockRejectedValue(error);
 
       const result = await detectHandler(
         {
@@ -264,7 +273,7 @@ describe('Detect Tool Tests', () => {
 
   describe('Progress Reporting', () => {
     it('should report progress for strongly connected detection', async () => {
-      mockMemoryService.getStronglyConnectedComponents.mockResolvedValue({
+      mockGraphAnalysisService.getStronglyConnectedComponents.mockResolvedValue({
         type: 'strongly-connected' as const,
         status: 'complete',
         projectedGraphName: 'deps',
@@ -299,7 +308,7 @@ describe('Detect Tool Tests', () => {
     });
 
     it('should report progress for weakly connected detection', async () => {
-      mockMemoryService.getWeaklyConnectedComponents.mockResolvedValue({
+      mockGraphAnalysisService.getWeaklyConnectedComponents.mockResolvedValue({
         type: 'weakly-connected' as const,
         status: 'complete',
         projectedGraphName: 'deps',

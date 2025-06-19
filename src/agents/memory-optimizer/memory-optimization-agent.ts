@@ -17,7 +17,7 @@ import type { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
 import type {
   AnalysisResult,
   OptimizationPlan,
-  OptimizationResult
+  OptimizationResult,
 } from '../../schemas/optimization/types';
 import type { OptimizationStrategy } from './prompt-manager';
 
@@ -771,9 +771,12 @@ export class MemoryOptimizationAgent {
     });
 
     // Execute deletion based on entity type
+    if (!this.memoryService.services) {
+      throw new Error('ServiceRegistry not initialized in MemoryService');
+    }
     switch (entityType) {
       case 'component':
-        await this.memoryService.deleteComponent(
+        await this.memoryService.services.entity.deleteComponent(
           mcpContext,
           clientProjectRoot,
           repository,
@@ -783,7 +786,7 @@ export class MemoryOptimizationAgent {
         break;
 
       case 'decision':
-        await this.memoryService.deleteDecision(
+        await this.memoryService.services.entity.deleteDecision(
           mcpContext,
           clientProjectRoot,
           repository,
@@ -793,7 +796,7 @@ export class MemoryOptimizationAgent {
         break;
 
       case 'rule':
-        await this.memoryService.deleteRule(
+        await this.memoryService.services.entity.deleteRule(
           mcpContext,
           clientProjectRoot,
           repository,
@@ -803,7 +806,7 @@ export class MemoryOptimizationAgent {
         break;
 
       case 'file':
-        await this.memoryService.deleteFile(
+        await this.memoryService.services.entity.deleteFile(
           mcpContext,
           clientProjectRoot,
           repository,
@@ -813,7 +816,7 @@ export class MemoryOptimizationAgent {
         break;
 
       case 'context':
-        await this.memoryService.deleteContext(
+        await this.memoryService.services.entity.deleteContext(
           mcpContext,
           clientProjectRoot,
           repository,
@@ -823,13 +826,7 @@ export class MemoryOptimizationAgent {
         break;
 
       case 'tag':
-        await this.memoryService.deleteTag(
-          mcpContext,
-          clientProjectRoot,
-          repository,
-          branch,
-          entityId,
-        );
+        await this.memoryService.services.entity.deleteTag(mcpContext, clientProjectRoot, entityId);
         break;
 
       default:

@@ -1,5 +1,6 @@
 import { contextHandler } from '../../../mcp/services/handlers/unified/context-handler';
 import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { ContextService } from '../../../services/domain/context.service';
 import { MemoryService } from '../../../services/memory.service';
 
 // Define discriminated union type for context handler results
@@ -31,6 +32,7 @@ type ContextResult =
 describe('context tool handler', () => {
   let mockContext: EnrichedRequestHandlerExtra;
   let mockMemoryService: jest.Mocked<MemoryService>;
+  let mockContextService: jest.Mocked<ContextService>;
 
   beforeEach(() => {
     // Reset mocks
@@ -52,9 +54,15 @@ describe('context tool handler', () => {
       sendProgress: jest.fn(),
     } as unknown as EnrichedRequestHandlerExtra;
 
+    mockContextService = {
+      updateContext: jest.fn(),
+    } as unknown as jest.Mocked<ContextService>;
+
     // Create mock memory service
     mockMemoryService = {
-      updateContext: jest.fn(),
+      services: {
+        context: mockContextService,
+      },
     } as unknown as jest.Mocked<MemoryService>;
   });
 
@@ -75,7 +83,7 @@ describe('context tool handler', () => {
           updated_at: '2024-12-10T12:00:00.000Z',
         },
       };
-      mockMemoryService.updateContext.mockResolvedValueOnce(mockUpdateResult);
+      mockContextService.updateContext.mockResolvedValueOnce(mockUpdateResult);
 
       const params = {
         operation: 'update',
@@ -88,7 +96,7 @@ describe('context tool handler', () => {
 
       const result = await contextHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.updateContext).toHaveBeenCalledWith(mockContext, '/test/project', {
+      expect(mockContextService.updateContext).toHaveBeenCalledWith(mockContext, '/test/project', {
         operation: 'update',
         repository: 'test-repo',
         branch: 'main',
@@ -136,7 +144,7 @@ describe('context tool handler', () => {
           updated_at: null,
         },
       };
-      mockMemoryService.updateContext.mockResolvedValueOnce(mockUpdateResult);
+      mockContextService.updateContext.mockResolvedValueOnce(mockUpdateResult);
 
       const params = {
         operation: 'update',
@@ -166,7 +174,7 @@ describe('context tool handler', () => {
         success: false,
         message: 'Database connection failed',
       };
-      mockMemoryService.updateContext.mockResolvedValueOnce(mockUpdateResult);
+      mockContextService.updateContext.mockResolvedValueOnce(mockUpdateResult);
 
       const params = {
         operation: 'update',
@@ -186,7 +194,7 @@ describe('context tool handler', () => {
 
     it('should handle unexpected response format', async () => {
       // Mock returning null
-      mockMemoryService.updateContext.mockResolvedValueOnce(null as any);
+      mockContextService.updateContext.mockResolvedValueOnce(null as any);
 
       const params = {
         operation: 'update',
@@ -227,7 +235,7 @@ describe('context tool handler', () => {
     });
 
     it('should handle service errors gracefully', async () => {
-      mockMemoryService.updateContext.mockRejectedValueOnce(new Error('Database error'));
+      mockContextService.updateContext.mockRejectedValueOnce(new Error('Database error'));
 
       const params = {
         operation: 'update',
@@ -286,7 +294,7 @@ describe('context tool handler', () => {
           updated_at: null,
         },
       };
-      mockMemoryService.updateContext.mockResolvedValueOnce(mockUpdateResult);
+      mockContextService.updateContext.mockResolvedValueOnce(mockUpdateResult);
 
       const params = {
         operation: 'update',

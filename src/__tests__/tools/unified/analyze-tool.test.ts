@@ -1,5 +1,6 @@
 import { analyzeHandler } from '../../../mcp/services/handlers/unified/analyze-handler';
 import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { GraphAnalysisService } from '../../../services/domain/graph-analysis.service';
 import { MemoryService } from '../../../services/memory.service';
 
 // Define discriminated union type for analyze handler results
@@ -36,14 +37,21 @@ type AnalyzeResult =
 
 describe('Analyze Tool Tests', () => {
   let mockMemoryService: jest.Mocked<MemoryService>;
+  let mockGraphAnalysisService: jest.Mocked<GraphAnalysisService>;
   let mockContext: jest.Mocked<EnrichedRequestHandlerExtra>;
 
   beforeEach(() => {
-    mockMemoryService = {
+    mockGraphAnalysisService = {
       pageRank: jest.fn(),
       shortestPath: jest.fn(),
       kCoreDecomposition: jest.fn(),
       louvainCommunityDetection: jest.fn(),
+    } as any;
+
+    mockMemoryService = {
+      services: {
+        graphAnalysis: mockGraphAnalysisService,
+      },
     } as any;
 
     // Mock context with session
@@ -76,7 +84,7 @@ describe('Analyze Tool Tests', () => {
         ],
         message: 'PageRank completed',
       };
-      mockMemoryService.pageRank.mockResolvedValue(mockResult);
+      mockGraphAnalysisService.pageRank.mockResolvedValue(mockResult);
 
       const result = (await analyzeHandler(
         {
@@ -101,7 +109,7 @@ describe('Analyze Tool Tests', () => {
       } else {
         fail('Expected result type to be pagerank');
       }
-      expect(mockMemoryService.pageRank).toHaveBeenCalledWith(mockContext, '/test/project', {
+      expect(mockGraphAnalysisService.pageRank).toHaveBeenCalledWith(mockContext, '/test/project', {
         type: 'pagerank',
         repository: 'test-repo',
         branch: 'main',
@@ -114,7 +122,7 @@ describe('Analyze Tool Tests', () => {
     });
 
     it('should use default parameters for pagerank', async () => {
-      mockMemoryService.pageRank.mockResolvedValue({
+      mockGraphAnalysisService.pageRank.mockResolvedValue({
         type: 'pagerank' as const,
         status: 'complete',
         projectedGraphName: 'deps',
@@ -133,7 +141,7 @@ describe('Analyze Tool Tests', () => {
         mockMemoryService,
       );
 
-      expect(mockMemoryService.pageRank).toHaveBeenCalledWith(
+      expect(mockGraphAnalysisService.pageRank).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         expect.objectContaining({
@@ -155,7 +163,7 @@ describe('Analyze Tool Tests', () => {
         path: ['comp-1', 'comp-2', 'comp-3'],
         pathLength: 3,
       };
-      mockMemoryService.shortestPath.mockResolvedValue(mockResult);
+      mockGraphAnalysisService.shortestPath.mockResolvedValue(mockResult);
 
       const result = (await analyzeHandler(
         {
@@ -190,7 +198,7 @@ describe('Analyze Tool Tests', () => {
         path: [],
         pathLength: 0,
       };
-      mockMemoryService.shortestPath.mockResolvedValue(mockResult);
+      mockGraphAnalysisService.shortestPath.mockResolvedValue(mockResult);
 
       const result = (await analyzeHandler(
         {
@@ -245,7 +253,7 @@ describe('Analyze Tool Tests', () => {
         ],
         k: 3,
       };
-      mockMemoryService.kCoreDecomposition.mockResolvedValue(mockResult);
+      mockGraphAnalysisService.kCoreDecomposition.mockResolvedValue(mockResult);
 
       const result = (await analyzeHandler(
         {
@@ -299,7 +307,7 @@ describe('Analyze Tool Tests', () => {
         ],
         modularity: 0.42,
       };
-      mockMemoryService.louvainCommunityDetection.mockResolvedValue(mockResult);
+      mockGraphAnalysisService.louvainCommunityDetection.mockResolvedValue(mockResult);
 
       const result = (await analyzeHandler(
         {
@@ -359,7 +367,7 @@ describe('Analyze Tool Tests', () => {
   describe('Error Handling', () => {
     it('should handle and rethrow service errors', async () => {
       const error = new Error('Analysis service error');
-      mockMemoryService.pageRank.mockRejectedValue(error);
+      mockGraphAnalysisService.pageRank.mockRejectedValue(error);
 
       await expect(
         analyzeHandler(
@@ -402,7 +410,7 @@ describe('Analyze Tool Tests', () => {
 
   describe('Progress Reporting', () => {
     it('should report progress for each analysis type', async () => {
-      mockMemoryService.pageRank.mockResolvedValue({
+      mockGraphAnalysisService.pageRank.mockResolvedValue({
         type: 'pagerank' as const,
         status: 'complete',
         projectedGraphName: 'deps',

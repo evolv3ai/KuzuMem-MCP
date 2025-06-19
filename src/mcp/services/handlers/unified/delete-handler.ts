@@ -1,5 +1,6 @@
+import { MemoryService } from '../../../../services/memory.service';
 import { SdkToolHandler } from '../../../tool-handlers';
-import { handleToolError, validateSession, logToolExecution } from '../../../utils/error-utils';
+import { handleToolError, logToolExecution, validateSession } from '../../../utils/error-utils';
 
 // TypeScript interfaces for delete input parameters
 interface DeleteParams {
@@ -76,6 +77,9 @@ export const deleteHandler: SdkToolHandler = async (params, context, memoryServi
 
   try {
     logToolExecution(context, 'delete', validatedParams);
+    if (!memoryService.services) {
+      throw new Error('ServiceRegistry not initialized in MemoryService');
+    }
 
     let result: DeleteResult;
 
@@ -167,11 +171,14 @@ export const deleteHandler: SdkToolHandler = async (params, context, memoryServi
 async function handleSingleDeletion(
   params: DeleteParams,
   context: any,
-  memoryService: any,
+  memoryService: MemoryService,
   clientProjectRoot: string,
   repository: string,
   branch: string,
 ): Promise<DeleteResult> {
+  if (!memoryService.services) {
+    throw new Error('ServiceRegistry not initialized in MemoryService');
+  }
   if (!params.entityType || !params.id) {
     throw new Error('entityType and id are required for single deletion');
   }
@@ -184,7 +191,7 @@ async function handleSingleDeletion(
     try {
       switch (params.entityType) {
         case 'component':
-          exists = !!(await memoryService.getComponent(
+          exists = !!(await memoryService.services.entity.getComponent(
             context,
             clientProjectRoot,
             repository,
@@ -193,7 +200,7 @@ async function handleSingleDeletion(
           ));
           break;
         case 'decision':
-          exists = !!(await memoryService.getDecision(
+          exists = !!(await memoryService.services.entity.getDecision(
             context,
             clientProjectRoot,
             repository,
@@ -202,7 +209,7 @@ async function handleSingleDeletion(
           ));
           break;
         case 'rule':
-          exists = !!(await memoryService.getRule(
+          exists = !!(await memoryService.services.entity.getRule(
             context,
             clientProjectRoot,
             repository,
@@ -211,7 +218,7 @@ async function handleSingleDeletion(
           ));
           break;
         case 'file':
-          exists = !!(await memoryService.getFile(
+          exists = !!(await memoryService.services.entity.getFile(
             context,
             clientProjectRoot,
             repository,
@@ -220,7 +227,7 @@ async function handleSingleDeletion(
           ));
           break;
         case 'tag':
-          exists = !!(await memoryService.getTag(
+          exists = !!(await memoryService.services.entity.getTag(
             context,
             clientProjectRoot,
             repository,
@@ -253,7 +260,7 @@ async function handleSingleDeletion(
 
   switch (params.entityType) {
     case 'component':
-      deleted = await memoryService.deleteComponent(
+      deleted = await memoryService.services.entity.deleteComponent(
         context,
         clientProjectRoot,
         repository,
@@ -262,7 +269,7 @@ async function handleSingleDeletion(
       );
       break;
     case 'decision':
-      deleted = await memoryService.deleteDecision(
+      deleted = await memoryService.services.entity.deleteDecision(
         context,
         clientProjectRoot,
         repository,
@@ -271,7 +278,7 @@ async function handleSingleDeletion(
       );
       break;
     case 'rule':
-      deleted = await memoryService.deleteRule(
+      deleted = await memoryService.services.entity.deleteRule(
         context,
         clientProjectRoot,
         repository,
@@ -280,7 +287,7 @@ async function handleSingleDeletion(
       );
       break;
     case 'file':
-      deleted = await memoryService.deleteFile(
+      deleted = await memoryService.services.entity.deleteFile(
         context,
         clientProjectRoot,
         repository,
@@ -289,16 +296,14 @@ async function handleSingleDeletion(
       );
       break;
     case 'tag':
-      deleted = await memoryService.deleteTag(
+      deleted = await memoryService.services.entity.deleteTag(
         context,
         clientProjectRoot,
-        repository,
-        branch,
         params.id,
       );
       break;
     case 'context':
-      deleted = await memoryService.deleteContext(
+      deleted = await memoryService.services.entity.deleteContext(
         context,
         clientProjectRoot,
         repository,
@@ -356,14 +361,21 @@ function formatBulkResult(
 async function handleBulkByType(
   params: DeleteParams,
   context: any,
-  memoryService: any,
+  memoryService: MemoryService,
   clientProjectRoot: string,
   repository: string,
   branch: string,
 ): Promise<DeleteResult> {
+  if (!memoryService.services) {
+    throw new Error('ServiceRegistry not initialized in MemoryService');
+  }
   validateBulkOperation(params, 'targetType');
 
-  const result = await memoryService.bulkDeleteByType(
+  if (!params.targetType) {
+    throw new Error('targetType is required for bulk-by-type deletion');
+  }
+
+  const result = await memoryService.services.entity.bulkDeleteByType(
     context,
     clientProjectRoot,
     repository,
@@ -382,14 +394,21 @@ async function handleBulkByType(
 async function handleBulkByTag(
   params: DeleteParams,
   context: any,
-  memoryService: any,
+  memoryService: MemoryService,
   clientProjectRoot: string,
   repository: string,
   branch: string,
 ): Promise<DeleteResult> {
+  if (!memoryService.services) {
+    throw new Error('ServiceRegistry not initialized in MemoryService');
+  }
   validateBulkOperation(params, 'tagId');
 
-  const result = await memoryService.bulkDeleteByTag(
+  if (!params.tagId) {
+    throw new Error('tagId is required for bulk-by-tag deletion');
+  }
+
+  const result = await memoryService.services.entity.bulkDeleteByTag(
     context,
     clientProjectRoot,
     repository,
@@ -413,13 +432,20 @@ async function handleBulkByTag(
 async function handleBulkByBranch(
   params: DeleteParams,
   context: any,
-  memoryService: any,
+  memoryService: MemoryService,
   clientProjectRoot: string,
   repository: string,
 ): Promise<DeleteResult> {
+  if (!memoryService.services) {
+    throw new Error('ServiceRegistry not initialized in MemoryService');
+  }
   validateBulkOperation(params, 'targetBranch');
 
-  const result = await memoryService.bulkDeleteByBranch(
+  if (!params.targetBranch) {
+    throw new Error('targetBranch is required for bulk-by-branch deletion');
+  }
+
+  const result = await memoryService.services.entity.bulkDeleteByBranch(
     context,
     clientProjectRoot,
     repository,
@@ -442,13 +468,16 @@ async function handleBulkByBranch(
 async function handleBulkByRepository(
   params: DeleteParams,
   context: any,
-  memoryService: any,
+  memoryService: MemoryService,
   clientProjectRoot: string,
   repository: string,
 ): Promise<DeleteResult> {
+  if (!memoryService.services) {
+    throw new Error('ServiceRegistry not initialized in MemoryService');
+  }
   validateBulkOperation(params);
 
-  const result = await memoryService.bulkDeleteByRepository(
+  const result = await memoryService.services.entity.bulkDeleteByRepository(
     context,
     clientProjectRoot,
     repository,
@@ -470,7 +499,7 @@ async function handleBulkByRepository(
 async function handleBulkByFilter(
   params: DeleteParams,
   context: any,
-  memoryService: any,
+  memoryService: MemoryService,
   clientProjectRoot: string,
   repository: string,
   branch: string,

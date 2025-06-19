@@ -1,3 +1,4 @@
+import { KuzuDBClient } from '../../db/kuzu';
 import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
 import { RepositoryRepository, TagRepository } from '../../repositories';
 import { Tag, TagInput } from '../../types';
@@ -192,4 +193,24 @@ export async function findItemsByTagOp(
       items: [],
     };
   }
+}
+
+export async function deleteTagOp(
+  mcpContext: EnrichedRequestHandlerExtra,
+  kuzuClient: KuzuDBClient,
+  tagId: string,
+): Promise<boolean> {
+  const logger = mcpContext.logger;
+
+  const deleteQuery = `
+    MATCH (t:Tag {id: $tagId})
+    DETACH DELETE t
+    RETURN 1 as deletedCount
+  `;
+
+  const result = await kuzuClient.executeQuery(deleteQuery, { tagId });
+  const deletedCount = result[0]?.deletedCount || 0;
+
+  logger.info(`[tag.ops.deleteTagOp] Deleted ${deletedCount} tag(s) with ID ${tagId}`);
+  return deletedCount > 0;
 }

@@ -83,6 +83,9 @@ async function handleInit(
   context: ToolHandlerContext,
   memoryService: MemoryService,
 ): Promise<any> {
+  if (!memoryService.services) {
+    throw new Error('ServiceRegistry not initialized in MemoryService');
+  }
   const { clientProjectRoot, repository, branch = 'main' } = params;
 
   // Store in session for subsequent calls
@@ -105,7 +108,7 @@ async function handleInit(
       percent: 40,
     });
 
-    const result = await memoryService.initMemoryBank(
+    const result = await memoryService.services.memoryBank.initMemoryBank(
       context,
       clientProjectRoot,
       repository,
@@ -162,9 +165,12 @@ async function handleGetMetadata(
   memoryService: MemoryService,
   clientProjectRoot: string,
 ): Promise<any> {
+  if (!memoryService.services) {
+    throw new Error('ServiceRegistry not initialized in MemoryService');
+  }
   const { repository, branch = 'main' } = params;
 
-  const metadataContent = await memoryService.getMetadata(
+  const metadataContent = await memoryService.services.metadata.getMetadata(
     context,
     clientProjectRoot,
     repository,
@@ -187,13 +193,16 @@ async function handleUpdateMetadata(
   memoryService: MemoryService,
   clientProjectRoot: string,
 ): Promise<any> {
+  if (!memoryService.services) {
+    throw new Error('ServiceRegistry not initialized in MemoryService');
+  }
   const { repository, branch = 'main', metadata } = params;
 
   if (!metadata) {
     throw new Error('metadata field is required for update-metadata operation');
   }
 
-  const result = await memoryService.updateMetadata(
+  const result = await memoryService.services.metadata.updateMetadata(
     context,
     clientProjectRoot,
     repository,

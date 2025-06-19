@@ -1,10 +1,12 @@
 import { deleteHandler } from '../../../mcp/services/handlers/unified/delete-handler';
 import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { EntityService } from '../../../services/domain/entity.service';
 import { MemoryService } from '../../../services/memory.service';
 
 describe('delete tool handler', () => {
   let mockContext: EnrichedRequestHandlerExtra;
   let mockMemoryService: jest.Mocked<MemoryService>;
+  let mockEntityService: jest.Mocked<EntityService>;
 
   beforeEach(() => {
     // Reset mocks
@@ -26,8 +28,7 @@ describe('delete tool handler', () => {
       sendProgress: jest.fn(),
     } as unknown as EnrichedRequestHandlerExtra;
 
-    // Create mock memory service
-    mockMemoryService = {
+    mockEntityService = {
       deleteComponent: jest.fn(),
       deleteDecision: jest.fn(),
       deleteRule: jest.fn(),
@@ -43,6 +44,13 @@ describe('delete tool handler', () => {
       bulkDeleteByTag: jest.fn(),
       bulkDeleteByBranch: jest.fn(),
       bulkDeleteByRepository: jest.fn(),
+    } as unknown as jest.Mocked<EntityService>;
+
+    // Create mock memory service
+    mockMemoryService = {
+      services: {
+        entity: mockEntityService,
+      },
     } as unknown as jest.Mocked<MemoryService>;
   });
 
@@ -70,7 +78,7 @@ describe('delete tool handler', () => {
 
   describe('single deletion', () => {
     it('should delete a component successfully', async () => {
-      mockMemoryService.deleteComponent.mockResolvedValueOnce(true);
+      mockEntityService.deleteComponent.mockResolvedValueOnce(true);
 
       const params = {
         operation: 'single',
@@ -82,7 +90,7 @@ describe('delete tool handler', () => {
 
       const result = await deleteHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.deleteComponent).toHaveBeenCalledWith(
+      expect(mockEntityService.deleteComponent).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -99,7 +107,7 @@ describe('delete tool handler', () => {
     });
 
     it('should handle delete of non-existent entity', async () => {
-      mockMemoryService.deleteFile.mockResolvedValueOnce(false);
+      mockEntityService.deleteFile.mockResolvedValueOnce(false);
 
       const params = {
         operation: 'single',
@@ -134,7 +142,7 @@ describe('delete tool handler', () => {
     });
 
     it('should support dry run for single deletion', async () => {
-      mockMemoryService.getComponent.mockResolvedValueOnce({
+      mockEntityService.getComponent.mockResolvedValueOnce({
         id: 'comp-test',
         name: 'Test Component',
         repository: 'test-repo',
@@ -152,7 +160,7 @@ describe('delete tool handler', () => {
 
       const result = await deleteHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.deleteComponent).not.toHaveBeenCalled();
+      expect(mockEntityService.deleteComponent).not.toHaveBeenCalled();
       expect(result).toEqual({
         success: true,
         operation: 'single',
@@ -173,7 +181,7 @@ describe('delete tool handler', () => {
         ],
         warnings: [],
       };
-      mockMemoryService.bulkDeleteByType.mockResolvedValueOnce(mockResult);
+      mockEntityService.bulkDeleteByType.mockResolvedValueOnce(mockResult);
 
       const params = {
         operation: 'bulk-by-type',
@@ -185,7 +193,7 @@ describe('delete tool handler', () => {
 
       const result = await deleteHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.bulkDeleteByType).toHaveBeenCalledWith(
+      expect(mockEntityService.bulkDeleteByType).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -253,7 +261,7 @@ describe('delete tool handler', () => {
         ],
         warnings: [],
       };
-      mockMemoryService.bulkDeleteByTag.mockResolvedValueOnce(mockResult);
+      mockEntityService.bulkDeleteByTag.mockResolvedValueOnce(mockResult);
 
       const params = {
         operation: 'bulk-by-tag',
@@ -265,7 +273,7 @@ describe('delete tool handler', () => {
 
       const result = await deleteHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.bulkDeleteByTag).toHaveBeenCalledWith(
+      expect(mockEntityService.bulkDeleteByTag).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -321,7 +329,7 @@ describe('delete tool handler', () => {
         ],
         warnings: [],
       };
-      mockMemoryService.bulkDeleteByBranch.mockResolvedValueOnce(mockResult);
+      mockEntityService.bulkDeleteByBranch.mockResolvedValueOnce(mockResult);
 
       const params = {
         operation: 'bulk-by-branch',
@@ -332,7 +340,7 @@ describe('delete tool handler', () => {
 
       const result = await deleteHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.bulkDeleteByBranch).toHaveBeenCalledWith(
+      expect(mockEntityService.bulkDeleteByBranch).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',
@@ -384,7 +392,7 @@ describe('delete tool handler', () => {
         ],
         warnings: [],
       };
-      mockMemoryService.bulkDeleteByRepository.mockResolvedValueOnce(mockResult);
+      mockEntityService.bulkDeleteByRepository.mockResolvedValueOnce(mockResult);
 
       const params = {
         operation: 'bulk-by-repository',
@@ -394,7 +402,7 @@ describe('delete tool handler', () => {
 
       const result = await deleteHandler(params, mockContext, mockMemoryService);
 
-      expect(mockMemoryService.bulkDeleteByRepository).toHaveBeenCalledWith(
+      expect(mockEntityService.bulkDeleteByRepository).toHaveBeenCalledWith(
         mockContext,
         '/test/project',
         'test-repo',

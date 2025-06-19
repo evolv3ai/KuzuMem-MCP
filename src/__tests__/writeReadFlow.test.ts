@@ -17,7 +17,10 @@ describe('MemoryService end-to-end write/read flow', () => {
     // Create a temporary directory for the Kùzu database file
     clientProjectRoot = fs.mkdtempSync(path.join(__dirname, 'kuzu-test-'));
     memoryService = await MemoryService.getInstance(mcpContext);
-    const initResult = await memoryService.initMemoryBank(
+    if (!memoryService.services) {
+      throw new Error('ServiceRegistry not initialized in MemoryService');
+    }
+    const initResult = await memoryService.services.memoryBank.initMemoryBank(
       mcpContext,
       clientProjectRoot,
       repository,
@@ -34,6 +37,9 @@ describe('MemoryService end-to-end write/read flow', () => {
   });
 
   it('should add a component and retrieve it via list/count queries', async () => {
+    if (!memoryService.services) {
+      throw new Error('ServiceRegistry not initialized');
+    }
     const compInput = {
       id: 'comp-UI',
       name: 'UI Module',
@@ -41,7 +47,7 @@ describe('MemoryService end-to-end write/read flow', () => {
       status: 'active' as const,
     };
 
-    const component = await memoryService.upsertComponent(
+    const component = await memoryService.services.entity.upsertComponent(
       mcpContext,
       clientProjectRoot,
       repository,
@@ -51,7 +57,7 @@ describe('MemoryService end-to-end write/read flow', () => {
     expect(component).toBeTruthy();
     expect(component?.id).toBe(compInput.id);
 
-    const count = await memoryService.countNodesByLabel(
+    const count = await memoryService.services.graphQuery.countNodesByLabel(
       mcpContext,
       clientProjectRoot,
       repository,
@@ -60,7 +66,7 @@ describe('MemoryService end-to-end write/read flow', () => {
     );
     expect(count.count).toBeGreaterThanOrEqual(1);
 
-    const list = await memoryService.listNodesByLabel(
+    const list = await memoryService.services.graphQuery.listNodesByLabel(
       mcpContext,
       clientProjectRoot,
       repository,
@@ -74,6 +80,9 @@ describe('MemoryService end-to-end write/read flow', () => {
   }, 30000);
 
   it('should add a file, associate with component, and retrieve via relationships', async () => {
+    if (!memoryService.services) {
+      throw new Error('ServiceRegistry not initialized');
+    }
     const fileInput = {
       id: 'file-src-ui-ts',
       name: 'ui.ts',
@@ -81,7 +90,7 @@ describe('MemoryService end-to-end write/read flow', () => {
       size: 120,
     } as any;
 
-    const addFileRes = await memoryService.addFile(
+    const addFileRes = await memoryService.services.entity.addFile(
       mcpContext,
       clientProjectRoot,
       repository,
@@ -90,7 +99,7 @@ describe('MemoryService end-to-end write/read flow', () => {
     );
     expect(addFileRes.success).toBe(true);
 
-    const assocRes = await memoryService.associateFileWithComponent(
+    const assocRes = await memoryService.services.entity.associateFileWithComponent(
       mcpContext,
       clientProjectRoot,
       repository,
@@ -102,12 +111,15 @@ describe('MemoryService end-to-end write/read flow', () => {
   }, 30000);
 
   it('should add a tag, tag the component, and find items by tag', async () => {
+    if (!memoryService.services) {
+      throw new Error('ServiceRegistry not initialized');
+    }
     const tagInput = {
       id: 'tag-ui',
       name: 'UI Layer',
       color: '#00ff00',
     } as any;
-    const addTagRes = await memoryService.addTag(
+    const addTagRes = await memoryService.services.entity.addTag(
       mcpContext,
       clientProjectRoot,
       repository,
@@ -116,7 +128,7 @@ describe('MemoryService end-to-end write/read flow', () => {
     );
     expect(addTagRes.success).toBe(true);
 
-    const tagItemRes = await memoryService.tagItem(
+    const tagItemRes = await memoryService.services.entity.tagItem(
       mcpContext,
       clientProjectRoot,
       repository,
@@ -127,7 +139,7 @@ describe('MemoryService end-to-end write/read flow', () => {
     );
     expect(tagItemRes.success).toBe(true);
 
-    const findRes = await memoryService.findItemsByTag(
+    const findRes = await memoryService.services.graphQuery.findItemsByTag(
       mcpContext,
       clientProjectRoot,
       repository,
