@@ -212,11 +212,14 @@ export class SnapshotService {
    */
   async listSnapshots(repository: string, branch?: string): Promise<SnapshotInfo[]> {
     try {
+      // Ensure snapshot schema exists before querying
+      await this.ensureSnapshotSchema();
+
       const query = `
         MATCH (s:Snapshot)
-        WHERE s.repository = $repository 
+        WHERE s.repository = $repository
           ${branch ? 'AND s.branch = $branch' : ''}
-        RETURN s.id AS id, s.repository AS repository, s.branch AS branch, 
+        RETURN s.id AS id, s.repository AS repository, s.branch AS branch,
                s.description AS description, s.created AS created,
                s.entitiesCount AS entitiesCount, s.relationshipsCount AS relationshipsCount,
                s.size AS size
@@ -245,6 +248,9 @@ export class SnapshotService {
    */
   async validateSnapshot(snapshotId: string): Promise<ValidationResult> {
     try {
+      // Ensure snapshot schema exists before querying
+      await this.ensureSnapshotSchema();
+
       const snapshot = await this.getSnapshot(snapshotId);
       if (!snapshot) {
         return {
@@ -295,6 +301,9 @@ export class SnapshotService {
    */
   async deleteSnapshot(snapshotId: string): Promise<boolean> {
     try {
+      // Ensure snapshot schema exists before querying
+      await this.ensureSnapshotSchema();
+
       const query = `
         MATCH (s:Snapshot {id: $snapshotId})
         DELETE s
@@ -325,6 +334,9 @@ export class SnapshotService {
     size: number;
   } | null> {
     try {
+      // Ensure snapshot schema exists before querying
+      await this.ensureSnapshotSchema();
+
       const snapshot = await this.getSnapshot(snapshotId);
       if (!snapshot) return null;
 
