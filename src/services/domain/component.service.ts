@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import { KuzuDBClient } from '../../db/kuzu';
 import { RepositoryProvider } from '../../db/repository-provider';
 import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
@@ -43,7 +42,7 @@ export class ComponentService extends BaseEntityService {
     },
   ): Promise<Component | null> {
     const logger = mcpContext.logger || console;
-    this.validateRepositoryProvider('upsertComponent');
+    this.validationService.validateRepositoryProvider('upsertComponent');
 
     const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
     const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
@@ -99,7 +98,7 @@ export class ComponentService extends BaseEntityService {
     updates: Partial<Omit<Component, 'id' | 'repository' | 'branch' | 'type'>>,
   ): Promise<Component | null> {
     const logger = mcpContext.logger || console;
-    this.validateRepositoryProvider('updateComponent');
+    this.validationService.validateRepositoryProvider('updateComponent');
 
     try {
       // First check if component exists
@@ -189,7 +188,7 @@ export class ComponentService extends BaseEntityService {
     branch: string,
   ): Promise<Component[]> {
     const logger = mcpContext.logger || console;
-    this.validateRepositoryProvider('getAllComponents');
+    this.validationService.validateRepositoryProvider('getAllComponents');
 
     try {
       const componentRepo = this.repositoryProvider.getComponentRepository(clientProjectRoot);

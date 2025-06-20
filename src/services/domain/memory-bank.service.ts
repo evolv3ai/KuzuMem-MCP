@@ -66,7 +66,9 @@ export class MemoryBankService extends CoreService {
   /**
    * Validate that the repository provider is initialized
    */
-  protected validateRepositoryProvider(logger: any): z.infer<typeof toolSchemas.InitMemoryBankOutputSchema> | { success: true } {
+  protected validateRepositoryProvider(
+    logger: any,
+  ): z.infer<typeof toolSchemas.InitMemoryBankOutputSchema> | { success: true } {
     if (!this.repositoryProvider) {
       logger.error(
         '[MemoryBankService.initMemoryBank] CRITICAL: RepositoryProvider is NOT INITIALIZED.',

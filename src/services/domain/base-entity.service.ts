@@ -1,8 +1,8 @@
-import { z } from 'zod';
 import { KuzuDBClient } from '../../db/kuzu';
 import { RepositoryProvider } from '../../db/repository-provider';
 import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
 import { CoreService } from '../core/core.service';
+import { ValidationService } from '../core/validation.service';
 import { SnapshotService } from '../snapshot.service';
 
 /**
@@ -10,6 +10,8 @@ import { SnapshotService } from '../snapshot.service';
  * Provides common functionality for all entity types
  */
 export abstract class BaseEntityService extends CoreService {
+  protected validationService: ValidationService;
+
   constructor(
     repositoryProvider: RepositoryProvider,
     getKuzuClient: (
@@ -22,6 +24,7 @@ export abstract class BaseEntityService extends CoreService {
     ) => Promise<SnapshotService>,
   ) {
     super(repositoryProvider, getKuzuClient, getSnapshotService);
+    this.validationService = new ValidationService(repositoryProvider);
   }
 
   /**
@@ -35,8 +38,8 @@ export abstract class BaseEntityService extends CoreService {
     entityId: string,
     methodName: string,
   ): void {
-    this.validateRepositoryProvider(methodName);
-    this.validateRequiredParams(
+    this.validationService.validateRepositoryProvider(methodName);
+    this.validationService.validateRequiredParams(
       { clientProjectRoot, repositoryName, branch, entityId },
       ['clientProjectRoot', 'repositoryName', 'branch', 'entityId'],
       methodName,
@@ -54,7 +57,7 @@ export abstract class BaseEntityService extends CoreService {
     logger: any = console,
   ): void {
     const context = { entityType, entityId };
-    this.handleServiceError(error, methodName, context, logger);
+    this.validationService.handleServiceError(error, methodName, context, logger);
   }
 
   /**
@@ -94,7 +97,14 @@ export abstract class BaseEntityService extends CoreService {
     repositoryType: 'component' | 'decision' | 'rule' | 'file' | 'tag' | 'context',
     methodName: string,
   ): Promise<T | null> {
-    this.validateEntityParams(mcpContext, clientProjectRoot, repositoryName, branch, entityId, methodName);
+    this.validateEntityParams(
+      mcpContext,
+      clientProjectRoot,
+      repositoryName,
+      branch,
+      entityId,
+      methodName,
+    );
 
     try {
       const repository = await this.getEntityRepository<any>(clientProjectRoot, repositoryType);
@@ -117,12 +127,19 @@ export abstract class BaseEntityService extends CoreService {
     repositoryType: 'component' | 'decision' | 'rule' | 'file' | 'tag' | 'context',
     methodName: string,
   ): Promise<boolean> {
-    this.validateEntityParams(mcpContext, clientProjectRoot, repositoryName, branch, entityId, methodName);
+    this.validateEntityParams(
+      mcpContext,
+      clientProjectRoot,
+      repositoryName,
+      branch,
+      entityId,
+      methodName,
+    );
 
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
       const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
-      
+
       // Import the appropriate delete operation
       switch (repositoryType) {
         case 'component': {

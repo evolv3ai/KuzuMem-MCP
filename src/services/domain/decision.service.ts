@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import { KuzuDBClient } from '../../db/kuzu';
 import { RepositoryProvider } from '../../db/repository-provider';
 import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
@@ -42,7 +41,7 @@ export class DecisionService extends BaseEntityService {
     },
   ): Promise<Decision | null> {
     const logger = mcpContext.logger || console;
-    this.validateRepositoryProvider('upsertDecision');
+    this.validationService.validateRepositoryProvider('upsertDecision');
 
     const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
     const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
@@ -98,7 +97,7 @@ export class DecisionService extends BaseEntityService {
     updates: Partial<Omit<Decision, 'id' | 'repository' | 'branch' | 'type'>>,
   ): Promise<Decision | null> {
     const logger = mcpContext.logger || console;
-    this.validateRepositoryProvider('updateDecision');
+    this.validationService.validateRepositoryProvider('updateDecision');
 
     try {
       // First check if decision exists
@@ -167,7 +166,7 @@ export class DecisionService extends BaseEntityService {
     branch: string,
   ): Promise<Decision[]> {
     const logger = mcpContext.logger || console;
-    this.validateRepositoryProvider('getAllDecisions');
+    this.validationService.validateRepositoryProvider('getAllDecisions');
 
     try {
       const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);

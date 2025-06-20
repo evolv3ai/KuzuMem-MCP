@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import { KuzuDBClient } from '../../db/kuzu';
 import { RepositoryProvider } from '../../db/repository-provider';
 import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
@@ -43,7 +42,7 @@ export class BulkOperationsService extends BaseEntityService {
     warnings: string[];
   }> {
     const logger = mcpContext.logger || console;
-    this.validateRepositoryProvider('bulkDeleteByType');
+    this.validationService.validateRepositoryProvider('bulkDeleteByType');
 
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
@@ -166,7 +165,7 @@ export class BulkOperationsService extends BaseEntityService {
     warnings: string[];
   }> {
     const logger = mcpContext.logger || console;
-    this.validateRepositoryProvider('bulkDeleteByBranch');
+    this.validationService.validateRepositoryProvider('bulkDeleteByBranch');
 
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
