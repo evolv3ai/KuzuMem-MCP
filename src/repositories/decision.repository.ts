@@ -1,8 +1,8 @@
 import { KuzuDBClient } from '../db/kuzu';
 import { Decision } from '../types';
 import { formatGraphUniqueId } from '../utils/id.utils';
-import { RepositoryRepository } from './repository.repository';
 import { loggers } from '../utils/logger';
+import { RepositoryRepository } from './repository.repository';
 
 /**
  * Repository for Decision, using KuzuDB and Cypher queries.
@@ -121,7 +121,7 @@ export class DecisionRepository {
 
     const [logicalRepositoryName] = repositoryNodeId.split(':');
     const graphUniqueId = formatGraphUniqueId(logicalRepositoryName, branch, logicalId);
-    const now = new Date().toISOString();
+    const now = new Date();
 
     const query = `
       MERGE (d:Decision {id: $id, graph_unique_id: $graphUniqueId})
@@ -145,7 +145,7 @@ export class DecisionRepository {
       id: logicalId,
       graphUniqueId,
       name,
-      date,
+      date: new Date(date),
       context: decisionContext,
       status: status || 'proposed',
       now,

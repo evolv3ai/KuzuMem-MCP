@@ -1,8 +1,8 @@
 import { KuzuDBClient } from '../db/kuzu';
 import { Rule } from '../types';
 import { formatGraphUniqueId } from '../utils/id.utils';
-import { RepositoryRepository } from './repository.repository';
 import { loggers } from '../utils/logger';
+import { RepositoryRepository } from './repository.repository';
 
 /**
  * Repository for Rule, using KuzuDB and Cypher queries.
@@ -102,7 +102,7 @@ export class RuleRepository {
 
     const [logicalRepositoryName] = repositoryNodeId.split(':');
     const graphUniqueId = formatGraphUniqueId(logicalRepositoryName, branch, logicalId);
-    const now = new Date().toISOString();
+    const now = new Date();
 
     const query = `
       MERGE (repo:Repository {id: $repositoryNodeId})
@@ -142,7 +142,7 @@ export class RuleRepository {
       scope: (rule as any).scope || 'component',
       severity: (rule as any).severity || 'medium',
       category: (rule as any).category || 'general',
-      now,
+      now: now,
     };
 
     try {

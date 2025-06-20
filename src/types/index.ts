@@ -68,6 +68,8 @@ export interface ComponentInput {
   content?: string | Record<string, any> | null;
   depends_on?: string[] | null;
   dependsOn?: string[] | null; // Alternative casing used by tools
+  created_at?: Date;
+  updated_at?: Date;
 }
 
 // Decision type

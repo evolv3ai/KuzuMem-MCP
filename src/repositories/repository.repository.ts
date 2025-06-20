@@ -38,18 +38,14 @@ export class RepositoryRepository {
    * id = name + ':' + branch
    */
   async findByName(name: string, branch: string = 'main'): Promise<Repository | null> {
-    // this.logger.error( // Temporarily disable for cleaner logs during this refactor phase
-    //   `RepositoryRepository (${this.kuzuClient.dbPath}): findByName CALLED with name: '${name}', branch: '${branch}'`,
-    // );
-
     const syntheticId = `${name}:${branch}`;
-    const escapedId = this.escapeStr(syntheticId);
-    const query = `MATCH (r:Repository {id: '${escapedId}'}) RETURN r LIMIT 1`;
+    const query = `MATCH (r:Repository {id: $id}) RETURN r LIMIT 1`;
+    const params = { id: syntheticId };
     const nowIso = new Date().toISOString();
 
     let result;
     try {
-      result = await this.kuzuClient.executeQuery(query);
+      result = await this.kuzuClient.executeQuery(query, params);
     } catch (e) {
       this.logger.error(
         `RepositoryRepository (${this.kuzuClient.dbPath}): executeQuery FAILED for query: ${query}`,
@@ -92,60 +88,47 @@ export class RepositoryRepository {
     const branch = repositoryInput.branch || 'main';
     const name = repositoryInput.name;
     const syntheticId = `${name}:${branch}`;
+    const now = new Date();
 
-    const escapedId = this.escapeStr(syntheticId);
-    const escapedName = this.escapeStr(name);
-    const escapedBranch = this.escapeStr(branch);
-    const nowIso = new Date().toISOString();
+    const query = `
+      CREATE (r:Repository {
+        id: $id,
+        name: $name,
+        branch: $branch,
+        created_at: $now,
+        updated_at: $now
+      })
+      RETURN r
+    `;
 
-    // Use simple string values instead of timestamp function which might not be supported
-    const query = `CREATE (r:Repository {
-      id: '${escapedId}', 
-      name: '${escapedName}', 
-      branch: '${escapedBranch}', 
-      created_at: '${nowIso}', 
-      updated_at: '${nowIso}'
-    }) RETURN r`;
+    const params = {
+      id: syntheticId,
+      name: name,
+      branch: branch,
+      now: now,
+    };
 
     try {
-      const result = await this.kuzuClient.executeQuery(query);
+      const result = await this.kuzuClient.executeQuery(query, params);
 
-      // Extract repository directly from result if possible
       if (result && Array.isArray(result) && result.length > 0) {
         const node = result[0].r ?? result[0]['r'] ?? result[0];
-        if (node && node.id === syntheticId) {
+        if (node) {
           return {
             name: node.name,
             branch: node.branch,
             id: node.id,
-            created_at: node.created_at ? new Date(node.created_at) : new Date(nowIso),
-            updated_at: node.updated_at ? new Date(node.updated_at) : new Date(nowIso),
+            created_at: new Date(node.created_at),
+            updated_at: new Date(node.updated_at),
           } as Repository;
         }
       }
-
-      // Fallback to findByName if direct extraction fails
-      try {
-        const found = await this.findByName(name, branch);
-        if (found) {
-          return found;
-        }
-      } catch (findError) {
-        this.logger.error(`RepositoryRepository: Error during findByName after create:`, findError);
-      }
-
-      // Last resort: construct repository object manually
-      return {
-        name,
-        branch,
-        id: syntheticId,
-        created_at: new Date(nowIso),
-        updated_at: new Date(nowIso),
-      } as Repository;
+      // If creation fails or returns nothing, a null will be returned below
     } catch (error) {
       this.logger.error(`RepositoryRepository: Error during create:`, error);
-      return null;
     }
+
+    return null;
   }
 
   /**
@@ -181,28 +164,29 @@ export class RepositoryRepository {
   }
 
   async update(repositoryId: string, repository: Partial<Repository>): Promise<void> {
-    const escapedId = this.escapeStr(repositoryId);
     const setParts: string[] = [];
+    const params: Record<string, any> = { id: repositoryId };
 
     if (repository.name !== undefined) {
-      setParts.push(`r.name = '${this.escapeStr(repository.name)}'`);
+      setParts.push(`r.name = $name`);
+      params.name = repository.name;
     }
     if (repository.branch !== undefined) {
-      setParts.push(`r.branch = '${this.escapeStr(repository.branch)}'`);
+      setParts.push(`r.branch = $branch`);
+      params.branch = repository.branch;
     }
 
     if (setParts.length === 0) {
       return; // Nothing to update
     }
 
-    const nowIso = new Date().toISOString();
-    const kuzuTimestamp = nowIso.replace('T', ' ').replace('Z', '');
-    setParts.push(`r.updated_at = timestamp('${kuzuTimestamp}')`);
+    setParts.push(`r.updated_at = $now`);
+    params.now = new Date();
 
-    const query = `MATCH (r:Repository {id: '${escapedId}'}) SET ${setParts.join(', ')}`;
+    const query = `MATCH (r:Repository {id: $id}) SET ${setParts.join(', ')}`;
 
     try {
-      await this.kuzuClient.executeQuery(query);
+      await this.kuzuClient.executeQuery(query, params);
     } catch (error) {
       this.logger.error(`RepositoryRepository: Error during update of ${repositoryId}:`, error);
       throw error;

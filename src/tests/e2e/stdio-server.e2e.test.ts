@@ -83,7 +83,12 @@ describe('MCP Stdio Server E2E Tests', () => {
     const response = await sendMessage(message, timeoutMs);
 
     if (response.result?.content?.[0]?.text) {
-      return JSON.parse(response.result.content[0].text);
+      try {
+        // Attempt to parse, but fall back to raw text if it's not JSON
+        return JSON.parse(response.result.content[0].text);
+      } catch (e) {
+        return response.result.content[0].text;
+      }
     }
 
     return response.result;
