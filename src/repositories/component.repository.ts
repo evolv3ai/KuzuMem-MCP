@@ -225,18 +225,14 @@ export class ComponentRepository {
   /**
    * Get strongly connected components
    */
-  async getStronglyConnectedComponents(
-    repositoryNodeId: string,
-  ): Promise<any> {
+  async getStronglyConnectedComponents(repositoryNodeId: string): Promise<any> {
     return this.algorithmRepo.getStronglyConnectedComponents(repositoryNodeId);
   }
 
   /**
    * Get weakly connected components
    */
-  async getWeaklyConnectedComponents(
-    repositoryNodeId: string,
-  ): Promise<any> {
+  async getWeaklyConnectedComponents(repositoryNodeId: string): Promise<any> {
     return this.algorithmRepo.getWeaklyConnectedComponents(repositoryNodeId);
   }
 

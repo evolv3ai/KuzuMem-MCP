@@ -8,7 +8,6 @@ import { RepositoryRepository } from '../repository.repository';
  * Handles create, read, update, delete operations for components
  */
 export class ComponentCrudRepository extends BaseComponentRepository {
-
   /**
    * Get all active components for a specific repository and branch
    */
@@ -54,7 +53,11 @@ export class ComponentCrudRepository extends BaseComponentRepository {
     try {
       // Step 1: Get the basic component info
       const query = `MATCH (c:Component {graph_unique_id: $graphUniqueId}) RETURN c LIMIT 1`;
-      const result = await this.executeQueryWithLogging(query, { graphUniqueId }, 'findByIdAndBranch');
+      const result = await this.executeQueryWithLogging(
+        query,
+        { graphUniqueId },
+        'findByIdAndBranch',
+      );
 
       if (result.length === 0) {
         this.logger.debug(`Component not found for GID: ${graphUniqueId}`);
@@ -87,20 +90,14 @@ export class ComponentCrudRepository extends BaseComponentRepository {
       );
 
       // Update the dependencies
-      componentData.depends_on = depsResult.length > 0
-        ? depsResult.map((dep: any) => dep.depId)
-        : [];
+      componentData.depends_on =
+        depsResult.length > 0 ? depsResult.map((dep: any) => dep.depId) : [];
 
-      this.logger.debug(
-        `Found ${depsResult.length} dependencies for ${graphUniqueId}`,
-      );
+      this.logger.debug(`Found ${depsResult.length} dependencies for ${graphUniqueId}`);
 
       return componentData;
     } catch (error: any) {
-      this.logger.error(
-        `Error in findByIdAndBranch for GID ${graphUniqueId}:`,
-        error,
-      );
+      this.logger.error(`Error in findByIdAndBranch for GID ${graphUniqueId}:`, error);
       return null;
     }
   }
@@ -157,10 +154,17 @@ export class ComponentCrudRepository extends BaseComponentRepository {
     repositoryNodeId: string,
     component: ComponentInput,
   ): Promise<Component | null> {
-    const logicalRepositoryName = this.validateRepositoryNodeId(repositoryNodeId, 'upsertComponent');
+    const logicalRepositoryName = this.validateRepositoryNodeId(
+      repositoryNodeId,
+      'upsertComponent',
+    );
     const componentId = String(component.id);
     const componentBranch = String(component.branch || 'main');
-    const graphUniqueId = this.createGraphUniqueId(logicalRepositoryName, componentBranch, componentId);
+    const graphUniqueId = this.createGraphUniqueId(
+      logicalRepositoryName,
+      componentBranch,
+      componentId,
+    );
     const now = new Date().toISOString();
 
     try {
@@ -239,10 +243,7 @@ export class ComponentCrudRepository extends BaseComponentRepository {
       }
       return null;
     } catch (error: any) {
-      this.logger.error(
-        `ERROR in upsertComponent for ${graphUniqueId}:`,
-        error,
-      );
+      this.logger.error(`ERROR in upsertComponent for ${graphUniqueId}:`, error);
       throw error;
     }
   }

@@ -152,9 +152,7 @@ export class ComponentAlgorithmRepository extends BaseComponentRepository {
   /**
    * Get strongly connected components
    */
-  async getStronglyConnectedComponents(
-    repositoryNodeId: string,
-  ): Promise<any> {
+  async getStronglyConnectedComponents(repositoryNodeId: string): Promise<any> {
     await this.ensureGraphProjection(this.globalProjectedGraphName);
 
     const escapedRepositoryNodeId = this.escapeStr(repositoryNodeId);
@@ -169,7 +167,11 @@ export class ComponentAlgorithmRepository extends BaseComponentRepository {
     `;
 
     try {
-      const result = await this.executeQueryWithLogging(query, {}, 'getStronglyConnectedComponents');
+      const result = await this.executeQueryWithLogging(
+        query,
+        {},
+        'getStronglyConnectedComponents',
+      );
 
       return {
         message: `SCC results for repository ${repositoryNodeId} using projection '${this.globalProjectedGraphName}'.`,
@@ -191,9 +193,7 @@ export class ComponentAlgorithmRepository extends BaseComponentRepository {
   /**
    * Get weakly connected components
    */
-  async getWeaklyConnectedComponents(
-    repositoryNodeId: string,
-  ): Promise<any> {
+  async getWeaklyConnectedComponents(repositoryNodeId: string): Promise<any> {
     await this.ensureGraphProjection(this.globalProjectedGraphName);
 
     const escapedRepositoryNodeId = this.escapeStr(repositoryNodeId);

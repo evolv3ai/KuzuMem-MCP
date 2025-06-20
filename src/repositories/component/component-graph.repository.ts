@@ -8,7 +8,6 @@ import { RepositoryRepository } from '../repository.repository';
  * Handles path finding, dependency queries, and relationship traversals
  */
 export class ComponentGraphRepository extends BaseComponentRepository {
-
   /**
    * Find shortest path between two components
    */
@@ -93,13 +92,13 @@ export class ComponentGraphRepository extends BaseComponentRepository {
       // Extract nodes from the KuzuDB path structure
       let nodes: Component[] = [];
 
-      if (kuzuPathObject && kuzuPathObject._NODES) {
+      if (kuzuPathObject?._NODES) {
         nodes = kuzuPathObject._NODES.map((node: any) => ({
           ...node,
           id: node.id,
           graph_unique_id: undefined,
         }));
-      } else if (kuzuPathObject && kuzuPathObject.nodes) {
+      } else if (kuzuPathObject?.nodes) {
         nodes = kuzuPathObject.nodes.map((node: any) => ({
           ...node,
           id: node.id,

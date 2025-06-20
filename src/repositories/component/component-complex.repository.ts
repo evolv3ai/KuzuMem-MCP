@@ -8,7 +8,6 @@ import { RepositoryRepository } from '../repository.repository';
  * Handles advanced upsert operations with relationships and complex business logic
  */
 export class ComponentComplexRepository extends BaseComponentRepository {
-
   /**
    * Upsert component with relationships using direct Cypher queries
    * This is a more complex version that handles all relationship management
@@ -70,7 +69,11 @@ export class ComponentComplexRepository extends BaseComponentRepository {
       status: ComponentStatus;
     },
   ): Promise<void> {
-    const graphUniqueId = this.createGraphUniqueId(logicalRepositoryName, componentBranch, componentId);
+    const graphUniqueId = this.createGraphUniqueId(
+      logicalRepositoryName,
+      componentBranch,
+      componentId,
+    );
     const nowIso = new Date().toISOString();
     const kuzuTimestamp = nowIso.replace('T', ' ').replace('Z', '');
 
@@ -130,7 +133,11 @@ export class ComponentComplexRepository extends BaseComponentRepository {
     componentId: string,
     dependencies: string[] | null | undefined,
   ): Promise<void> {
-    const graphUniqueId = this.createGraphUniqueId(logicalRepositoryName, componentBranch, componentId);
+    const graphUniqueId = this.createGraphUniqueId(
+      logicalRepositoryName,
+      componentBranch,
+      componentId,
+    );
     const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
 
     // Delete existing dependencies
@@ -146,7 +153,12 @@ export class ComponentComplexRepository extends BaseComponentRepository {
     // Add new dependencies if provided
     if (dependencies && dependencies.length > 0) {
       for (const depId of dependencies) {
-        await this.ensureDependencyNode(repositoryNodeId, logicalRepositoryName, componentBranch, depId);
+        await this.ensureDependencyNode(
+          repositoryNodeId,
+          logicalRepositoryName,
+          componentBranch,
+          depId,
+        );
         await this.createDependencyRelationship(
           logicalRepositoryName,
           componentBranch,
@@ -166,7 +178,11 @@ export class ComponentComplexRepository extends BaseComponentRepository {
     componentBranch: string,
     depId: string,
   ): Promise<void> {
-    const depGraphUniqueId = this.createGraphUniqueId(logicalRepositoryName, componentBranch, depId);
+    const depGraphUniqueId = this.createGraphUniqueId(
+      logicalRepositoryName,
+      componentBranch,
+      depId,
+    );
     const nowIso = new Date().toISOString();
 
     const ensureDepNodeQuery = `
@@ -204,8 +220,16 @@ export class ComponentComplexRepository extends BaseComponentRepository {
     componentId: string,
     depId: string,
   ): Promise<void> {
-    const graphUniqueId = this.createGraphUniqueId(logicalRepositoryName, componentBranch, componentId);
-    const depGraphUniqueId = this.createGraphUniqueId(logicalRepositoryName, componentBranch, depId);
+    const graphUniqueId = this.createGraphUniqueId(
+      logicalRepositoryName,
+      componentBranch,
+      componentId,
+    );
+    const depGraphUniqueId = this.createGraphUniqueId(
+      logicalRepositoryName,
+      componentBranch,
+      depId,
+    );
     const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
     const escapedDepGraphUniqueId = this.escapeStr(depGraphUniqueId);
 
@@ -234,7 +258,9 @@ export class ComponentComplexRepository extends BaseComponentRepository {
             MATCH (dep:Component {graph_unique_id: '${escapedDepGraphUniqueId}'})
             CREATE (c)-[r:DEPENDS_ON]->(dep) RETURN count(r)`;
 
-    this.logger.debug(`Attempting DEPENDS_ON: ${escapedGraphUniqueId} -> ${escapedDepGraphUniqueId}`);
+    this.logger.debug(
+      `Attempting DEPENDS_ON: ${escapedGraphUniqueId} -> ${escapedDepGraphUniqueId}`,
+    );
 
     const relCreateResult = await this.executeQueryWithLogging(
       addDepRelQuery,
@@ -255,7 +281,11 @@ export class ComponentComplexRepository extends BaseComponentRepository {
     componentBranch: string,
     componentId: string,
   ): Promise<Component | null> {
-    const graphUniqueId = this.createGraphUniqueId(logicalRepositoryName, componentBranch, componentId);
+    const graphUniqueId = this.createGraphUniqueId(
+      logicalRepositoryName,
+      componentBranch,
+      componentId,
+    );
     const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
 
     // Return the updated component by finding it again

@@ -18,7 +18,9 @@ export abstract class BaseComponentRepository {
       throw new Error('BaseComponentRepository requires an initialized KuzuDBClient instance.');
     }
     if (!repositoryRepo) {
-      throw new Error('BaseComponentRepository requires an initialized RepositoryRepository instance.');
+      throw new Error(
+        'BaseComponentRepository requires an initialized RepositoryRepository instance.',
+      );
     }
     this.kuzuClient = kuzuClient;
     this.repositoryRepo = repositoryRepo;
@@ -38,7 +40,7 @@ export abstract class BaseComponentRepository {
       .replace(/"/g, '\\"')
       .replace(/\n/g, '\\n')
       .replace(/\r/g, '\\r')
-      .replace(/\x00/g, '\\x00');
+      .replace(/\0/g, '\\0');
   }
 
   /**
@@ -71,7 +73,11 @@ export abstract class BaseComponentRepository {
   /**
    * Helper to create graph unique ID for components
    */
-  protected createGraphUniqueId(repositoryName: string, branch: string, componentId: string): string {
+  protected createGraphUniqueId(
+    repositoryName: string,
+    branch: string,
+    componentId: string,
+  ): string {
     return formatGraphUniqueId(repositoryName, branch, componentId);
   }
 
