@@ -306,7 +306,7 @@ export class ContextRepository {
 
     const [logicalRepositoryName] = repositoryNodeId.split(':');
     const graphUniqueId = formatGraphUniqueId(logicalRepositoryName, branch, logicalId);
-    const now = new Date().toISOString();
+    const now = new Date();
 
     const query = `
       MERGE (c:Context {id: $id, graph_unique_id: $graphUniqueId})

@@ -1,7 +1,5 @@
-import { KuzuDBClient } from '../../db/kuzu';
 import { Component, ComponentInput, ComponentStatus } from '../../types';
 import { BaseComponentRepository } from '../base/base-component.repository';
-import { RepositoryRepository } from '../repository.repository';
 
 /**
  * Repository for basic Component CRUD operations
@@ -165,7 +163,7 @@ export class ComponentCrudRepository extends BaseComponentRepository {
       componentBranch,
       componentId,
     );
-    const now = new Date().toISOString();
+    const now = new Date();
 
     try {
       const result = await this.kuzuClient.transaction(async (tx) => {
@@ -180,7 +178,7 @@ export class ComponentCrudRepository extends BaseComponentRepository {
             c.status = $status,
             c.branch = $branch,
             c.repository = $repository,
-            c.created_at = $now,
+            c.created_at = $createdAt,
             c.updated_at = $now
           ON MATCH SET
             c.name = $name,
@@ -188,6 +186,7 @@ export class ComponentCrudRepository extends BaseComponentRepository {
             c.status = $status,
             c.branch = $branch,
             c.repository = $repository,
+            c.created_at = $createdAt,
             c.updated_at = $now
           MERGE (c)-[:PART_OF]->(repo)
         `;
@@ -199,7 +198,8 @@ export class ComponentCrudRepository extends BaseComponentRepository {
           status: component.status || 'active',
           branch: componentBranch,
           repository: repositoryNodeId,
-          now,
+          now: now,
+          createdAt: component.created_at ? new Date(component.created_at) : now,
         });
 
         // Handle dependencies

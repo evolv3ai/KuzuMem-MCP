@@ -1,7 +1,6 @@
+import { createPerformanceLogger, logError } from '../../utils/logger';
 import { BaseKuzuClient } from '../base/base-kuzu-client';
 import { KuzuQueryExecutor } from './kuzu-query-executor';
-import { createPerformanceLogger } from '../../utils/logger';
-import { logError } from '../../utils/logger';
 
 /**
  * Service responsible for database schema management
@@ -103,8 +102,8 @@ export class KuzuSchemaManager extends BaseKuzuClient {
         id STRING,
         name STRING,
         branch STRING,
-        created_at STRING,
-        updated_at STRING,
+        created_at TIMESTAMP,
+        updated_at TIMESTAMP,
         techStack STRING[],
         architecture STRING,
         PRIMARY KEY (id)
@@ -122,8 +121,8 @@ export class KuzuSchemaManager extends BaseKuzuClient {
         graph_unique_id STRING,
         branch STRING,
         repository STRING,
-        created_at STRING,
-        updated_at STRING,
+        created_at TIMESTAMP,
+        updated_at TIMESTAMP,
         PRIMARY KEY (graph_unique_id)
       );`,
 
@@ -133,14 +132,14 @@ export class KuzuSchemaManager extends BaseKuzuClient {
         title STRING,
         rationale STRING,
         status STRING,
-        dateCreated STRING,
+        dateCreated TIMESTAMP,
         impact STRING[],
         tags STRING[],
         graph_unique_id STRING,
         branch STRING,
         repository STRING,
-        created_at STRING,
-        updated_at STRING,
+        created_at TIMESTAMP,
+        updated_at TIMESTAMP,
         PRIMARY KEY (graph_unique_id)
       );`,
 
@@ -157,8 +156,8 @@ export class KuzuSchemaManager extends BaseKuzuClient {
         branch STRING,
         repository STRING,
         status STRING,
-        created_at STRING,
-        updated_at STRING,
+        created_at TIMESTAMP,
+        updated_at TIMESTAMP,
         PRIMARY KEY (graph_unique_id)
       );`,
 
@@ -169,11 +168,11 @@ export class KuzuSchemaManager extends BaseKuzuClient {
         path STRING,
         size INT64,
         mime_type STRING,
-        lastModified STRING,
+        lastModified TIMESTAMP,
         checksum STRING,
         metadata STRING,
-        created_at STRING,
-        updated_at STRING,
+        created_at TIMESTAMP,
+        updated_at TIMESTAMP,
         repository STRING,
         branch STRING,
         PRIMARY KEY (id)
@@ -188,8 +187,8 @@ export class KuzuSchemaManager extends BaseKuzuClient {
         color STRING,
         repository STRING,
         branch STRING,
-        created_at STRING,
-        updated_at STRING,
+        created_at TIMESTAMP,
+        updated_at TIMESTAMP,
         PRIMARY KEY (id)
       );`,
 
@@ -199,12 +198,12 @@ export class KuzuSchemaManager extends BaseKuzuClient {
         agent STRING,
         summary STRING,
         observation STRING,
-        timestamp STRING,
+        timestamp TIMESTAMP,
         repository STRING,
         branch STRING,
         graph_unique_id STRING,
-        created_at STRING,
-        updated_at STRING,
+        created_at TIMESTAMP,
+        updated_at TIMESTAMP,
         PRIMARY KEY (graph_unique_id)
       );`,
 
@@ -215,8 +214,8 @@ export class KuzuSchemaManager extends BaseKuzuClient {
         branch STRING,
         name STRING,
         content STRING,
-        created_at STRING,
-        updated_at STRING,
+        created_at TIMESTAMP,
+        updated_at TIMESTAMP,
         PRIMARY KEY (graph_unique_id)
       );`,
     ];
@@ -299,7 +298,9 @@ export class KuzuSchemaManager extends BaseKuzuClient {
       // Try to get extension information (this might not be available in all KuzuDB versions)
       let extensions: string[] = [];
       try {
-        const extensionResult = await this.queryExecutor.executeQuery('CALL show_extensions() RETURN name;');
+        const extensionResult = await this.queryExecutor.executeQuery(
+          'CALL show_extensions() RETURN name;',
+        );
         extensions = Array.isArray(extensionResult)
           ? extensionResult.map((ext: any) => ext.name || ext).filter(Boolean)
           : [];
@@ -308,11 +309,14 @@ export class KuzuSchemaManager extends BaseKuzuClient {
         extensions = ['JSON', 'ALGO'];
       }
 
-      logger.debug({
-        tableCount: tables.length,
-        relationshipCount: relationships.length,
-        extensionCount: extensions.length,
-      }, 'Schema information retrieved');
+      logger.debug(
+        {
+          tableCount: tables.length,
+          relationshipCount: relationships.length,
+          extensionCount: extensions.length,
+        },
+        'Schema information retrieved',
+      );
 
       return { tables, relationships, extensions };
     } catch (error) {
