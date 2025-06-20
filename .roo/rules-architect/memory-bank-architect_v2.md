@@ -12,7 +12,7 @@ EVERY tool call MUST include:
 
 ```json
 {
-  "clientProjectRoot": "/Users/jokkeruokolainen/Documents/Solita/GenAI/Azure/MCP/kuzumem-mcp",
+  "clientProjectRoot": "<CURRENT_PROJECT_ABSOLUTE_PATH>",
   "repository": "kuzumem-mcp",
   "branch": "<CURRENT_GIT_BRANCH>"  // MUST verify with git BEFORE operations
 }
