@@ -16,19 +16,22 @@ export class ComponentAlgorithmRepository extends BaseComponentRepository {
   async kCoreDecomposition(repositoryNodeId: string, k: number): Promise<any> {
     await this.ensureGraphProjection(this.globalProjectedGraphName);
 
-    const escapedRepositoryNodeId = this.escapeStr(repositoryNodeId);
     const kValue = k;
 
     const query = `
       CALL k_core_decomposition('${this.globalProjectedGraphName}') YIELD node AS algo_component_node, k_degree
       WITH algo_component_node, k_degree
       WHERE k_degree >= ${kValue}
-      MATCH (repo:Repository {id: '${escapedRepositoryNodeId}'})<-[:PART_OF]-(algo_component_node)
+      MATCH (repo:Repository {id: $repositoryNodeId})<-[:PART_OF]-(algo_component_node)
       RETURN algo_component_node AS component, k_degree
     `;
 
     try {
-      const result = await this.executeQueryWithLogging(query, {}, 'kCoreDecomposition');
+      const result = await this.executeQueryWithLogging(
+        query,
+        { repositoryNodeId },
+        'kCoreDecomposition',
+      );
 
       return {
         message: `Nodes in the ${kValue}-core (or higher) for repository ${repositoryNodeId} using projection '${this.globalProjectedGraphName}'.`,
@@ -60,19 +63,22 @@ export class ComponentAlgorithmRepository extends BaseComponentRepository {
   async louvainCommunityDetection(repositoryNodeId: string): Promise<any> {
     await this.ensureGraphProjection(this.globalProjectedGraphName);
 
-    const escapedRepositoryNodeId = this.escapeStr(repositoryNodeId);
     const louvainCallParams = `'${this.globalProjectedGraphName}'`;
 
     const query = `
-      CALL louvain(${louvainCallParams}) YIELD node AS algo_component_node, louvain_id 
+      CALL louvain(${louvainCallParams}) YIELD node AS algo_component_node, louvain_id
       WITH algo_component_node, louvain_id
-      MATCH (repo:Repository {id: '${escapedRepositoryNodeId}'})<-[:PART_OF]-(algo_component_node)
-      RETURN algo_component_node AS component, louvain_id AS community_id 
-      ORDER BY community_id, algo_component_node.name 
+      MATCH (repo:Repository {id: $repositoryNodeId})<-[:PART_OF]-(algo_component_node)
+      RETURN algo_component_node AS component, louvain_id AS community_id
+      ORDER BY community_id, algo_component_node.name
     `;
 
     try {
-      const result = await this.executeQueryWithLogging(query, {}, 'louvainCommunityDetection');
+      const result = await this.executeQueryWithLogging(
+        query,
+        { repositoryNodeId },
+        'louvainCommunityDetection',
+      );
 
       return {
         message: `Community detection results for repository ${repositoryNodeId} using projection '${this.globalProjectedGraphName}'.`,
@@ -106,7 +112,6 @@ export class ComponentAlgorithmRepository extends BaseComponentRepository {
   ): Promise<any> {
     await this.ensureGraphProjection(this.globalProjectedGraphName);
 
-    const escapedRepositoryNodeId = this.escapeStr(repositoryNodeId);
     let callParams = `'${this.globalProjectedGraphName}'`;
     if (dampingFactor !== undefined) {
       callParams += `, dampingFactor := ${dampingFactor}`;
@@ -124,13 +129,13 @@ export class ComponentAlgorithmRepository extends BaseComponentRepository {
     const query = `
       CALL page_rank(${callParams}) YIELD node AS algo_component_node, rank
       WITH algo_component_node, rank
-      MATCH (repo:Repository {id: '${escapedRepositoryNodeId}'})<-[:PART_OF]-(algo_component_node)
+      MATCH (repo:Repository {id: $repositoryNodeId})<-[:PART_OF]-(algo_component_node)
       RETURN algo_component_node AS component, rank
       ORDER BY rank DESC
     `;
 
     try {
-      const result = await this.executeQueryWithLogging(query, {}, 'pageRank');
+      const result = await this.executeQueryWithLogging(query, { repositoryNodeId }, 'pageRank');
 
       return {
         message: `PageRank results for repository ${repositoryNodeId} using projection '${this.globalProjectedGraphName}'.`,
@@ -155,13 +160,12 @@ export class ComponentAlgorithmRepository extends BaseComponentRepository {
   async getStronglyConnectedComponents(repositoryNodeId: string): Promise<any> {
     await this.ensureGraphProjection(this.globalProjectedGraphName);
 
-    const escapedRepositoryNodeId = this.escapeStr(repositoryNodeId);
     const sccCallParams = `'${this.globalProjectedGraphName}'`;
 
     const query = `
       CALL strongly_connected_components(${sccCallParams}) YIELD node AS algo_component_node, component_id AS group_id
       WITH algo_component_node, group_id
-      MATCH (repo:Repository {id: '${escapedRepositoryNodeId}'})<-[:PART_OF]-(algo_component_node)
+      MATCH (repo:Repository {id: $repositoryNodeId})<-[:PART_OF]-(algo_component_node)
       RETURN algo_component_node AS component, group_id
       ORDER BY group_id, algo_component_node.name
     `;
@@ -169,7 +173,7 @@ export class ComponentAlgorithmRepository extends BaseComponentRepository {
     try {
       const result = await this.executeQueryWithLogging(
         query,
-        {},
+        { repositoryNodeId },
         'getStronglyConnectedComponents',
       );
 
@@ -196,19 +200,22 @@ export class ComponentAlgorithmRepository extends BaseComponentRepository {
   async getWeaklyConnectedComponents(repositoryNodeId: string): Promise<any> {
     await this.ensureGraphProjection(this.globalProjectedGraphName);
 
-    const escapedRepositoryNodeId = this.escapeStr(repositoryNodeId);
     const wccCallParams = `'${this.globalProjectedGraphName}'`;
 
     const query = `
       CALL weakly_connected_components(${wccCallParams}) YIELD node AS algo_component_node, component_id AS group_id
       WITH algo_component_node, group_id
-      MATCH (repo:Repository {id: '${escapedRepositoryNodeId}'})<-[:PART_OF]-(algo_component_node)
+      MATCH (repo:Repository {id: $repositoryNodeId})<-[:PART_OF]-(algo_component_node)
       RETURN algo_component_node AS component, group_id
       ORDER BY group_id, algo_component_node.name
     `;
 
     try {
-      const result = await this.executeQueryWithLogging(query, {}, 'getWeaklyConnectedComponents');
+      const result = await this.executeQueryWithLogging(
+        query,
+        { repositoryNodeId },
+        'getWeaklyConnectedComponents',
+      );
 
       return {
         message: `WCC results for repository ${repositoryNodeId} using projection '${this.globalProjectedGraphName}'.`,
