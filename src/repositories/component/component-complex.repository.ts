@@ -138,15 +138,14 @@ export class ComponentComplexRepository extends BaseComponentRepository {
       componentBranch,
       componentId,
     );
-    const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
 
     // Delete existing dependencies
     const deleteDepsQuery = `
-        MATCH (c:Component {graph_unique_id: '${escapedGraphUniqueId}'})-[r:DEPENDS_ON]->()
+        MATCH (c:Component {graph_unique_id: $graphUniqueId})-[r:DEPENDS_ON]->()
         DELETE r`;
     await this.executeQueryWithLogging(
       deleteDepsQuery,
-      {},
+      { graphUniqueId },
       'upsertComponentWithRelationships-deleteDeps',
     );
 
@@ -230,41 +229,36 @@ export class ComponentComplexRepository extends BaseComponentRepository {
       componentBranch,
       depId,
     );
-    const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
-    const escapedDepGraphUniqueId = this.escapeStr(depGraphUniqueId);
-
     // Verify both nodes exist before creating relationship
-    const checkCQuery = `MATCH (c:Component {graph_unique_id: '${escapedGraphUniqueId}'}) RETURN c.id AS componentId`;
-    const checkDQuery = `MATCH (d:Component {graph_unique_id: '${escapedDepGraphUniqueId}'}) RETURN d.id AS depId`;
+    const checkCQuery = `MATCH (c:Component {graph_unique_id: $graphUniqueId}) RETURN c.id AS componentId`;
+    const checkDQuery = `MATCH (d:Component {graph_unique_id: $depGraphUniqueId}) RETURN d.id AS depId`;
 
     const cResult = await this.executeQueryWithLogging(
       checkCQuery,
-      {},
+      { graphUniqueId },
       'upsertComponentWithRelationships-checkC',
     );
     const dResult = await this.executeQueryWithLogging(
       checkDQuery,
-      {},
+      { depGraphUniqueId },
       'upsertComponentWithRelationships-checkD',
     );
 
     this.logger.debug(
-      `Pre-CREATE check: Found parent c (${escapedGraphUniqueId})? ${cResult.length > 0}. Found dep d (${escapedDepGraphUniqueId})? ${dResult.length > 0}`,
+      `Pre-CREATE check: Found parent c (${graphUniqueId})? ${cResult.length > 0}. Found dep d (${depGraphUniqueId})? ${dResult.length > 0}`,
     );
 
     // Create the dependency relationship
     const addDepRelQuery = `
-            MATCH (c:Component {graph_unique_id: '${escapedGraphUniqueId}'})
-            MATCH (dep:Component {graph_unique_id: '${escapedDepGraphUniqueId}'})
+            MATCH (c:Component {graph_unique_id: $graphUniqueId})
+            MATCH (dep:Component {graph_unique_id: $depGraphUniqueId})
             CREATE (c)-[r:DEPENDS_ON]->(dep) RETURN count(r)`;
 
-    this.logger.debug(
-      `Attempting DEPENDS_ON: ${escapedGraphUniqueId} -> ${escapedDepGraphUniqueId}`,
-    );
+    this.logger.debug(`Attempting DEPENDS_ON: ${graphUniqueId} -> ${depGraphUniqueId}`);
 
     const relCreateResult = await this.executeQueryWithLogging(
       addDepRelQuery,
-      {},
+      { graphUniqueId, depGraphUniqueId },
       'upsertComponentWithRelationships-createRel',
     );
 
@@ -286,13 +280,12 @@ export class ComponentComplexRepository extends BaseComponentRepository {
       componentBranch,
       componentId,
     );
-    const escapedGraphUniqueId = this.escapeStr(graphUniqueId);
 
     // Return the updated component by finding it again
-    const findQuery = `MATCH (c:Component {graph_unique_id: '${escapedGraphUniqueId}'}) RETURN c LIMIT 1`;
+    const findQuery = `MATCH (c:Component {graph_unique_id: $graphUniqueId}) RETURN c LIMIT 1`;
     const findResult = await this.executeQueryWithLogging(
       findQuery,
-      {},
+      { graphUniqueId },
       'upsertComponentWithRelationships-find',
     );
 
@@ -314,13 +307,13 @@ export class ComponentComplexRepository extends BaseComponentRepository {
 
     // Get dependencies
     const depsQuery = `
-      MATCH (c:Component {graph_unique_id: '${escapedGraphUniqueId}'})-[:DEPENDS_ON]->(dep:Component)
+      MATCH (c:Component {graph_unique_id: $graphUniqueId})-[:DEPENDS_ON]->(dep:Component)
       RETURN dep.id as depId
     `;
 
     const depsResult = await this.executeQueryWithLogging(
       depsQuery,
-      {},
+      { graphUniqueId },
       'upsertComponentWithRelationships-getDeps',
     );
 
