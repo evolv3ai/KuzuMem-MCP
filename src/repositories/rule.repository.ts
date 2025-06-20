@@ -142,7 +142,7 @@ export class RuleRepository {
       scope: (rule as any).scope || 'component',
       severity: (rule as any).severity || 'medium',
       category: (rule as any).category || 'general',
-      now,
+      now: now,
     };
 
     try {

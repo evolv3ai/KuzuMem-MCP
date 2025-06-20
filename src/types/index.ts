@@ -69,6 +69,7 @@ export interface ComponentInput {
   depends_on?: string[] | null;
   dependsOn?: string[] | null; // Alternative casing used by tools
   created_at?: string;
+  updated_at?: string;
 }
 
 // Decision type
