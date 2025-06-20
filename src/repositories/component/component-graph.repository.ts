@@ -231,7 +231,6 @@ export class ComponentGraphRepository extends BaseComponentRepository {
   ): Promise<Component[]> {
     const currentDepth = depth && depth > 0 && depth <= 10 ? depth : 1;
     const currentDirection = direction || 'OUTGOING';
-    const escapedComponentBranch = this.escapeStr(componentBranch);
 
     let relTypeSpec = '';
     if (relationshipTypes && relationshipTypes.length > 0) {
