@@ -1,6 +1,5 @@
 import { KuzuDBClient } from '../db/kuzu.js';
 import { logger } from '../utils/logger';
-import type { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom.js';
 
 export interface SnapshotResult {
   snapshotId: string;
@@ -410,13 +409,17 @@ export class SnapshotService {
     const query = `
       MATCH (n)
       WHERE n.repository = $repository AND n.branch = $branch
-      RETURN n.id AS id, n.name AS name, n.created AS created, n.updated AS updated,
-             n.description AS description, n.status AS status, n.kind AS kind,
-             n.dependsOn AS dependsOn, n.tags AS tags, n.metadata AS metadata,
-             labels(n) AS nodeLabels, properties(n) AS properties
+      RETURN n, labels(n) AS nodeLabels
     `;
 
-    return await this.kuzuClient.executeQuery(query, { repository, branch });
+    const results = await this.kuzuClient.executeQuery(query, { repository, branch });
+    return results.map((row: any) => {
+      const { _id, _label, ...properties } = row.n;
+      return {
+        properties,
+        nodeLabels: row.nodeLabels,
+      };
+    });
   }
 
   /**
@@ -427,11 +430,19 @@ export class SnapshotService {
       MATCH (a)-[r]->(b)
       WHERE a.repository = $repository AND a.branch = $branch
         AND b.repository = $repository AND b.branch = $branch
-      RETURN a.id AS fromId, b.id AS toId, type(r) AS relationshipType,
-             properties(r) AS properties
+      RETURN a.id AS fromId, b.id AS toId, label(r) AS relationshipType, r AS properties
     `;
 
-    return await this.kuzuClient.executeQuery(query, { repository, branch });
+    const results = await this.kuzuClient.executeQuery(query, { repository, branch });
+    return results.map((row: any) => {
+      const { from, to, label, ...properties } = row.properties;
+      return {
+        fromId: row.fromId,
+        toId: row.toId,
+        relationshipType: row.relationshipType,
+        properties,
+      };
+    });
   }
 
   /**
@@ -441,13 +452,17 @@ export class SnapshotService {
     try {
       const query = `
         MATCH (m:Metadata)
-        WHERE m.repository = $repository AND m.branch = $branch
-        RETURN properties(m) AS metadata
+        WHERE m.name = $repository AND m.branch = $branch
+        RETURN m
         LIMIT 1
       `;
 
       const result = await this.kuzuClient.executeQuery(query, { repository, branch });
-      return result[0]?.metadata || {};
+      if (result.length > 0) {
+        const { _id, _label, ...metadata } = result[0].m;
+        return metadata;
+      }
+      return {};
     } catch (error) {
       this.snapshotLogger.warn('Failed to get repository metadata:', error);
       return {};
@@ -554,7 +569,7 @@ export class SnapshotService {
       `
       MATCH (n)
       WHERE n.repository = $repository AND n.branch = $branch
-        AND NOT n:Snapshot AND NOT n:Metadata
+        AND label(n) <> 'Snapshot' AND label(n) <> 'Metadata'
       DELETE n
     `,
       { repository, branch },

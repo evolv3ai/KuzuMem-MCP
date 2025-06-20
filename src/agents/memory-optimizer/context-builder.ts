@@ -212,13 +212,13 @@ export class MemoryContextBuilder {
         MATCH (c:Context)
         WHERE c.repository = $repository AND c.branch = $branch
           AND (c.summary CONTAINS 'optimization' OR c.summary CONTAINS 'cleanup')
-        RETURN c.created
-        ORDER BY c.created DESC
+        RETURN c.created_at
+        ORDER BY c.created_at DESC
         LIMIT 1
       `;
 
       const result = await kuzuClient.executeQuery(query, { repository, branch });
-      return result[0]?.created || undefined;
+      return result[0]?.created_at || undefined;
     } catch (error) {
       logger.warn('Failed to get last optimization timestamp:', error);
       return undefined;
@@ -242,13 +242,13 @@ export class MemoryContextBuilder {
       const query = `
         MATCH (n)
         WHERE n.repository = $repository AND n.branch = $branch
-          AND n.created IS NOT NULL
-          AND n.created <> ''
-          AND n.created CONTAINS 'T'
+          AND n.created_at IS NOT NULL
+          AND n.created_at <> ''
+          AND n.created_at CONTAINS 'T'
         OPTIONAL MATCH (n)-[r]-()
         WITH n, COUNT(r) AS relationshipCount
         WHERE relationshipCount = 0 OR n.status = 'deprecated'
-        RETURN n.id, n.name, n.created, relationshipCount
+        RETURN n.id, n.name, n.created_at, relationshipCount
         ORDER BY relationshipCount ASC
         LIMIT 50
       `;

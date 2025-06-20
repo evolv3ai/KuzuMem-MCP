@@ -1,8 +1,8 @@
-import * as path from 'path';
 import { KuzuDBClient } from '../db/kuzu';
 import { RepositoryProvider } from '../db/repository-provider';
 import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
 import { Mutex } from '../utils/mutex';
+import { ensureAbsolutePath } from '../utils/path.utils';
 import { ServiceRegistry } from './core/service-registry.service';
 import { SnapshotService } from './snapshot.service';
 
@@ -82,7 +82,7 @@ export class MemoryService {
     }
 
     // Ensure path is absolute
-    clientProjectRoot = this.ensureAbsoluteRoot(clientProjectRoot);
+    clientProjectRoot = ensureAbsolutePath(clientProjectRoot);
     logger.info(
       `[MemoryService.getKuzuClient] Using absolute clientProjectRoot: ${clientProjectRoot}`,
     );
@@ -93,45 +93,33 @@ export class MemoryService {
       throw new Error('RepositoryProvider not initialized');
     }
 
-    // Return cached client if available
+    // Correct Caching Logic: Reuse existing client if available
     if (this.kuzuClients.has(clientProjectRoot)) {
       logger.info(
-        `[MemoryService.getKuzuClient] Found cached KuzuDBClient for: ${clientProjectRoot}`,
+        `[MemoryService.getKuzuClient] Reusing cached KuzuDBClient for: ${clientProjectRoot}`,
       );
-      const cachedClient = this.kuzuClients.get(clientProjectRoot)!;
-      return cachedClient;
+      return this.kuzuClients.get(clientProjectRoot)!;
     }
 
-    // Create new client if needed
+    // Create new client only if it doesn't exist
     logger.info(
-      `[MemoryService.getKuzuClient] Creating new KuzuDBClient for: ${clientProjectRoot}`,
+      `[MemoryService.getKuzuClient] No cached client found. Creating new KuzuDBClient for: ${clientProjectRoot}`,
     );
 
     try {
-      const newClient = new KuzuDBClient(clientProjectRoot); // KuzuDBClient constructor handles path joining for db file
-      // Pass the mcpContext to allow for progress notifications during initialization
-      await newClient.initialize(mcpContext); // This now also handles schema init
+      const newClient = new KuzuDBClient(clientProjectRoot);
+      await newClient.initialize(mcpContext);
       this.kuzuClients.set(clientProjectRoot, newClient);
+
       await this.repositoryProvider.initializeRepositories(clientProjectRoot, newClient);
 
-      // Initialize SnapshotService for this client project root
+      // Initialize SnapshotService for this new client
       if (!this.snapshotServices.has(clientProjectRoot)) {
-        try {
-          const snapshotService = new SnapshotService(newClient);
-          this.snapshotServices.set(clientProjectRoot, snapshotService);
-          logger.info(
-            `[MemoryService.getKuzuClient] SnapshotService initialized for: ${clientProjectRoot}`,
-          );
-        } catch (snapshotError) {
-          logger.error(
-            `[MemoryService.getKuzuClient] Failed to initialize SnapshotService for ${clientProjectRoot}:`,
-            snapshotError,
-          );
-          // Continue without SnapshotService - optimization operations will handle this gracefully
-          logger.warn(
-            `[MemoryService.getKuzuClient] Continuing without SnapshotService - snapshot operations will not be available for ${clientProjectRoot}`,
-          );
-        }
+        const snapshotService = new SnapshotService(newClient);
+        this.snapshotServices.set(clientProjectRoot, snapshotService);
+        logger.info(
+          `[MemoryService.getKuzuClient] SnapshotService initialized for: ${clientProjectRoot}`,
+        );
       }
 
       logger.info(
@@ -162,7 +150,7 @@ export class MemoryService {
     const logger = mcpContext.logger || console;
 
     // Ensure absolute path
-    clientProjectRoot = this.ensureAbsoluteRoot(clientProjectRoot);
+    clientProjectRoot = ensureAbsolutePath(clientProjectRoot);
 
     // Ensure KuzuDB client is initialized (this also initializes SnapshotService)
     await this.getKuzuClient(mcpContext, clientProjectRoot);
@@ -220,13 +208,6 @@ export class MemoryService {
   // ------------------------------------------------------------------------
 
   // All file and tag methods have been moved to EntityService
-
-  private ensureAbsoluteRoot(clientProjectRoot: string): string {
-    if (!path.isAbsolute(clientProjectRoot)) {
-      return path.resolve(clientProjectRoot);
-    }
-    return clientProjectRoot;
-  }
 
   // Delete methods moved to EntityService
 

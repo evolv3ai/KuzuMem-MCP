@@ -3,21 +3,39 @@ import { KuzuDBClient } from '../../db/kuzu';
 import { RepositoryProvider } from '../../db/repository-provider';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
-import { Component, ComponentStatus, Decision, Rule } from '../../types';
+import {
+  Component,
+  ComponentStatus,
+  Decision,
+  DecisionInput,
+  FileInput,
+  File as FileRecord,
+  Rule,
+  RuleInput,
+  Tag,
+  TagInput,
+} from '../../types';
 import { CoreService } from '../core/core.service';
-import * as componentOps from '../memory-operations/component.ops';
 import * as contextOps from '../memory-operations/context.ops';
-import * as decisionOps from '../memory-operations/decision.ops';
 import * as fileOps from '../memory-operations/file.ops';
 import * as ruleOps from '../memory-operations/rule.ops';
 import * as tagOps from '../memory-operations/tag.ops';
 import { SnapshotService } from '../snapshot.service';
+import { BulkOperationsService } from './bulk-operations.service';
+import { ComponentService } from './component.service';
+import { DecisionService } from './decision.service';
 
-// Type definitions (temporary until proper types are created)
-type FileRecord = any;
-type Tag = any;
+// Type definitions are now properly imported
 
+/**
+ * Main Entity Service that orchestrates operations across different entity types
+ * Delegates to specialized services for specific entity operations
+ */
 export class EntityService extends CoreService {
+  private componentService: ComponentService;
+  private decisionService: DecisionService;
+  private bulkOperationsService: BulkOperationsService;
+
   constructor(
     repositoryProvider: RepositoryProvider,
     getKuzuClient: (
@@ -30,6 +48,35 @@ export class EntityService extends CoreService {
     ) => Promise<SnapshotService>,
   ) {
     super(repositoryProvider, getKuzuClient, getSnapshotService);
+
+    // Initialize specialized services
+    this.componentService = new ComponentService(
+      repositoryProvider,
+      getKuzuClient,
+      getSnapshotService,
+    );
+    this.decisionService = new DecisionService(
+      repositoryProvider,
+      getKuzuClient,
+      getSnapshotService,
+    );
+    this.bulkOperationsService = new BulkOperationsService(
+      repositoryProvider,
+      getKuzuClient,
+      getSnapshotService,
+    );
+  }
+  /**
+   * Helper function to convert null to undefined for cleaner data handling
+   */
+  private convertNullToUndefined<T>(
+    value: T | null | undefined,
+    fallback?: T | null | undefined,
+  ): T | undefined {
+    if (value !== undefined) {
+      return value === null ? undefined : value;
+    }
+    return fallback === null ? undefined : fallback;
   }
 
   /**
@@ -63,13 +110,13 @@ export class EntityService extends CoreService {
       mcpContext,
       repositoryName,
       branch,
-      ruleForOps as any,
+      ruleForOps as RuleInput,
       repositoryRepo,
       ruleRepo,
     ) as Promise<Rule | null>;
   }
 
-  // Add new methods for tools, delegating to Ops
+  // Component operations - delegate to ComponentService
   async upsertComponent(
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
@@ -83,33 +130,16 @@ export class EntityService extends CoreService {
       depends_on?: string[];
     },
   ): Promise<Component | null> {
-    const logger = mcpContext.logger || console;
-    if (!this.repositoryProvider) {
-      logger.error('[EntityService.upsertComponent] RepositoryProvider not initialized');
-      throw new Error('RepositoryProvider not initialized');
-    }
-
-    const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
-    const componentRepo = this.repositoryProvider.getComponentRepository(clientProjectRoot);
-
-    // Construct the data object expected by componentOps.upsertComponentOp
-    const componentOpData = {
-      ...componentData,
-      repository: repositoryName,
-      branch: branch,
-    };
-
-    return componentOps.upsertComponentOp(
+    return this.componentService.upsertComponent(
       mcpContext,
+      clientProjectRoot,
       repositoryName,
       branch,
-      componentOpData,
-      repositoryRepo,
-      componentRepo,
-    ) as Promise<Component | null>;
+      componentData,
+    );
   }
 
+  // Decision operations - delegate to DecisionService
   async upsertDecision(
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
@@ -122,34 +152,16 @@ export class EntityService extends CoreService {
       context?: string;
     },
   ): Promise<Decision | null> {
-    const logger = mcpContext.logger || console;
-    if (!this.repositoryProvider) {
-      logger.error('[EntityService.upsertDecision] RepositoryProvider not initialized');
-      throw new Error('RepositoryProvider not initialized');
-    }
-
-    const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-    const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
-    const decisionRepo = this.repositoryProvider.getDecisionRepository(clientProjectRoot);
-
-    // Construct the data object expected by decisionOps.upsertDecisionOp
-    const decisionOpData = {
-      ...decisionData,
-      repository: repositoryName,
-      branch: branch,
-    };
-
-    return decisionOps.upsertDecisionOp(
+    return this.decisionService.upsertDecision(
       mcpContext,
+      clientProjectRoot,
       repositoryName,
       branch,
-      decisionOpData as any,
-      repositoryRepo,
-      decisionRepo,
-    ) as Promise<Decision | null>;
+      decisionData,
+    );
   }
 
-  // Get methods for individual entities
+  // Get methods for individual entities - delegate to specialized services
   async getComponent(
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
@@ -157,20 +169,13 @@ export class EntityService extends CoreService {
     branch: string,
     componentId: string,
   ): Promise<Component | null> {
-    const logger = mcpContext.logger || console;
-    if (!this.repositoryProvider) {
-      logger.error('[EntityService.getComponent] RepositoryProvider not initialized');
-      throw new Error('RepositoryProvider not initialized');
-    }
-
-    try {
-      const componentRepo = this.repositoryProvider.getComponentRepository(clientProjectRoot);
-      const component = await componentRepo.findByIdAndBranch(repositoryName, componentId, branch);
-      return component;
-    } catch (error: any) {
-      logger.error(`[EntityService.getComponent] Error getting component ${componentId}:`, error);
-      throw error;
-    }
+    return this.componentService.getComponent(
+      mcpContext,
+      clientProjectRoot,
+      repositoryName,
+      branch,
+      componentId,
+    );
   }
 
   async getDecision(
@@ -180,20 +185,13 @@ export class EntityService extends CoreService {
     branch: string,
     decisionId: string,
   ): Promise<Decision | null> {
-    const logger = mcpContext.logger || console;
-    if (!this.repositoryProvider) {
-      logger.error('[EntityService.getDecision] RepositoryProvider not initialized');
-      throw new Error('RepositoryProvider not initialized');
-    }
-
-    try {
-      const decisionRepo = this.repositoryProvider.getDecisionRepository(clientProjectRoot);
-      const decision = await decisionRepo.findByIdAndBranch(repositoryName, decisionId, branch);
-      return decision;
-    } catch (error: any) {
-      logger.error(`[EntityService.getDecision] Error getting decision ${decisionId}:`, error);
-      throw error;
-    }
+    return this.decisionService.getDecision(
+      mcpContext,
+      clientProjectRoot,
+      repositoryName,
+      branch,
+      decisionId,
+    );
   }
 
   async getRule(
@@ -219,7 +217,7 @@ export class EntityService extends CoreService {
     }
   }
 
-  // Update methods for entities (distinct from upsert - only update existing)
+  // Update methods for entities - delegate to specialized services
   async updateComponent(
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
@@ -228,70 +226,14 @@ export class EntityService extends CoreService {
     componentId: string,
     updates: Partial<Omit<Component, 'id' | 'repository' | 'branch' | 'type'>>,
   ): Promise<Component | null> {
-    const logger = mcpContext.logger || console;
-    if (!this.repositoryProvider) {
-      logger.error('[EntityService.updateComponent] RepositoryProvider not initialized');
-      throw new Error('RepositoryProvider not initialized');
-    }
-
-    try {
-      // First check if component exists
-      const existing = await this.getComponent(
-        mcpContext,
-        clientProjectRoot,
-        repositoryName,
-        branch,
-        componentId,
-      );
-      if (!existing) {
-        logger.warn(`[EntityService.updateComponent] Component ${componentId} not found`);
-        return null;
-      }
-
-      // Merge updates with existing data
-      const updatedData = {
-        id: componentId,
-        name: existing.name,
-        kind:
-          updates.kind !== undefined
-            ? updates.kind === null
-              ? undefined
-              : updates.kind
-            : existing.kind === null
-              ? undefined
-              : existing.kind,
-        depends_on:
-          updates.depends_on !== undefined
-            ? updates.depends_on === null
-              ? undefined
-              : updates.depends_on
-            : existing.depends_on === null
-              ? undefined
-              : existing.depends_on,
-        status:
-          updates.status !== undefined
-            ? updates.status === null
-              ? undefined
-              : updates.status
-            : existing.status === null
-              ? undefined
-              : existing.status,
-      };
-
-      return await this.upsertComponent(
-        mcpContext,
-        clientProjectRoot,
-        repositoryName,
-        branch,
-        updatedData,
-      );
-    } catch (error: any) {
-      logger.error(
-        `[EntityService.updateComponent] Error updating component ${componentId}:`,
-        error,
-      );
-      throw error;
-    }
+    return this.componentService.updateComponent(
+      mcpContext,
+      clientProjectRoot,
+      repositoryName,
+      branch,
+      componentId,
+      updates,
+    );
   }
 
   async updateDecision(
@@ -302,46 +244,14 @@ export class EntityService extends CoreService {
     decisionId: string,
     updates: Partial<Omit<Decision, 'id' | 'repository' | 'branch' | 'type'>>,
   ): Promise<Decision | null> {
-    const logger = mcpContext.logger || console;
-    if (!this.repositoryProvider) {
-      logger.error('[EntityService.updateDecision] RepositoryProvider not initialized');
-      throw new Error('RepositoryProvider not initialized');
-    }
-
-    try {
-      // First check if decision exists
-      const existing = await this.getDecision(
-        mcpContext,
-        clientProjectRoot,
-        repositoryName,
-        branch,
-        decisionId,
-      );
-      if (!existing) {
-        logger.warn(`[EntityService.updateDecision] Decision ${decisionId} not found`);
-        return null;
-      }
-
-      // Merge updates with existing data
-      const updatedData = {
-        ...existing,
-        ...updates,
-        // Convert null to undefined
-        context: updates.context === null ? undefined : updates.context,
-      };
-
-      // Use upsert method to update
-      return await this.upsertDecision(
-        mcpContext,
-        clientProjectRoot,
-        repositoryName,
-        branch,
-        updatedData,
-      );
-    } catch (error: any) {
-      logger.error(`[EntityService.updateDecision] Error updating decision ${decisionId}:`, error);
-      throw error;
-    }
+    return this.decisionService.updateDecision(
+      mcpContext,
+      clientProjectRoot,
+      repositoryName,
+      branch,
+      decisionId,
+      updates,
+    );
   }
 
   async updateRule(
@@ -395,7 +305,7 @@ export class EntityService extends CoreService {
     }
   }
 
-  // Delete methods for entities
+  // Delete methods for entities - delegate to specialized services
   async deleteComponent(
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
@@ -403,30 +313,13 @@ export class EntityService extends CoreService {
     branch: string,
     componentId: string,
   ): Promise<boolean> {
-    const logger = mcpContext.logger || console;
-    if (!this.repositoryProvider) {
-      logger.error('[EntityService.deleteComponent] RepositoryProvider not initialized');
-      throw new Error('RepositoryProvider not initialized');
-    }
-
-    try {
-      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-      const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
-      return await componentOps.deleteComponentOp(
-        mcpContext,
-        kuzuClient,
-        repositoryRepo,
-        repositoryName,
-        branch,
-        componentId,
-      );
-    } catch (error: any) {
-      logger.error(
-        `[EntityService.deleteComponent] Error deleting component ${componentId}:`,
-        error,
-      );
-      throw error;
-    }
+    return this.componentService.deleteComponent(
+      mcpContext,
+      clientProjectRoot,
+      repositoryName,
+      branch,
+      componentId,
+    );
   }
 
   async deleteDecision(
@@ -436,27 +329,13 @@ export class EntityService extends CoreService {
     branch: string,
     decisionId: string,
   ): Promise<boolean> {
-    const logger = mcpContext.logger || console;
-    if (!this.repositoryProvider) {
-      logger.error('[EntityService.deleteDecision] RepositoryProvider not initialized');
-      throw new Error('RepositoryProvider not initialized');
-    }
-
-    try {
-      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-      const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
-      return await decisionOps.deleteDecisionOp(
-        mcpContext,
-        kuzuClient,
-        repositoryRepo,
-        repositoryName,
-        branch,
-        decisionId,
-      );
-    } catch (error: any) {
-      logger.error(`[EntityService.deleteDecision] Error deleting decision ${decisionId}:`, error);
-      throw error;
-    }
+    return this.decisionService.deleteDecision(
+      mcpContext,
+      clientProjectRoot,
+      repositoryName,
+      branch,
+      decisionId,
+    );
   }
 
   async deleteRule(
@@ -598,7 +477,7 @@ export class EntityService extends CoreService {
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
-    fileData: any, // Remove schema reference
+    fileData: FileInput,
   ): Promise<z.infer<typeof toolSchemas.EntityCreateOutputSchema>> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
@@ -706,7 +585,7 @@ export class EntityService extends CoreService {
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
-    tagData: any, // Remove schema reference
+    tagData: TagInput,
   ): Promise<z.infer<typeof toolSchemas.EntityCreateOutputSchema>> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
@@ -839,7 +718,7 @@ export class EntityService extends CoreService {
 
   // Helper methods for bulk deletion
   private async executeBulkDeletion(
-    kuzuClient: any,
+    kuzuClient: KuzuDBClient,
     entityType: string,
     whereClause: string,
     params: Record<string, any>,
@@ -848,95 +727,51 @@ export class EntityService extends CoreService {
     entities: Array<{ type: string; id: string; name?: string }>;
     count: number;
   }> {
-    if (dryRun) {
-      const query = `
-        MATCH (n:${entityType})
-        WHERE ${whereClause}
-        RETURN n.id as id, n.name as name
-      `;
-      const results = await kuzuClient.executeQuery(query, params);
+    const query = `
+      MATCH (n:${entityType})
+      WHERE ${whereClause}
+      ${dryRun ? '' : 'DETACH DELETE n'}
+      RETURN n.id as id, n.name as name, labels(n) as labels
+    `;
+    const results = await kuzuClient.executeQuery(query, params);
 
-      const entities = results.map((row: any) => ({
-        type: entityType.toLowerCase(),
-        id: row.id,
-        name: row.name,
-      }));
+    const entities = results.map((row: any) => ({
+      type:
+        (row.labels as string[])
+          .find((l) => l.toLowerCase() === entityType.toLowerCase())
+          ?.toLowerCase() || entityType.toLowerCase(),
+      id: row.id,
+      name: row.name,
+    }));
 
-      return { entities, count: entities.length };
-    } else {
-      // First get entity details before deletion
-      const selectQuery = `
-        MATCH (n:${entityType})
-        WHERE ${whereClause}
-        RETURN n.id as id, n.name as name
-      `;
-      const selectResults = await kuzuClient.executeQuery(selectQuery, params);
-
-      const entities = selectResults.map((row: any) => ({
-        type: entityType.toLowerCase(),
-        id: row.id,
-        name: row.name,
-      }));
-
-      // Then perform bulk deletion - KuzuDB compatible
-      // Use DETACH DELETE to remove nodes and all their relationships
-      const deleteQuery = `
-        MATCH (n:${entityType}) WHERE ${whereClause}
-        DETACH DELETE n
-        RETURN count(*) as deletedCount
-      `;
-
-      const deleteResult = await kuzuClient.executeQuery(deleteQuery, params);
-      const deletedCount = deleteResult[0]?.deletedCount || 0;
-
-      return { entities, count: deletedCount };
-    }
+    return { entities, count: entities.length };
   }
 
   private async handleTagDeletion(
-    kuzuClient: any,
+    kuzuClient: KuzuDBClient,
     dryRun: boolean,
   ): Promise<{
     entities: Array<{ type: string; id: string; name?: string }>;
     count: number;
   }> {
-    if (dryRun) {
-      const tagQuery = `MATCH (t:Tag) RETURN t.id as id, t.name as name`;
-      const tagResults = await kuzuClient.executeQuery(tagQuery, {});
+    const query = `
+      MATCH (t:Tag)
+      ${dryRun ? '' : 'DETACH DELETE t'}
+      RETURN t.id as id, t.name as name
+    `;
+    const results = await kuzuClient.executeQuery(query, {});
 
-      const entities = tagResults.map((row: any) => ({
-        type: 'tag',
-        id: row.id,
-        name: row.name,
-      }));
+    const entities = results.map((row: any) => ({
+      type: 'tag',
+      id: row.id,
+      name: row.name,
+    }));
 
-      return { entities, count: entities.length };
-    } else {
-      // First get tag details before deletion
-      const tagSelectQuery = `MATCH (t:Tag) RETURN t.id as id, t.name as name`;
-      const tagSelectResults = await kuzuClient.executeQuery(tagSelectQuery, {});
-
-      const entities = tagSelectResults.map((row: any) => ({
-        type: 'tag',
-        id: row.id,
-        name: row.name,
-      }));
-
-      // Then perform bulk deletion - KuzuDB compatible
-      // Use DETACH DELETE to remove nodes and all their relationships
-      const tagDeleteQuery = `
-        MATCH (t:Tag)
-        DETACH DELETE t
-      `;
-
-      await kuzuClient.executeQuery(tagDeleteQuery, {});
-
-      return { entities, count: entities.length };
-    }
+    return { entities, count: entities.length };
   }
 
   private async processRepositoryScopedEntities(
-    kuzuClient: any,
+    kuzuClient: KuzuDBClient,
     entityTypes: string[],
     repositoryName: string,
     branch: string,
@@ -965,7 +800,7 @@ export class EntityService extends CoreService {
     return { entities: allEntities, count: totalCount };
   }
 
-  // Bulk delete methods
+  // Bulk delete methods - delegate to BulkOperationsService
   async bulkDeleteByType(
     mcpContext: EnrichedRequestHandlerExtra,
     clientProjectRoot: string,
@@ -981,72 +816,14 @@ export class EntityService extends CoreService {
     entities: Array<{ type: string; id: string; name?: string }>;
     warnings: string[];
   }> {
-    const logger = mcpContext.logger || console;
-    if (!this.repositoryProvider) {
-      logger.error('[EntityService.bulkDeleteByType] RepositoryProvider not initialized');
-      throw new Error('RepositoryProvider not initialized');
-    }
-
-    try {
-      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-      const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
-
-      // Get repository to ensure it exists
-      const repository = await repositoryRepo.findByName(repositoryName, branch);
-      if (!repository || !repository.id) {
-        logger.warn(
-          `[EntityService.bulkDeleteByType] Repository ${repositoryName}:${branch} not found.`,
-        );
-        return {
-          count: 0,
-          entities: [],
-          warnings: [`Repository ${repositoryName}:${branch} not found`],
-        };
-      }
-
-      const warnings: string[] = [];
-      let totalCount = 0;
-      const deletedEntities: Array<{ type: string; id: string; name?: string }> = [];
-
-      // Define entity types to process
-      const entityTypes =
-        entityType === 'all'
-          ? ['Component', 'Decision', 'Rule', 'File', 'Context']
-          : [entityType.charAt(0).toUpperCase() + entityType.slice(1)];
-
-      // Handle tags (they're not scoped to repository/branch)
-      if (entityType === 'tag' || entityType === 'all') {
-        const tagResult = await this.handleTagDeletion(kuzuClient, options.dryRun || false);
-        deletedEntities.push(...tagResult.entities);
-        totalCount += tagResult.count;
-      }
-
-      // Process repository-scoped entities
-      if (entityType !== 'tag') {
-        const scopedResult = await this.processRepositoryScopedEntities(
-          kuzuClient,
-          entityTypes,
-          repositoryName,
-          branch,
-          options.dryRun || false,
-        );
-        deletedEntities.push(...scopedResult.entities);
-        totalCount += scopedResult.count;
-      }
-
-      logger.info(
-        `[EntityService.bulkDeleteByType] ${options.dryRun ? 'Would delete' : 'Deleted'} ${totalCount} ${entityType} entities in ${repositoryName}:${branch}`,
-      );
-
-      return {
-        count: totalCount,
-        entities: deletedEntities,
-        warnings,
-      };
-    } catch (error: any) {
-      logger.error(`[EntityService.bulkDeleteByType] Error bulk deleting ${entityType}:`, error);
-      throw error;
-    }
+    return this.bulkOperationsService.bulkDeleteByType(
+      mcpContext,
+      clientProjectRoot,
+      repositoryName,
+      branch,
+      entityType,
+      options,
+    );
   }
 
   async bulkDeleteByTag(
@@ -1084,49 +861,26 @@ export class EntityService extends CoreService {
         return { count: 0, entities: [], warnings };
       }
 
-      // Find all entities tagged with the specified tag
-      const findQuery = `
-        MATCH (t:Tag {id: $tagId})-[:TAGGED_WITH]-(n)
-        WHERE n.repository = $repositoryName AND n.branch = $branch
-        RETURN labels(n) as nodeLabels, n.id as id, n.name as name
+      const whereClause = 't.id = $tagId AND n.repository = $repositoryName AND n.branch = $branch';
+      const params = { tagId, repositoryName, branch };
+
+      const query = `
+        MATCH (t:Tag)-[:TAGGED_WITH]-(n)
+        WHERE ${whereClause}
+        ${options.dryRun ? '' : 'DETACH DELETE n'}
+        RETURN n.id as id, n.name as name, labels(n) as labels
       `;
 
-      const findResults = await kuzuClient.executeQuery(findQuery, {
-        tagId,
-        repositoryName,
-        branch,
-      });
+      const results = await kuzuClient.executeQuery(query, params);
 
-      // Process found entities
-      for (const row of findResults) {
-        const nodeLabels = row.nodeLabels || [];
-        const entityType =
-          nodeLabels
-            .find((label: string) =>
-              ['Component', 'Decision', 'Rule', 'File', 'Context'].includes(label),
-            )
-            ?.toLowerCase() || 'unknown';
+      const entities = results.map((row: any) => ({
+        type: (row.labels as string[]).find((l) => l !== 'Tag')?.toLowerCase() || 'unknown',
+        id: row.id,
+        name: row.name,
+      }));
 
-        deletedEntities.push({ type: entityType, id: row.id, name: row.name });
-        totalCount++;
-      }
-
-      // Perform actual deletion if not dry run
-      if (!options.dryRun && deletedEntities.length > 0) {
-        const bulkDeleteQuery = `
-          MATCH (t:Tag {id: $tagId})-[:TAGGED_WITH]-(n)
-          WHERE n.repository = $repositoryName AND n.branch = $branch
-          OPTIONAL MATCH (n)-[r_out]->()
-          OPTIONAL MATCH (n)<-[r_in]-()
-          DELETE r_out, r_in, n
-        `;
-
-        await kuzuClient.executeQuery(bulkDeleteQuery, {
-          tagId,
-          repositoryName,
-          branch,
-        });
-      }
+      totalCount = entities.length;
+      deletedEntities.push(...entities);
 
       logger.info(
         `[EntityService.bulkDeleteByTag] ${
@@ -1159,73 +913,13 @@ export class EntityService extends CoreService {
     entities: Array<{ type: string; id: string; name?: string }>;
     warnings: string[];
   }> {
-    const logger = mcpContext.logger || console;
-    if (!this.repositoryProvider) {
-      logger.error('[EntityService.bulkDeleteByBranch] RepositoryProvider not initialized');
-      throw new Error('RepositoryProvider not initialized');
-    }
-
-    try {
-      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-      const warnings: string[] = [];
-      let totalCount = 0;
-      const deletedEntities: Array<{ type: string; id: string; name?: string }> = [];
-
-      // Entity types that are scoped to repository/branch
-      const entityTypes = ['Component', 'Decision', 'Rule', 'File', 'Context'];
-
-      // Process repository-scoped entities using helper method
-      const scopedResult = await this.processRepositoryScopedEntities(
-        kuzuClient,
-        entityTypes,
-        repositoryName,
-        targetBranch,
-        options.dryRun || false,
-      );
-      deletedEntities.push(...scopedResult.entities);
-      totalCount += scopedResult.count;
-
-      // Also delete the repository record for this branch if not dry run
-      if (!options.dryRun) {
-        const repoDeleteQuery = `
-          MATCH (r:Repository {name: $repositoryName, branch: $targetBranch})
-          DELETE r
-          RETURN count(r) as deletedCount
-        `;
-
-        const repoResult = await kuzuClient.executeQuery(repoDeleteQuery, {
-          repositoryName,
-          targetBranch,
-        });
-        const repoDeletedCount = repoResult[0]?.deletedCount || 0;
-        if (repoDeletedCount > 0) {
-          deletedEntities.push({
-            type: 'repository',
-            id: `${repositoryName}:${targetBranch}`,
-            name: repositoryName,
-          });
-          totalCount += repoDeletedCount;
-        }
-      }
-
-      logger.info(
-        `[EntityService.bulkDeleteByBranch] ${
-          options.dryRun ? 'Would delete' : 'Deleted'
-        } ${totalCount} entities from branch ${targetBranch} in repository ${repositoryName}`,
-      );
-
-      return {
-        count: totalCount,
-        entities: deletedEntities,
-        warnings,
-      };
-    } catch (error: any) {
-      logger.error(
-        `[EntityService.bulkDeleteByBranch] Error bulk deleting branch ${targetBranch}:`,
-        error,
-      );
-      throw error;
-    }
+    return this.bulkOperationsService.bulkDeleteByBranch(
+      mcpContext,
+      clientProjectRoot,
+      repositoryName,
+      targetBranch,
+      options,
+    );
   }
 
   async bulkDeleteByRepository(

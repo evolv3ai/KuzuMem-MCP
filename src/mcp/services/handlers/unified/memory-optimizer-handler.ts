@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import { MemoryService } from '../../../../services/memory.service';
 import { MemoryOptimizationAgent } from '../../../../agents/memory-optimizer/memory-optimization-agent';
-import { validateSession, logToolExecution, handleToolError } from '../../../utils/error-utils';
+import type { OptimizationStrategy } from '../../../../agents/memory-optimizer/prompt-manager';
+import { MemoryService } from '../../../../services/memory.service';
 import { logger } from '../../../../utils/logger';
 import type { EnrichedRequestHandlerExtra } from '../../../types/sdk-custom';
-import type { OptimizationStrategy } from '../../../../agents/memory-optimizer/prompt-manager';
+import { handleToolError, logToolExecution, validateSession } from '../../../utils/error-utils';
 
 // Input schema for memory optimizer tool
 const MemoryOptimizerInputSchema = z.object({
@@ -111,10 +111,11 @@ export async function memoryOptimizerHandler(params: any, context: any): Promise
     const validatedParams = MemoryOptimizerInputSchema.parse(params);
 
     // Validate session and get clientProjectRoot
-    const clientProjectRoot = validateSession(context, 'memory-optimizer');
+    const clientProjectRoot =
+      validatedParams.clientProjectRoot || validateSession(context, 'memory-optimizer');
 
     // Update session context
-    context.session.clientProjectRoot = validatedParams.clientProjectRoot || clientProjectRoot;
+    context.session.clientProjectRoot = clientProjectRoot;
     context.session.repository = validatedParams.repository;
     context.session.branch = validatedParams.branch;
 

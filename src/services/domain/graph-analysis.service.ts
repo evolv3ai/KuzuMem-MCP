@@ -75,7 +75,7 @@ export class GraphAnalysisService extends CoreService {
         type: 'k-core' as const,
         status: 'complete',
         projectedGraphName: params.projectedGraphName,
-        nodes: algorithmResults.components.map((c) => ({ id: c.nodeId, coreNumber: c.coreness })),
+        nodes: algorithmResults.components.map((c: any) => ({ id: c.nodeId, coreNumber: c.coreness })),
         message: 'K-Core decomposition completed successfully',
       };
     } catch (error: any) {
@@ -141,7 +141,7 @@ export class GraphAnalysisService extends CoreService {
         type: 'louvain' as const,
         status: 'complete',
         projectedGraphName: params.projectedGraphName,
-        nodes: algorithmResults.communities.map((c) => ({
+        nodes: algorithmResults.communities.map((c: any) => ({
           id: c.nodeId,
           communityId: c.communityId,
         })),
@@ -203,7 +203,7 @@ export class GraphAnalysisService extends CoreService {
         type: 'pagerank',
         status: 'complete',
         projectedGraphName: params.projectedGraphName,
-        nodes: algorithmResults.ranks.map((r) => ({ id: r.nodeId, pagerank: r.score })),
+        nodes: algorithmResults.ranks.map((r: any) => ({ id: r.nodeId, pagerank: r.score })),
         message: 'PageRank algorithm completed successfully',
       };
     } catch (error: any) {
