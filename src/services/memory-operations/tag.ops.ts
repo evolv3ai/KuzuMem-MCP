@@ -1,5 +1,5 @@
 import { KuzuDBClient } from '../../db/kuzu';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { RepositoryRepository, TagRepository } from '../../repositories';
 import { Tag, TagInput } from '../../types';
 
@@ -29,7 +29,7 @@ interface FindItemsResult {
  * Operation to add a new tag.
  */
 export async function addTagOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   repositoryName: string,
   branch: string,
   tagData: TagInput,
@@ -99,7 +99,7 @@ export async function addTagOp(
  * Operation to associate a tag with an item (Component, Decision, Rule, or File).
  */
 export async function tagItemOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   repositoryName: string,
   branch: string,
   itemId: string,
@@ -150,7 +150,7 @@ export async function tagItemOp(
  * Operation to find items by tag.
  */
 export async function findItemsByTagOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   repositoryName: string,
   branch: string,
   tagId: string,
@@ -196,7 +196,7 @@ export async function findItemsByTagOp(
 }
 
 export async function deleteTagOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   kuzuClient: KuzuDBClient,
   tagId: string,
 ): Promise<boolean> {

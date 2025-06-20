@@ -1,7 +1,11 @@
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const kuzu = require('kuzu');
 
-import { BaseKuzuClient, CONNECTION_VALIDATION_INTERVAL, MAX_CONNECTION_AGE } from '../base/base-kuzu-client';
+import {
+  BaseKuzuClient,
+  CONNECTION_VALIDATION_INTERVAL,
+  MAX_CONNECTION_AGE,
+} from '../base/base-kuzu-client';
 import { KuzuErrorHandler } from './kuzu-error-handler';
 import { logError } from '../../utils/logger';
 import { Mutex } from '../../utils/mutex';

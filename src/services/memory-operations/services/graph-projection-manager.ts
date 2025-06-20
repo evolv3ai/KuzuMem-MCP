@@ -1,5 +1,5 @@
+import { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
 import { BaseGraphOperations } from '../base/base-graph-operations';
-import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
 
 /**
  * Service responsible for managing projected graphs in KuzuDB
@@ -10,7 +10,7 @@ export class GraphProjectionManager extends BaseGraphOperations {
    * Execute a callback with a projected graph, ensuring proper cleanup
    */
   async withProjectedGraph<T>(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     projectionName: string,
     nodeTables: string[],
     relTables: string[],
@@ -51,13 +51,10 @@ export class GraphProjectionManager extends BaseGraphOperations {
     try {
       return await callback();
     } catch (callbackError: any) {
-      logger.error(
-        `Error executing callback for projected graph ${safeProjectionName}:`,
-        {
-          error: callbackError.toString(),
-          stack: callbackError.stack,
-        },
-      );
+      logger.error(`Error executing callback for projected graph ${safeProjectionName}:`, {
+        error: callbackError.toString(),
+        stack: callbackError.stack,
+      });
       return { error: `Algorithm execution failed: ${callbackError.message}` };
     } finally {
       try {
@@ -77,7 +74,7 @@ export class GraphProjectionManager extends BaseGraphOperations {
    * Create a projected graph manually (without automatic cleanup)
    */
   async createProjectedGraph(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     projectionName: string,
     nodeTables: string[],
     relTables: string[],
@@ -115,7 +112,7 @@ export class GraphProjectionManager extends BaseGraphOperations {
    * Drop a projected graph manually
    */
   async dropProjectedGraph(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     projectionName: string,
   ): Promise<{ success: boolean; error?: string }> {
     const logger = this.createOperationLogger(mcpContext, 'dropProjectedGraph', {
@@ -146,7 +143,7 @@ export class GraphProjectionManager extends BaseGraphOperations {
    * List all projected graphs
    */
   async listProjectedGraphs(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
   ): Promise<{ graphs: string[]; error?: string }> {
     const logger = this.createOperationLogger(mcpContext, 'listProjectedGraphs', {});
 
@@ -176,7 +173,7 @@ export class GraphProjectionManager extends BaseGraphOperations {
    * Check if a projected graph exists
    */
   async projectedGraphExists(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     projectionName: string,
   ): Promise<boolean> {
     const logger = this.createOperationLogger(mcpContext, 'projectedGraphExists', {

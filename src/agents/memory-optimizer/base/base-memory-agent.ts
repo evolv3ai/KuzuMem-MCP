@@ -149,10 +149,7 @@ export abstract class BaseMemoryAgent {
   /**
    * Create a child logger with operation context
    */
-  protected createOperationLogger(
-    operation: string,
-    context: Record<string, any> = {},
-  ) {
+  protected createOperationLogger(operation: string, context: Record<string, any> = {}) {
     return this.agentLogger.child({
       operation,
       ...context,

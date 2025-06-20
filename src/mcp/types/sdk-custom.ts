@@ -38,6 +38,3 @@ export interface ToolHandlerContext {
 // Legacy aliases for backward compatibility during transition
 /** @deprecated Use ProgressNotification instead */
 export type McpProgressNotification = ProgressNotification;
-
-/** @deprecated Use ToolHandlerContext instead */
-export type EnrichedRequestHandlerExtra = ToolHandlerContext;

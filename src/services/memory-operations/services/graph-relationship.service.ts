@@ -1,5 +1,10 @@
-import { BaseGraphOperations, GetRelatedItemsParams, RelatedItemsResult, RelatedItem } from '../base/base-graph-operations';
-import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
+import {
+  BaseGraphOperations,
+  GetRelatedItemsParams,
+  RelatedItem,
+  RelatedItemsResult,
+} from '../base/base-graph-operations';
 
 /**
  * Service responsible for relationship and traversal operations
@@ -10,7 +15,7 @@ export class GraphRelationshipService extends BaseGraphOperations {
    * Retrieves related items within a certain number of hops in the graph
    */
   async getRelatedItems(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     params: GetRelatedItemsParams,
   ): Promise<RelatedItemsResult> {
     const logger = this.createOperationLogger(mcpContext, 'getRelatedItems', params);
@@ -105,7 +110,7 @@ export class GraphRelationshipService extends BaseGraphOperations {
    * Get relationship summary for a repository
    */
   async getRelationshipSummary(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     repository: string,
     branch: string,
   ): Promise<{
@@ -202,7 +207,7 @@ export class GraphRelationshipService extends BaseGraphOperations {
    * Find shortest path between two items
    */
   async findShortestPath(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     repository: string,
     branch: string,
     startItemId: string,

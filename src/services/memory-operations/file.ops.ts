@@ -1,5 +1,5 @@
 import { KuzuDBClient } from '../../db/kuzu';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { FileRepository, RepositoryRepository } from '../../repositories';
 import { File, FileInput } from '../../types';
 
@@ -19,7 +19,7 @@ interface AssociationResult {
  * Operation to add a new file node.
  */
 export async function addFileOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   repositoryName: string,
   branch: string,
   fileData: FileInput,
@@ -86,7 +86,7 @@ export async function addFileOp(
  * Operation to associate a file with a component.
  */
 export async function associateFileWithComponentOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   repositoryName: string,
   branch: string,
   componentId: string,
@@ -144,7 +144,7 @@ export async function associateFileWithComponentOp(
 // File queries can be done through component associations using findFilesByComponent.
 
 export async function deleteFileOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   kuzuClient: KuzuDBClient,
   repositoryRepo: RepositoryRepository,
   repositoryName: string,

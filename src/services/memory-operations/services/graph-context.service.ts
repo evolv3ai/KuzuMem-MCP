@@ -1,5 +1,9 @@
-import { BaseGraphOperations, GetItemContextualHistoryParams, ContextResult } from '../base/base-graph-operations';
-import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
+import {
+  BaseGraphOperations,
+  ContextResult,
+  GetItemContextualHistoryParams,
+} from '../base/base-graph-operations';
 
 /**
  * Service responsible for context and history operations
@@ -10,7 +14,7 @@ export class GraphContextService extends BaseGraphOperations {
    * Retrieves the contextual history for a given item
    */
   async getItemContextualHistory(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     params: GetItemContextualHistoryParams,
   ): Promise<ContextResult[]> {
     const logger = this.createOperationLogger(mcpContext, 'getItemContextualHistory', params);
@@ -105,10 +109,10 @@ export class GraphContextService extends BaseGraphOperations {
         } as ContextResult;
       });
     } catch (error: any) {
-      logger.error(
-        `Error fetching contextual history for ${itemType} ${itemId} in ${repoId}:`,
-        { error: error.toString(), stack: error.stack },
-      );
+      logger.error(`Error fetching contextual history for ${itemType} ${itemId} in ${repoId}:`, {
+        error: error.toString(),
+        stack: error.stack,
+      });
       throw new Error(
         `Failed to fetch contextual history for ${itemType} ${itemId}: ${error.message}`,
       );
@@ -119,7 +123,7 @@ export class GraphContextService extends BaseGraphOperations {
    * Get context summary for a repository
    */
   async getContextSummary(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     repository: string,
     branch: string,
   ): Promise<{

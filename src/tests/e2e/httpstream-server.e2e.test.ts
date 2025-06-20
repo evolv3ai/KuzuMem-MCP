@@ -1402,7 +1402,9 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     };
 
     it('should analyze memory graph via HTTP stream', async () => {
-      if (skipIfNoOpenAIKey()) return;
+      if (skipIfNoOpenAIKey()) {
+        return;
+      }
 
       const result = await callTool('memory-optimizer', {
         operation: 'analyze',
@@ -1438,7 +1440,9 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
     }, 45000);
 
     it('should perform dry-run optimization via HTTP stream', async () => {
-      if (skipIfNoOpenAIKey()) return;
+      if (skipIfNoOpenAIKey()) {
+        return;
+      }
 
       // First analyze to get an analysis ID
       const analysisResult = await callTool('memory-optimizer', {

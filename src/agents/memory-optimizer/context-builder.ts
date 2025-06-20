@@ -1,5 +1,5 @@
 import { KuzuDBClient } from '../../db/kuzu';
-import type { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import type { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import type { MemoryContext } from '../../schemas/optimization/types';
 import { MemoryService } from '../../services/memory.service';
 import { logger } from '../../utils/logger';
@@ -15,7 +15,7 @@ export class MemoryContextBuilder {
    * Build complete memory context for a repository/branch
    */
   async buildMemoryContext(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string = 'main',
@@ -82,7 +82,7 @@ export class MemoryContextBuilder {
    * Get entity counts for all types using existing MemoryService methods
    */
   private async getEntityCounts(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string,
@@ -229,7 +229,7 @@ export class MemoryContextBuilder {
    * Get stale entity candidates based on age and usage patterns
    */
   async getStaleEntityCandidates(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string,
@@ -264,7 +264,7 @@ export class MemoryContextBuilder {
    * Get relationship summary for analysis
    */
   async getRelationshipSummary(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string,

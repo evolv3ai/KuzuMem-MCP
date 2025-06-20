@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { KuzuDBClient } from '../../db/kuzu';
 import { RepositoryProvider } from '../../db/repository-provider';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { Context } from '../../types';
 import { CoreService } from '../core/core.service';
 import * as contextOps from '../memory-operations/context.ops';
@@ -12,11 +12,11 @@ export class ContextService extends CoreService {
   constructor(
     repositoryProvider: RepositoryProvider,
     getKuzuClient: (
-      mcpContext: EnrichedRequestHandlerExtra,
+      mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<KuzuDBClient>,
     getSnapshotService: (
-      mcpContext: EnrichedRequestHandlerExtra,
+      mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<SnapshotService>,
   ) {
@@ -27,7 +27,7 @@ export class ContextService extends CoreService {
    * Get today's context or create it if it doesn't exist
    */
   async getTodayContext(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string = 'main',
@@ -71,7 +71,7 @@ export class ContextService extends CoreService {
    * Update today's context
    */
   async updateTodayContext(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     contextUpdate: Partial<
@@ -190,7 +190,7 @@ export class ContextService extends CoreService {
    * Get latest contexts
    */
   async getLatestContexts(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string = 'main',
@@ -238,7 +238,7 @@ export class ContextService extends CoreService {
    * Accepts summary, agent, decision, issue, observation. Merges with existing.
    */
   async updateContext(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     params: z.infer<typeof toolSchemas.ContextInputSchema>,
   ): Promise<z.infer<typeof toolSchemas.ContextUpdateOutputSchema> | null> {

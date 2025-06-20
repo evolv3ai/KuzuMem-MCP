@@ -1,5 +1,5 @@
 import { searchHandler } from '../../../mcp/services/handlers/unified/search-handler';
-import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
 import { MemoryService } from '../../../services/memory.service';
 
 // Define discriminated union type for search handler results
@@ -25,7 +25,7 @@ type SearchResult =
 
 describe('Semantic Search Tool Tests', () => {
   let mockMemoryService: jest.Mocked<MemoryService>;
-  let mockContext: jest.Mocked<EnrichedRequestHandlerExtra>;
+  let mockContext: jest.Mocked<ToolHandlerContext>;
 
   beforeEach(() => {
     // Set NODE_ENV to test to trigger simple fallback search

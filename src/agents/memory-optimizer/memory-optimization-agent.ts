@@ -2,20 +2,20 @@
 import { MemoryService } from '../../services/memory.service';
 
 // Memory optimizer components
-import { MCPSamplingManager } from './mcp-sampling-manager';
 import { MemoryContextBuilder } from './context-builder';
+import { MCPSamplingManager } from './mcp-sampling-manager';
 import { PromptManager } from './prompt-manager';
 
 // Specialized services
 import { BaseMemoryAgent, type MemoryOptimizationConfig } from './base/base-memory-agent';
-import { MemoryAnalysisService } from './services/memory-analysis.service';
-import { OptimizationPlanService } from './services/optimization-plan.service';
-import { OptimizationExecutionService } from './services/optimization-execution.service';
-import { SnapshotManagementService } from './services/snapshot-management.service';
 import { ActionExecutorService } from './services/action-executor.service';
+import { MemoryAnalysisService } from './services/memory-analysis.service';
+import { OptimizationExecutionService } from './services/optimization-execution.service';
+import { OptimizationPlanService } from './services/optimization-plan.service';
+import { SnapshotManagementService } from './services/snapshot-management.service';
 
 // Type imports
-import type { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import type { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import type {
   AnalysisResult,
   OptimizationPlan,
@@ -48,10 +48,7 @@ export class MemoryOptimizationAgent extends BaseMemoryAgent {
   private snapshotService: SnapshotManagementService;
   private actionExecutor: ActionExecutorService;
 
-  constructor(
-    memoryService: MemoryService,
-    config: Partial<MemoryOptimizationConfig> = {},
-  ) {
+  constructor(memoryService: MemoryService, config: Partial<MemoryOptimizationConfig> = {}) {
     super(memoryService, config);
 
     // Initialize supporting services
@@ -88,7 +85,7 @@ export class MemoryOptimizationAgent extends BaseMemoryAgent {
    * Analyze memory graph and identify optimization opportunities
    */
   async analyzeMemory(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string = 'main',
@@ -107,7 +104,7 @@ export class MemoryOptimizationAgent extends BaseMemoryAgent {
    * Generate optimization plan based on analysis results
    */
   async generateOptimizationPlan(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string,
@@ -128,7 +125,7 @@ export class MemoryOptimizationAgent extends BaseMemoryAgent {
    * Execute optimization plan safely
    */
   async executeOptimizationPlan(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string,
@@ -154,7 +151,7 @@ export class MemoryOptimizationAgent extends BaseMemoryAgent {
    * Rollback to a previous snapshot
    */
   async rollbackToSnapshot(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string,
@@ -180,7 +177,7 @@ export class MemoryOptimizationAgent extends BaseMemoryAgent {
    * List available snapshots for a repository
    */
   async listSnapshots(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch?: string,

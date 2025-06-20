@@ -2,7 +2,7 @@
 import { BaseMemoryAgent } from '../base/base-memory-agent';
 
 // Type imports
-import type { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import type { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
 
 /**
  * Service responsible for executing individual optimization actions
@@ -13,7 +13,7 @@ export class ActionExecutorService extends BaseMemoryAgent {
    * Execute individual optimization action
    */
   async executeAction(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string,
@@ -91,7 +91,7 @@ export class ActionExecutorService extends BaseMemoryAgent {
    * Execute delete action using MemoryService
    */
   private async executeDeleteAction(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string,
@@ -181,7 +181,7 @@ export class ActionExecutorService extends BaseMemoryAgent {
    * Execute merge action (merge source entity into target entity)
    */
   private async executeMergeAction(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string,
@@ -261,7 +261,7 @@ export class ActionExecutorService extends BaseMemoryAgent {
    * Execute update action (update entity properties)
    */
   private async executeUpdateAction(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string,
@@ -276,11 +276,23 @@ export class ActionExecutorService extends BaseMemoryAgent {
     const kuzuClient = await this.memoryService.getKuzuClient(mcpContext, clientProjectRoot);
 
     // Define allowed fields for updates
-    const allowedFields = ['name', 'description', 'status', 'metadata', 'updated_at', 'kind', 'depends_on', 'content', 'triggers', 'date', 'context'];
+    const allowedFields = [
+      'name',
+      'description',
+      'status',
+      'metadata',
+      'updated_at',
+      'kind',
+      'depends_on',
+      'content',
+      'triggers',
+      'date',
+      'context',
+    ];
 
     // Filter and validate fields
     const validUpdates = Object.keys(updates)
-      .filter(key => allowedFields.includes(key))
+      .filter((key) => allowedFields.includes(key))
       .reduce((obj, key) => ({ ...obj, [key]: updates[key] }), {});
 
     if (Object.keys(validUpdates).length === 0) {
@@ -319,7 +331,7 @@ export class ActionExecutorService extends BaseMemoryAgent {
    * Execute move action (change entity relationships or hierarchy)
    */
   private async executeMoveAction(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string,

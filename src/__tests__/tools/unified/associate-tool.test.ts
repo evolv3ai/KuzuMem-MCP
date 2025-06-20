@@ -1,5 +1,5 @@
 import { associateHandler } from '../../../mcp/services/handlers/unified/associate-handler';
-import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
 import { EntityService } from '../../../services/domain/entity.service';
 import { MemoryService } from '../../../services/memory.service';
 
@@ -21,7 +21,7 @@ type AssociateResult =
 describe('Associate Tool Tests', () => {
   let mockMemoryService: jest.Mocked<MemoryService>;
   let mockEntityService: jest.Mocked<EntityService>;
-  let mockContext: jest.Mocked<EnrichedRequestHandlerExtra>;
+  let mockContext: jest.Mocked<ToolHandlerContext>;
 
   beforeEach(() => {
     mockEntityService = {

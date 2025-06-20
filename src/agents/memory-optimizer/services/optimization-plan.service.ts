@@ -7,11 +7,8 @@ import { MemoryContextBuilder } from '../context-builder';
 import { PromptManager } from '../prompt-manager';
 
 // Type imports
-import type { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
-import type {
-  AnalysisResult,
-  OptimizationPlan,
-} from '../../../schemas/optimization/types';
+import type { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
+import type { AnalysisResult, OptimizationPlan } from '../../../schemas/optimization/types';
 import type { OptimizationStrategy } from '../prompt-manager';
 
 // Schema imports
@@ -40,7 +37,7 @@ export class OptimizationPlanService extends BaseMemoryAgent {
    * Generate optimization plan based on analysis results
    */
   async generateOptimizationPlan(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string,

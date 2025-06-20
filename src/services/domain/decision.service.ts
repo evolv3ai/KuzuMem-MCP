@@ -1,6 +1,6 @@
 import { KuzuDBClient } from '../../db/kuzu';
 import { RepositoryProvider } from '../../db/repository-provider';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { Decision, DecisionInput } from '../../types';
 import * as decisionOps from '../memory-operations/decision.ops';
 import { SnapshotService } from '../snapshot.service';
@@ -14,11 +14,11 @@ export class DecisionService extends BaseEntityService {
   constructor(
     repositoryProvider: RepositoryProvider,
     getKuzuClient: (
-      mcpContext: EnrichedRequestHandlerExtra,
+      mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<KuzuDBClient>,
     getSnapshotService: (
-      mcpContext: EnrichedRequestHandlerExtra,
+      mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<SnapshotService>,
   ) {
@@ -29,7 +29,7 @@ export class DecisionService extends BaseEntityService {
    * Create or update a decision
    */
   async upsertDecision(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -68,7 +68,7 @@ export class DecisionService extends BaseEntityService {
    * Get a decision by ID
    */
   async getDecision(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -89,7 +89,7 @@ export class DecisionService extends BaseEntityService {
    * Update an existing decision
    */
   async updateDecision(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -139,7 +139,7 @@ export class DecisionService extends BaseEntityService {
    * Delete a decision
    */
   async deleteDecision(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -160,7 +160,7 @@ export class DecisionService extends BaseEntityService {
    * Get all decisions for a repository and branch
    */
   async getAllDecisions(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,

@@ -42,8 +42,6 @@ export class ComponentRepository {
     this.complexRepo = new ComponentComplexRepository(kuzuClient, repositoryRepo);
   }
 
-
-
   // === CRUD Operations - Delegated to ComponentCrudRepository ===
 
   /**

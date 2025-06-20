@@ -1,6 +1,6 @@
 import { KuzuDBClient } from '../../db/kuzu';
 import { RepositoryProvider } from '../../db/repository-provider';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { CoreService } from '../core/core.service';
 import { ValidationService } from '../core/validation.service';
 import { SnapshotService } from '../snapshot.service';
@@ -15,11 +15,11 @@ export abstract class BaseEntityService extends CoreService {
   constructor(
     repositoryProvider: RepositoryProvider,
     getKuzuClient: (
-      mcpContext: EnrichedRequestHandlerExtra,
+      mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<KuzuDBClient>,
     getSnapshotService: (
-      mcpContext: EnrichedRequestHandlerExtra,
+      mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<SnapshotService>,
   ) {
@@ -31,7 +31,7 @@ export abstract class BaseEntityService extends CoreService {
    * Common validation for entity operations
    */
   protected validateEntityParams(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -89,7 +89,7 @@ export abstract class BaseEntityService extends CoreService {
    * Common pattern for entity retrieval
    */
   protected async getEntityById<T>(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -119,7 +119,7 @@ export abstract class BaseEntityService extends CoreService {
    * Common pattern for entity deletion
    */
   protected async deleteEntityById(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,

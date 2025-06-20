@@ -1,5 +1,5 @@
 import { bulkImportHandler } from '../../../mcp/services/handlers/unified/bulk-import-handler';
-import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
 import { EntityService } from '../../../services/domain/entity.service';
 import { MemoryService } from '../../../services/memory.service';
 
@@ -30,7 +30,7 @@ type BulkImportResult =
 describe('Bulk Import Tool Tests', () => {
   let mockMemoryService: jest.Mocked<MemoryService>;
   let mockEntityService: jest.Mocked<EntityService>;
-  let mockContext: jest.Mocked<EnrichedRequestHandlerExtra>;
+  let mockContext: jest.Mocked<ToolHandlerContext>;
 
   beforeEach(() => {
     mockEntityService = {

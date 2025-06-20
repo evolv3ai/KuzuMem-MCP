@@ -1,5 +1,5 @@
 import { KuzuDBClient } from '../../db/kuzu';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { ComponentRepository, RepositoryRepository } from '../../repositories';
 import { Component, ComponentInput } from '../../types';
 
@@ -23,7 +23,7 @@ function parseBaseEntityTimestamp(timestamp: Date | undefined): string | null {
  * @returns A Promise resolving to the upserted Component object or null if repository not found.
  */
 export async function upsertComponentOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   repositoryName: string,
   branch: string,
   componentData: ComponentInput,
@@ -78,7 +78,7 @@ export async function upsertComponentOp(
  * @returns A Promise resolving to an array of dependent Component objects.
  */
 export async function getComponentDependenciesOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   repositoryName: string,
   branch: string,
   componentId: string,
@@ -113,7 +113,7 @@ export async function getComponentDependenciesOp(
  * @returns A Promise resolving to an array of dependent Component objects.
  */
 export async function getComponentDependentsOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   repositoryName: string,
   branch: string,
   componentId: string,
@@ -147,7 +147,7 @@ export async function getComponentDependentsOp(
  * @returns A Promise resolving to an array of active Component objects.
  */
 export async function getActiveComponentsOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   repositoryName: string,
   branch: string,
   repositoryRepo: RepositoryRepository,
@@ -186,7 +186,7 @@ function normalizeComponent(
 }
 
 export async function deleteComponentOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   kuzuClient: KuzuDBClient,
   repositoryRepo: RepositoryRepository,
   repositoryName: string,

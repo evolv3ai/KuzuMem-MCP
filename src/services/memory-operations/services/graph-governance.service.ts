@@ -1,6 +1,10 @@
-import { BaseGraphOperations, GetGoverningItemsParams, GoverningItemsResult } from '../base/base-graph-operations';
-import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
 import { Decision, Rule } from '../../../types';
+import {
+  BaseGraphOperations,
+  GetGoverningItemsParams,
+  GoverningItemsResult,
+} from '../base/base-graph-operations';
 
 /**
  * Service responsible for governance operations
@@ -11,7 +15,7 @@ export class GraphGovernanceService extends BaseGraphOperations {
    * Retrieves governing items (decisions, rules) for a component
    */
   async getGoverningItemsForComponent(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     params: GetGoverningItemsParams,
   ): Promise<GoverningItemsResult> {
     const logger = this.createOperationLogger(mcpContext, 'getGoverningItemsForComponent', params);
@@ -109,10 +113,10 @@ export class GraphGovernanceService extends BaseGraphOperations {
         message: `Successfully retrieved ${decisions.length} decisions and ${rules.length} rules governing component ${componentId}`,
       };
     } catch (error: any) {
-      logger.error(
-        `Error fetching governing items for component ${componentId} in ${repoId}:`,
-        { error: error.toString(), stack: error.stack },
-      );
+      logger.error(`Error fetching governing items for component ${componentId} in ${repoId}:`, {
+        error: error.toString(),
+        stack: error.stack,
+      });
 
       return {
         status: 'error',
@@ -127,7 +131,7 @@ export class GraphGovernanceService extends BaseGraphOperations {
    * Get governance summary for a repository
    */
   async getGovernanceSummary(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     repository: string,
     branch: string,
   ): Promise<{

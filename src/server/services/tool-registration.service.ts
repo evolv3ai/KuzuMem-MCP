@@ -27,9 +27,14 @@ interface MemoryBankInitArgs extends BaseToolArguments {
 
 // Type guard functions
 function isMemoryBankInitArgs(args: ToolArguments): args is MemoryBankInitArgs & ToolArguments {
-  return typeof args === 'object' && args !== null &&
-         'operation' in args && args.operation === 'init' &&
-         'clientProjectRoot' in args && 'repository' in args;
+  return (
+    typeof args === 'object' &&
+    args !== null &&
+    'operation' in args &&
+    args.operation === 'init' &&
+    'clientProjectRoot' in args &&
+    'repository' in args
+  );
 }
 
 function hasRepositoryInfo(args: ToolArguments): args is ToolArguments & { repository: string } {
@@ -121,11 +126,7 @@ export class ToolRegistrationService {
     try {
       // Handle clientProjectRoot storage for memory-bank init operations
       if (toolName === 'memory-bank' && isMemoryBankInitArgs(args)) {
-        this.setRepositoryRoot(
-          args.repository,
-          args.branch,
-          args.clientProjectRoot,
-        );
+        this.setRepositoryRoot(args.repository, args.branch, args.clientProjectRoot);
       }
 
       // Get clientProjectRoot from stored map or args
@@ -252,28 +253,28 @@ export class ToolRegistrationService {
    * Get list of registered tools
    */
   getRegisteredTools(): string[] {
-    return MEMORY_BANK_MCP_TOOLS.map(tool => tool.name);
+    return MEMORY_BANK_MCP_TOOLS.map((tool) => tool.name);
   }
 
   /**
    * Check if a tool is registered
    */
   isToolRegistered(toolName: string): boolean {
-    return MEMORY_BANK_MCP_TOOLS.some(tool => tool.name === toolName);
+    return MEMORY_BANK_MCP_TOOLS.some((tool) => tool.name === toolName);
   }
 
   /**
    * Get tool information
    */
   getToolInfo(toolName: string) {
-    return MEMORY_BANK_MCP_TOOLS.find(tool => tool.name === toolName);
+    return MEMORY_BANK_MCP_TOOLS.find((tool) => tool.name === toolName);
   }
 
   /**
    * Get all tool information
    */
   getAllToolsInfo() {
-    return MEMORY_BANK_MCP_TOOLS.map(tool => ({
+    return MEMORY_BANK_MCP_TOOLS.map((tool) => ({
       name: tool.name,
       description: tool.description,
       inputSchema: createZodRawShape(tool),

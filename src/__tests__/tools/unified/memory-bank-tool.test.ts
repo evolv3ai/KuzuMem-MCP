@@ -1,6 +1,6 @@
 import { memoryBankHandler } from '../../../mcp/services/handlers/unified/memory-bank-handler';
 import { memoryBankTool } from '../../../mcp/tools/unified/memory-bank-tool';
-import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
 import { MemoryBankService } from '../../../services/domain/memory-bank.service';
 import { MetadataService } from '../../../services/domain/metadata.service';
 import { MemoryService } from '../../../services/memory.service';
@@ -9,7 +9,7 @@ describe('Unified Memory Bank Tool', () => {
   let mockMemoryService: jest.Mocked<MemoryService>;
   let mockMemoryBankService: jest.Mocked<MemoryBankService>;
   let mockMetadataService: jest.Mocked<MetadataService>;
-  let mockContext: jest.Mocked<EnrichedRequestHandlerExtra>;
+  let mockContext: jest.Mocked<ToolHandlerContext>;
 
   beforeEach(() => {
     // Mock Services

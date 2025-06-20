@@ -81,13 +81,7 @@ if (require.main === module) {
 }
 
 // Export the server manager and utilities for testing and external usage
-export {
-  serverManager,
-  startServer,
-  stopServer,
-  getServerStatus,
-  getServerServices,
-};
+export { serverManager, startServer, stopServer, getServerStatus, getServerServices };
 
 // Legacy exports for backward compatibility
 export const mcpServer = serverManager.getMcpServer();

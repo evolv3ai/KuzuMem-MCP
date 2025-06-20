@@ -1,5 +1,5 @@
 import { queryHandler } from '../../../mcp/services/handlers/unified/query-handler';
-import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
 import { ContextService } from '../../../services/domain/context.service';
 import { GraphQueryService } from '../../../services/domain/graph-query.service';
 import { MemoryService } from '../../../services/memory.service';
@@ -37,7 +37,7 @@ describe('Query Tool Tests', () => {
   let mockMemoryService: jest.Mocked<MemoryService>;
   let mockContextService: jest.Mocked<ContextService>;
   let mockGraphQueryService: jest.Mocked<GraphQueryService>;
-  let mockContext: jest.Mocked<EnrichedRequestHandlerExtra>;
+  let mockContext: jest.Mocked<ToolHandlerContext>;
 
   beforeEach(() => {
     mockContextService = {

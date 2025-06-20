@@ -1,5 +1,5 @@
 import { contextHandler } from '../../../mcp/services/handlers/unified/context-handler';
-import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
 import { ContextService } from '../../../services/domain/context.service';
 import { MemoryService } from '../../../services/memory.service';
 
@@ -30,7 +30,7 @@ type ContextResult =
     };
 
 describe('context tool handler', () => {
-  let mockContext: EnrichedRequestHandlerExtra;
+  let mockContext: ToolHandlerContext;
   let mockMemoryService: jest.Mocked<MemoryService>;
   let mockContextService: jest.Mocked<ContextService>;
 
@@ -52,7 +52,7 @@ describe('context tool handler', () => {
         debug: jest.fn(),
       },
       sendProgress: jest.fn(),
-    } as unknown as EnrichedRequestHandlerExtra;
+    } as unknown as ToolHandlerContext;
 
     mockContextService = {
       updateContext: jest.fn(),

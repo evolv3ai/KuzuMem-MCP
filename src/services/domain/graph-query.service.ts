@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { KuzuDBClient } from '../../db/kuzu';
 import { RepositoryProvider } from '../../db/repository-provider';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { Component, Decision, Rule } from '../../types';
 import { CoreService } from '../core/core.service';
 import * as componentOps from '../memory-operations/component.ops';
@@ -16,11 +16,11 @@ export class GraphQueryService extends CoreService {
   constructor(
     repositoryProvider: RepositoryProvider,
     getKuzuClient: (
-      mcpContext: EnrichedRequestHandlerExtra,
+      mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<KuzuDBClient>,
     getSnapshotService: (
-      mcpContext: EnrichedRequestHandlerExtra,
+      mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<SnapshotService>,
   ) {
@@ -28,7 +28,7 @@ export class GraphQueryService extends CoreService {
   }
 
   async getComponentDependencies(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -72,7 +72,7 @@ export class GraphQueryService extends CoreService {
   }
 
   async getActiveComponents(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string = 'main',
@@ -104,7 +104,7 @@ export class GraphQueryService extends CoreService {
   }
 
   async getComponentDependents(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -146,7 +146,7 @@ export class GraphQueryService extends CoreService {
   }
 
   async getItemContextualHistory(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -195,7 +195,7 @@ export class GraphQueryService extends CoreService {
   }
 
   async getGoverningItemsForComponent(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -242,7 +242,7 @@ export class GraphQueryService extends CoreService {
   }
 
   async getRelatedItems(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -291,7 +291,7 @@ export class GraphQueryService extends CoreService {
   }
 
   async getDecisionsByDateRange(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string = 'main',
@@ -342,7 +342,7 @@ export class GraphQueryService extends CoreService {
   }
 
   async getActiveRules(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string = 'main',
@@ -379,7 +379,7 @@ export class GraphQueryService extends CoreService {
   }
 
   async countNodesByLabel(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -415,7 +415,7 @@ export class GraphQueryService extends CoreService {
   }
 
   async listNodesByLabel(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -482,7 +482,7 @@ export class GraphQueryService extends CoreService {
   }
 
   async getNodeProperties(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -527,7 +527,7 @@ export class GraphQueryService extends CoreService {
   }
 
   async listAllIndexes(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -555,7 +555,7 @@ export class GraphQueryService extends CoreService {
   }
 
   async findItemsByTag(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -589,7 +589,7 @@ export class GraphQueryService extends CoreService {
   }
 
   async listAllNodeLabels(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string,

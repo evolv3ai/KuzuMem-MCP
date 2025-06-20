@@ -1,6 +1,6 @@
 import { KuzuDBClient } from '../db/kuzu';
 import { RepositoryProvider } from '../db/repository-provider';
-import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../mcp/types/sdk-custom';
 import { Mutex } from '../utils/mutex';
 import { ensureAbsolutePath } from '../utils/path.utils';
 import { ServiceRegistry } from './core/service-registry.service';
@@ -34,7 +34,7 @@ export class MemoryService {
     // No initialization here - will be done in initialize()
   }
 
-  private async initialize(initialMcpContext?: EnrichedRequestHandlerExtra): Promise<void> {
+  private async initialize(initialMcpContext?: ToolHandlerContext): Promise<void> {
     // Do not attempt any database initialization in the initial setup
     // This will make the MemoryService lightweight during creation
     // The real database work will be done on-demand when specific methods are called with valid clientProjectRoot
@@ -60,7 +60,7 @@ export class MemoryService {
    * @returns Initialized KuzuDBClient instance
    */
   public async getKuzuClient(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
   ): Promise<KuzuDBClient> {
     const logger = mcpContext.logger || console; // Fallback for safety, though context should always have logger
@@ -144,7 +144,7 @@ export class MemoryService {
    * @returns SnapshotService instance
    */
   public async getSnapshotService(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
   ): Promise<SnapshotService> {
     const logger = mcpContext.logger || console;
@@ -172,9 +172,7 @@ export class MemoryService {
     return snapshotService;
   }
 
-  static async getInstance(
-    initialMcpContext?: EnrichedRequestHandlerExtra,
-  ): Promise<MemoryService> {
+  static async getInstance(initialMcpContext?: ToolHandlerContext): Promise<MemoryService> {
     const release = await MemoryService.lock.acquire();
     try {
       if (!MemoryService.instance) {

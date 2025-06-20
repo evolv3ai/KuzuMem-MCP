@@ -1,5 +1,5 @@
 import { KuzuDBClient } from '../../../db/kuzu';
-import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
 import { RepositoryRepository } from '../../../repositories';
 import { Decision, Rule } from '../../../types';
 
@@ -182,7 +182,11 @@ export abstract class BaseGraphOperations {
   /**
    * Create component graph ID from repository, branch, and component ID
    */
-  protected createComponentGraphId(repository: string, branch: string, componentId: string): string {
+  protected createComponentGraphId(
+    repository: string,
+    branch: string,
+    componentId: string,
+  ): string {
     return `${repository}:${branch}:${componentId}`;
   }
 
@@ -190,7 +194,7 @@ export abstract class BaseGraphOperations {
    * Validate repository exists if repository repo is available
    */
   protected async validateRepository(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     repository: string,
     branch: string,
   ): Promise<boolean> {
@@ -211,17 +215,17 @@ export abstract class BaseGraphOperations {
   /**
    * Create operation logger with context
    */
-  protected createOperationLogger(
-    mcpContext: EnrichedRequestHandlerExtra,
-    operation: string,
-    params: any,
-  ) {
+  protected createOperationLogger(mcpContext: ToolHandlerContext, operation: string, params: any) {
     // Create a simple logger object since mcpContext.logger might not have child method
     return {
-      info: (message: string, meta?: any) => mcpContext.logger.info(`[graph.ops.${operation}] ${message}`, meta),
-      debug: (message: string, meta?: any) => mcpContext.logger.debug(`[graph.ops.${operation}] ${message}`, meta),
-      warn: (message: string, meta?: any) => mcpContext.logger.warn(`[graph.ops.${operation}] ${message}`, meta),
-      error: (message: string, meta?: any) => mcpContext.logger.error(`[graph.ops.${operation}] ${message}`, meta),
+      info: (message: string, meta?: any) =>
+        mcpContext.logger.info(`[graph.ops.${operation}] ${message}`, meta),
+      debug: (message: string, meta?: any) =>
+        mcpContext.logger.debug(`[graph.ops.${operation}] ${message}`, meta),
+      warn: (message: string, meta?: any) =>
+        mcpContext.logger.warn(`[graph.ops.${operation}] ${message}`, meta),
+      error: (message: string, meta?: any) =>
+        mcpContext.logger.error(`[graph.ops.${operation}] ${message}`, meta),
     };
   }
 }

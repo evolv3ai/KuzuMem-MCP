@@ -46,9 +46,9 @@ export abstract class BaseKuzuClient {
 
   constructor(clientProjectRoot: string) {
     this.dbPath = this.initializeDbPath(clientProjectRoot);
-    this.logger = kuzuLogger.child({ 
+    this.logger = kuzuLogger.child({
       component: this.constructor.name,
-      dbPath: this.dbPath 
+      dbPath: this.dbPath,
     });
     this.logger.info('Kuzu client instance created');
   }

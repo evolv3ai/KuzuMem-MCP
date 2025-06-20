@@ -3,11 +3,8 @@ import { BaseMemoryAgent } from '../base/base-memory-agent';
 import { ActionExecutorService } from './action-executor.service';
 
 // Type imports
-import type { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
-import type {
-  OptimizationPlan,
-  OptimizationResult,
-} from '../../../schemas/optimization/types';
+import type { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
+import type { OptimizationPlan, OptimizationResult } from '../../../schemas/optimization/types';
 
 /**
  * Service responsible for executing optimization plans safely
@@ -16,11 +13,7 @@ import type {
 export class OptimizationExecutionService extends BaseMemoryAgent {
   private actionExecutor: ActionExecutorService;
 
-  constructor(
-    memoryService: any,
-    config: any,
-    actionExecutor: ActionExecutorService,
-  ) {
+  constructor(memoryService: any, config: any, actionExecutor: ActionExecutorService) {
     super(memoryService, config);
     this.actionExecutor = actionExecutor;
   }
@@ -29,7 +22,7 @@ export class OptimizationExecutionService extends BaseMemoryAgent {
    * Execute optimization plan safely
    */
   async executeOptimizationPlan(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string,
@@ -171,7 +164,7 @@ export class OptimizationExecutionService extends BaseMemoryAgent {
    * Create pre-optimization snapshot
    */
   private async createPreOptimizationSnapshot(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string,

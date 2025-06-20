@@ -1,8 +1,8 @@
 import { KuzuDBClient } from '../db/kuzu';
-import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../mcp/types/sdk-custom';
 import { Metadata } from '../types';
-import { RepositoryRepository } from './repository.repository';
 import { loggers } from '../utils/logger';
+import { RepositoryRepository } from './repository.repository';
 /**
  * Repository for Metadata, using KuzuDB and Cypher queries.
  * Each instance is now tied to a specific KuzuDBClient.
@@ -54,7 +54,7 @@ export class MetadataRepository {
    * @param metadataId The logical ID of the metadata (typically 'meta').
    */
   async findMetadata(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     repositoryName: string,
     branch: string,
     metadataId: string = 'meta',
@@ -109,7 +109,7 @@ export class MetadataRepository {
    * The `metadata.id` is the logical ID (e.g., 'meta').
    */
   async upsertMetadata(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     metadata: Metadata,
   ): Promise<Metadata | null> {
     const logger = mcpContext.logger || console;

@@ -1,8 +1,8 @@
 // src/services/memory-operations/metadata.ops.ts
 // Re-saving to try and clear any potential ts-node/jest cache issues.
+import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { RepositoryRepository } from '../../repositories';
-import { Repository, Metadata } from '../../types';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { Metadata, Repository } from '../../types';
 
 /**
  * Retrieves metadata for a repository.
@@ -14,7 +14,7 @@ import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
  * @returns A Promise resolving to the Metadata object or null if not found.
  */
 export async function getMetadataOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   repositoryName: string,
   branch: string,
   repositoryRepo: RepositoryRepository,
@@ -75,7 +75,7 @@ export async function getMetadataOp(
  * @returns A Promise resolving to the updated Metadata object or null if not found.
  */
 export async function updateMetadataOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   repositoryName: string,
   branch: string,
   metadataContent: Partial<Metadata['content']>,
@@ -142,7 +142,7 @@ export async function updateMetadataOp(
  * @returns A Promise resolving to the created Repository object or null on failure.
  */
 export async function initializeRepositoryOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   repositoryName: string,
   branch: string,
   repositoryRepo: RepositoryRepository,

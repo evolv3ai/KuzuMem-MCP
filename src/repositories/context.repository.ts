@@ -1,5 +1,5 @@
 import { KuzuDBClient } from '../db/kuzu';
-import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../mcp/types/sdk-custom';
 import { Context } from '../types';
 import { formatGraphUniqueId } from '../utils/id.utils';
 import { RepositoryRepository } from './repository.repository';
@@ -31,7 +31,7 @@ export class ContextRepository {
     kuzuRowData: any,
     repositoryName: string,
     branch: string,
-    logger: EnrichedRequestHandlerExtra['logger'] | Console = console,
+    logger: ToolHandlerContext['logger'] | Console = console,
   ): Context {
     const rawContext = kuzuRowData.properties || kuzuRowData;
     const logicalId = rawContext.id?.toString();
@@ -115,7 +115,7 @@ export class ContextRepository {
    * Get the latest N contexts for a specific repository node and context branch.
    */
   async getLatestContexts(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     repositoryNodeId: string,
     contextBranch: string,
     limit: number = 10,
@@ -262,7 +262,7 @@ export class ContextRepository {
    * The logical ID for a daily context is typically 'context-[ISODATE]'.
    */
   async getContextByDate(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     repositoryName: string,
     contextBranch: string,
     isoDate: string,
@@ -297,10 +297,7 @@ export class ContextRepository {
    * `context.branch` is the branch of this Context entity.
    * `context.id` is the logical ID of this Context entity.
    */
-  async upsertContext(
-    mcpContext: EnrichedRequestHandlerExtra,
-    context: Context,
-  ): Promise<Context | null> {
+  async upsertContext(mcpContext: ToolHandlerContext, context: Context): Promise<Context | null> {
     const logger = mcpContext.logger || console;
     const { repository: repositoryNodeId, branch, id: logicalId, summary, agent } = context;
 
@@ -355,7 +352,7 @@ export class ContextRepository {
    * Find a context by its logical ID and branch, within a given repository name.
    */
   async findByIdAndBranch(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     repositoryName: string,
     itemId: string,
     itemBranch: string,

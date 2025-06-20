@@ -1,6 +1,6 @@
 import { KuzuDBClient } from '../../db/kuzu';
 import { RepositoryProvider } from '../../db/repository-provider';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { Component, ComponentStatus } from '../../types';
 import * as componentOps from '../memory-operations/component.ops';
 import { SnapshotService } from '../snapshot.service';
@@ -14,11 +14,11 @@ export class ComponentService extends BaseEntityService {
   constructor(
     repositoryProvider: RepositoryProvider,
     getKuzuClient: (
-      mcpContext: EnrichedRequestHandlerExtra,
+      mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<KuzuDBClient>,
     getSnapshotService: (
-      mcpContext: EnrichedRequestHandlerExtra,
+      mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<SnapshotService>,
   ) {
@@ -29,7 +29,7 @@ export class ComponentService extends BaseEntityService {
    * Create or update a component
    */
   async upsertComponent(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -69,7 +69,7 @@ export class ComponentService extends BaseEntityService {
    * Get a component by ID
    */
   async getComponent(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -90,7 +90,7 @@ export class ComponentService extends BaseEntityService {
    * Update an existing component
    */
   async updateComponent(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -161,7 +161,7 @@ export class ComponentService extends BaseEntityService {
    * Delete a component
    */
   async deleteComponent(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -182,7 +182,7 @@ export class ComponentService extends BaseEntityService {
    * Get all components for a repository and branch
    */
   async getAllComponents(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,

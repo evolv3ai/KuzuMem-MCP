@@ -1,5 +1,5 @@
 import { analyzeHandler } from '../../../mcp/services/handlers/unified/analyze-handler';
-import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
 import { GraphAnalysisService } from '../../../services/domain/graph-analysis.service';
 import { MemoryService } from '../../../services/memory.service';
 
@@ -38,7 +38,7 @@ type AnalyzeResult =
 describe('Analyze Tool Tests', () => {
   let mockMemoryService: jest.Mocked<MemoryService>;
   let mockGraphAnalysisService: jest.Mocked<GraphAnalysisService>;
-  let mockContext: jest.Mocked<EnrichedRequestHandlerExtra>;
+  let mockContext: jest.Mocked<ToolHandlerContext>;
 
   beforeEach(() => {
     mockGraphAnalysisService = {

@@ -95,10 +95,7 @@ export class KuzuQueryExecutor extends BaseKuzuClient {
   /**
    * Execute a prepared statement with parameters
    */
-  async executePreparedStatement(
-    query: string,
-    params: Record<string, any>,
-  ): Promise<any> {
+  async executePreparedStatement(query: string, params: Record<string, any>): Promise<any> {
     const logger = this.createOperationLogger('execute-prepared-statement');
 
     try {
@@ -155,7 +152,7 @@ export class KuzuQueryExecutor extends BaseKuzuClient {
       for (let i = 0; i < queries.length; i++) {
         const query = queries[i];
         logger.debug({ queryIndex: i, queryLength: query.length }, 'Executing batch query');
-        
+
         const result = await this.executeSimpleQuery(query);
         results.push(result);
       }
@@ -215,16 +212,20 @@ export class KuzuQueryExecutor extends BaseKuzuClient {
         : [];
 
       // Get relationships (this might need adjustment based on KuzuDB's relationship introspection)
-      const relationshipsResult = await this.executeQuery(`
+      const relationshipsResult = await this.executeQuery(
+        `
         CALL show_connection() RETURN *;
-      `).catch(() => []); // Fallback to empty array if command doesn't exist
+      `,
+      ).catch(() => []); // Fallback to empty array if command doesn't exist
 
       const relationships = Array.isArray(relationshipsResult)
         ? relationshipsResult.map((rel: any) => rel.name || rel).filter(Boolean)
         : [];
 
-      logger.debug({ tableCount: tables.length, relationshipCount: relationships.length }, 
-        'Schema information retrieved');
+      logger.debug(
+        { tableCount: tables.length, relationshipCount: relationships.length },
+        'Schema information retrieved',
+      );
 
       return { tables, relationships };
     } catch (error) {

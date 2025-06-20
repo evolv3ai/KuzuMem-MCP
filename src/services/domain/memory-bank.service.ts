@@ -1,13 +1,13 @@
 import { z } from 'zod';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { Metadata, Repository } from '../../types';
 import { ensureAbsolutePath } from '../../utils/path.utils';
 import { CoreService } from '../core/core.service';
 
 export class MemoryBankService extends CoreService {
   async initMemoryBank(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string = 'main',
@@ -107,7 +107,7 @@ export class MemoryBankService extends CoreService {
    * Ensure metadata exists for the repository
    */
   private async ensureMetadata(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: Repository,
     repositoryName: string,
@@ -142,7 +142,7 @@ export class MemoryBankService extends CoreService {
   }
 
   async getOrCreateRepository(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     name: string,
     branch: string = 'main',

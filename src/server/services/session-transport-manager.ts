@@ -26,9 +26,9 @@ export class SessionTransportManager extends BaseHttpStreamServer {
           createdAt: new Date(),
           lastActivity: new Date(),
         });
-        
+
         this.logger.debug({ sessionId: newSessionId }, 'New session initialized');
-        
+
         if (onSessionInitialized) {
           onSessionInitialized(newSessionId);
         }
@@ -48,14 +48,16 @@ export class SessionTransportManager extends BaseHttpStreamServer {
   /**
    * Get session information with metadata
    */
-  getSessionInfoWithMetadata(sessionId: string): (SessionInfo & { 
-    createdAt: Date; 
-    lastActivity: Date;
-    duration: number;
-  }) | undefined {
+  getSessionInfoWithMetadata(sessionId: string):
+    | (SessionInfo & {
+        createdAt: Date;
+        lastActivity: Date;
+        duration: number;
+      })
+    | undefined {
     const transport = this.getTransport(sessionId);
     const metadata = this.sessionMetadata.get(sessionId);
-    
+
     if (!transport || !metadata) {
       return undefined;
     }
@@ -82,16 +84,20 @@ export class SessionTransportManager extends BaseHttpStreamServer {
   /**
    * Get all active sessions with metadata
    */
-  getAllSessionsInfo(): Array<SessionInfo & { 
-    createdAt: Date; 
-    lastActivity: Date;
-    duration: number;
-  }> {
-    const sessions: Array<SessionInfo & { 
-      createdAt: Date; 
+  getAllSessionsInfo(): Array<
+    SessionInfo & {
+      createdAt: Date;
       lastActivity: Date;
       duration: number;
-    }> = [];
+    }
+  > {
+    const sessions: Array<
+      SessionInfo & {
+        createdAt: Date;
+        lastActivity: Date;
+        duration: number;
+      }
+    > = [];
 
     for (const sessionId of this.getActiveSessionIds()) {
       const sessionInfo = this.getSessionInfoWithMetadata(sessionId);
@@ -108,7 +114,7 @@ export class SessionTransportManager extends BaseHttpStreamServer {
    */
   async cleanupSession(sessionId: string): Promise<void> {
     const transport = this.getTransport(sessionId);
-    
+
     if (transport) {
       try {
         await transport.close();
@@ -130,7 +136,7 @@ export class SessionTransportManager extends BaseHttpStreamServer {
     this.logger.info('Cleaning up all active sessions');
 
     const sessionIds = this.getActiveSessionIds();
-    const cleanupPromises = sessionIds.map(sessionId => this.cleanupSession(sessionId));
+    const cleanupPromises = sessionIds.map((sessionId) => this.cleanupSession(sessionId));
 
     try {
       await Promise.allSettled(cleanupPromises);
@@ -160,7 +166,7 @@ export class SessionTransportManager extends BaseHttpStreamServer {
         'Cleaning up inactive sessions',
       );
 
-      const cleanupPromises = inactiveSessions.map(sessionId => this.cleanupSession(sessionId));
+      const cleanupPromises = inactiveSessions.map((sessionId) => this.cleanupSession(sessionId));
       await Promise.allSettled(cleanupPromises);
     }
   }
@@ -175,7 +181,7 @@ export class SessionTransportManager extends BaseHttpStreamServer {
     newestSession: Date | null;
   } {
     const sessions = this.getAllSessionsInfo();
-    
+
     if (sessions.length === 0) {
       return {
         totalSessions: 0,
@@ -187,7 +193,7 @@ export class SessionTransportManager extends BaseHttpStreamServer {
 
     const totalDuration = sessions.reduce((sum, session) => sum + session.duration, 0);
     const averageDuration = totalDuration / sessions.length;
-    
+
     const sortedByCreation = sessions.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
     const oldestSession = sortedByCreation[0]?.createdAt || null;
     const newestSession = sortedByCreation[sortedByCreation.length - 1]?.createdAt || null;
@@ -212,7 +218,7 @@ export class SessionTransportManager extends BaseHttpStreamServer {
    */
   async forceCloseSession(sessionId: string): Promise<boolean> {
     const transport = this.getTransport(sessionId);
-    
+
     if (!transport) {
       return false;
     }
@@ -232,7 +238,7 @@ export class SessionTransportManager extends BaseHttpStreamServer {
    */
   startPeriodicCleanup(intervalMs: number = 10 * 60 * 1000): NodeJS.Timeout {
     this.logger.info({ intervalMs }, 'Starting periodic session cleanup');
-    
+
     return setInterval(async () => {
       try {
         await this.cleanupInactiveSessions();

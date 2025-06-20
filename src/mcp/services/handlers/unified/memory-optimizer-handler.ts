@@ -3,7 +3,7 @@ import { MemoryOptimizationAgent } from '../../../../agents/memory-optimizer/mem
 import type { OptimizationStrategy } from '../../../../agents/memory-optimizer/prompt-manager';
 import { MemoryService } from '../../../../services/memory.service';
 import { logger } from '../../../../utils/logger';
-import type { EnrichedRequestHandlerExtra } from '../../../types/sdk-custom';
+import type { ToolHandlerContext } from '../../../types/sdk-custom';
 import { handleToolError, logToolExecution, validateSession } from '../../../utils/error-utils';
 
 // Input schema for memory optimizer tool
@@ -142,7 +142,7 @@ export async function memoryOptimizerHandler(params: any, context: any): Promise
         return await handleAnalyzeOperation(
           agent,
           validatedParams,
-          context as EnrichedRequestHandlerExtra,
+          context as ToolHandlerContext,
           handlerLogger,
         );
 
@@ -150,7 +150,7 @@ export async function memoryOptimizerHandler(params: any, context: any): Promise
         return await handleOptimizeOperation(
           agent,
           validatedParams,
-          context as EnrichedRequestHandlerExtra,
+          context as ToolHandlerContext,
           handlerLogger,
         );
 
@@ -158,7 +158,7 @@ export async function memoryOptimizerHandler(params: any, context: any): Promise
         return await handleRollbackOperation(
           agent,
           validatedParams,
-          context as EnrichedRequestHandlerExtra,
+          context as ToolHandlerContext,
           handlerLogger,
         );
 
@@ -166,7 +166,7 @@ export async function memoryOptimizerHandler(params: any, context: any): Promise
         return await handleListSnapshotsOperation(
           agent,
           validatedParams,
-          context as EnrichedRequestHandlerExtra,
+          context as ToolHandlerContext,
           handlerLogger,
         );
 
@@ -191,7 +191,7 @@ export async function memoryOptimizerHandler(params: any, context: any): Promise
 async function handleAnalyzeOperation(
   agent: MemoryOptimizationAgent,
   params: MemoryOptimizerParams,
-  context: EnrichedRequestHandlerExtra,
+  context: ToolHandlerContext,
   logger: any,
 ): Promise<any> {
   // Internal type assertion for logger
@@ -266,7 +266,7 @@ async function handleAnalyzeOperation(
 async function handleOptimizeOperation(
   agent: MemoryOptimizationAgent,
   params: MemoryOptimizerParams,
-  context: EnrichedRequestHandlerExtra,
+  context: ToolHandlerContext,
   logger: any,
 ): Promise<any> {
   // Internal type assertion for logger
@@ -382,7 +382,7 @@ async function handleOptimizeOperation(
 async function handleRollbackOperation(
   agent: MemoryOptimizationAgent,
   params: MemoryOptimizerParams,
-  context: EnrichedRequestHandlerExtra,
+  context: ToolHandlerContext,
   logger: any,
 ): Promise<any> {
   // Internal type assertion for logger
@@ -444,7 +444,7 @@ async function handleRollbackOperation(
 async function handleListSnapshotsOperation(
   agent: MemoryOptimizationAgent,
   params: MemoryOptimizerParams,
-  context: EnrichedRequestHandlerExtra,
+  context: ToolHandlerContext,
   logger: any,
 ): Promise<any> {
   // Internal type assertion for logger

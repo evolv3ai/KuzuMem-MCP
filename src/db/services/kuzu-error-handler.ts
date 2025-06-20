@@ -90,10 +90,7 @@ export class KuzuErrorHandler extends BaseKuzuClient {
       return new Error(userMessage);
     }
 
-    if (
-      error.message &&
-      (error.message.includes('lock') || error.message.includes('busy'))
-    ) {
+    if (error.message && (error.message.includes('lock') || error.message.includes('busy'))) {
       const userMessage = `Database file '${this.dbPath}' is locked or in use by another process. Please close other connections and try again.`;
       logger.error({ error }, userMessage);
       return new Error(userMessage);

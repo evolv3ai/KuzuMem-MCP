@@ -2,7 +2,7 @@
 import { Command } from 'commander';
 import fs from 'fs/promises';
 import path from 'path';
-import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../mcp/types/sdk-custom';
 import { MemoryService } from '../services/memory.service';
 import { logError, loggers } from '../utils/logger';
 
@@ -12,7 +12,7 @@ let memoryService: MemoryService;
 // Create CLI-specific logger
 const cliLogger = loggers.controller().child({ component: 'CLI' });
 
-function createMockContext(): EnrichedRequestHandlerExtra {
+function createMockContext(): ToolHandlerContext {
   return {
     logger: cliLogger,
     session: {},
@@ -22,7 +22,7 @@ function createMockContext(): EnrichedRequestHandlerExtra {
     requestId: 'cli-request',
     sendNotification: async () => {},
     sendRequest: async () => ({ id: 'cli', jsonrpc: '2.0', result: {} }),
-  } as EnrichedRequestHandlerExtra;
+  } as ToolHandlerContext;
 }
 
 async function initializeMemoryServiceInstance(): Promise<void> {

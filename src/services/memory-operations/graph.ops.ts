@@ -1,34 +1,34 @@
 // Main orchestrator for graph operations using specialized services
 import { KuzuDBClient } from '../../db/kuzu';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { RepositoryRepository } from '../../repositories';
 
 // Import specialized services
+import { GraphAlgorithmService } from './services/graph-algorithm.service';
 import { GraphContextService } from './services/graph-context.service';
 import { GraphGovernanceService } from './services/graph-governance.service';
-import { GraphRelationshipService } from './services/graph-relationship.service';
-import { GraphAlgorithmService } from './services/graph-algorithm.service';
 import { GraphProjectionManager } from './services/graph-projection-manager';
+import { GraphRelationshipService } from './services/graph-relationship.service';
 
 // Re-export types from base for backward compatibility
 export type {
-  GraphOperationParams,
-  GetItemContextualHistoryParams,
+  ConnectedComponentsParams,
+  ConnectedComponentsResult,
   ContextResult,
   GetGoverningItemsParams,
-  GoverningItemsResult,
+  GetItemContextualHistoryParams,
   GetRelatedItemsParams,
-  RelatedItem,
-  RelatedItemsResult,
-  ProjectedGraphParams,
-  PageRankParams,
-  PageRankResult,
+  GoverningItemsResult,
+  GraphOperationParams,
   KCoreParams,
   KCoreResult,
   LouvainParams,
   LouvainResult,
-  ConnectedComponentsParams,
-  ConnectedComponentsResult,
+  PageRankParams,
+  PageRankResult,
+  ProjectedGraphParams,
+  RelatedItem,
+  RelatedItemsResult,
   ShortestPathParams,
   ShortestPathResult,
 } from './base/base-graph-operations';
@@ -54,92 +54,74 @@ class GraphOperationsOrchestrator {
 
   // === Context Operations - Delegated to GraphContextService ===
 
-  async getItemContextualHistory(
-    mcpContext: EnrichedRequestHandlerExtra,
-    params: any,
-  ) {
+  async getItemContextualHistory(mcpContext: ToolHandlerContext, params: any) {
     return this.contextService.getItemContextualHistory(mcpContext, params);
   }
 
   // === Governance Operations - Delegated to GraphGovernanceService ===
 
-  async getGoverningItemsForComponent(
-    mcpContext: EnrichedRequestHandlerExtra,
-    params: any,
-  ) {
+  async getGoverningItemsForComponent(mcpContext: ToolHandlerContext, params: any) {
     return this.governanceService.getGoverningItemsForComponent(mcpContext, params);
   }
 
   // === Relationship Operations - Delegated to GraphRelationshipService ===
 
-  async getRelatedItems(
-    mcpContext: EnrichedRequestHandlerExtra,
-    params: any,
-  ) {
+  async getRelatedItems(mcpContext: ToolHandlerContext, params: any) {
     return this.relationshipService.getRelatedItems(mcpContext, params);
   }
 
   // === Algorithm Operations - Delegated to GraphAlgorithmService ===
 
-  async executePageRank(
-    mcpContext: EnrichedRequestHandlerExtra,
-    params: any,
-  ) {
+  async executePageRank(mcpContext: ToolHandlerContext, params: any) {
     return this.algorithmService.executePageRank(mcpContext, params);
   }
 
-  async executeKCoreDecomposition(
-    mcpContext: EnrichedRequestHandlerExtra,
-    params: any,
-  ) {
+  async executeKCoreDecomposition(mcpContext: ToolHandlerContext, params: any) {
     return this.algorithmService.executeKCoreDecomposition(mcpContext, params);
   }
 
-  async executeLouvainCommunityDetection(
-    mcpContext: EnrichedRequestHandlerExtra,
-    params: any,
-  ) {
+  async executeLouvainCommunityDetection(mcpContext: ToolHandlerContext, params: any) {
     return this.algorithmService.executeLouvainCommunityDetection(mcpContext, params);
   }
 
-  async executeStronglyConnectedComponents(
-    mcpContext: EnrichedRequestHandlerExtra,
-    params: any,
-  ) {
+  async executeStronglyConnectedComponents(mcpContext: ToolHandlerContext, params: any) {
     return this.algorithmService.executeStronglyConnectedComponents(mcpContext, params);
   }
 
-  async executeWeaklyConnectedComponents(
-    mcpContext: EnrichedRequestHandlerExtra,
-    params: any,
-  ) {
+  async executeWeaklyConnectedComponents(mcpContext: ToolHandlerContext, params: any) {
     return this.algorithmService.executeWeaklyConnectedComponents(mcpContext, params);
   }
 
-  async executeShortestPath(
-    mcpContext: EnrichedRequestHandlerExtra,
-    params: any,
-  ) {
+  async executeShortestPath(mcpContext: ToolHandlerContext, params: any) {
     return this.algorithmService.executeShortestPath(mcpContext, params);
   }
 
   // === Projection Management - Delegated to GraphProjectionManager ===
 
   async withProjectedGraph<T>(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     projectionName: string,
     nodeTables: string[],
     relTables: string[],
     callback: () => Promise<T>,
   ) {
-    return this.projectionManager.withProjectedGraph(mcpContext, projectionName, nodeTables, relTables, callback);
+    return this.projectionManager.withProjectedGraph(
+      mcpContext,
+      projectionName,
+      nodeTables,
+      relTables,
+      callback,
+    );
   }
 }
 
 // Create a singleton orchestrator instance
 let orchestrator: GraphOperationsOrchestrator | null = null;
 
-function getOrchestrator(kuzuClient: KuzuDBClient, repositoryRepo?: RepositoryRepository): GraphOperationsOrchestrator {
+function getOrchestrator(
+  kuzuClient: KuzuDBClient,
+  repositoryRepo?: RepositoryRepository,
+): GraphOperationsOrchestrator {
   if (!orchestrator) {
     orchestrator = new GraphOperationsOrchestrator(kuzuClient, repositoryRepo);
   }
@@ -153,7 +135,7 @@ function getOrchestrator(kuzuClient: KuzuDBClient, repositoryRepo?: RepositoryRe
  * @deprecated Use GraphContextService.getItemContextualHistory() instead
  */
 export async function getItemContextualHistoryOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   kuzuClient: KuzuDBClient,
   params: any,
   repositoryRepo?: RepositoryRepository,
@@ -167,7 +149,7 @@ export async function getItemContextualHistoryOp(
  * @deprecated Use GraphGovernanceService.getGoverningItemsForComponent() instead
  */
 export async function getGoverningItemsForComponentOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   kuzuClient: KuzuDBClient,
   params: any,
 ): Promise<any> {
@@ -180,7 +162,7 @@ export async function getGoverningItemsForComponentOp(
  * @deprecated Use GraphRelationshipService.getRelatedItems() instead
  */
 export async function getRelatedItemsOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   kuzuClient: KuzuDBClient,
   params: any,
 ): Promise<any> {
@@ -193,7 +175,7 @@ export async function getRelatedItemsOp(
  * @deprecated Use GraphAlgorithmService.executeKCoreDecomposition() instead
  */
 export async function kCoreDecompositionOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   kuzuClient: KuzuDBClient,
   params: any,
 ): Promise<any> {
@@ -206,7 +188,7 @@ export async function kCoreDecompositionOp(
  * @deprecated Use GraphAlgorithmService.executePageRank() instead
  */
 export async function pageRankOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   kuzuClient: KuzuDBClient,
   params: any,
 ): Promise<any> {
@@ -219,7 +201,7 @@ export async function pageRankOp(
  * @deprecated Use GraphAlgorithmService.executeLouvainCommunityDetection() instead
  */
 export async function louvainCommunityDetectionOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   kuzuClient: KuzuDBClient,
   params: any,
 ): Promise<any> {
@@ -232,7 +214,7 @@ export async function louvainCommunityDetectionOp(
  * @deprecated Use GraphAlgorithmService.executeStronglyConnectedComponents() instead
  */
 export async function stronglyConnectedComponentsOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   kuzuClient: KuzuDBClient,
   params: any,
 ): Promise<any> {
@@ -245,7 +227,7 @@ export async function stronglyConnectedComponentsOp(
  * @deprecated Use GraphAlgorithmService.executeWeaklyConnectedComponents() instead
  */
 export async function weaklyConnectedComponentsOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   kuzuClient: KuzuDBClient,
   params: any,
 ): Promise<any> {
@@ -258,7 +240,7 @@ export async function weaklyConnectedComponentsOp(
  * @deprecated Use GraphAlgorithmService.executeShortestPath() instead
  */
 export async function shortestPathOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   kuzuClient: KuzuDBClient,
   params: any,
 ): Promise<any> {

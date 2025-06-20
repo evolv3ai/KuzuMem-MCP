@@ -2,7 +2,7 @@
 import { BaseMemoryAgent } from '../base/base-memory-agent';
 
 // Type imports
-import type { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import type { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
 
 /**
  * Service responsible for snapshot management operations
@@ -13,7 +13,7 @@ export class SnapshotManagementService extends BaseMemoryAgent {
    * Rollback to a previous snapshot
    */
   async rollbackToSnapshot(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string,
@@ -82,7 +82,7 @@ export class SnapshotManagementService extends BaseMemoryAgent {
    * List available snapshots for a repository
    */
   async listSnapshots(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch?: string,
@@ -103,7 +103,7 @@ export class SnapshotManagementService extends BaseMemoryAgent {
    * Create a snapshot with optional description
    */
   async createSnapshot(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string,
@@ -151,7 +151,7 @@ export class SnapshotManagementService extends BaseMemoryAgent {
    * Validate a snapshot
    */
   async validateSnapshot(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     snapshotId: string,
   ): Promise<{
@@ -190,7 +190,7 @@ export class SnapshotManagementService extends BaseMemoryAgent {
    * Delete a snapshot
    */
   async deleteSnapshot(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     snapshotId: string,
   ): Promise<{ success: boolean; message: string }> {

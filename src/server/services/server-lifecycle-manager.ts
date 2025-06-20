@@ -140,7 +140,7 @@ export class ServerLifecycleManager extends BaseHttpStreamServer {
 
     server.on('connection', (socket) => {
       this.logger.debug('New connection established');
-      
+
       socket.on('error', (err) => {
         this.logger.debug({ error: err }, 'Socket error');
       });
@@ -213,10 +213,7 @@ export class ServerLifecycleManager extends BaseHttpStreamServer {
     });
 
     process.on('unhandledRejection', (reason, promise) => {
-      this.logger.error(
-        { reason, promise },
-        'Unhandled promise rejection',
-      );
+      this.logger.error({ reason, promise }, 'Unhandled promise rejection');
       this.gracefulShutdown('unhandledRejection').catch(() => {
         process.exit(1);
       });

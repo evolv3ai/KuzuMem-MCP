@@ -1,5 +1,5 @@
 import { KuzuDBClient } from '../../db/kuzu';
-import type { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import type { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { MemoryService } from '../../services/memory.service';
 import { logger } from '../../utils/logger';
 import type { OptimizationStrategy } from './prompt-manager';
@@ -56,7 +56,7 @@ export class MCPSamplingManager {
    * Sample memory context based on strategy
    */
   async sampleMemoryContext(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string,

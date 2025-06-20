@@ -1,17 +1,17 @@
-import { 
-  BaseGraphOperations, 
-  PageRankParams, 
-  PageRankResult,
+import { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
+import {
+  BaseGraphOperations,
+  ConnectedComponentsParams,
+  ConnectedComponentsResult,
   KCoreParams,
   KCoreResult,
   LouvainParams,
   LouvainResult,
-  ConnectedComponentsParams,
-  ConnectedComponentsResult,
+  PageRankParams,
+  PageRankResult,
   ShortestPathParams,
-  ShortestPathResult
+  ShortestPathResult,
 } from '../base/base-graph-operations';
-import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
 import { GraphProjectionManager } from './graph-projection-manager';
 
 /**
@@ -30,7 +30,7 @@ export class GraphAlgorithmService extends BaseGraphOperations {
    * Executes PageRank algorithm
    */
   async executePageRank(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     params: PageRankParams,
   ): Promise<PageRankResult> {
     const logger = this.createOperationLogger(mcpContext, 'executePageRank', params);
@@ -75,7 +75,7 @@ export class GraphAlgorithmService extends BaseGraphOperations {
    * Executes K-Core Decomposition algorithm
    */
   async executeKCoreDecomposition(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     params: KCoreParams,
   ): Promise<KCoreResult> {
     const logger = this.createOperationLogger(mcpContext, 'executeKCoreDecomposition', params);
@@ -83,7 +83,10 @@ export class GraphAlgorithmService extends BaseGraphOperations {
       `Executing K-Core Decomposition on G: ${params.projectedGraphName}, k: ${params.k}, R: ${params.repository}, B: ${params.branch}`,
     );
 
-    const result = await this.projectionManager.withProjectedGraph<{ k: number; components: any[] }>(
+    const result = await this.projectionManager.withProjectedGraph<{
+      k: number;
+      components: any[];
+    }>(
       mcpContext,
       params.projectedGraphName,
       params.nodeTableNames,
@@ -111,10 +114,14 @@ export class GraphAlgorithmService extends BaseGraphOperations {
    * Executes Louvain Community Detection algorithm
    */
   async executeLouvainCommunityDetection(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     params: LouvainParams,
   ): Promise<LouvainResult> {
-    const logger = this.createOperationLogger(mcpContext, 'executeLouvainCommunityDetection', params);
+    const logger = this.createOperationLogger(
+      mcpContext,
+      'executeLouvainCommunityDetection',
+      params,
+    );
     logger.info(
       `Executing Louvain Community Detection on G: ${params.projectedGraphName}, R: ${params.repository}, B: ${params.branch}`,
     );
@@ -147,10 +154,14 @@ export class GraphAlgorithmService extends BaseGraphOperations {
    * Executes Strongly Connected Components algorithm
    */
   async executeStronglyConnectedComponents(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     params: ConnectedComponentsParams,
   ): Promise<ConnectedComponentsResult> {
-    const logger = this.createOperationLogger(mcpContext, 'executeStronglyConnectedComponents', params);
+    const logger = this.createOperationLogger(
+      mcpContext,
+      'executeStronglyConnectedComponents',
+      params,
+    );
     logger.info(
       `Executing Strongly Connected Components on G: ${params.projectedGraphName}, R: ${params.repository}, B: ${params.branch}`,
     );
@@ -180,10 +191,14 @@ export class GraphAlgorithmService extends BaseGraphOperations {
    * Executes Weakly Connected Components algorithm
    */
   async executeWeaklyConnectedComponents(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     params: ConnectedComponentsParams,
   ): Promise<ConnectedComponentsResult> {
-    const logger = this.createOperationLogger(mcpContext, 'executeWeaklyConnectedComponents', params);
+    const logger = this.createOperationLogger(
+      mcpContext,
+      'executeWeaklyConnectedComponents',
+      params,
+    );
     logger.info(
       `Executing Weakly Connected Components on G: ${params.projectedGraphName}, R: ${params.repository}, B: ${params.branch}`,
     );
@@ -213,16 +228,14 @@ export class GraphAlgorithmService extends BaseGraphOperations {
    * Executes Shortest Path algorithm
    */
   async executeShortestPath(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     params: ShortestPathParams,
   ): Promise<ShortestPathResult> {
     const logger = this.createOperationLogger(mcpContext, 'executeShortestPath', params);
     const { repository, branch, startNodeId, endNodeId } = params;
     const repoId = this.createRepoId(repository, branch);
 
-    logger.info(
-      `Finding shortest path from ${startNodeId} to ${endNodeId} in ${repoId}`,
-    );
+    logger.info(`Finding shortest path from ${startNodeId} to ${endNodeId} in ${repoId}`);
 
     // Don't use projected graph for shortest path - query directly
     try {

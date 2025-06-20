@@ -1,6 +1,6 @@
 import { KuzuDBClient } from '../../db/kuzu';
 import { RepositoryProvider } from '../../db/repository-provider';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { SnapshotService } from '../snapshot.service';
 import { BaseEntityService } from './base-entity.service';
 
@@ -12,11 +12,11 @@ export class BulkOperationsService extends BaseEntityService {
   constructor(
     repositoryProvider: RepositoryProvider,
     getKuzuClient: (
-      mcpContext: EnrichedRequestHandlerExtra,
+      mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<KuzuDBClient>,
     getSnapshotService: (
-      mcpContext: EnrichedRequestHandlerExtra,
+      mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<SnapshotService>,
   ) {
@@ -27,7 +27,7 @@ export class BulkOperationsService extends BaseEntityService {
    * Bulk delete entities by type
    */
   async bulkDeleteByType(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -151,7 +151,7 @@ export class BulkOperationsService extends BaseEntityService {
    * Bulk delete entities by branch
    */
   async bulkDeleteByBranch(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     targetBranch: string,

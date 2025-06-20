@@ -1,10 +1,10 @@
 import { deleteHandler } from '../../../mcp/services/handlers/unified/delete-handler';
-import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
 import { EntityService } from '../../../services/domain/entity.service';
 import { MemoryService } from '../../../services/memory.service';
 
 describe('delete tool handler', () => {
-  let mockContext: EnrichedRequestHandlerExtra;
+  let mockContext: ToolHandlerContext;
   let mockMemoryService: jest.Mocked<MemoryService>;
   let mockEntityService: jest.Mocked<EntityService>;
 
@@ -26,7 +26,7 @@ describe('delete tool handler', () => {
         debug: jest.fn(),
       },
       sendProgress: jest.fn(),
-    } as unknown as EnrichedRequestHandlerExtra;
+    } as unknown as ToolHandlerContext;
 
     mockEntityService = {
       deleteComponent: jest.fn(),

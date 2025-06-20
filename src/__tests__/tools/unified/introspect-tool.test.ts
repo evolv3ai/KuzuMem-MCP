@@ -1,10 +1,10 @@
 import { introspectHandler } from '../../../mcp/services/handlers/unified/introspect-handler';
-import { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
 import { GraphQueryService } from '../../../services/domain/graph-query.service';
 import { MemoryService } from '../../../services/memory.service';
 
 describe('introspect tool handler', () => {
-  let mockContext: EnrichedRequestHandlerExtra;
+  let mockContext: ToolHandlerContext;
   let mockMemoryService: jest.Mocked<MemoryService>;
   let mockGraphQueryService: jest.Mocked<GraphQueryService>;
 
@@ -26,7 +26,7 @@ describe('introspect tool handler', () => {
         debug: jest.fn(),
       },
       sendProgress: jest.fn(),
-    } as unknown as EnrichedRequestHandlerExtra;
+    } as unknown as ToolHandlerContext;
 
     mockGraphQueryService = {
       listAllNodeLabels: jest.fn(),

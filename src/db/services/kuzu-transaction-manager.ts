@@ -29,7 +29,7 @@ export class KuzuTransactionManager extends BaseKuzuClient {
 
     const transactionId = `tx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const logger = this.createOperationLogger('transaction', { transactionId });
-    
+
     logger.debug('Beginning transaction');
 
     try {
@@ -57,12 +57,12 @@ export class KuzuTransactionManager extends BaseKuzuClient {
       const result = await transactionBlock(txContext);
       await connection.query('COMMIT');
       this.activeTransactions.delete(transactionId);
-      
+
       logger.debug('Transaction committed successfully');
       return result;
     } catch (error) {
       logger.error({ error }, 'Transaction failed, rolling back');
-      
+
       try {
         const connection = this.connectionManager.getConnection();
         await connection.query('ROLLBACK');
@@ -72,7 +72,7 @@ export class KuzuTransactionManager extends BaseKuzuClient {
         logger.error({ rollbackError }, 'Failed to rollback transaction');
         this.activeTransactions.delete(transactionId);
       }
-      
+
       throw error;
     }
   }
@@ -101,7 +101,7 @@ export class KuzuTransactionManager extends BaseKuzuClient {
 
         if (attempt < maxRetries) {
           logger.debug({ retryDelay }, 'Waiting before retry');
-          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          await new Promise((resolve) => setTimeout(resolve, retryDelay));
         }
       }
     }
@@ -114,9 +114,11 @@ export class KuzuTransactionManager extends BaseKuzuClient {
    * Execute multiple transactions in sequence
    */
   async sequentialTransactions<T>(
-    transactionBlocks: Array<(tx: {
-      executeQuery: (query: string, params?: Record<string, any>) => Promise<any>;
-    }) => Promise<T>>,
+    transactionBlocks: Array<
+      (tx: {
+        executeQuery: (query: string, params?: Record<string, any>) => Promise<any>;
+      }) => Promise<T>
+    >,
   ): Promise<T[]> {
     const logger = this.createOperationLogger('sequential-transactions', {
       transactionCount: transactionBlocks.length,

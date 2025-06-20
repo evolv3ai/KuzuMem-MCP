@@ -7,7 +7,7 @@ import { MemoryContextBuilder } from '../context-builder';
 import { PromptManager } from '../prompt-manager';
 
 // Type imports
-import type { EnrichedRequestHandlerExtra } from '../../../mcp/types/sdk-custom';
+import type { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
 import type { AnalysisResult } from '../../../schemas/optimization/types';
 import type { OptimizationStrategy } from '../prompt-manager';
 
@@ -37,7 +37,7 @@ export class MemoryAnalysisService extends BaseMemoryAgent {
    * Analyze memory graph and identify optimization opportunities
    */
   async analyzeMemory(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string = 'main',

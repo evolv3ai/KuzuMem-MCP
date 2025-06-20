@@ -41,11 +41,13 @@ export class HttpRequestRouter extends BaseHttpStreamServer {
       // Validate request headers
       if (!this.securityMiddleware.validateRequestHeaders(req, requestLogger)) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          jsonrpc: '2.0',
-          error: { code: -32000, message: 'Invalid request headers' },
-          id: null,
-        }));
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            error: { code: -32000, message: 'Invalid request headers' },
+            id: null,
+          }),
+        );
         return;
       }
 
@@ -68,11 +70,13 @@ export class HttpRequestRouter extends BaseHttpStreamServer {
           break;
         default:
           res.writeHead(405, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({
-            jsonrpc: '2.0',
-            error: { code: -32000, message: 'Method not allowed' },
-            id: null,
-          }));
+          res.end(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              error: { code: -32000, message: 'Method not allowed' },
+              id: null,
+            }),
+          );
       }
     } catch (error) {
       logError(requestLogger, error as Error, {
@@ -83,9 +87,11 @@ export class HttpRequestRouter extends BaseHttpStreamServer {
 
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          error: { code: -32603, message: 'Internal error' },
-        }));
+        res.end(
+          JSON.stringify({
+            error: { code: -32603, message: 'Internal error' },
+          }),
+        );
       }
     }
   }
@@ -112,7 +118,9 @@ export class HttpRequestRouter extends BaseHttpStreamServer {
         cleanup();
         requestLogger.error({ error }, 'Request size validation failed (Content-Length check)');
         res.writeHead(413, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(this.securityMiddleware.createSizeLimitErrorResponse(error as Error)));
+        res.end(
+          JSON.stringify(this.securityMiddleware.createSizeLimitErrorResponse(error as Error)),
+        );
         return;
       }
 
@@ -135,7 +143,10 @@ export class HttpRequestRouter extends BaseHttpStreamServer {
           await transport.handleRequest(sizeLimitedReq, res);
           return;
         } catch (error) {
-          requestLogger.error({ error, sessionId }, 'Error handling request with existing transport');
+          requestLogger.error(
+            { error, sessionId },
+            'Error handling request with existing transport',
+          );
           this.removeTransport(sessionId);
           throw error;
         }
@@ -176,11 +187,13 @@ export class HttpRequestRouter extends BaseHttpStreamServer {
 
       // Invalid request - session ID provided but not found
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        jsonrpc: '2.0',
-        error: { code: -32000, message: 'Bad Request: Invalid session ID' },
-        id: null,
-      }));
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'Bad Request: Invalid session ID' },
+          id: null,
+        }),
+      );
     } catch (error) {
       cleanup();
       requestLogger.error({ error }, 'Unhandled error in POST request handler');
@@ -203,11 +216,13 @@ export class HttpRequestRouter extends BaseHttpStreamServer {
 
     if (!sessionId || !this.getTransport(sessionId)) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        jsonrpc: '2.0',
-        error: { code: -32000, message: 'Bad Request: Invalid or missing session ID' },
-        id: null,
-      }));
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'Bad Request: Invalid or missing session ID' },
+          id: null,
+        }),
+      );
       return;
     }
 
@@ -227,11 +242,13 @@ export class HttpRequestRouter extends BaseHttpStreamServer {
 
     if (!sessionId || !this.getTransport(sessionId)) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        jsonrpc: '2.0',
-        error: { code: -32000, message: 'Bad Request: Invalid or missing session ID' },
-        id: null,
-      }));
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'Bad Request: Invalid or missing session ID' },
+          id: null,
+        }),
+      );
       return;
     }
 
@@ -243,18 +260,22 @@ export class HttpRequestRouter extends BaseHttpStreamServer {
       requestLogger.debug({ sessionId }, 'Session terminated');
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        jsonrpc: '2.0',
-        result: { success: true },
-        id: null,
-      }));
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          result: { success: true },
+          id: null,
+        }),
+      );
     } catch (error) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        jsonrpc: '2.0',
-        error: { code: -32603, message: 'Internal error during session termination' },
-        id: null,
-      }));
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: { code: -32603, message: 'Internal error during session termination' },
+          id: null,
+        }),
+      );
     }
   }
 

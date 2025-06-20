@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { CoreService } from '../core/core.service';
 import * as metadataOps from '../memory-operations/metadata.ops';
 
 export class MetadataService extends CoreService {
   async getMetadata(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string = 'main',
@@ -57,7 +57,7 @@ export class MetadataService extends CoreService {
   }
 
   async updateMetadata(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     metadataContentChanges: any,

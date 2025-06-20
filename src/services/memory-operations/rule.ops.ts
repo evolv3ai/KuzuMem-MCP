@@ -1,5 +1,5 @@
 import { KuzuDBClient } from '../../db/kuzu';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { RepositoryRepository, RuleRepository } from '../../repositories';
 import { Rule, RuleInput } from '../../types';
 
@@ -29,7 +29,7 @@ function parseBaseEntityTimestamp(timestamp: Date | undefined): string | null {
  * @returns A Promise resolving to the upserted Rule object or null if repository not found.
  */
 export async function upsertRuleOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   repositoryName: string,
   branch: string,
   ruleData: RuleInput,
@@ -89,7 +89,7 @@ export async function upsertRuleOp(
  * @returns A Promise resolving to an array of active Rule objects.
  */
 export async function getActiveRulesOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   repositoryName: string,
   branch: string,
   repositoryRepo: RepositoryRepository,
@@ -124,7 +124,7 @@ function normalizeRule(rule: Rule, repositoryName: string, branch: string): Rule
 }
 
 export async function deleteRuleOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   kuzuClient: KuzuDBClient,
   repositoryRepo: RepositoryRepository,
   repositoryName: string,

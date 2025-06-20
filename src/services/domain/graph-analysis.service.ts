@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { KuzuDBClient } from '../../db/kuzu';
 import { RepositoryProvider } from '../../db/repository-provider';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { CoreService } from '../core/core.service';
 import * as graphOps from '../memory-operations/graph.ops';
 import { SnapshotService } from '../snapshot.service';
@@ -11,11 +11,11 @@ export class GraphAnalysisService extends CoreService {
   constructor(
     repositoryProvider: RepositoryProvider,
     getKuzuClient: (
-      mcpContext: EnrichedRequestHandlerExtra,
+      mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<KuzuDBClient>,
     getSnapshotService: (
-      mcpContext: EnrichedRequestHandlerExtra,
+      mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<SnapshotService>,
   ) {
@@ -23,7 +23,7 @@ export class GraphAnalysisService extends CoreService {
   }
 
   async kCoreDecomposition(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     params: z.infer<typeof toolSchemas.AnalyzeInputSchema>,
   ): Promise<z.infer<typeof toolSchemas.KCoreOutputSchema>> {
@@ -75,7 +75,10 @@ export class GraphAnalysisService extends CoreService {
         type: 'k-core' as const,
         status: 'complete',
         projectedGraphName: params.projectedGraphName,
-        nodes: algorithmResults.components.map((c: any) => ({ id: c.nodeId, coreNumber: c.coreness })),
+        nodes: algorithmResults.components.map((c: any) => ({
+          id: c.nodeId,
+          coreNumber: c.coreness,
+        })),
         message: 'K-Core decomposition completed successfully',
       };
     } catch (error: any) {
@@ -94,7 +97,7 @@ export class GraphAnalysisService extends CoreService {
   }
 
   async louvainCommunityDetection(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     params: z.infer<typeof toolSchemas.AnalyzeInputSchema>,
   ): Promise<z.infer<typeof toolSchemas.LouvainOutputSchema>> {
@@ -163,7 +166,7 @@ export class GraphAnalysisService extends CoreService {
   }
 
   async pageRank(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     params: z.infer<typeof toolSchemas.AnalyzeInputSchema>,
   ): Promise<z.infer<typeof toolSchemas.PageRankOutputSchema>> {
@@ -222,7 +225,7 @@ export class GraphAnalysisService extends CoreService {
   }
 
   async getStronglyConnectedComponents(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     params: z.infer<typeof toolSchemas.DetectInputSchema>,
   ): Promise<z.infer<typeof toolSchemas.DetectOutputSchema>> {
@@ -291,7 +294,7 @@ export class GraphAnalysisService extends CoreService {
   }
 
   async getWeaklyConnectedComponents(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     params: z.infer<typeof toolSchemas.DetectInputSchema>,
   ): Promise<z.infer<typeof toolSchemas.DetectOutputSchema>> {
@@ -360,7 +363,7 @@ export class GraphAnalysisService extends CoreService {
   }
 
   async shortestPath(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     params: z.infer<typeof toolSchemas.AnalyzeInputSchema>,
   ): Promise<z.infer<typeof toolSchemas.ShortestPathOutputSchema>> {

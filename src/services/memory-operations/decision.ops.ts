@@ -1,5 +1,5 @@
 import { KuzuDBClient } from '../../db/kuzu';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { DecisionRepository, RepositoryRepository } from '../../repositories';
 import { Decision, DecisionInput } from '../../types';
 
@@ -15,7 +15,7 @@ import { Decision, DecisionInput } from '../../types';
  * @returns A Promise resolving to the upserted Decision object or null if repository not found.
  */
 export async function upsertDecisionOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   repositoryName: string,
   branch: string,
   decisionData: DecisionInput,
@@ -75,7 +75,7 @@ export async function upsertDecisionOp(
  * @returns A Promise resolving to an array of active Decision objects.
  */
 export async function getActiveDecisionsOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   repositoryName: string,
   branch: string,
   repositoryRepo: RepositoryRepository,
@@ -112,7 +112,7 @@ function normalizeDecision(decision: Decision, repositoryName: string, branch: s
 }
 
 export async function deleteDecisionOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   kuzuClient: KuzuDBClient,
   repositoryRepo: RepositoryRepository,
   repositoryName: string,

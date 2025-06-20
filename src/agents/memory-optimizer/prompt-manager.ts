@@ -1,9 +1,9 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { logger } from '../../utils/logger';
+import type { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import type { MemoryContext } from '../../schemas/optimization/types';
-import type { MCPSamplingManager, MemorySample } from './mcp-sampling-manager';
-import type { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { logger } from '../../utils/logger';
+import type { MCPSamplingManager } from './mcp-sampling-manager';
 
 export interface SystemPromptConfig {
   version: string;
@@ -127,7 +127,7 @@ export class PromptManager {
   async buildContextAwareSystemPrompt(
     role: AgentRole,
     strategy: OptimizationStrategy,
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repository: string,
     branch: string,

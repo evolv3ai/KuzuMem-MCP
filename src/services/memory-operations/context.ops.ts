@@ -1,5 +1,5 @@
 import { KuzuDBClient } from '../../db/kuzu';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { ContextRepository, RepositoryRepository } from '../../repositories';
 import { Context, ContextInput } from '../../types';
 
@@ -15,7 +15,7 @@ import { Context, ContextInput } from '../../types';
  * @returns A Promise resolving to an array of Context objects.
  */
 export async function getLatestContextsOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   repositoryName: string,
   branch: string,
   limit: number,
@@ -54,7 +54,7 @@ export async function getLatestContextsOp(
  * @returns A Promise resolving to the created Context object or null if repository not found.
  */
 export async function createContextOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   repositoryName: string,
   branch: string,
   contextData: ContextInput,
@@ -110,7 +110,7 @@ export async function createContextOp(
  * @returns A Promise resolving to the created/updated Context object or null if repository not found.
  */
 export async function updateContextOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   repositoryName: string,
   branch: string,
   contextData: ContextInput,
@@ -183,7 +183,7 @@ function normalizeContext(context: Context, repositoryName: string, branch: stri
 }
 
 export async function deleteContextOp(
-  mcpContext: EnrichedRequestHandlerExtra,
+  mcpContext: ToolHandlerContext,
   kuzuClient: KuzuDBClient,
   repositoryRepo: RepositoryRepository,
   repositoryName: string,

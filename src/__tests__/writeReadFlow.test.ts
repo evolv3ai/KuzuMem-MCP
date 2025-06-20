@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { EnrichedRequestHandlerExtra } from '../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../mcp/types/sdk-custom';
 import { MemoryService } from '../services/memory.service';
 
 describe('MemoryService end-to-end write/read flow', () => {
@@ -8,10 +8,10 @@ describe('MemoryService end-to-end write/read flow', () => {
   const branch = 'main';
   let clientProjectRoot: string;
   let memoryService: MemoryService;
-  const mcpContext: EnrichedRequestHandlerExtra = {
+  const mcpContext: ToolHandlerContext = {
     logger: console,
     sendProgress: async () => {}, // no-op
-  } as unknown as EnrichedRequestHandlerExtra;
+  } as unknown as ToolHandlerContext;
 
   beforeAll(async () => {
     // Create a temporary directory for the Kùzu database file

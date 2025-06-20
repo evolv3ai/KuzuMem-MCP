@@ -4,7 +4,7 @@ import { type Logger } from 'pino';
 import {
   BaseHttpStreamServer,
   type DataEventListener,
-  type GenericEventListener
+  type GenericEventListener,
 } from '../base/base-httpstream-server';
 
 /**
@@ -55,7 +55,9 @@ export class RequestSecurityMiddleware extends BaseHttpStreamServer {
                   return; // Don't process more data if limit already exceeded
                 }
 
-                const chunkSize = Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk, 'utf8');
+                const chunkSize = Buffer.isBuffer(chunk)
+                  ? chunk.length
+                  : Buffer.byteLength(chunk, 'utf8');
                 cumulativeSize += chunkSize;
 
                 if (cumulativeSize > maxRequestSize) {
@@ -222,7 +224,7 @@ export class RequestSecurityMiddleware extends BaseHttpStreamServer {
       if (!contentType || !contentType.includes('application/json')) {
         requestLogger.warn(
           { contentType },
-          'Invalid or missing Content-Type header for POST request'
+          'Invalid or missing Content-Type header for POST request',
         );
         return false;
       }
@@ -234,10 +236,7 @@ export class RequestSecurityMiddleware extends BaseHttpStreamServer {
       const suspiciousHeaders = ['x-forwarded-for', 'x-real-ip'];
       for (const header of suspiciousHeaders) {
         if (req.headers[header]) {
-          requestLogger.debug(
-            { header, value: req.headers[header] },
-            'Proxy header detected'
-          );
+          requestLogger.debug({ header, value: req.headers[header] }, 'Proxy header detected');
         }
       }
     }

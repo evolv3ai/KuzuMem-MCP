@@ -2,12 +2,11 @@ import { z } from 'zod';
 import { KuzuDBClient } from '../../db/kuzu';
 import { RepositoryProvider } from '../../db/repository-provider';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
-import { EnrichedRequestHandlerExtra } from '../../mcp/types/sdk-custom';
+import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import {
   Component,
   ComponentStatus,
   Decision,
-  DecisionInput,
   FileInput,
   File as FileRecord,
   Rule,
@@ -39,11 +38,11 @@ export class EntityService extends CoreService {
   constructor(
     repositoryProvider: RepositoryProvider,
     getKuzuClient: (
-      mcpContext: EnrichedRequestHandlerExtra,
+      mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<KuzuDBClient>,
     getSnapshotService: (
-      mcpContext: EnrichedRequestHandlerExtra,
+      mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<SnapshotService>,
   ) {
@@ -83,7 +82,7 @@ export class EntityService extends CoreService {
    * Create or update a rule for a repository
    */
   async upsertRule(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     rule: Omit<Rule, 'repository' | 'branch' | 'id'> & { id: string },
@@ -118,7 +117,7 @@ export class EntityService extends CoreService {
 
   // Component operations - delegate to ComponentService
   async upsertComponent(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -141,7 +140,7 @@ export class EntityService extends CoreService {
 
   // Decision operations - delegate to DecisionService
   async upsertDecision(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -163,7 +162,7 @@ export class EntityService extends CoreService {
 
   // Get methods for individual entities - delegate to specialized services
   async getComponent(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -179,7 +178,7 @@ export class EntityService extends CoreService {
   }
 
   async getDecision(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -195,7 +194,7 @@ export class EntityService extends CoreService {
   }
 
   async getRule(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -219,7 +218,7 @@ export class EntityService extends CoreService {
 
   // Update methods for entities - delegate to specialized services
   async updateComponent(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -237,7 +236,7 @@ export class EntityService extends CoreService {
   }
 
   async updateDecision(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -255,7 +254,7 @@ export class EntityService extends CoreService {
   }
 
   async updateRule(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -307,7 +306,7 @@ export class EntityService extends CoreService {
 
   // Delete methods for entities - delegate to specialized services
   async deleteComponent(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -323,7 +322,7 @@ export class EntityService extends CoreService {
   }
 
   async deleteDecision(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -339,7 +338,7 @@ export class EntityService extends CoreService {
   }
 
   async deleteRule(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -369,7 +368,7 @@ export class EntityService extends CoreService {
   }
 
   async deleteFile(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -399,7 +398,7 @@ export class EntityService extends CoreService {
   }
 
   async deleteTag(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     tagId: string,
   ): Promise<boolean> {
@@ -418,7 +417,7 @@ export class EntityService extends CoreService {
     }
   }
   async getFile(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -450,7 +449,7 @@ export class EntityService extends CoreService {
   }
 
   async getTag(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -473,7 +472,7 @@ export class EntityService extends CoreService {
   }
 
   async addFile(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -522,7 +521,7 @@ export class EntityService extends CoreService {
   }
 
   async associateFileWithComponent(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -581,7 +580,7 @@ export class EntityService extends CoreService {
   }
 
   async addTag(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -630,7 +629,7 @@ export class EntityService extends CoreService {
   }
 
   async tagItem(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -687,7 +686,7 @@ export class EntityService extends CoreService {
   }
 
   async deleteContext(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -802,7 +801,7 @@ export class EntityService extends CoreService {
 
   // Bulk delete methods - delegate to BulkOperationsService
   async bulkDeleteByType(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -827,7 +826,7 @@ export class EntityService extends CoreService {
   }
 
   async bulkDeleteByTag(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     branch: string,
@@ -900,7 +899,7 @@ export class EntityService extends CoreService {
   }
 
   async bulkDeleteByBranch(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     targetBranch: string,
@@ -923,7 +922,7 @@ export class EntityService extends CoreService {
   }
 
   async bulkDeleteByRepository(
-    mcpContext: EnrichedRequestHandlerExtra,
+    mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
     repositoryName: string,
     options: {
