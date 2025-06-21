@@ -1,0 +1,248 @@
+---
+description: KuzuMem-MCP Project Configuration Rules v2 - Immutable project settings and conventions
+globs: 
+alwaysApply: true
+---
+# KuzuMem-MCP Project Configuration Rules v2
+
+**STATUS**: ACTIVE - Supersedes all previous versions  
+**TYPE**: IMMUTABLE CONFIGURATION - Agent MUST NOT modify this file  
+**PURPOSE**: Define fixed parameters, conventions, and tool usage patterns for KuzuMem-MCP
+
+---
+
+## 1. MANDATORY PROJECT IDENTITY
+
+Every single MCP tool call MUST include these fields with exact values:
+
+```json
+{
+  "clientProjectRoot": "<CURRENT_PROJECT_ABSOLUTE_PATH>",
+  "repository": "kuzumem-mcp",
+  "branch": "<CURRENT_GIT_BRANCH>"  // MUST verify with git before EVERY operation
+}
+```
+
+**ENFORCEMENT**: Agent MUST run `git branch --show-current` before ANY MCP operation to ensure correct branch.
+
+---
+
+## 2. ENTITY ID CONVENTIONS (MANDATORY FORMAT)
+
+Agent MUST use these EXACT formats - NO EXCEPTIONS:
+
+| Entity Type | Format Pattern | Valid Example | INVALID Examples |
+|-------------|----------------|---------------|------------------|
+| Component | `comp-<CamelCase>` | `comp-MemoryService` | ~~comp_memory_service~~, ~~component-MemoryService~~ |
+| Decision | `dec-YYYYMMDD-<kebab-slug>` | `dec-20250120-unified-tools` | ~~decision-2025-01-20-unified~~ |
+| Rule | `rule-<category>-<kebab-slug>` | `rule-security-input-validation` | ~~rule_security_input~~ |
+| File | `file-<path-with-dashes>-v<N>` | `file-src-services-memory-ts-v1` | ~~file-src/services/memory.ts~~ |
+| Tag | `tag-<category>` | `tag-security-critical` | ~~tag_security~~, ~~security-tag~~ |
+| Context | `ctx-YYYYMMDD-HHMM-<slug>` | `ctx-20250120-1430-refactor-complete` | ~~context-20250120~~ |
+| Analysis | `analysis-<timestamp>-<hash>` | `analysis-1705765800-abc123` | ~~analyze-result-123~~ |
+| Snapshot | `snapshot-<timestamp>-<hash>` | `snapshot-1705765800-xyz789` | ~~backup-123~~ |
+
+---
+
+## 3. THE 12 UNIFIED TOOLS (USE ONLY THESE)
+
+| Tool Name | Purpose | Required Fields |
+|-----------|---------|-----------------|
+| `memory-bank` | Repository initialization & metadata | operation, clientProjectRoot, repository, branch |
+| `entity` | ALL entity CRUD operations | operation, entityType, repository, branch, data/id |
+| `introspect` | Database schema exploration | query, repository, branch |
+| `context` | Session logging (UPDATE CONSTANTLY) | operation, agent, summary, repository, branch |
+| `query` | Graph traversal & searches | type, repository, branch, (type-specific params) |
+| `associate` | Create relationships | type, repository, branch, (relationship params) |
+| `analyze` | Graph algorithms | type, repository, branch, projectedGraphName, nodeTableNames |
+| `detect` | Pattern detection | type, repository, branch, projectedGraphName, nodeTableNames |
+| `bulk-import` | Batch operations | type, repository, branch, (entity arrays) |
+| `search` | Full-text search | query, repository, branch, entityTypes |
+| `delete` | Entity removal (USE WITH EXTREME CAUTION) | operation, repository, branch, (deletion params) |
+| `memory-optimizer` | AI-powered optimization | operation, repository, branch, strategy |
+
+**FORBIDDEN**: Using ANY tool name not in this list (e.g., ~~mcp_KuzuMem-MCP_entity~~)
+
+---
+
+## 4. TECHNOLOGY STACK (REFERENCE ONLY)
+
+- **Runtime**: Node.js 20 + TypeScript 5.x
+- **Database**: Embedded KuzuDB (graph database)
+- **Framework**: MCP TypeScript SDK
+- **Testing**: Jest + ts-jest, Vitest (watch mode)
+- **Package Manager**: pnpm (workspaces enabled)
+- **Key Libraries**: Commander.js (CLI), Zod (validation)
+
+---
+
+## 5. ARCHITECTURAL PRINCIPLES
+
+Agent MUST respect these principles in ALL code changes:
+
+1. **Clean Architecture**: Controllers → Services → Repositories → Database (NO upward dependencies)
+2. **Repository Pattern**: All database access through repository layer
+3. **Transactional Safety**: Graph mutations ONLY through service layer transactions
+4. **Test Coverage**: New components require BOTH unit AND integration tests
+5. **Dependency Rules**: NO circular dependencies (use `detect` tool to verify)
+
+---
+
+## 6. GOVERNANCE RULES (ENFORCED VIA MCP)
+
+Agent MUST ensure:
+
+1. **Component Dependencies**: EVERY component MUST list ALL dependencies in `depends_on` array
+2. **No Deletions**: Components are NEVER deleted - use `status: "deprecated"` instead
+3. **Decision Tagging**: EVERY Decision MUST have at least one tag: `tag-architecture`, `tag-security`, or `tag-performance`
+4. **Analysis Persistence**: EVERY `analyze`/`detect` result MUST be:
+   - Stored as an entity
+   - Associated with affected components
+5. **Branch Isolation**: NEVER mix data between branches - verify branch before EVERY operation
+
+---
+
+## 7. TOOL USAGE TEMPLATES
+
+### 7.1 Initialize/Switch Branch (MANDATORY FIRST STEP)
+```json
+{
+  "tool": "memory-bank",
+  "operation": "init",
+  "clientProjectRoot": "<CURRENT_PROJECT_ABSOLUTE_PATH>",
+  "repository": "kuzumem-mcp",
+  "branch": "main"
+}
+```
+
+### 7.2 Create Component with Dependencies
+```json
+{
+  "tool": "entity",
+  "operation": "create",
+  "entityType": "component",
+  "repository": "kuzumem-mcp",
+  "branch": "main",
+  "data": {
+    "id": "comp-ExampleService",
+    "name": "Example Service",
+    "kind": "service",
+    "status": "active",
+    "depends_on": ["comp-DatabaseClient", "comp-Logger"],
+    "description": "Handles example operations",
+    "metadata": {
+      "file_paths": ["src/services/example.service.ts"],
+      "created": "2025-01-20",
+      "version": "1.0.0"
+    }
+  }
+}
+```
+
+### 7.3 Update Context (MUST DO FREQUENTLY)
+```json
+{
+  "tool": "context",
+  "operation": "update",
+  "agent": "cursor-assistant",
+  "summary": "Completed refactoring of authentication service",
+  "observation": "Simplified token validation logic, reduced dependencies from 5 to 3",
+  "repository": "kuzumem-mcp",
+  "branch": "feature/auth-refactor"
+}
+```
+
+### 7.4 Run PageRank Analysis
+```json
+{
+  "tool": "analyze",
+  "type": "pagerank",
+  "repository": "kuzumem-mcp",
+  "branch": "main",
+  "clientProjectRoot": "<CURRENT_PROJECT_ABSOLUTE_PATH>",
+  "projectedGraphName": "component-importance-20250120",
+  "nodeTableNames": ["Component"],
+  "relationshipTableNames": ["DEPENDS_ON"],
+  "damping": 0.85
+}
+```
+
+### 7.5 Detect Circular Dependencies
+```json
+{
+  "tool": "detect",
+  "type": "cycles",
+  "repository": "kuzumem-mcp",
+  "branch": "main",
+  "projectedGraphName": "cycle-check-20250120",
+  "nodeTableNames": ["Component"],
+  "relationshipTableNames": ["DEPENDS_ON"]
+}
+```
+
+### 7.6 Search for Components
+```json
+{
+  "tool": "search",
+  "query": "authentication service token validation",
+  "repository": "kuzumem-mcp",
+  "branch": "main",
+  "mode": "fulltext",
+  "entityTypes": ["component", "decision", "rule"],
+  "limit": 10
+}
+```
+
+### 7.7 Safe Memory Optimization (ALWAYS DRY-RUN FIRST)
+```json
+{
+  "tool": "memory-optimizer",
+  "operation": "analyze",
+  "repository": "kuzumem-mcp",
+  "branch": "main",
+  "clientProjectRoot": "<CURRENT_PROJECT_ABSOLUTE_PATH>",
+  "strategy": "conservative",
+  "dryRun": true,
+  "enableMCPSampling": true
+}
+```
+
+---
+
+## 8. CRITICAL SAFETY RULES
+
+Agent MUST:
+
+1. **NEVER** delete entities without explicit user permission
+2. **ALWAYS** run dependency checks before modifying components
+3. **ALWAYS** use dry-run mode for destructive operations
+4. **NEVER** use aggressive optimization without written approval
+5. **ALWAYS** create snapshots before bulk operations
+6. **NEVER** mix test data with production memory banks
+
+---
+
+## 9. ERROR HANDLING PROTOCOL
+
+On ANY error, agent MUST:
+
+1. **STOP** immediately - do not retry blindly
+2. **LOG** full error details via context update
+3. **ANALYZE** error type and potential impact
+4. **ASK** user for guidance before proceeding
+5. **DOCUMENT** resolution in a new context entry
+
+---
+
+## 10. CHANGE CONTROL
+
+- This configuration is IMMUTABLE during runtime
+- Changes require approved Decision entity with status "approved"
+- Agent may propose changes but CANNOT modify without human approval
+- All changes must maintain backward compatibility
+
+---
+
+**Last Updated**: 2025-01-20  
+**Version**: 2.0  
+**Approval Status**: ACTIVE

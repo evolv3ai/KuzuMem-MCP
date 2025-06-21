@@ -1,0 +1,469 @@
+---
+description: KuzuMem-MCP Workflow State Machine v2 - Agent execution rules and phase transitions
+globs: 
+alwaysApply: true
+---
+# KuzuMem-MCP Workflow State Machine Rules v2
+
+**STATUS**: ACTIVE - Supersedes all previous versions  
+**TYPE**: IMMUTABLE WORKFLOW - Agent MUST follow exactly  
+**PURPOSE**: Define mandatory workflow phases and transitions for EVERY task
+
+---
+
+## 0. CRITICAL: WORKFLOW IS MANDATORY
+
+Agent MUST:
+- **ALWAYS** start with ANALYZE phase
+- **NEVER** skip phases or transitions
+- **ALWAYS** log phase transitions in context
+- **NEVER** proceed without required approvals
+- **ALWAYS** complete ALL steps in current phase before transitioning
+
+---
+
+## 1. THE FIVE-PHASE STATE MACHINE
+
+```mermaid
+stateDiagram-v2
+    [*] --> ANALYZE: Task received
+    ANALYZE --> BLUEPRINT: Analysis complete
+    BLUEPRINT --> CONSTRUCT: User approved
+    BLUEPRINT --> ANALYZE: User rejected
+    CONSTRUCT --> VALIDATE: Implementation complete
+    VALIDATE --> [*]: Tests pass
+    VALIDATE --> CONSTRUCT: Tests fail
+    CONSTRUCT --> ROLLBACK: Unrecoverable error
+    ROLLBACK --> ANALYZE: Rollback complete
+```
+
+| Phase | Purpose | Entry Condition | Exit Condition | Next Phase |
+|-------|---------|-----------------|----------------|------------|
+| **ANALYZE** | Understand task & gather context | New task received | Blueprint drafted | BLUEPRINT |
+| **BLUEPRINT** | Create implementation plan | Analysis complete | User types "APPROVED" | CONSTRUCT |
+| **CONSTRUCT** | Execute plan step-by-step | Blueprint approved | All steps complete | VALIDATE |
+| **VALIDATE** | Test & verify changes | Construction done | Tests pass | DONE |
+| **ROLLBACK** | Revert failed changes | Unrecoverable error | Cleanup complete | ANALYZE |
+
+---
+
+## 2. PHASE EXECUTION RULES
+
+### 2.1 ANALYZE Phase (MANDATORY FIRST STEP)
+
+**Step 1: Initialize Memory Bank**
+```json
+{
+  "tool": "memory-bank",
+  "operation": "init",
+  "clientProjectRoot": "<CURRENT_PROJECT_ABSOLUTE_PATH>",
+  "repository": "kuzumem-mcp",
+  "branch": "<current-branch>"
+}
+```
+
+**Step 2: Get Recent Context** (MANDATORY)
+```json
+{
+  "tool": "query",
+  "type": "context",
+  "repository": "kuzumem-mcp",
+  "branch": "<current-branch>",
+  "latest": true,
+  "limit": 10
+}
+```
+
+**Step 3: Search Relevant Entities** (if task involves existing code)
+```json
+{
+  "tool": "search",
+  "query": "<keywords from user task>",
+  "repository": "kuzumem-mcp",
+  "branch": "<current-branch>",
+  "entityTypes": ["component", "decision", "rule", "file"],
+  "limit": 20
+}
+```
+
+**Step 4: Analyze Dependencies** (if modifying components)
+```json
+{
+  "tool": "query",
+  "type": "dependencies",
+  "componentId": "<target-component>",
+  "direction": "both",
+  "repository": "kuzumem-mcp",
+  "branch": "<current-branch>"
+}
+```
+
+**Step 5: Optional - Run Impact Analysis**
+```json
+{
+  "tool": "analyze",
+  "type": "pagerank",
+  "repository": "kuzumem-mcp",
+  "branch": "<current-branch>",
+  "clientProjectRoot": "<CURRENT_PROJECT_ABSOLUTE_PATH>",
+  "projectedGraphName": "impact-analysis-<timestamp>",
+  "nodeTableNames": ["Component"],
+  "relationshipTableNames": ["DEPENDS_ON"]
+}
+```
+
+**Step 6: Log Analysis Complete** (MANDATORY)
+```json
+{
+  "tool": "context",
+  "operation": "update",
+  "agent": "cursor-agent",
+  "summary": "ANALYZE phase complete: <one-line task understanding>",
+  "observation": "Key findings: 1) ... 2) ... 3) ...",
+  "repository": "kuzumem-mcp",
+  "branch": "<current-branch>"
+}
+```
+
+### 2.2 BLUEPRINT Phase
+
+**Step 1: Create Decision Entity** (MANDATORY)
+```json
+{
+  "tool": "entity",
+  "operation": "create",
+  "entityType": "decision",
+  "repository": "kuzumem-mcp",
+  "branch": "<current-branch>",
+  "data": {
+    "id": "dec-YYYYMMDD-<task-slug>",
+    "name": "Implementation Plan: <task description>",
+    "date": "YYYY-MM-DD",
+    "status": "proposed",
+    "context": "## Task\n<description>\n\n## Plan\n1. <step>\n2. <step>\n3. ...\n\n## Impact\n- Components: <list>\n- Dependencies: <list>",
+    "affects": ["<comp-id-1>", "<comp-id-2>"]
+  }
+}
+```
+
+**Step 2: Tag Decision** (MANDATORY)
+```json
+{
+  "tool": "associate",
+  "type": "tag-item",
+  "tagId": "tag-architecture",
+  "itemId": "dec-YYYYMMDD-<task-slug>",
+  "entityType": "Decision",
+  "repository": "kuzumem-mcp",
+  "branch": "<current-branch>"
+}
+```
+
+**Step 3: Present Plan to User** (MANDATORY)
+- Display numbered plan clearly
+- State: "Please review the implementation plan above and type APPROVED to proceed"
+- WAIT for user response
+- Do NOT proceed without "APPROVED"
+
+**Step 4: On Approval - Update Decision**
+```json
+{
+  "tool": "entity",
+  "operation": "update",
+  "entityType": "decision",
+  "id": "dec-YYYYMMDD-<task-slug>",
+  "repository": "kuzumem-mcp",
+  "branch": "<current-branch>",
+  "data": {
+    "status": "approved"
+  }
+}
+```
+
+### 2.3 CONSTRUCT Phase
+
+**For EACH step in the approved plan:**
+
+**Step A: Execute Code Changes**
+- Make the actual code modifications
+- Follow architectural principles
+
+**Step B: Create/Update Component Entities**
+```json
+{
+  "tool": "entity",
+  "operation": "create",
+  "entityType": "component",
+  "repository": "kuzumem-mcp",
+  "branch": "<current-branch>",
+  "data": {
+    "id": "comp-<ComponentName>",
+    "name": "<Component Display Name>",
+    "kind": "service|handler|repository|module|tool",
+    "status": "active",
+    "depends_on": ["<dependency-ids>"],
+    "description": "<what it does>",
+    "metadata": {
+      "file_paths": ["<relative-paths>"],
+      "created": "YYYY-MM-DD",
+      "modified": "YYYY-MM-DD"
+    }
+  }
+}
+```
+
+**Step C: Associate Files with Components**
+```json
+{
+  "tool": "associate",
+  "type": "file-component",
+  "fileId": "file-<path-with-dashes>-v1",
+  "componentId": "comp-<ComponentName>",
+  "repository": "kuzumem-mcp",
+  "branch": "<current-branch>"
+}
+```
+
+**Step D: Log Step Completion** (MANDATORY after EACH step)
+```json
+{
+  "tool": "context",
+  "operation": "update",
+  "agent": "cursor-agent",
+  "summary": "CONSTRUCT: Completed step N - <what was done>",
+  "observation": "<details of changes made>",
+  "repository": "kuzumem-mcp",
+  "branch": "<current-branch>"
+}
+```
+
+### 2.4 VALIDATE Phase
+
+**Step 1: Run Tests**
+```bash
+npm test
+npm run lint
+```
+
+**Step 2: Check for Circular Dependencies**
+```json
+{
+  "tool": "detect",
+  "type": "cycles",
+  "repository": "kuzumem-mcp",
+  "branch": "<current-branch>",
+  "projectedGraphName": "validation-cycles-<timestamp>",
+  "nodeTableNames": ["Component"],
+  "relationshipTableNames": ["DEPENDS_ON"]
+}
+```
+
+**Step 3A: If Tests PASS - Update Decision**
+```json
+{
+  "tool": "entity",
+  "operation": "update",
+  "entityType": "decision",
+  "id": "dec-YYYYMMDD-<task-slug>",
+  "repository": "kuzumem-mcp",
+  "branch": "<current-branch>",
+  "data": {
+    "status": "implemented"
+  }
+}
+```
+
+**Step 3B: If Tests FAIL - Log and Return**
+```json
+{
+  "tool": "context",
+  "operation": "update",
+  "agent": "cursor-agent",
+  "summary": "VALIDATE failed: <test failure summary>",
+  "observation": "Errors: <details>\nReturning to CONSTRUCT phase",
+  "repository": "kuzumem-mcp",
+  "branch": "<current-branch>"
+}
+```
+Then return to CONSTRUCT phase to fix issues.
+
+**Step 4: Final Success Log**
+```json
+{
+  "tool": "context",
+  "operation": "update",
+  "agent": "cursor-agent",
+  "summary": "Task complete: <task description>",
+  "observation": "All tests pass. Implementation successful.",
+  "repository": "kuzumem-mcp",
+  "branch": "<current-branch>"
+}
+```
+
+### 2.5 ROLLBACK Phase (Emergency Only)
+
+**Triggered by**: Unrecoverable errors, corrupted state, or explicit user request
+
+**Step 1: Document Failure**
+```json
+{
+  "tool": "context",
+  "operation": "update",
+  "agent": "cursor-agent",
+  "summary": "ROLLBACK initiated: <reason>",
+  "observation": "Error details: <full error>\nAffected components: <list>",
+  "repository": "kuzumem-mcp",
+  "branch": "<current-branch>"
+}
+```
+
+**Step 2: Revert Code Changes**
+- Use git to revert changes
+- Or manually undo modifications
+
+**Step 3: Update Affected Entities**
+```json
+{
+  "tool": "entity",
+  "operation": "update",
+  "entityType": "component",
+  "id": "<affected-component>",
+  "repository": "kuzumem-mcp",
+  "branch": "<current-branch>",
+  "data": {
+    "status": "deprecated",
+    "metadata": {
+      "deprecated_reason": "Rollback due to <reason>",
+      "deprecated_date": "YYYY-MM-DD"
+    }
+  }
+}
+```
+
+**Step 4: Update Decision Status**
+```json
+{
+  "tool": "entity",
+  "operation": "update",
+  "entityType": "decision",
+  "id": "dec-YYYYMMDD-<task-slug>",
+  "repository": "kuzumem-mcp",
+  "branch": "<current-branch>",
+  "data": {
+    "status": "failed",
+    "metadata": {
+      "failure_reason": "<detailed explanation>"
+    }
+  }
+}
+```
+
+---
+
+## 3. MEMORY HYGIENE REQUIREMENTS
+
+| Memory Type | Update Frequency | Critical Points |
+|-------------|------------------|-----------------|
+| **Context** | After EVERY significant action | Phase transitions, errors, completions |
+| **Decision** | Blueprint creation, status changes | proposed → approved → implemented/failed |
+| **Component** | When creating/modifying code | Include ALL dependencies |
+| **File** | When adding new source files | Use correct ID format |
+| **Analysis Results** | After EVERY analyze/detect | Store as entity and associate |
+
+---
+
+## 4. ERROR HANDLING DIRECTIVES
+
+### On Tool Errors:
+1. **STOP** - Do not retry more than once
+2. **LOG** - Full error via context update
+3. **ANALYZE** - Determine if recoverable
+4. **ASK** - Get user guidance if unclear
+5. **PROCEED** - Only with clear path forward
+
+### On Test Failures:
+1. **STAY** in CONSTRUCT phase
+2. **IDENTIFY** root cause
+3. **FIX** the specific issue
+4. **RETEST** before proceeding
+5. **LOG** each fix attempt
+
+### On Unrecoverable Errors:
+1. **ENTER** ROLLBACK immediately
+2. **DOCUMENT** everything
+3. **REVERT** all changes
+4. **UPDATE** all affected entities
+5. **RESTART** from ANALYZE
+
+---
+
+## 5. PHASE TRANSITION CHECKLIST
+
+### ANALYZE → BLUEPRINT
+- [ ] Recent context retrieved
+- [ ] Relevant entities searched
+- [ ] Dependencies analyzed
+- [ ] Context logged with findings
+
+### BLUEPRINT → CONSTRUCT
+- [ ] Decision entity created (status: proposed)
+- [ ] Decision tagged appropriately
+- [ ] User typed "APPROVED"
+- [ ] Decision updated (status: approved)
+
+### CONSTRUCT → VALIDATE
+- [ ] All plan steps completed
+- [ ] All components created/updated
+- [ ] All associations created
+- [ ] Each step logged in context
+
+### VALIDATE → DONE
+- [ ] All tests pass
+- [ ] No circular dependencies
+- [ ] Decision updated (status: implemented)
+- [ ] Final context logged
+
+---
+
+## 6. FORBIDDEN WORKFLOW VIOLATIONS
+
+Agent MUST NEVER:
+1. Skip the ANALYZE phase
+2. Proceed without user approval after BLUEPRINT
+3. Jump between non-adjacent phases
+4. Forget to update context at phase transitions
+5. Ignore test failures in VALIDATE
+6. Continue after unrecoverable errors
+7. Modify this workflow without approved Decision
+
+---
+
+## 7. QUICK REFERENCE: Critical Tool Calls
+
+**Start Every Task:**
+```json
+{"tool": "memory-bank", "operation": "init", ...}
+{"tool": "query", "type": "context", "latest": true, ...}
+```
+
+**Before Modifying Components:**
+```json
+{"tool": "query", "type": "dependencies", "direction": "both", ...}
+{"tool": "detect", "type": "cycles", ...}
+```
+
+**After Every Change:**
+```json
+{"tool": "context", "operation": "update", ...}
+```
+
+**On Completion:**
+```json
+{"tool": "entity", "operation": "update", "entityType": "decision", "data": {"status": "implemented"}, ...}
+```
+
+---
+
+**Last Updated**: 2025-01-20  
+**Version**: 2.0  
+**Approval Status**: ACTIVE
