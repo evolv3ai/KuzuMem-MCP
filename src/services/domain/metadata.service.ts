@@ -35,7 +35,9 @@ export class MetadataService extends CoreService {
       const repository = await repositoryRepo.findByName(repositoryName, branch);
 
       if (!repository) {
-        logger.warn(`[MetadataService.getMetadata] Repository ${repositoryName}:${branch} not found`);
+        logger.warn(
+          `[MetadataService.getMetadata] Repository ${repositoryName}:${branch} not found`,
+        );
         return null;
       }
 
@@ -58,7 +60,10 @@ export class MetadataService extends CoreService {
           id: metadata.id || 'meta',
           project: {
             name: metadata.project_name || repositoryName,
-            created: metadata.project_created || repository.created_at?.toISOString() || new Date().toISOString(),
+            created:
+              metadata.project_created ||
+              repository.created_at?.toISOString() ||
+              new Date().toISOString(),
           },
           tech_stack: metadata.tech_stack ? JSON.parse(metadata.tech_stack) : {},
           architecture: metadata.architecture || '',
@@ -100,7 +105,9 @@ export class MetadataService extends CoreService {
       const repository = await repositoryRepo.findByName(repositoryName, branch);
 
       if (!repository) {
-        logger.error(`[MetadataService.updateMetadata] Repository ${repositoryName}:${branch} not found`);
+        logger.error(
+          `[MetadataService.updateMetadata] Repository ${repositoryName}:${branch} not found`,
+        );
         return {
           success: false,
           message: `Repository ${repositoryName}:${branch} not found`,
@@ -139,8 +146,13 @@ export class MetadataService extends CoreService {
         repositoryId: repository.id,
         metadataId,
         projectName: metadataContentChanges.project?.name || repositoryName,
-        projectCreated: metadataContentChanges.project?.created || repository.created_at?.toISOString() || new Date().toISOString(),
-        techStack: metadataContentChanges.tech_stack ? JSON.stringify(metadataContentChanges.tech_stack) : null,
+        projectCreated:
+          metadataContentChanges.project?.created ||
+          repository.created_at?.toISOString() ||
+          new Date().toISOString(),
+        techStack: metadataContentChanges.tech_stack
+          ? JSON.stringify(metadataContentChanges.tech_stack)
+          : null,
         architecture: metadataContentChanges.architecture || null,
         memorySpecVersion: metadataContentChanges.memory_spec_version || '3.0.0',
         now,
@@ -149,13 +161,17 @@ export class MetadataService extends CoreService {
       const result = await kuzuClient.executeQuery(updateQuery, params);
 
       if (result && result.length > 0) {
-        logger.info(`[MetadataService.updateMetadata] Successfully updated metadata for ${repositoryName}:${branch}`);
+        logger.info(
+          `[MetadataService.updateMetadata] Successfully updated metadata for ${repositoryName}:${branch}`,
+        );
         return {
           success: true,
           message: `Metadata updated successfully for ${repositoryName}:${branch}`,
         };
       } else {
-        logger.error(`[MetadataService.updateMetadata] Failed to update metadata for ${repositoryName}:${branch}`);
+        logger.error(
+          `[MetadataService.updateMetadata] Failed to update metadata for ${repositoryName}:${branch}`,
+        );
         return {
           success: false,
           message: `Failed to update metadata for ${repositoryName}:${branch}`,
