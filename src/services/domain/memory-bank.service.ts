@@ -98,7 +98,7 @@ export class MemoryBankService extends CoreService {
     clientProjectRoot: string,
     name: string,
     branch: string = 'main',
-  ): Promise<Repository | null> {
+  ): Promise<Repository> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error('[MemoryBankService.getOrCreateRepository] RepositoryProvider not initialized');
@@ -115,8 +115,14 @@ export class MemoryBankService extends CoreService {
         repositoryRepo,
       );
 
+      if (!repository) {
+        const errorMessage = `Failed to create or retrieve repository ${name}:${branch}`;
+        logger.error(`[MemoryBankService.getOrCreateRepository] ${errorMessage}`);
+        throw new Error(errorMessage);
+      }
+
       logger.info(
-        `[MemoryBankService.getOrCreateRepository] Repository ${name}:${branch} ${repository ? 'retrieved/created' : 'failed'}`,
+        `[MemoryBankService.getOrCreateRepository] Repository ${name}:${branch} retrieved/created successfully`,
       );
 
       return repository;

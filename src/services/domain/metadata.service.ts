@@ -7,19 +7,6 @@ import { KuzuDBClient } from '../../db/kuzu';
 import { SnapshotService } from '../snapshot.service';
 
 export class MetadataService extends CoreService {
-  constructor(
-    repositoryProvider: RepositoryProvider,
-    getKuzuClient: (
-      mcpContext: ToolHandlerContext,
-      clientProjectRoot: string,
-    ) => Promise<KuzuDBClient>,
-    getSnapshotService: (
-      mcpContext: ToolHandlerContext,
-      clientProjectRoot: string,
-    ) => Promise<SnapshotService>,
-  ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService);
-  }
 
   async getMetadata(
     mcpContext: ToolHandlerContext,
