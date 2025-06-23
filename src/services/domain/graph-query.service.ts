@@ -48,6 +48,26 @@ export class GraphQueryService extends CoreService {
       throw new Error(`Invalid label: ${label}. Allowed labels: ${Array.from(GraphQueryService.ALLOWED_LABELS).join(', ')}`);
     }
   }
+
+  /**
+   * Validates and sanitizes a label for safe use in queries
+   * This provides defense-in-depth by ensuring the label is both whitelisted and safe
+   * @param label The label to validate and sanitize
+   * @returns The validated label (same as input if valid)
+   * @throws Error if label is not allowed or contains unsafe characters
+   */
+  private validateAndSanitizeLabel(label: string): string {
+    // First check whitelist
+    this.validateLabel(label);
+
+    // Additional safety: ensure label contains only alphanumeric characters
+    // This is redundant given the whitelist, but provides defense-in-depth
+    if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(label)) {
+      throw new Error(`Label contains invalid characters: ${label}. Labels must be alphanumeric with underscores.`);
+    }
+
+    return label;
+  }
   async getComponentDependencies(
     mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
@@ -231,8 +251,8 @@ export class GraphQueryService extends CoreService {
       throw new Error('RepositoryProvider not initialized');
     }
 
-    // Validate label to prevent injection attacks
-    this.validateLabel(label);
+    // Validate and sanitize label to prevent injection attacks
+    const safeLabel = this.validateAndSanitizeLabel(label);
 
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
@@ -241,7 +261,7 @@ export class GraphQueryService extends CoreService {
       // by fetching more records and slicing in memory for now
       const totalLimit = limit + offset;
       const query = `
-        MATCH (n:${label})
+        MATCH (n:${safeLabel})
         WHERE n.repository = $repositoryName AND n.branch = $branch
         RETURN n
         ORDER BY n.created_at DESC
@@ -423,14 +443,14 @@ export class GraphQueryService extends CoreService {
       throw new Error('RepositoryProvider not initialized');
     }
 
-    // Validate label to prevent injection attacks
-    this.validateLabel(label);
+    // Validate and sanitize label to prevent injection attacks
+    const safeLabel = this.validateAndSanitizeLabel(label);
 
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
 
       const query = `
-        MATCH (n:${label})
+        MATCH (n:${safeLabel})
         WHERE n.repository = $repositoryName AND n.branch = $branch
         RETURN count(n) as count
       `;
@@ -476,14 +496,14 @@ export class GraphQueryService extends CoreService {
       throw new Error('RepositoryProvider not initialized');
     }
 
-    // Validate label to prevent injection attacks
-    this.validateLabel(label);
+    // Validate and sanitize label to prevent injection attacks
+    const safeLabel = this.validateAndSanitizeLabel(label);
 
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
 
       const query = `
-        CALL table_info('${label}') RETURN *
+        CALL table_info('${safeLabel}') RETURN *
       `;
 
       const result = await kuzuClient.executeQuery(query, {});
