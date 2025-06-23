@@ -75,7 +75,7 @@ describe('MemoryService end-to-end write/read flow', () => {
       10,
       0,
     );
-    const ids = list.entities.map((n: any) => n.id || n.properties?.id);
+    const ids = list.entities.map((n: any) => n.n?.id || n.id || n.properties?.id);
     expect(ids).toContain(compInput.id);
   }, 30000);
 
@@ -83,6 +83,26 @@ describe('MemoryService end-to-end write/read flow', () => {
     if (!memoryService.services) {
       throw new Error('ServiceRegistry not initialized');
     }
+
+    // First create a component to associate with
+    const compInput = {
+      id: 'comp-UI',
+      name: 'UI Module',
+      kind: 'service',
+      status: 'active' as const,
+    };
+
+    const component = await memoryService.services.entity.upsertComponent(
+      mcpContext,
+      clientProjectRoot,
+      repository,
+      branch,
+      compInput,
+    );
+    expect(component).toBeTruthy();
+    expect(component?.id).toBe(compInput.id);
+
+    // Now create a file
     const fileInput = {
       id: 'file-src-ui-ts',
       name: 'ui.ts',
@@ -99,6 +119,7 @@ describe('MemoryService end-to-end write/read flow', () => {
     );
     expect(addFileRes.success).toBe(true);
 
+    // Associate the file with the component
     const assocRes = await memoryService.services.entity.associateFileWithComponent(
       mcpContext,
       clientProjectRoot,
@@ -114,6 +135,26 @@ describe('MemoryService end-to-end write/read flow', () => {
     if (!memoryService.services) {
       throw new Error('ServiceRegistry not initialized');
     }
+
+    // First create a component to tag
+    const compInput = {
+      id: 'comp-UI',
+      name: 'UI Module',
+      kind: 'service',
+      status: 'active' as const,
+    };
+
+    const component = await memoryService.services.entity.upsertComponent(
+      mcpContext,
+      clientProjectRoot,
+      repository,
+      branch,
+      compInput,
+    );
+    expect(component).toBeTruthy();
+    expect(component?.id).toBe(compInput.id);
+
+    // Now create a tag
     const tagInput = {
       id: 'tag-ui',
       name: 'UI Layer',
@@ -128,6 +169,7 @@ describe('MemoryService end-to-end write/read flow', () => {
     );
     expect(addTagRes.success).toBe(true);
 
+    // Tag the component
     const tagItemRes = await memoryService.services.entity.tagItem(
       mcpContext,
       clientProjectRoot,
@@ -139,6 +181,7 @@ describe('MemoryService end-to-end write/read flow', () => {
     );
     expect(tagItemRes.success).toBe(true);
 
+    // Find items by tag
     const findRes = await memoryService.services.graphQuery.findItemsByTag(
       mcpContext,
       clientProjectRoot,

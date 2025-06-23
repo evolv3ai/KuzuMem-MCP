@@ -42,8 +42,8 @@ export const contextHandler: SdkToolHandler = async (params, context, memoryServ
 
     // 2. Validate session and get clientProjectRoot
     const clientProjectRoot = validateSession(context, 'context');
-    if (!memoryService.services) {
-      throw new Error('ServiceRegistry not initialized in MemoryService');
+    if (!memoryService.context) {
+      throw new Error('ContextService not initialized in MemoryService');
     }
 
     // 3. Log the operation
@@ -64,7 +64,7 @@ export const contextHandler: SdkToolHandler = async (params, context, memoryServ
         });
 
         // Call memory service to update context
-        const result = await memoryService.services.context.updateContext(
+        const result = await memoryService.context.updateContext(
           context,
           clientProjectRoot,
           validatedParams,

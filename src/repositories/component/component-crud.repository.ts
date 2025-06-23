@@ -169,10 +169,11 @@ export class ComponentCrudRepository extends BaseComponentRepository {
       const result = await this.kuzuClient.transaction(async (tx) => {
         // Atomic MERGE query that includes PART_OF relationship creation
         const upsertNodeQuery = `
-          MERGE (repo:Repository {id: $repository})
+          MERGE (repo:Repository {id: $repositoryId})
           ON CREATE SET repo.name = $repository, repo.created_at = $now
           MERGE (c:Component {id: $componentId, graph_unique_id: $graphUniqueId})
           ON CREATE SET
+            c.id = $componentId,
             c.name = $name,
             c.kind = $kind,
             c.status = $status,
@@ -181,6 +182,7 @@ export class ComponentCrudRepository extends BaseComponentRepository {
             c.created_at = $createdAt,
             c.updated_at = $now
           ON MATCH SET
+            c.id = $componentId,
             c.name = $name,
             c.kind = $kind,
             c.status = $status,
@@ -197,7 +199,8 @@ export class ComponentCrudRepository extends BaseComponentRepository {
           kind: component.kind || 'Unknown',
           status: component.status || 'active',
           branch: componentBranch,
-          repository: repositoryNodeId,
+          repository: logicalRepositoryName,
+          repositoryId: repositoryNodeId,
           now: now,
           createdAt: component.created_at ? new Date(component.created_at) : now,
         });

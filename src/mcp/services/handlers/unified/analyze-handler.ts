@@ -13,8 +13,8 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
 
   // 2. Validate session and get clientProjectRoot
   const clientProjectRoot = validateSession(context, 'analyze');
-  if (!memoryService.services) {
-    throw new Error('ServiceRegistry not initialized in MemoryService');
+  if (!memoryService.graphAnalysis) {
+    throw new Error('GraphAnalysisService not initialized in MemoryService');
   }
 
   // 3. Log the operation
@@ -50,7 +50,7 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
           percent: 50,
         });
 
-        const result = await memoryService.services.graphAnalysis.pageRank(
+        const result = await memoryService.graphAnalysis.pageRank(
           context,
           clientProjectRoot,
           {
@@ -82,7 +82,7 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
           percent: 50,
         });
 
-        const result = await memoryService.services.graphAnalysis.kCoreDecomposition(
+        const result = await memoryService.graphAnalysis.kCoreDecomposition(
           context,
           clientProjectRoot,
           {
@@ -113,7 +113,7 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
           percent: 50,
         });
 
-        const result = await memoryService.services.graphAnalysis.louvainCommunityDetection(
+        const result = await memoryService.graphAnalysis.louvainCommunityDetection(
           context,
           clientProjectRoot,
           {
@@ -143,7 +143,7 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
           percent: 50,
         });
 
-        const result = await memoryService.services.graphAnalysis.shortestPath(
+        const result = await memoryService.graphAnalysis.shortestPath(
           context,
           clientProjectRoot,
           {

@@ -249,6 +249,8 @@ program
     const clientProjectRoot = getEffectiveProjectRoot();
     const ruleDataForService = {
       id: id,
+      repository: repositoryName,
+      branch: branch,
       name: options.name,
       created: options.created,
       triggers: options.triggers ? options.triggers.split(',') : [],

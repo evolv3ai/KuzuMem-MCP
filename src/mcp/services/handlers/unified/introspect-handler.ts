@@ -64,8 +64,8 @@ export const introspectHandler: SdkToolHandler = async (params, context, memoryS
 
   // 2. Validate session and get clientProjectRoot
   const clientProjectRoot = validateSession(context, 'introspect');
-  if (!memoryService.services) {
-    throw new Error('ServiceRegistry not initialized in MemoryService');
+  if (!memoryService.graphQuery) {
+    throw new Error('GraphQueryService not initialized in MemoryService');
   }
 
   // 3. Log the operation
@@ -90,7 +90,7 @@ export const introspectHandler: SdkToolHandler = async (params, context, memoryS
           percent: 50,
         });
 
-        const result = await memoryService.services.graphQuery.listAllNodeLabels(
+        const result = await memoryService.graphQuery.listAllNodeLabels(
           context,
           clientProjectRoot,
           repository,
@@ -119,7 +119,7 @@ export const introspectHandler: SdkToolHandler = async (params, context, memoryS
           percent: 50,
         });
 
-        const result = await memoryService.services.graphQuery.countNodesByLabel(
+        const result = await memoryService.graphQuery.countNodesByLabel(
           context,
           clientProjectRoot,
           repository,
@@ -144,7 +144,7 @@ export const introspectHandler: SdkToolHandler = async (params, context, memoryS
           percent: 50,
         });
 
-        const result = await memoryService.services.graphQuery.getNodeProperties(
+        const result = await memoryService.graphQuery.getNodeProperties(
           context,
           clientProjectRoot,
           repository,
@@ -169,7 +169,7 @@ export const introspectHandler: SdkToolHandler = async (params, context, memoryS
           percent: 50,
         });
 
-        const result = await memoryService.services.graphQuery.listAllIndexes(
+        const result = await memoryService.graphQuery.listAllIndexes(
           context,
           clientProjectRoot,
           repository,

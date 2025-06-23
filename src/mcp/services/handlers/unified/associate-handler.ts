@@ -26,8 +26,8 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
 
   // 2. Validate session and get clientProjectRoot
   const clientProjectRoot = validateSession(context, 'associate');
-  if (!memoryService.services) {
-    throw new Error('ServiceRegistry not initialized in MemoryService');
+  if (!memoryService.entity) {
+    throw new Error('EntityService not initialized in MemoryService');
   }
 
   // 3. Log the operation
@@ -51,7 +51,7 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
         });
 
         // Call the service method
-        const result = await memoryService.services.entity.associateFileWithComponent(
+        const result = await memoryService.entity.associateFileWithComponent(
           context,
           clientProjectRoot,
           repository,
@@ -89,7 +89,7 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
         });
 
         // Call the service method
-        const result = await memoryService.services.entity.tagItem(
+        const result = await memoryService.entity.tagItem(
           context,
           clientProjectRoot,
           repository,
