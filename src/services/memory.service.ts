@@ -3,8 +3,15 @@ import { RepositoryProvider } from '../db/repository-provider';
 import { ToolHandlerContext } from '../mcp/types/sdk-custom';
 import { Mutex } from '../utils/mutex';
 import { ensureAbsolutePath } from '../utils/path.utils';
-import { ServiceRegistry } from './core/service-registry.service';
 import { SnapshotService } from './snapshot.service';
+
+// Import simplified domain services
+import { MemoryBankService } from './domain/memory-bank.service';
+import { MetadataService } from './domain/metadata.service';
+import { EntityService } from './domain/entity.service';
+import { ContextService } from './domain/context.service';
+import { GraphQueryService } from './domain/graph-query.service';
+import { GraphAnalysisService } from './domain/graph-analysis.service';
 
 // Import operation modules
 import { loggers } from '../utils/logger';
@@ -24,8 +31,27 @@ export class MemoryService {
   private kuzuClients: Map<string, KuzuDBClient> = new Map();
 
   // Repository provider for managing repository instances
-  private repositoryProvider: RepositoryProvider | null = null;
-  public services: ServiceRegistry | null = null;
+  private repositoryProvider!: RepositoryProvider;
+
+  // Direct service instances (initialized in initialize method)
+  public memoryBank!: MemoryBankService;
+  public metadata!: MetadataService;
+  public entity!: EntityService;
+  public context!: ContextService;
+  public graphQuery!: GraphQueryService;
+  public graphAnalysis!: GraphAnalysisService;
+
+  // Services property for backward compatibility
+  public get services() {
+    return {
+      memoryBank: this.memoryBank,
+      metadata: this.metadata,
+      entity: this.entity,
+      context: this.context,
+      graphQuery: this.graphQuery,
+      graphAnalysis: this.graphAnalysis,
+    };
+  }
 
   // Snapshot services for each client project root
   private snapshotServices: Map<string, SnapshotService> = new Map();
@@ -45,11 +71,40 @@ export class MemoryService {
     logger.info(
       'MemoryService: Initialized with RepositoryProvider - database access deferred until needed',
     );
-    this.services = new ServiceRegistry(
+
+    // Initialize services with proper dependencies
+    this.memoryBank = new MemoryBankService(
       this.repositoryProvider,
       this.getKuzuClient.bind(this),
       this.getSnapshotService.bind(this),
     );
+    this.metadata = new MetadataService(
+      this.repositoryProvider,
+      this.getKuzuClient.bind(this),
+      this.getSnapshotService.bind(this),
+    );
+    this.entity = new EntityService(
+      this.repositoryProvider,
+      this.getKuzuClient.bind(this),
+      this.getSnapshotService.bind(this),
+    );
+    this.context = new ContextService(
+      this.repositoryProvider,
+      this.getKuzuClient.bind(this),
+      this.getSnapshotService.bind(this),
+    );
+    this.graphQuery = new GraphQueryService(
+      this.repositoryProvider,
+      this.getKuzuClient.bind(this),
+      this.getSnapshotService.bind(this),
+    );
+    this.graphAnalysis = new GraphAnalysisService(
+      this.repositoryProvider,
+      this.getKuzuClient.bind(this),
+      this.getSnapshotService.bind(this),
+    );
+
+    logger.info('MemoryService: All services initialized with dependencies');
   }
 
   /**
@@ -87,11 +142,8 @@ export class MemoryService {
       `[MemoryService.getKuzuClient] Using absolute clientProjectRoot: ${clientProjectRoot}`,
     );
 
-    // Check repository provider
-    if (!this.repositoryProvider) {
-      logger.error('[MemoryService.getKuzuClient] RepositoryProvider not initialized');
-      throw new Error('RepositoryProvider not initialized');
-    }
+    // Repository provider should be initialized by now
+    // (removed null check since it's guaranteed to be initialized)
 
     // Correct Caching Logic: Reuse existing client if available
     if (this.kuzuClients.has(clientProjectRoot)) {
@@ -237,8 +289,7 @@ export class MemoryService {
       // Clear the clients map
       this.kuzuClients.clear();
 
-      // Reset repository provider
-      this.repositoryProvider = null;
+      // Repository provider will be cleaned up by garbage collection
 
       logger.info('[MemoryService.shutdown] Shutdown completed successfully');
     } catch (error: any) {

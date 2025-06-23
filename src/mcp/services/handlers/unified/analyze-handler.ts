@@ -13,8 +13,8 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
 
   // 2. Validate session and get clientProjectRoot
   const clientProjectRoot = validateSession(context, 'analyze');
-  if (!memoryService.services) {
-    throw new Error('ServiceRegistry not initialized in MemoryService');
+  if (!memoryService.graphAnalysis) {
+    throw new Error('GraphAnalysisService not initialized in MemoryService');
   }
 
   // 3. Log the operation
@@ -50,20 +50,16 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
           percent: 50,
         });
 
-        const result = await memoryService.services.graphAnalysis.pageRank(
-          context,
-          clientProjectRoot,
-          {
-            type: 'pagerank',
-            repository,
-            branch,
-            projectedGraphName: validatedParams.projectedGraphName,
-            nodeTableNames: validatedParams.nodeTableNames,
-            relationshipTableNames: validatedParams.relationshipTableNames,
-            damping: validatedParams.damping,
-            maxIterations: validatedParams.maxIterations,
-          },
-        );
+        const result = await memoryService.graphAnalysis.pageRank(context, clientProjectRoot, {
+          type: 'pagerank',
+          repository,
+          branch,
+          projectedGraphName: validatedParams.projectedGraphName,
+          nodeTableNames: validatedParams.nodeTableNames,
+          relationshipTableNames: validatedParams.relationshipTableNames,
+          damping: validatedParams.damping,
+          maxIterations: validatedParams.maxIterations,
+        });
 
         await context.sendProgress({
           status: 'complete',
@@ -82,7 +78,7 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
           percent: 50,
         });
 
-        const result = await memoryService.services.graphAnalysis.kCoreDecomposition(
+        const result = await memoryService.graphAnalysis.kCoreDecomposition(
           context,
           clientProjectRoot,
           {
@@ -113,7 +109,7 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
           percent: 50,
         });
 
-        const result = await memoryService.services.graphAnalysis.louvainCommunityDetection(
+        const result = await memoryService.graphAnalysis.louvainCommunityDetection(
           context,
           clientProjectRoot,
           {
@@ -143,20 +139,16 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
           percent: 50,
         });
 
-        const result = await memoryService.services.graphAnalysis.shortestPath(
-          context,
-          clientProjectRoot,
-          {
-            type: 'shortest-path',
-            repository,
-            branch,
-            startNodeId: validatedParams.startNodeId!,
-            endNodeId: validatedParams.endNodeId!,
-            projectedGraphName: validatedParams.projectedGraphName,
-            nodeTableNames: validatedParams.nodeTableNames,
-            relationshipTableNames: validatedParams.relationshipTableNames,
-          },
-        );
+        const result = await memoryService.graphAnalysis.shortestPath(context, clientProjectRoot, {
+          type: 'shortest-path',
+          repository,
+          branch,
+          startNodeId: validatedParams.startNodeId!,
+          endNodeId: validatedParams.endNodeId!,
+          projectedGraphName: validatedParams.projectedGraphName,
+          nodeTableNames: validatedParams.nodeTableNames,
+          relationshipTableNames: validatedParams.relationshipTableNames,
+        });
 
         await context.sendProgress({
           status: 'complete',

@@ -22,90 +22,84 @@ export class FileRepository {
    * @returns The created File object or null on failure.
    */
   async createFileNode(
-    repoNodeId: string, // This is the actual PK of the Repository node in Kuzu
+    repoNodeId: string, // This is the synthetic ID like "test-repo:main"
     branch: string,
     // Input data should be clean, matching internal File type structure for new node properties
-    fileData: Omit<File, 'repository' | 'branch' | 'created_at' | 'updated_at'> & { id: string },
+    fileData: Omit<File, 'repository' | 'branch' | 'created_at' | 'updated_at'> & {
+      id: string;
+      checksum?: string;
+      content_hash?: string;
+    },
   ): Promise<File | null> {
-    // Map the file data to match the database schema, handling undefined values properly
-    const fileNodeProps = {
-      id: fileData.id,
-      name: fileData.name,
-      path: fileData.path,
-      mime_type: fileData.mime_type || 'unknown',
-      size: fileData.size ?? 0,
-      lastModified: new Date().toISOString(),
-      checksum: '',
-      metadata: JSON.stringify({
-        branch: branch,
-        repository: repoNodeId,
-        content: fileData.content || null,
-        metrics: fileData.metrics || null,
-        mime_type: fileData.mime_type || null,
-      }),
-    };
+    // Extract repository name from synthetic ID
+    const repositoryName = repoNodeId.split(':')[0];
+    const now = new Date();
 
-    // KuzuDB does not support the Neo4j-style FOREACH hack for conditional linking.
-    // We use a transaction to perform the two steps atomically:
-    // 1. MERGE the File node.
-    // 2. Conditionally MATCH the repository and MERGE the relationship.
-    const upsertFileQuery = `
-      MERGE (f:File {id: $id})
-      ON CREATE SET f.name = $name, f.path = $path, f.mime_type = $mime_type, f.size = $size, f.lastModified = $lastModified, f.checksum = $checksum, f.metadata = $metadata
-      ON MATCH SET f.name = $name, f.path = $path, f.mime_type = $mime_type, f.size = $size, f.lastModified = $lastModified, f.checksum = $checksum, f.metadata = $metadata
-    `;
-
-    const linkRepoQuery = `
-      MATCH (f:File {id: $id}), (repo:Repository {id: $repository})
+    // Use the same pattern as ComponentRepository - single MERGE query with repository relationship
+    // Note: File table uses 'id' as PRIMARY KEY, not 'graph_unique_id'
+    const upsertQuery = `
+      MERGE (f:File {id: $fileId})
+      ON CREATE SET
+        f.name = $name,
+        f.path = $path,
+        f.mime_type = $mime_type,
+        f.size = $size,
+        f.repository = $repository,
+        f.branch = $branch,
+        f.lastModified = $now,
+        f.checksum = $checksum,
+        f.metadata = $metadata,
+        f.created_at = $createdAt,
+        f.updated_at = $now
+      ON MATCH SET
+        f.name = $name,
+        f.path = $path,
+        f.mime_type = $mime_type,
+        f.size = $size,
+        f.repository = $repository,
+        f.branch = $branch,
+        f.lastModified = $now,
+        f.checksum = $checksum,
+        f.metadata = $metadata,
+        f.updated_at = $now
+      MERGE (repo:Repository {id: $repositoryId})
+      ON CREATE SET repo.name = $repository, repo.created_at = $now
       MERGE (f)-[:PART_OF]->(repo)
     `;
 
-    const getFileQuery = `
-      MATCH (f:File {id: $id})
-      OPTIONAL MATCH (repo:Repository {id: $repository})
-      RETURN f, repo
-    `;
-
     try {
-      const result = await this.kuzuClient.transaction(async (tx) => {
-        // Step 1: Create or update the file node.
-        await tx.executeQuery(upsertFileQuery, fileNodeProps);
-
-        // Step 2: Attempt to link to the repository. This is conditional on the repo existing.
-        await tx.executeQuery(linkRepoQuery, {
-          id: fileNodeProps.id,
-          repository: repoNodeId,
-        });
-
-        // Step 3: Fetch the final state of the file and its relationship.
-        return tx.executeQuery(getFileQuery, {
-          id: fileNodeProps.id,
-          repository: repoNodeId,
-        });
+      await this.kuzuClient.executeQuery(upsertQuery, {
+        fileId: fileData.id,
+        name: fileData.name,
+        path: fileData.path,
+        mime_type: fileData.mime_type || 'unknown',
+        size: fileData.size ?? 0,
+        repository: repositoryName,
+        repositoryId: repoNodeId,
+        branch: branch,
+        checksum: fileData.checksum || fileData.content_hash || '', // Use provided checksum/content_hash or default to empty
+        metadata: JSON.stringify({
+          content: fileData.content || null,
+          metrics: fileData.metrics || null,
+        }),
+        now: now,
+        createdAt: now,
       });
 
-      if (result && result.length > 0) {
-        const createdNode = result[0].f.properties || result[0].f;
-        const repoNode = result[0].repo ? result[0].repo.properties || result[0].repo : null;
-        const parsedMetadata = this._parseFileMetadata(createdNode.metadata, createdNode.id);
-        const repositoryName = repoNode ? repoNode.name : repoNodeId.split(':')[0];
-
-        // Return a File object that matches our interface
-        return {
-          id: createdNode.id?.toString(),
-          name: createdNode.name,
-          path: createdNode.path,
-          size: createdNode.size,
-          mime_type: parsedMetadata.mime_type || fileNodeProps.mime_type,
-          content: parsedMetadata.content,
-          metrics: parsedMetadata.metrics,
-          repository: repositoryName, // Consistent repository name extraction
-          branch: branch,
-          created_at: new Date(createdNode.lastModified),
-          updated_at: new Date(createdNode.lastModified),
-        } as File;
-      }
-      return null;
+      // Return the created file
+      return {
+        id: fileData.id,
+        name: fileData.name,
+        path: fileData.path,
+        size: fileData.size ?? 0,
+        mime_type: fileData.mime_type || 'unknown',
+        content: fileData.content || null,
+        metrics: fileData.metrics || null,
+        repository: repositoryName,
+        branch: branch,
+        created_at: now,
+        updated_at: now,
+      } as File;
     } catch (error) {
       this.logger.error(`[FileRepository] Error creating File node ${fileData.id}:`, error);
       return null;

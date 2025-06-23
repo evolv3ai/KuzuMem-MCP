@@ -21,7 +21,6 @@ export class GraphAnalysisService extends CoreService {
   ) {
     super(repositoryProvider, getKuzuClient, getSnapshotService);
   }
-
   async kCoreDecomposition(
     mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
@@ -224,144 +223,6 @@ export class GraphAnalysisService extends CoreService {
     }
   }
 
-  async getStronglyConnectedComponents(
-    mcpContext: ToolHandlerContext,
-    clientProjectRoot: string,
-    params: z.infer<typeof toolSchemas.DetectInputSchema>,
-  ): Promise<z.infer<typeof toolSchemas.DetectOutputSchema>> {
-    const logger = mcpContext.logger || console;
-    if (!this.repositoryProvider) {
-      logger.error(
-        '[GraphAnalysisService.getStronglyConnectedComponents] RepositoryProvider not initialized',
-      );
-      return {
-        type: 'strongly-connected' as const,
-        status: 'error',
-        components: [],
-        projectedGraphName: params.projectedGraphName,
-        totalComponents: 0,
-        message: 'RepositoryProvider not initialized',
-      };
-    }
-    try {
-      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-      if (!kuzuClient) {
-        logger.error(
-          '[GraphAnalysisService.getStronglyConnectedComponents] KuzuDBClient not found after getKuzuClient call.',
-        );
-        throw new Error('KuzuDBClient not found for this project root.');
-      }
-      const graphOpsParams = {
-        clientProjectRoot: clientProjectRoot,
-        repository: params.repository,
-        branch: params.branch,
-        projectedGraphName: params.projectedGraphName,
-        nodeTableNames: params.nodeTableNames,
-        relationshipTableNames: params.relationshipTableNames,
-      };
-
-      const algorithmResults = await graphOps.stronglyConnectedComponentsOp(
-        mcpContext,
-        kuzuClient,
-        graphOpsParams,
-      );
-
-      logger.info(
-        '[GraphAnalysisService.getStronglyConnectedComponents] Algorithm completed successfully',
-      );
-      return {
-        type: 'strongly-connected' as const,
-        status: 'complete',
-        projectedGraphName: params.projectedGraphName,
-        components: this.groupComponentsByComponentId(algorithmResults.components),
-        totalComponents: algorithmResults.components.length,
-        message: 'Strongly Connected Components found successfully',
-      };
-    } catch (error: any) {
-      logger.error('[GraphAnalysisService.getStronglyConnectedComponents] Error:', {
-        error: error.toString(),
-        stack: error.stack,
-      });
-      return {
-        type: 'strongly-connected' as const,
-        status: 'error',
-        components: [],
-        projectedGraphName: params.projectedGraphName,
-        totalComponents: 0,
-        message: error.message || 'SCC failed in GraphAnalysisService',
-      };
-    }
-  }
-
-  async getWeaklyConnectedComponents(
-    mcpContext: ToolHandlerContext,
-    clientProjectRoot: string,
-    params: z.infer<typeof toolSchemas.DetectInputSchema>,
-  ): Promise<z.infer<typeof toolSchemas.DetectOutputSchema>> {
-    const logger = mcpContext.logger || console;
-    if (!this.repositoryProvider) {
-      logger.error(
-        '[GraphAnalysisService.getWeaklyConnectedComponents] RepositoryProvider not initialized',
-      );
-      return {
-        type: 'weakly-connected' as const,
-        status: 'error',
-        components: [],
-        projectedGraphName: params.projectedGraphName,
-        totalComponents: 0,
-        message: 'RepositoryProvider not initialized',
-      };
-    }
-    try {
-      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-      if (!kuzuClient) {
-        logger.error(
-          '[GraphAnalysisService.getWeaklyConnectedComponents] KuzuDBClient not found after getKuzuClient call.',
-        );
-        throw new Error('KuzuDBClient not found for this project root.');
-      }
-      const graphOpsParams = {
-        clientProjectRoot: clientProjectRoot,
-        repository: params.repository,
-        branch: params.branch,
-        projectedGraphName: params.projectedGraphName,
-        nodeTableNames: params.nodeTableNames,
-        relationshipTableNames: params.relationshipTableNames,
-      };
-
-      const algorithmResults = await graphOps.weaklyConnectedComponentsOp(
-        mcpContext,
-        kuzuClient,
-        graphOpsParams,
-      );
-
-      logger.info(
-        '[GraphAnalysisService.getWeaklyConnectedComponents] Algorithm completed successfully',
-      );
-      return {
-        type: 'weakly-connected' as const,
-        status: 'complete',
-        projectedGraphName: params.projectedGraphName,
-        components: this.groupComponentsByComponentId(algorithmResults.components),
-        totalComponents: algorithmResults.components.length,
-        message: 'Weakly Connected Components found successfully',
-      };
-    } catch (error: any) {
-      logger.error('[GraphAnalysisService.getWeaklyConnectedComponents] Error:', {
-        error: error.toString(),
-        stack: error.stack,
-      });
-      return {
-        type: 'weakly-connected' as const,
-        status: 'error',
-        components: [],
-        projectedGraphName: params.projectedGraphName,
-        totalComponents: 0,
-        message: error.message || 'WCC failed in GraphAnalysisService',
-      };
-    }
-  }
-
   async shortestPath(
     mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
@@ -387,16 +248,9 @@ export class GraphAnalysisService extends CoreService {
         projectedGraphName: params.projectedGraphName,
         nodeTableNames: params.nodeTableNames,
         relationshipTableNames: params.relationshipTableNames,
-        startNodeId: params.startNodeId || '',
-        endNodeId: params.endNodeId || '',
+        sourceNodeId: params.startNodeId,
+        targetNodeId: params.endNodeId,
       };
-
-      logger.debug(
-        '[GraphAnalysisService.shortestPath] Calling graphOps.shortestPathOp with params:',
-        {
-          graphOpsParams,
-        },
-      );
 
       const algorithmResults = await graphOps.shortestPathOp(
         mcpContext,
@@ -410,8 +264,10 @@ export class GraphAnalysisService extends CoreService {
         status: 'complete',
         pathFound: algorithmResults.pathFound,
         path: algorithmResults.path,
-        pathLength: algorithmResults.pathLength,
-        message: algorithmResults.pathFound ? 'Shortest path found.' : 'Shortest path not found.',
+        pathLength: algorithmResults.distance,
+        message: algorithmResults.pathFound
+          ? 'Shortest path found successfully'
+          : 'No path found between nodes',
       };
     } catch (error: any) {
       logger.error('[GraphAnalysisService.shortestPath] Error:', {
@@ -422,26 +278,136 @@ export class GraphAnalysisService extends CoreService {
         type: 'shortest-path',
         status: 'error',
         pathFound: false,
-        message: error.message || 'Failed to compute shortest path',
+        message: error.message || 'Shortest path algorithm failed',
       };
     }
   }
 
-  private groupComponentsByComponentId(
-    components: Array<{ nodeId: string; componentId: number }>,
-  ): Array<{ componentId: number; nodes: string[] }> {
-    const grouped = new Map<number, string[]>();
-
-    for (const component of components) {
-      if (!grouped.has(component.componentId)) {
-        grouped.set(component.componentId, []);
-      }
-      grouped.get(component.componentId)!.push(component.nodeId);
+  async getStronglyConnectedComponents(
+    mcpContext: ToolHandlerContext,
+    clientProjectRoot: string,
+    params: z.infer<typeof toolSchemas.DetectInputSchema>,
+  ): Promise<z.infer<typeof toolSchemas.DetectOutputSchema>> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error(
+        '[GraphAnalysisService.getStronglyConnectedComponents] RepositoryProvider not initialized',
+      );
+      return {
+        type: 'strongly-connected' as const,
+        status: 'error',
+        components: [],
+        projectedGraphName: params.projectedGraphName,
+        totalComponents: 0,
+        message: 'RepositoryProvider not initialized',
+      };
     }
+    try {
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
 
-    return Array.from(grouped.entries()).map(([componentId, nodes]) => ({
-      componentId,
-      nodes,
-    }));
+      const graphOpsParams = {
+        clientProjectRoot: clientProjectRoot,
+        repository: params.repository,
+        branch: params.branch,
+        projectedGraphName: params.projectedGraphName,
+        nodeTableNames: params.nodeTableNames,
+        relationshipTableNames: params.relationshipTableNames,
+      };
+
+      const algorithmResults = await graphOps.stronglyConnectedComponentsOp(
+        mcpContext,
+        kuzuClient,
+        graphOpsParams,
+      );
+
+      logger.info(
+        '[GraphAnalysisService.getStronglyConnectedComponents] Algorithm completed successfully',
+      );
+      return {
+        type: 'strongly-connected' as const,
+        status: 'complete',
+        components: algorithmResults.components,
+        projectedGraphName: params.projectedGraphName,
+        totalComponents: algorithmResults.components.length,
+        message: 'Strongly Connected Components found successfully',
+      };
+    } catch (error: any) {
+      logger.error('[GraphAnalysisService.getStronglyConnectedComponents] Error:', {
+        error: error.toString(),
+        stack: error.stack,
+      });
+      return {
+        type: 'strongly-connected' as const,
+        status: 'error',
+        components: [],
+        projectedGraphName: params.projectedGraphName,
+        totalComponents: 0,
+        message: error.message || 'Strongly Connected Components detection failed',
+      };
+    }
+  }
+
+  async getWeaklyConnectedComponents(
+    mcpContext: ToolHandlerContext,
+    clientProjectRoot: string,
+    params: z.infer<typeof toolSchemas.DetectInputSchema>,
+  ): Promise<z.infer<typeof toolSchemas.DetectOutputSchema>> {
+    const logger = mcpContext.logger || console;
+    if (!this.repositoryProvider) {
+      logger.error(
+        '[GraphAnalysisService.getWeaklyConnectedComponents] RepositoryProvider not initialized',
+      );
+      return {
+        type: 'weakly-connected' as const,
+        status: 'error',
+        components: [],
+        projectedGraphName: params.projectedGraphName,
+        totalComponents: 0,
+        message: 'RepositoryProvider not initialized',
+      };
+    }
+    try {
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+
+      const graphOpsParams = {
+        clientProjectRoot: clientProjectRoot,
+        repository: params.repository,
+        branch: params.branch,
+        projectedGraphName: params.projectedGraphName,
+        nodeTableNames: params.nodeTableNames,
+        relationshipTableNames: params.relationshipTableNames,
+      };
+
+      const algorithmResults = await graphOps.weaklyConnectedComponentsOp(
+        mcpContext,
+        kuzuClient,
+        graphOpsParams,
+      );
+
+      logger.info(
+        '[GraphAnalysisService.getWeaklyConnectedComponents] Algorithm completed successfully',
+      );
+      return {
+        type: 'weakly-connected' as const,
+        status: 'complete',
+        components: algorithmResults.components,
+        projectedGraphName: params.projectedGraphName,
+        totalComponents: algorithmResults.components.length,
+        message: 'Weakly Connected Components found successfully',
+      };
+    } catch (error: any) {
+      logger.error('[GraphAnalysisService.getWeaklyConnectedComponents] Error:', {
+        error: error.toString(),
+        stack: error.stack,
+      });
+      return {
+        type: 'weakly-connected' as const,
+        status: 'error',
+        components: [],
+        projectedGraphName: params.projectedGraphName,
+        totalComponents: 0,
+        message: error.message || 'Weakly Connected Components detection failed',
+      };
+    }
   }
 }

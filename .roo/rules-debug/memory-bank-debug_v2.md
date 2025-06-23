@@ -14,7 +14,7 @@ EVERY tool call MUST include:
 {
   "clientProjectRoot": "<CURRENT_PROJECT_ABSOLUTE_PATH>",
   "repository": "kuzumem-mcp",
-  "branch": "<CURRENT_GIT_BRANCH>"  // MUST verify with git BEFORE operations
+  "branch": "<CURRENT_GIT_BRANCH>" // MUST verify with git BEFORE operations
 }
 ```
 
@@ -35,15 +35,15 @@ EVERY tool call MUST include:
 
 ## 3. DEBUG-SPECIFIC TOOL USAGE
 
-| Task | Primary Tools | Frequency |
-|------|---------------|-----------|
-| Log findings | context | VERY HIGH |
-| Document root cause | entity (Decision) | HIGH |
-| Track affected components | entity (Component) | HIGH |
-| Analyze dependencies | query, analyze | HIGH |
-| Detect architectural issues | detect | MEDIUM |
-| Search for patterns | search | HIGH |
-| Tag issues | entity (Tag), associate | MEDIUM |
+| Task                        | Primary Tools           | Frequency |
+| --------------------------- | ----------------------- | --------- |
+| Log findings                | context                 | VERY HIGH |
+| Document root cause         | entity (Decision)       | HIGH      |
+| Track affected components   | entity (Component)      | HIGH      |
+| Analyze dependencies        | query, analyze          | HIGH      |
+| Detect architectural issues | detect                  | MEDIUM    |
+| Search for patterns         | search                  | HIGH      |
+| Tag issues                  | entity (Tag), associate | MEDIUM    |
 
 ## 4. MANDATORY WORKFLOW: DEBUG PERSPECTIVE
 

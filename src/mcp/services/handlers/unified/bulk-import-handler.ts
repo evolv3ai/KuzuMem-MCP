@@ -17,8 +17,8 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
 
   // 2. Validate session and get clientProjectRoot
   const clientProjectRoot = validateSession(context, 'bulk-import');
-  if (!memoryService.services) {
-    throw new Error('ServiceRegistry not initialized in MemoryService');
+  if (!memoryService.entity) {
+    throw new Error('EntityService not initialized in MemoryService');
   }
 
   // 3. Log the operation
@@ -61,7 +61,7 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
           try {
             // Check if exists
             if (!overwrite) {
-              const existing = await memoryService.services.entity.getComponent(
+              const existing = await memoryService.entity.getComponent(
                 context,
                 clientProjectRoot,
                 repository,
@@ -75,7 +75,7 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
             }
 
             // Import component
-            await memoryService.services.entity.upsertComponent(
+            await memoryService.entity.upsertComponent(
               context,
               clientProjectRoot,
               repository,
@@ -120,7 +120,7 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
           try {
             // Check if exists
             if (!overwrite) {
-              const existing = await memoryService.services.entity.getDecision(
+              const existing = await memoryService.entity.getDecision(
                 context,
                 clientProjectRoot,
                 repository,
@@ -134,7 +134,7 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
             }
 
             // Import decision
-            await memoryService.services.entity.upsertDecision(
+            await memoryService.entity.upsertDecision(
               context,
               clientProjectRoot,
               repository,
@@ -180,7 +180,7 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
           try {
             // Check if exists
             if (!overwrite) {
-              const existing = await memoryService.services.entity.getRule(
+              const existing = await memoryService.entity.getRule(
                 context,
                 clientProjectRoot,
                 repository,
@@ -193,13 +193,15 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
               }
             }
 
-            // Import rule
-            await memoryService.services.entity.upsertRule(
+            // Import rule (repository and branch are passed as separate parameters)
+            await memoryService.entity.upsertRule(
               context,
               clientProjectRoot,
               repository,
               {
                 id: rule.id,
+                repository: repository,
+                branch: branch,
                 name: rule.name,
                 created: rule.created,
                 content: rule.content,

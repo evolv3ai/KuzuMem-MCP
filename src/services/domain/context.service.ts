@@ -77,7 +77,6 @@ export class ContextService extends CoreService {
     contextUpdate: Partial<
       Omit<Context, 'repository' | 'id' | 'iso_date' | 'branch' | 'created_at' | 'updated_at'>
     > & {
-      // Allow these to be passed directly for convenience, maps to Context fields
       issue?: string;
       decision?: string;
       observation?: string;
@@ -216,7 +215,7 @@ export class ContextService extends CoreService {
         mcpContext,
         repositoryName,
         branch,
-        limit || 10, // Provide default value
+        limit || 10,
         repositoryRepo,
         contextRepo,
       );
@@ -235,7 +234,6 @@ export class ContextService extends CoreService {
 
   /**
    * Update today's context for a repository/branch (MCP tool compatibility)
-   * Accepts summary, agent, decision, issue, observation. Merges with existing.
    */
   async updateContext(
     mcpContext: ToolHandlerContext,

@@ -13,8 +13,8 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
 
   // 2. Validate session and get clientProjectRoot
   const clientProjectRoot = validateSession(context, 'detect');
-  if (!memoryService.services) {
-    throw new Error('ServiceRegistry not initialized in MemoryService');
+  if (!memoryService.graphAnalysis) {
+    throw new Error('GraphAnalysisService not initialized in MemoryService');
   }
 
   // 3. Log the operation
@@ -43,7 +43,7 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
           percent: 50,
         });
 
-        const result = await memoryService.services.graphAnalysis.getStronglyConnectedComponents(
+        const result = await memoryService.graphAnalysis.getStronglyConnectedComponents(
           context,
           clientProjectRoot,
           {
@@ -77,7 +77,7 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
           percent: 50,
         });
 
-        const result = await memoryService.services.graphAnalysis.getWeaklyConnectedComponents(
+        const result = await memoryService.graphAnalysis.getWeaklyConnectedComponents(
           context,
           clientProjectRoot,
           {
@@ -111,20 +111,16 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
           percent: 50,
         });
 
-        const result = await memoryService.services.graphAnalysis.shortestPath(
-          context,
-          clientProjectRoot,
-          {
-            type: 'shortest-path',
-            repository,
-            branch,
-            projectedGraphName: validatedParams.projectedGraphName,
-            nodeTableNames: validatedParams.nodeTableNames,
-            relationshipTableNames: validatedParams.relationshipTableNames,
-            startNodeId: validatedParams.startNodeId!,
-            endNodeId: validatedParams.endNodeId!,
-          } as any,
-        );
+        const result = await memoryService.graphAnalysis.shortestPath(context, clientProjectRoot, {
+          type: 'shortest-path',
+          repository,
+          branch,
+          projectedGraphName: validatedParams.projectedGraphName,
+          nodeTableNames: validatedParams.nodeTableNames,
+          relationshipTableNames: validatedParams.relationshipTableNames,
+          startNodeId: validatedParams.startNodeId!,
+          endNodeId: validatedParams.endNodeId!,
+        } as any);
 
         await context.sendProgress({
           status: 'complete',
@@ -147,7 +143,7 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
           percent: 50,
         });
 
-        const result = await memoryService.services.graphAnalysis.getStronglyConnectedComponents(
+        const result = await memoryService.graphAnalysis.getStronglyConnectedComponents(
           context,
           clientProjectRoot,
           {
@@ -177,7 +173,7 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
           percent: 50,
         });
 
-        const result = await memoryService.services.graphAnalysis.getWeaklyConnectedComponents(
+        const result = await memoryService.graphAnalysis.getWeaklyConnectedComponents(
           context,
           clientProjectRoot,
           {

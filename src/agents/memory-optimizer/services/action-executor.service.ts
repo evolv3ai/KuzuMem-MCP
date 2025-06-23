@@ -109,12 +109,12 @@ export class ActionExecutorService extends BaseMemoryAgent {
     });
 
     // Execute deletion based on entity type
-    if (!this.memoryService.services) {
-      throw new Error('ServiceRegistry not initialized in MemoryService');
+    if (!this.memoryService.entity) {
+      throw new Error('EntityService not initialized in MemoryService');
     }
     switch (entityType) {
       case 'component':
-        await this.memoryService.services.entity.deleteComponent(
+        await this.memoryService.entity.deleteComponent(
           mcpContext,
           clientProjectRoot,
           repository,
@@ -124,7 +124,7 @@ export class ActionExecutorService extends BaseMemoryAgent {
         break;
 
       case 'decision':
-        await this.memoryService.services.entity.deleteDecision(
+        await this.memoryService.entity.deleteDecision(
           mcpContext,
           clientProjectRoot,
           repository,
@@ -134,7 +134,7 @@ export class ActionExecutorService extends BaseMemoryAgent {
         break;
 
       case 'rule':
-        await this.memoryService.services.entity.deleteRule(
+        await this.memoryService.entity.deleteRule(
           mcpContext,
           clientProjectRoot,
           repository,
@@ -144,7 +144,7 @@ export class ActionExecutorService extends BaseMemoryAgent {
         break;
 
       case 'file':
-        await this.memoryService.services.entity.deleteFile(
+        await this.memoryService.entity.deleteFile(
           mcpContext,
           clientProjectRoot,
           repository,
@@ -154,7 +154,7 @@ export class ActionExecutorService extends BaseMemoryAgent {
         break;
 
       case 'context':
-        await this.memoryService.services.entity.deleteContext(
+        await this.memoryService.entity.deleteContext(
           mcpContext,
           clientProjectRoot,
           repository,
@@ -164,7 +164,13 @@ export class ActionExecutorService extends BaseMemoryAgent {
         break;
 
       case 'tag':
-        await this.memoryService.services.entity.deleteTag(mcpContext, clientProjectRoot, entityId);
+        await this.memoryService.entity.deleteTag(
+          mcpContext,
+          clientProjectRoot,
+          repository,
+          branch,
+          entityId,
+        );
         break;
 
       default:

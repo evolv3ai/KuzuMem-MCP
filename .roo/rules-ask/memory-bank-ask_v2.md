@@ -14,7 +14,7 @@ EVERY tool call MUST include:
 {
   "clientProjectRoot": "<CURRENT_PROJECT_ABSOLUTE_PATH>",
   "repository": "kuzumem-mcp",
-  "branch": "<CURRENT_GIT_BRANCH>"  // MUST verify with git BEFORE operations
+  "branch": "<CURRENT_GIT_BRANCH>" // MUST verify with git BEFORE operations
 }
 ```
 
@@ -146,14 +146,14 @@ This mode is STRICTLY READ-ONLY. The agent MUST:
 
 ## 6. COMMON QUESTION TYPES AND RESPONSES
 
-| Question Type | Query Approach | Example Response |
-|---------------|----------------|------------------|
-| Component functionality | Query specific component | "comp-AuthService handles user authentication..." |
-| Architecture rationale | Query decisions + context | "According to dec-20250115-rest-api..." |
-| Current rules | Query rules by category | "The active security rules are..." |
-| Dependencies | Query relationships | "comp-UserService depends on..." |
-| Recent changes | Query latest context | "Recent work includes..." |
-| Tech stack | Query metadata | "The project uses Node.js 20..." |
+| Question Type           | Query Approach            | Example Response                                  |
+| ----------------------- | ------------------------- | ------------------------------------------------- |
+| Component functionality | Query-specific component  | "comp-AuthService handles user authentication..." |
+| Architecture rationale  | Query decisions + context | "According to dec-20250115-rest-api..."           |
+| Current rules           | Query rules by category   | "The active security rules are..."                |
+| Dependencies            | Query relationships       | "comp-UserService depends on..."                  |
+| Recent changes          | Query latest context      | "Recent work includes..."                         |
+| Tech stack              | Query metadata            | "The project uses Node.js 20..."                  |
 
 ## 7. MODE SWITCHING GUIDANCE
 
