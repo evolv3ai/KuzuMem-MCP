@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { RepositoryRepository } from '../../repositories/repository.repository';
 import { Repository } from '../../types';
@@ -30,7 +31,7 @@ export async function getOrCreateRepositoryOp(
     );
 
     const newRepository: Repository = {
-      id: `${repositoryName}-${branch}-${Date.now()}`,
+      id: `${repositoryName}-${branch}-${randomUUID()}`,
       name: repositoryName,
       branch: branch,
       created_at: new Date(),
