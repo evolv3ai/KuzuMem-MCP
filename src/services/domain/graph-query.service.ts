@@ -361,9 +361,11 @@ export class GraphQueryService extends CoreService {
       `;
 
       const result = await kuzuClient.executeQuery(query, {});
-      const labels = result.map((row: any) => row.name).filter((name: string) =>
-        ['Component', 'Decision', 'Rule', 'Tag', 'File', 'Context', 'Repository'].includes(name)
-      );
+      const labels = result
+        .map((row: any) => row.name)
+        .filter((name: string) =>
+          ['Component', 'Decision', 'Rule', 'Tag', 'File', 'Context', 'Repository'].includes(name),
+        );
 
       logger.info(
         `[GraphQueryService.listAllNodeLabels] Retrieved ${labels.length} node labels in ${repositoryName}:${branch}`,
@@ -496,19 +498,16 @@ export class GraphQueryService extends CoreService {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
 
       // KuzuDB doesn't have a direct way to list indexes, so return empty for now
-      logger.info(
-        `[GraphQueryService.listAllIndexes] Index listing not supported in KuzuDB`,
-      );
+      logger.info(`[GraphQueryService.listAllIndexes] Index listing not supported in KuzuDB`);
 
       return {
         indexes: [],
         message: 'Index listing not supported in KuzuDB',
       };
     } catch (error: any) {
-      logger.error(
-        `[GraphQueryService.listAllIndexes] Error listing indexes: ${error.message}`,
-        { error: error.toString() },
-      );
+      logger.error(`[GraphQueryService.listAllIndexes] Error listing indexes: ${error.message}`, {
+        error: error.toString(),
+      });
       return {
         indexes: [],
         message: `Error listing indexes: ${error.message}`,
@@ -525,7 +524,9 @@ export class GraphQueryService extends CoreService {
   ): Promise<{ componentId: string; rules: any[]; decisions: any[] }> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
-      logger.error('[GraphQueryService.getGoverningItemsForComponent] RepositoryProvider not initialized');
+      logger.error(
+        '[GraphQueryService.getGoverningItemsForComponent] RepositoryProvider not initialized',
+      );
       throw new Error('RepositoryProvider not initialized');
     }
 

@@ -24,7 +24,7 @@ describe('MCP Stdio Server E2E Tests', () => {
   let initializationResponse: any;
 
   // Helper to add delays between resource-intensive operations
-  const waitForStability = (ms: number = 1000) => new Promise(resolve => setTimeout(resolve, ms));
+  const waitForStability = (ms: number = 1000) => new Promise((resolve) => setTimeout(resolve, ms));
 
   // Helper to send JSON-RPC message to server
   const sendMessage = (message: RpcMessage, timeoutMs: number = 30000): Promise<RpcMessage> => {
@@ -465,7 +465,11 @@ describe('MCP Stdio Server E2E Tests', () => {
         if (result.properties && result.properties.length > 0) {
           // Check if the first property has the expected structure
           const firstProperty = result.properties[0];
-          if (firstProperty && typeof firstProperty === 'object' && Object.keys(firstProperty).length > 0) {
+          if (
+            firstProperty &&
+            typeof firstProperty === 'object' &&
+            Object.keys(firstProperty).length > 0
+          ) {
             expect(firstProperty).toMatchObject({
               name: expect.any(String),
               type: expect.any(String),

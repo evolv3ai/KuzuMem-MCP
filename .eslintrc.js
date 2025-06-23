@@ -13,7 +13,14 @@ module.exports = {
     node: true,
     jest: true,
   },
-  ignorePatterns: ['.eslintrc.js', '.prettierrc.js', 'dist', 'node_modules', '*.kuzu', 'test-connection-recovery.ts'],
+  ignorePatterns: [
+    '.eslintrc.js',
+    '.prettierrc.js',
+    'dist',
+    'node_modules',
+    '*.kuzu',
+    'test-connection-recovery.ts',
+  ],
   rules: {
     '@typescript-eslint/interface-name-prefix': 'off',
     '@typescript-eslint/explicit-function-return-type': 'warn',

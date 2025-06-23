@@ -17,7 +17,7 @@ export async function getOrCreateRepositoryOp(
   try {
     // First try to find existing repository
     let repository = await repositoryRepo.findByName(repositoryName, branch);
-    
+
     if (repository) {
       logger.info(
         `[repository.ops.getOrCreateRepositoryOp] Found existing repository: ${repositoryName}:${branch}`,
@@ -39,7 +39,7 @@ export async function getOrCreateRepositoryOp(
     };
 
     repository = await repositoryRepo.create(newRepository);
-    
+
     if (repository) {
       logger.info(
         `[repository.ops.getOrCreateRepositoryOp] Successfully created repository: ${repositoryName}:${branch}`,
@@ -73,7 +73,7 @@ export async function findRepositoryOp(
 
   try {
     const repository = await repositoryRepo.findByName(repositoryName, branch);
-    
+
     if (repository) {
       logger.debug(
         `[repository.ops.findRepositoryOp] Found repository: ${repositoryName}:${branch}`,
@@ -105,17 +105,14 @@ export async function listRepositoriesOp(
 
   try {
     const repositories = await repositoryRepo.findAll();
-    
-    logger.debug(
-      `[repository.ops.listRepositoriesOp] Found ${repositories.length} repositories`,
-    );
+
+    logger.debug(`[repository.ops.listRepositoriesOp] Found ${repositories.length} repositories`);
 
     return repositories;
   } catch (error: any) {
-    logger.error(
-      `[repository.ops.listRepositoriesOp] Error: ${error.message}`,
-      { error: error.toString() },
-    );
+    logger.error(`[repository.ops.listRepositoriesOp] Error: ${error.message}`, {
+      error: error.toString(),
+    });
     throw error;
   }
 }
@@ -133,7 +130,7 @@ export async function deleteRepositoryOp(
 
   try {
     const repository = await repositoryRepo.findByName(repositoryName, branch);
-    
+
     if (!repository) {
       logger.warn(
         `[repository.ops.deleteRepositoryOp] Repository not found: ${repositoryName}:${branch}`,

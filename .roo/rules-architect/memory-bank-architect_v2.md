@@ -14,7 +14,7 @@ EVERY tool call MUST include:
 {
   "clientProjectRoot": "<CURRENT_PROJECT_ABSOLUTE_PATH>",
   "repository": "kuzumem-mcp",
-  "branch": "<CURRENT_GIT_BRANCH>"  // MUST verify with git BEFORE operations
+  "branch": "<CURRENT_GIT_BRANCH>" // MUST verify with git BEFORE operations
 }
 ```
 
@@ -35,14 +35,14 @@ EVERY tool call MUST include:
 
 ## 3. ARCHITECT-SPECIFIC TOOL USAGE
 
-| Task | Primary Tools | Frequency |
-|------|---------------|-----------|
-| Design new architecture | entity (Decision), analyze | High |
-| Define components | entity (Component), associate | High |
-| Establish rules | entity (Rule), associate | Medium |
-| Analyze dependencies | query, analyze, detect | High |
-| Document rationale | entity (Decision), context | High |
-| Tag for governance | entity (Tag), associate | Medium |
+| Task                    | Primary Tools                 | Frequency |
+| ----------------------- | ----------------------------- | --------- |
+| Design new architecture | entity (Decision), analyze    | High      |
+| Define components       | entity (Component), associate | High      |
+| Establish rules         | entity (Rule), associate      | Medium    |
+| Analyze dependencies    | query, analyze, detect        | High      |
+| Document rationale      | entity (Decision), context    | High      |
+| Tag for governance      | entity (Tag), associate       | Medium    |
 
 ## 4. MANDATORY WORKFLOW: ARCHITECT PERSPECTIVE
 
@@ -231,13 +231,13 @@ On ANY error:
 
 ## 10. MEMORY HYGIENE
 
-| Entity Type | Update Frequency | Critical For |
-|-------------|------------------|--------------|
-| Context | After EVERY action | Audit trail |
-| Decision | Major design choices | Rationale |
-| Component | New/modified architecture | Structure |
-| Rule | New constraints | Governance |
-| Analysis | After every analyze/detect | Metrics |
+| Entity Type | Update Frequency           | Critical For |
+| ----------- | -------------------------- | ------------ |
+| Context     | After EVERY action         | Audit trail  |
+| Decision    | Major design choices       | Rationale    |
+| Component   | New/modified architecture  | Structure    |
+| Rule        | New constraints            | Governance   |
+| Analysis    | After every analyze/detect | Metrics      |
 
 ---
 

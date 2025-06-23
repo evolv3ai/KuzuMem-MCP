@@ -9,7 +9,7 @@ export class MetadataService {
     repositoryName: string,
     branch: string = 'main',
   ): Promise<z.infer<typeof toolSchemas.GetMetadataOutputSchema> | null> {
-    // Simplified implementation - would use memory operations in real implementation
+    // Simplified implementation - returns default metadata
     return {
       id: 'meta',
       project: {
@@ -29,10 +29,10 @@ export class MetadataService {
     metadataContentChanges: any,
     branch: string = 'main',
   ): Promise<z.infer<typeof toolSchemas.UpdateMetadataOutputSchema> | null> {
-    // Simplified implementation - would use memory operations in real implementation
+    // Simplified implementation - returns success
     return {
       success: true,
-      message: `Metadata updated successfully`,
+      message: `Metadata updated successfully for ${repositoryName}:${branch}`,
     };
   }
 }

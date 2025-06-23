@@ -14,7 +14,7 @@ EVERY tool call MUST include:
 {
   "clientProjectRoot": "<CURRENT_PROJECT_ABSOLUTE_PATH>",
   "repository": "kuzumem-mcp",
-  "branch": "<CURRENT_GIT_BRANCH>"  // MUST verify with git BEFORE operations
+  "branch": "<CURRENT_GIT_BRANCH>" // MUST verify with git BEFORE operations
 }
 ```
 
@@ -35,15 +35,15 @@ EVERY tool call MUST include:
 
 ## 3. CODE-SPECIFIC TOOL USAGE
 
-| Task | Primary Tools | Frequency |
-|------|---------------|-----------|
-| Log progress | context | VERY HIGH |
-| Track file changes | entity (File) | HIGH |
-| Link files to components | associate | HIGH |
-| Get requirements | query (Decision) | HIGH |
-| Check constraints | query (Rule) | MEDIUM |
-| Update component status | entity (Component) | MEDIUM |
-| Search for examples | search | MEDIUM |
+| Task                     | Primary Tools      | Frequency |
+| ------------------------ | ------------------ | --------- |
+| Log progress             | context            | VERY HIGH |
+| Track file changes       | entity (File)      | HIGH      |
+| Link files to components | associate          | HIGH      |
+| Get requirements         | query (Decision)   | HIGH      |
+| Check constraints        | query (Rule)       | MEDIUM    |
+| Update component status  | entity (Component) | MEDIUM    |
+| Search for examples      | search             | MEDIUM    |
 
 ## 4. MANDATORY WORKFLOW: CODE PERSPECTIVE
 

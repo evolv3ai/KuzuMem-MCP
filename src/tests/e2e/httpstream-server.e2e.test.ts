@@ -794,7 +794,11 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         if (result.properties && result.properties.length > 0) {
           // Check if the first property has the expected structure
           const firstProperty = result.properties[0];
-          if (firstProperty && typeof firstProperty === 'object' && Object.keys(firstProperty).length > 0) {
+          if (
+            firstProperty &&
+            typeof firstProperty === 'object' &&
+            Object.keys(firstProperty).length > 0
+          ) {
             expect(firstProperty).toMatchObject({
               name: expect.any(String),
               type: expect.any(String),
@@ -1385,13 +1389,15 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
       // If components exist, verify the system is working correctly
       if (result.entities.length > 0) {
         // Extract component IDs, handling different data structures
-        const componentIds = result.entities.map((e: any) => {
-          // Handle different response formats
-          if (e && typeof e === 'object') {
-            return e.id || (e.n && e.n.id) || undefined;
-          }
-          return undefined;
-        }).filter((id: any) => id !== undefined);
+        const componentIds = result.entities
+          .map((e: any) => {
+            // Handle different response formats
+            if (e && typeof e === 'object') {
+              return e.id || (e.n && e.n.id) || undefined;
+            }
+            return undefined;
+          })
+          .filter((id: any) => id !== undefined);
 
         console.log('Found components:', componentIds);
 

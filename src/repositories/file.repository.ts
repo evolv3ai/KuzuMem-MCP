@@ -25,7 +25,11 @@ export class FileRepository {
     repoNodeId: string, // This is the synthetic ID like "test-repo:main"
     branch: string,
     // Input data should be clean, matching internal File type structure for new node properties
-    fileData: Omit<File, 'repository' | 'branch' | 'created_at' | 'updated_at'> & { id: string },
+    fileData: Omit<File, 'repository' | 'branch' | 'created_at' | 'updated_at'> & {
+      id: string;
+      checksum?: string;
+      content_hash?: string;
+    },
   ): Promise<File | null> {
     // Extract repository name from synthetic ID
     const repositoryName = repoNodeId.split(':')[0];
@@ -73,7 +77,7 @@ export class FileRepository {
         repository: repositoryName,
         repositoryId: repoNodeId,
         branch: branch,
-        checksum: '', // Default empty checksum
+        checksum: fileData.checksum || fileData.content_hash || '', // Use provided checksum/content_hash or default to empty
         metadata: JSON.stringify({
           content: fileData.content || null,
           metrics: fileData.metrics || null,

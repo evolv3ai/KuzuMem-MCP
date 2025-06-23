@@ -164,7 +164,13 @@ export class ActionExecutorService extends BaseMemoryAgent {
         break;
 
       case 'tag':
-        await this.memoryService.entity.deleteTag(mcpContext, clientProjectRoot, repository, branch, entityId);
+        await this.memoryService.entity.deleteTag(
+          mcpContext,
+          clientProjectRoot,
+          repository,
+          branch,
+          entityId,
+        );
         break;
 
       default:

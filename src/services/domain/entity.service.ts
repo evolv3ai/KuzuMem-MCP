@@ -132,7 +132,11 @@ export class EntityService extends CoreService {
       const componentRepo = this.repositoryProvider.getComponentRepository(clientProjectRoot);
 
       // For updates, we need to get the existing component first, then upsert with updates
-      const existingComponent = await componentRepo.findByIdAndBranch(repositoryName, componentId, branch);
+      const existingComponent = await componentRepo.findByIdAndBranch(
+        repositoryName,
+        componentId,
+        branch,
+      );
       if (!existingComponent) {
         logger.warn(
           `[EntityService.updateComponent] Component ${componentId} not found in ${repositoryName}:${branch}`,
@@ -305,7 +309,11 @@ export class EntityService extends CoreService {
       const decisionRepo = this.repositoryProvider.getDecisionRepository(clientProjectRoot);
 
       // For updates, get existing decision first, then upsert with updates
-      const existingDecision = await decisionRepo.findByIdAndBranch(repositoryName, decisionId, branch);
+      const existingDecision = await decisionRepo.findByIdAndBranch(
+        repositoryName,
+        decisionId,
+        branch,
+      );
       if (!existingDecision) {
         logger.warn(
           `[EntityService.updateDecision] Decision ${decisionId} not found in ${repositoryName}:${branch}`,
@@ -631,9 +639,7 @@ export class EntityService extends CoreService {
       const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
       const repository = await repositoryRepo.findByName(repositoryName, branch);
       if (!repository || !repository.id) {
-        logger.warn(
-          `[EntityService.getFile] Repository ${repositoryName}:${branch} not found.`,
-        );
+        logger.warn(`[EntityService.getFile] Repository ${repositoryName}:${branch} not found.`);
         return null;
       }
 
@@ -774,11 +780,7 @@ export class EntityService extends CoreService {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
       const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
 
-      const result = await tagOps.deleteTagOp(
-        mcpContext,
-        kuzuClient,
-        tagId,
-      );
+      const result = await tagOps.deleteTagOp(mcpContext, kuzuClient, tagId);
 
       logger.info(
         `[EntityService.deleteTag] Tag ${tagId} deletion result: ${result} in ${repositoryName}:${branch}`,
@@ -973,7 +975,11 @@ export class EntityService extends CoreService {
     branch: string,
     entityType: string,
     options: { dryRun?: boolean; force?: boolean } = {},
-  ): Promise<{ count: number; entities: Array<{ type: string; id: string; name?: string }>; warnings: string[] }> {
+  ): Promise<{
+    count: number;
+    entities: Array<{ type: string; id: string; name?: string }>;
+    warnings: string[];
+  }> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error('[EntityService.bulkDeleteByType] RepositoryProvider not initialized');
@@ -989,7 +995,11 @@ export class EntityService extends CoreService {
         logger.warn(
           `[EntityService.bulkDeleteByType] Repository ${repositoryName}:${branch} not found.`,
         );
-        return { count: 0, entities: [], warnings: [`Repository ${repositoryName}:${branch} not found`] };
+        return {
+          count: 0,
+          entities: [],
+          warnings: [`Repository ${repositoryName}:${branch} not found`],
+        };
       }
 
       // Query to find entities of the specified type
@@ -1048,7 +1058,11 @@ export class EntityService extends CoreService {
     branch: string,
     tagId: string,
     options: { dryRun?: boolean; force?: boolean } = {},
-  ): Promise<{ count: number; entities: Array<{ type: string; id: string; name?: string }>; warnings: string[] }> {
+  ): Promise<{
+    count: number;
+    entities: Array<{ type: string; id: string; name?: string }>;
+    warnings: string[];
+  }> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error('[EntityService.bulkDeleteByTag] RepositoryProvider not initialized');
@@ -1068,7 +1082,12 @@ export class EntityService extends CoreService {
       `;
 
       const repoPrefix = `${repositoryName}:${branch}:`;
-      const entities = await kuzuClient.executeQuery(findQuery, { tagId, repositoryName, branch, repoPrefix });
+      const entities = await kuzuClient.executeQuery(findQuery, {
+        tagId,
+        repositoryName,
+        branch,
+        repoPrefix,
+      });
 
       if (options.dryRun) {
         logger.info(
@@ -1098,7 +1117,7 @@ export class EntityService extends CoreService {
             id: entity.id,
             repositoryName,
             branch,
-            repoPrefix
+            repoPrefix,
           });
 
           if (result.length > 0) {
@@ -1133,7 +1152,11 @@ export class EntityService extends CoreService {
     repositoryName: string,
     targetBranch: string,
     options: { dryRun?: boolean; force?: boolean } = {},
-  ): Promise<{ count: number; entities: Array<{ type: string; id: string; name?: string }>; warnings: string[] }> {
+  ): Promise<{
+    count: number;
+    entities: Array<{ type: string; id: string; name?: string }>;
+    warnings: string[];
+  }> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error('[EntityService.bulkDeleteByBranch] RepositoryProvider not initialized');
@@ -1206,7 +1229,11 @@ export class EntityService extends CoreService {
     clientProjectRoot: string,
     repositoryName: string,
     options: { dryRun?: boolean; force?: boolean } = {},
-  ): Promise<{ count: number; entities: Array<{ type: string; id: string; name?: string }>; warnings: string[] }> {
+  ): Promise<{
+    count: number;
+    entities: Array<{ type: string; id: string; name?: string }>;
+    warnings: string[];
+  }> {
     const logger = mcpContext.logger || console;
     if (!this.repositoryProvider) {
       logger.error('[EntityService.bulkDeleteByRepository] RepositoryProvider not initialized');

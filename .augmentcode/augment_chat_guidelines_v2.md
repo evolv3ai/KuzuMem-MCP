@@ -14,7 +14,7 @@ Before ANY operation on a repository/branch, you MUST:
   "operation": "init",
   "clientProjectRoot": "<CURRENT_PROJECT_ABSOLUTE_PATH>",
   "repository": "kuzumem-mcp",
-  "branch": "current_branch_name"
+  "branch": "current_branch_name",
 }
 ```
 
@@ -45,7 +45,7 @@ Format:
   "summary": "One-line description of what was done",
   "observation": "Detailed findings, errors, or important notes",
   "repository": "kuzumem-mcp",
-  "branch": "current_branch"
+  "branch": "current_branch",
 }
 ```
 
@@ -64,7 +64,7 @@ You MUST follow this exact workflow for EVERY task:
      "repository": "kuzumem-mcp",
      "branch": "current_branch",
      "latest": true,
-     "limit": 5
+     "limit": 5,
    }
    ```
 
@@ -76,7 +76,7 @@ You MUST follow this exact workflow for EVERY task:
      "query": "search terms related to task",
      "repository": "kuzumem-mcp",
      "entityTypes": ["component", "decision", "rule", "file"],
-     "limit": 10
+     "limit": 10,
    }
    ```
 
@@ -89,7 +89,7 @@ You MUST follow this exact workflow for EVERY task:
      "componentId": "comp-TargetComponent",
      "direction": "both",
      "repository": "kuzumem-mcp",
-     "branch": "current_branch"
+     "branch": "current_branch",
    }
    ```
 
@@ -110,10 +110,10 @@ You MUST follow this exact workflow for EVERY task:
        "date": "YYYY-MM-DD",
        "status": "proposed",
        "context": "Numbered plan:\n1. Step one\n2. Step two\n3. ...",
-       "affects": ["comp-AffectedComponent1", "comp-AffectedComponent2"]
+       "affects": ["comp-AffectedComponent1", "comp-AffectedComponent2"],
      },
      "repository": "kuzumem-mcp",
-     "branch": "current_branch"
+     "branch": "current_branch",
    }
    ```
 
@@ -127,7 +127,7 @@ You MUST follow this exact workflow for EVERY task:
      "itemId": "dec-YYYYMMDD-task-slug",
      "entityType": "Decision",
      "repository": "kuzumem-mcp",
-     "branch": "current_branch"
+     "branch": "current_branch",
    }
    ```
 
@@ -156,11 +156,11 @@ For EACH step in your approved plan:
        "metadata": {
          "file_paths": ["src/path/to/component.ts"],
          "created": "YYYY-MM-DD",
-         "modified": "YYYY-MM-DD"
-       }
+         "modified": "YYYY-MM-DD",
+       },
      },
      "repository": "kuzumem-mcp",
-     "branch": "current_branch"
+     "branch": "current_branch",
    }
    ```
 
@@ -173,7 +173,7 @@ For EACH step in your approved plan:
      "fileId": "file-src-path-to-component-ts-v1",
      "componentId": "comp-ComponentName",
      "repository": "kuzumem-mcp",
-     "branch": "current_branch"
+     "branch": "current_branch",
    }
    ```
 
@@ -193,7 +193,7 @@ For EACH step in your approved plan:
      "branch": "current_branch",
      "projectedGraphName": "validation-check",
      "nodeTableNames": ["Component"],
-     "relationshipTableNames": ["DEPENDS_ON"]
+     "relationshipTableNames": ["DEPENDS_ON"],
    }
    ```
 
@@ -206,10 +206,10 @@ For EACH step in your approved plan:
      "entityType": "decision",
      "id": "dec-YYYYMMDD-task-slug",
      "data": {
-       "status": "implemented" // or "failed" if tests fail
+       "status": "implemented", // or "failed" if tests fail
      },
      "repository": "kuzumem-mcp",
-     "branch": "current_branch"
+     "branch": "current_branch",
    }
    ```
 
@@ -241,13 +241,13 @@ For EACH step in your approved plan:
 
 ### ID Format Rules (MUST FOLLOW EXACTLY)
 
-| Entity Type | Format | Example |
-|-------------|---------|---------|
-| Component | `comp-<CamelCase>` | `comp-MemoryService` |
-| Decision | `dec-YYYYMMDD-<slug>` | `dec-20250120-unified-tools` |
-| Rule | `rule-<category>-<slug>` | `rule-security-auth` |
-| File | `file-<path-with-dashes>-v<n>` | `file-src-services-memory-ts-v1` |
-| Tag | `tag-<category>` | `tag-performance` |
+| Entity Type | Format                         | Example                          |
+| ----------- | ------------------------------ | -------------------------------- |
+| Component   | `comp-<CamelCase>`             | `comp-MemoryService`             |
+| Decision    | `dec-YYYYMMDD-<slug>`          | `dec-20250120-unified-tools`     |
+| Rule        | `rule-<category>-<slug>`       | `rule-security-auth`             |
+| File        | `file-<path-with-dashes>-v<n>` | `file-src-services-memory-ts-v1` |
+| Tag         | `tag-<category>`               | `tag-performance`                |
 
 ### Dependency Rules
 
@@ -273,7 +273,7 @@ ALWAYS use conservative strategy unless explicitly told otherwise:
   "strategy": "conservative",
   "dryRun": true,
   "repository": "kuzumem-mcp",
-  "branch": "current_branch"
+  "branch": "current_branch",
 }
 ```
 
@@ -320,7 +320,7 @@ You MUST NEVER:
   "componentId": "comp-TargetComponent",
   "direction": "dependents",
   "repository": "kuzumem-mcp",
-  "branch": "current_branch"
+  "branch": "current_branch",
 }
 ```
 
@@ -332,7 +332,7 @@ You MUST NEVER:
   "type": "governance",
   "componentId": "comp-TargetComponent",
   "repository": "kuzumem-mcp",
-  "branch": "current_branch"
+  "branch": "current_branch",
 }
 ```
 
@@ -346,7 +346,7 @@ You MUST NEVER:
   "branch": "current_branch",
   "projectedGraphName": "importance-analysis",
   "nodeTableNames": ["Component"],
-  "relationshipTableNames": ["DEPENDS_ON"]
+  "relationshipTableNames": ["DEPENDS_ON"],
 }
 ```
 

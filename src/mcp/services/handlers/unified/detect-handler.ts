@@ -111,20 +111,16 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
           percent: 50,
         });
 
-        const result = await memoryService.graphAnalysis.shortestPath(
-          context,
-          clientProjectRoot,
-          {
-            type: 'shortest-path',
-            repository,
-            branch,
-            projectedGraphName: validatedParams.projectedGraphName,
-            nodeTableNames: validatedParams.nodeTableNames,
-            relationshipTableNames: validatedParams.relationshipTableNames,
-            startNodeId: validatedParams.startNodeId!,
-            endNodeId: validatedParams.endNodeId!,
-          } as any,
-        );
+        const result = await memoryService.graphAnalysis.shortestPath(context, clientProjectRoot, {
+          type: 'shortest-path',
+          repository,
+          branch,
+          projectedGraphName: validatedParams.projectedGraphName,
+          nodeTableNames: validatedParams.nodeTableNames,
+          relationshipTableNames: validatedParams.relationshipTableNames,
+          startNodeId: validatedParams.startNodeId!,
+          endNodeId: validatedParams.endNodeId!,
+        } as any);
 
         await context.sendProgress({
           status: 'complete',

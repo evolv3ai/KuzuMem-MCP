@@ -42,7 +42,7 @@ export const queryHandler: SdkToolHandler = async (params, context, memoryServic
   // 2. Validate session and get clientProjectRoot
   const clientProjectRoot = validateSession(context, 'query');
   if (!memoryService.context || !memoryService.graphQuery) {
-    throw new Error('Required services not initialized in MemoryService');
+    throw new Error('ContextService and GraphQueryService not initialized in MemoryService');
   }
 
   // 3. Log the operation

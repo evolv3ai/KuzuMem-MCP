@@ -193,7 +193,7 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
               }
             }
 
-            // Import rule
+            // Import rule (repository and branch are passed as separate parameters)
             await memoryService.entity.upsertRule(
               context,
               clientProjectRoot,
