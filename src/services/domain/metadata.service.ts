@@ -43,6 +43,24 @@ export class MetadataService extends CoreService {
 
       if (result && result.length > 0) {
         const metadata = result[0].m;
+
+        // Safely parse tech_stack JSON with error handling
+        let techStack = {};
+        if (metadata.tech_stack) {
+          try {
+            techStack = JSON.parse(metadata.tech_stack);
+          } catch (parseError) {
+            logger.warn(
+              `[MetadataService.getMetadata] Invalid JSON in tech_stack for ${repositoryName}:${branch}, using empty object`,
+              {
+                tech_stack: metadata.tech_stack,
+                parseError: parseError instanceof Error ? parseError.message : String(parseError)
+              }
+            );
+            techStack = {};
+          }
+        }
+
         return {
           id: metadata.id || 'meta',
           project: {
@@ -52,7 +70,7 @@ export class MetadataService extends CoreService {
               repository.created_at?.toISOString() ||
               new Date().toISOString(),
           },
-          tech_stack: metadata.tech_stack ? JSON.parse(metadata.tech_stack) : {},
+          tech_stack: techStack,
           architecture: metadata.architecture || '',
           memory_spec_version: metadata.memory_spec_version || '3.0.0',
         };
