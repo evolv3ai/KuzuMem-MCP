@@ -7,7 +7,6 @@ import { KuzuDBClient } from '../../db/kuzu';
 import { SnapshotService } from '../snapshot.service';
 
 export class MetadataService extends CoreService {
-
   async getMetadata(
     mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
@@ -54,8 +53,8 @@ export class MetadataService extends CoreService {
               `[MetadataService.getMetadata] Invalid JSON in tech_stack for ${repositoryName}:${branch}, using empty object`,
               {
                 tech_stack: metadata.tech_stack,
-                parseError: parseError instanceof Error ? parseError.message : String(parseError)
-              }
+                parseError: parseError instanceof Error ? parseError.message : String(parseError),
+              },
             );
             techStack = {};
           }

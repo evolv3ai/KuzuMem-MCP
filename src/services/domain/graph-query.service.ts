@@ -21,7 +21,7 @@ export class GraphQueryService extends CoreService {
     'Tag',
     'File',
     'Context',
-    'Repository'
+    'Repository',
   ]);
 
   constructor(
@@ -45,7 +45,9 @@ export class GraphQueryService extends CoreService {
    */
   private validateLabel(label: string): void {
     if (!GraphQueryService.ALLOWED_LABELS.has(label)) {
-      throw new Error(`Invalid label: ${label}. Allowed labels: ${Array.from(GraphQueryService.ALLOWED_LABELS).join(', ')}`);
+      throw new Error(
+        `Invalid label: ${label}. Allowed labels: ${Array.from(GraphQueryService.ALLOWED_LABELS).join(', ')}`,
+      );
     }
   }
 
@@ -63,7 +65,9 @@ export class GraphQueryService extends CoreService {
     // Additional safety: ensure label contains only alphanumeric characters
     // This is redundant given the whitelist, but provides defense-in-depth
     if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(label)) {
-      throw new Error(`Label contains invalid characters: ${label}. Labels must be alphanumeric with underscores.`);
+      throw new Error(
+        `Label contains invalid characters: ${label}. Labels must be alphanumeric with underscores.`,
+      );
     }
 
     return label;
