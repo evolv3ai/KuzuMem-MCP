@@ -13,6 +13,17 @@ import * as tagOps from '../memory-operations/tag.ops';
 import { SnapshotService } from '../snapshot.service';
 
 export class GraphQueryService extends CoreService {
+  // Whitelist of allowed node labels to prevent injection attacks
+  private static readonly ALLOWED_LABELS = new Set([
+    'Component',
+    'Decision',
+    'Rule',
+    'Tag',
+    'File',
+    'Context',
+    'Repository'
+  ]);
+
   constructor(
     repositoryProvider: RepositoryProvider,
     getKuzuClient: (
@@ -25,6 +36,17 @@ export class GraphQueryService extends CoreService {
     ) => Promise<SnapshotService>,
   ) {
     super(repositoryProvider, getKuzuClient, getSnapshotService);
+  }
+
+  /**
+   * Validates that a label is in the allowed whitelist to prevent injection attacks
+   * @param label The label to validate
+   * @throws Error if label is not allowed
+   */
+  private validateLabel(label: string): void {
+    if (!GraphQueryService.ALLOWED_LABELS.has(label)) {
+      throw new Error(`Invalid label: ${label}. Allowed labels: ${Array.from(GraphQueryService.ALLOWED_LABELS).join(', ')}`);
+    }
   }
   async getComponentDependencies(
     mcpContext: ToolHandlerContext,
@@ -208,6 +230,9 @@ export class GraphQueryService extends CoreService {
       logger.error('[GraphQueryService.listNodesByLabel] RepositoryProvider not initialized');
       throw new Error('RepositoryProvider not initialized');
     }
+
+    // Validate label to prevent injection attacks
+    this.validateLabel(label);
 
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
@@ -398,6 +423,9 @@ export class GraphQueryService extends CoreService {
       throw new Error('RepositoryProvider not initialized');
     }
 
+    // Validate label to prevent injection attacks
+    this.validateLabel(label);
+
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
 
@@ -447,6 +475,9 @@ export class GraphQueryService extends CoreService {
       logger.error('[GraphQueryService.getNodeProperties] RepositoryProvider not initialized');
       throw new Error('RepositoryProvider not initialized');
     }
+
+    // Validate label to prevent injection attacks
+    this.validateLabel(label);
 
     try {
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
