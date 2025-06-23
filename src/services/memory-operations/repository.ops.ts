@@ -141,25 +141,22 @@ export async function deleteRepositoryOp(
       return false;
     }
 
+    // Attempt to delete the repository - if it throws, the catch block will handle it
     await repositoryRepo.delete(repository.id);
-    const success = true; // delete method doesn't return boolean
-    
-    if (success) {
-      logger.info(
-        `[repository.ops.deleteRepositoryOp] Successfully deleted repository: ${repositoryName}:${branch}`,
-      );
-    } else {
-      logger.error(
-        `[repository.ops.deleteRepositoryOp] Failed to delete repository: ${repositoryName}:${branch}`,
-      );
-    }
 
-    return success;
+    // If we reach here, deletion was successful (no exception thrown)
+    logger.info(
+      `[repository.ops.deleteRepositoryOp] Successfully deleted repository: ${repositoryName}:${branch}`,
+    );
+
+    return true;
   } catch (error: any) {
     logger.error(
-      `[repository.ops.deleteRepositoryOp] Error for ${repositoryName}:${branch}: ${error.message}`,
+      `[repository.ops.deleteRepositoryOp] Failed to delete repository ${repositoryName}:${branch}: ${error.message}`,
       { error: error.toString() },
     );
-    throw error;
+    // Return false to indicate deletion failure instead of throwing
+    // This allows callers to handle the failure gracefully
+    return false;
   }
 }
