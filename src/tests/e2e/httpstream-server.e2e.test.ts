@@ -1393,7 +1393,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
           .map((e: any) => {
             // Handle different response formats
             if (e && typeof e === 'object') {
-              return e.id || (e.n && e.n.id) || undefined;
+              return e.id || e.n?.id || undefined;
             }
             return undefined;
           })
@@ -1407,7 +1407,7 @@ describe('MCP HTTP Stream Server E2E Tests', () => {
         // Verify that each valid component has required properties
         const validComponents = result.entities.filter((e: any) => {
           const component = e.n || e; // Handle nested structure
-          return component && component.id;
+          return component?.id;
         });
 
         validComponents.forEach((entity: any) => {

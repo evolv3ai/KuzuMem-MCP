@@ -78,7 +78,11 @@ export class MemoryService {
       this.getKuzuClient.bind(this),
       this.getSnapshotService.bind(this),
     );
-    this.metadata = new MetadataService();
+    this.metadata = new MetadataService(
+      this.repositoryProvider,
+      this.getKuzuClient.bind(this),
+      this.getSnapshotService.bind(this),
+    );
     this.entity = new EntityService(
       this.repositoryProvider,
       this.getKuzuClient.bind(this),

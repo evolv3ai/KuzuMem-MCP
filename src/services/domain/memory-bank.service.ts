@@ -10,19 +10,6 @@ import * as repositoryOps from '../memory-operations/repository.ops';
 import { SnapshotService } from '../snapshot.service';
 
 export class MemoryBankService extends CoreService {
-  constructor(
-    repositoryProvider: RepositoryProvider,
-    getKuzuClient: (
-      mcpContext: ToolHandlerContext,
-      clientProjectRoot: string,
-    ) => Promise<KuzuDBClient>,
-    getSnapshotService: (
-      mcpContext: ToolHandlerContext,
-      clientProjectRoot: string,
-    ) => Promise<SnapshotService>,
-  ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService);
-  }
   async initMemoryBank(
     mcpContext: ToolHandlerContext,
     clientProjectRoot: string,

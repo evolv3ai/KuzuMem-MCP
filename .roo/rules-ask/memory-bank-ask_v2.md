@@ -148,7 +148,7 @@ This mode is STRICTLY READ-ONLY. The agent MUST:
 
 | Question Type           | Query Approach            | Example Response                                  |
 | ----------------------- | ------------------------- | ------------------------------------------------- |
-| Component functionality | Query specific component  | "comp-AuthService handles user authentication..." |
+| Component functionality | Query-specific component  | "comp-AuthService handles user authentication..." |
 | Architecture rationale  | Query decisions + context | "According to dec-20250115-rest-api..."           |
 | Current rules           | Query rules by category   | "The active security rules are..."                |
 | Dependencies            | Query relationships       | "comp-UserService depends on..."                  |
