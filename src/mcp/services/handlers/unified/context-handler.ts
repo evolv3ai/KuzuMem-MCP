@@ -1,5 +1,5 @@
 import { SdkToolHandler } from '../../../tool-handlers';
-import { handleToolError, logToolExecution } from '../../../utils/error-utils';
+import { handleToolError, logToolExecution, validateSession } from '../../../utils/error-utils';
 
 // TypeScript interfaces for context input parameters
 interface ContextParams {
@@ -123,15 +123,7 @@ export const contextHandler: SdkToolHandler = async (params, context, memoryServ
     const { operation, agent, summary, observation, repository, branch } = validatedParams;
 
     // 2. Validate session and get clientProjectRoot
-    if (!context.session?.clientProjectRoot) {
-      return {
-        success: false,
-        message:
-          'No active session for context tool. Use memory-bank tool with operation "init" first.',
-      };
-    }
-
-    const clientProjectRoot = context.session.clientProjectRoot;
+    const clientProjectRoot = validateSession(context, 'context');
     const contextService = await memoryService.context;
 
     // 3. Log the operation
