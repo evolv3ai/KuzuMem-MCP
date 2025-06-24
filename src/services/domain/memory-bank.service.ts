@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { KuzuDBClient } from '../../db/kuzu';
+import { RepositoryProvider } from '../../db/repository-provider';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { Repository } from '../../types';
@@ -6,8 +8,25 @@ import { ensureAbsolutePath } from '../../utils/path.utils';
 import { RepositoryAnalyzer } from '../../utils/repository-analyzer';
 import { CoreService } from '../core/core.service';
 import * as repositoryOps from '../memory-operations/repository.ops';
+import { MemoryService } from '../memory.service';
+import { SnapshotService } from '../snapshot.service';
 
 export class MemoryBankService extends CoreService {
+  constructor(
+    repositoryProvider: RepositoryProvider,
+    getKuzuClient: (
+      mcpContext: ToolHandlerContext,
+      clientProjectRoot: string,
+    ) => Promise<KuzuDBClient>,
+    getSnapshotService: (
+      mcpContext: ToolHandlerContext,
+      clientProjectRoot: string,
+    ) => Promise<SnapshotService>,
+    memoryService?: MemoryService,
+  ) {
+    super(repositoryProvider, getKuzuClient, getSnapshotService, memoryService);
+  }
+
   async initMemoryBank(
     mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
