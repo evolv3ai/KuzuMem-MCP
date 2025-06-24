@@ -49,6 +49,9 @@ export class RepositoryAnalyzer {
   private logger?: { debug: (message: string) => void };
 
   constructor(rootPath: string, logger?: { debug: (message: string) => void }) {
+    if (!rootPath || typeof rootPath !== 'string') {
+      throw new Error('rootPath must be a non-empty string');
+    }
     this.rootPath = rootPath;
     this.logger = logger;
   }
@@ -66,11 +69,14 @@ export class RepositoryAnalyzer {
   }
 
   async analyzeRepository(): Promise<RepositoryMetadata> {
-    const [techStack, architecture, projectInfo] = await Promise.all([
+    // Analyze tech stack and project info first to inform architecture analysis
+    const [techStack, projectInfo] = await Promise.all([
       this.analyzeTechStack(),
-      this.analyzeArchitecture(),
       this.analyzeProjectInfo(),
     ]);
+
+    // Analyze architecture with enhanced complexity assessment using tech stack and file count
+    const architecture = await this.analyzeArchitecture(techStack, projectInfo.size.files);
 
     return {
       techStack,
@@ -193,12 +199,13 @@ export class RepositoryAnalyzer {
     }
   }
 
-  private async analyzeFileExtensions(techStack: TechStack): Promise<void> {
+  private async analyzeFileExtensions(techStack: TechStack, maxFiles = 1000): Promise<void> {
     try {
       const files = await this.getFileList(this.rootPath);
       const extensions = new Set<string>();
+      const filesToAnalyze = files.slice(0, maxFiles);
 
-      files.forEach((file) => {
+      filesToAnalyze.forEach((file) => {
         const ext = path.extname(file).toLowerCase();
         if (ext) {
           extensions.add(ext);
@@ -224,7 +231,10 @@ export class RepositoryAnalyzer {
     }
   }
 
-  private async analyzeArchitecture(): Promise<ArchitectureInfo> {
+  private async analyzeArchitecture(
+    techStack?: TechStack,
+    fileCount?: number,
+  ): Promise<ArchitectureInfo> {
     const directories = await this.getDirectories(this.rootPath);
     const layers: string[] = [];
     const patterns: string[] = [];
@@ -254,7 +264,7 @@ export class RepositoryAnalyzer {
       patterns.push('Layered Architecture');
     }
 
-    const complexity = this.assessComplexity(directories, layers);
+    const complexity = this.assessComplexity(directories, layers, techStack, fileCount);
     const pattern = this.inferArchitecturalPattern(patterns, layers);
 
     return {
@@ -343,13 +353,28 @@ export class RepositoryAnalyzer {
   /**
    * Assess project complexity based on directory structure and architectural layers.
    * Uses externalized thresholds with documented rationale.
+   * Enhanced with dependency and file count factors for more nuanced assessment.
    */
   private assessComplexity(
     directories: string[],
     layers: string[],
+    techStack?: TechStack,
+    fileCount?: number,
   ): 'simple' | 'moderate' | 'complex' {
-    // Complexity scoring: sum of top-level directories and identified architectural layers
-    const complexityScore = directories.length + layers.length;
+    // Enhanced complexity scoring with multiple factors
+    let complexityScore = directories.length + layers.length;
+
+    // Add dependency complexity factor
+    if (techStack) {
+      const totalDeps =
+        techStack.frameworks.length + techStack.databases.length + techStack.tools.length;
+      complexityScore += Math.floor(totalDeps / 3); // Weight dependencies less heavily
+    }
+
+    // Add file count factor for very large projects
+    if (fileCount && fileCount > 500) {
+      complexityScore += Math.floor(fileCount / 250);
+    }
 
     if (complexityScore <= COMPLEXITY_THRESHOLDS.simple.max) {
       return 'simple'; // Small projects with minimal structure (< 5 components)
