@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
+import { safeJsonParse } from '../../utils/security.utils';
 import { CoreService } from '../core/core.service';
 
 export class MetadataService extends CoreService {
@@ -38,34 +39,32 @@ export class MetadataService extends CoreService {
       if (result && result.length > 0) {
         const metadata = result[0].m;
 
-        // Parse the content JSON field
-        let parsedContent: any = {};
-        if (metadata.content) {
-          try {
-            parsedContent = JSON.parse(metadata.content);
-          } catch (parseError) {
-            logger.warn(
-              `[MetadataService.getMetadata] Invalid JSON in content for ${repositoryName}:${branch}, using default values`,
-              {
-                content: metadata.content,
-                parseError: parseError instanceof Error ? parseError.message : String(parseError),
-              },
-            );
-            parsedContent = {};
-          }
-        }
+        // Use safe JSON parsing with comprehensive validation
+        const parsedContent = safeJsonParse(
+          metadata.content,
+          {
+            // Default fallback structure matching expected metadata format
+            project: {
+              name: 'Unknown',
+              created: new Date().toISOString(),
+              description: undefined,
+            },
+            tech_stack: {},
+            architecture: 'Unknown',
+            memory_spec_version: '3.0.0',
+          },
+          2 * 1024 * 1024, // 2MB max for metadata JSON
+        );
 
         return {
-          id: metadata.id || 'meta',
+          id: metadata.id,
           project: {
-            name: parsedContent.project?.name || metadata.name || repositoryName,
-            created:
-              parsedContent.project?.created ||
-              repository.created_at?.toISOString() ||
-              new Date().toISOString(),
+            name: parsedContent.project?.name || repositoryName,
+            created: parsedContent.project?.created || metadata.created || new Date().toISOString(),
+            description: parsedContent.project?.description,
           },
-          tech_stack: parsedContent.tech_stack || {},
-          architecture: parsedContent.architecture || '',
+          tech_stack: this.normalizeTechStack(parsedContent.tech_stack || {}),
+          architecture: parsedContent.architecture || 'Unknown',
           memory_spec_version: parsedContent.memory_spec_version || '3.0.0',
         };
       }
@@ -78,7 +77,7 @@ export class MetadataService extends CoreService {
           created: repository.created_at?.toISOString() || new Date().toISOString(),
         },
         tech_stack: {},
-        architecture: '',
+        architecture: 'Unknown',
         memory_spec_version: '3.0.0',
       };
     } catch (error: any) {
@@ -191,5 +190,29 @@ export class MetadataService extends CoreService {
         message: `Error updating metadata: ${error.message}`,
       };
     }
+  }
+
+  /**
+   * Normalize tech stack to ensure consistent string format
+   */
+  private normalizeTechStack(techStack: any): Record<string, string> {
+    if (!techStack || typeof techStack !== 'object') {
+      return {};
+    }
+
+    const normalized: Record<string, string> = {};
+
+    // Handle array values by joining them
+    Object.entries(techStack).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        normalized[key] = value.join(', ');
+      } else if (typeof value === 'string') {
+        normalized[key] = value;
+      } else if (value !== null && value !== undefined) {
+        normalized[key] = String(value);
+      }
+    });
+
+    return normalized;
   }
 }

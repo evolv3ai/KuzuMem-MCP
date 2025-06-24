@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   COMPLEXITY_THRESHOLDS,
   CONFIG_FILE_MAPPINGS,
@@ -7,6 +7,13 @@ import {
   EXTENSION_LANGUAGE_MAPPINGS,
   LAYER_MAPPINGS,
 } from './repository-analyzer-config';
+import {
+  DEFAULT_SECURITY_CONFIG,
+  MemoryMonitor,
+  ResourceManager,
+  SecurityConfig,
+  validatePath,
+} from './security.utils';
 
 const { readFile, readdir, stat, access } = fs.promises;
 
@@ -50,16 +57,19 @@ export class RepositoryAnalyzer {
     debug: (message: string) => void;
     error: (message: string, context?: any) => void;
   };
+  private securityConfig: SecurityConfig;
+  private resourceManager: ResourceManager;
 
   constructor(
     rootPath: string,
     logger?: { debug: (message: string) => void; error: (message: string, context?: any) => void },
+    securityConfig: SecurityConfig = DEFAULT_SECURITY_CONFIG,
   ) {
-    if (!rootPath || typeof rootPath !== 'string') {
-      throw new Error('rootPath must be a non-empty string');
-    }
-    this.rootPath = rootPath;
+    // Validate and normalize root path to prevent traversal
+    this.rootPath = path.resolve(rootPath);
     this.logger = logger;
+    this.securityConfig = securityConfig;
+    this.resourceManager = new ResourceManager();
   }
 
   /**
@@ -67,30 +77,44 @@ export class RepositoryAnalyzer {
    */
   private async fileExists(filePath: string): Promise<boolean> {
     try {
-      await access(filePath, fs.constants.F_OK);
+      // Validate path before checking existence
+      const safePath = validatePath(filePath, this.rootPath);
+      await access(safePath, fs.constants.F_OK);
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
 
   async analyzeRepository(): Promise<RepositoryMetadata> {
-    // Analyze tech stack and project info first to inform architecture analysis
-    const [techStack, projectInfo] = await Promise.all([
-      this.analyzeTechStack(),
-      this.analyzeProjectInfo(),
-    ]);
+    const memoryMonitor = new MemoryMonitor();
 
-    // Analyze architecture with enhanced complexity assessment using tech stack and file count
-    const architecture = await this.analyzeArchitecture(techStack, projectInfo.size.files);
+    try {
+      const techStack = await this.analyzeTechStack();
 
-    return {
-      techStack,
-      architecture,
-      projectType: this.inferProjectType(techStack, architecture),
-      size: projectInfo.size,
-      createdDate: projectInfo.createdDate,
-    };
+      // Check memory usage after tech stack analysis
+      memoryMonitor.checkMemoryUsage();
+
+      const files = await this.getFileListSecurely();
+      const architecture = await this.analyzeArchitecture(techStack, files.length);
+
+      // Check memory usage after file analysis
+      memoryMonitor.checkMemoryUsage();
+
+      const projectInfo = await this.analyzeProjectInfo();
+      const projectType = this.inferProjectType(techStack, architecture);
+
+      return {
+        techStack,
+        architecture,
+        projectType,
+        size: projectInfo.size,
+        createdDate: projectInfo.createdDate,
+      };
+    } finally {
+      // Always clean up resources
+      await this.resourceManager.cleanup();
+    }
   }
 
   private async analyzeTechStack(): Promise<TechStack> {
@@ -101,24 +125,28 @@ export class RepositoryAnalyzer {
       tools: [],
     };
 
-    // Analyze package.json for Node.js/TypeScript projects
-    await this.analyzePackageJson(techStack);
-
-    // Analyze other config files
+    await this.analyzePackageJsonSecurely(techStack);
     await this.analyzeConfigFiles(techStack);
-
-    // Analyze file extensions
     await this.analyzeFileExtensions(techStack);
 
     return techStack;
   }
 
-  private async analyzePackageJson(techStack: TechStack): Promise<void> {
+  private async analyzePackageJsonSecurely(techStack: TechStack): Promise<void> {
     try {
       const packageJsonPath = path.join(this.rootPath, 'package.json');
-      const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
 
-      // Detect package manager
+      // Use secure file reading with resource management
+      const packageJsonContent = await this.resourceManager.readFileSecurely(packageJsonPath);
+
+      // Use safe JSON parsing with validation
+      const packageJson = this.safeParsePackageJson(packageJsonContent);
+
+      if (!packageJson) {
+        return; // Failed to parse, continue without package.json data
+      }
+
+      // Detect package manager securely
       if (await this.fileExists(path.join(this.rootPath, 'pnpm-lock.yaml'))) {
         techStack.packageManager = 'pnpm';
       } else if (await this.fileExists(path.join(this.rootPath, 'yarn.lock'))) {
@@ -127,57 +155,44 @@ export class RepositoryAnalyzer {
         techStack.packageManager = 'npm';
       }
 
-      // Detect runtime
-      if (packageJson.engines?.node) {
-        techStack.runtime = `Node.js ${packageJson.engines.node}`;
-      }
+      // Detect runtime and dependencies
+      const dependencies = { ...packageJson.dependencies, ...packageJson.devDependencies };
 
-      // Capture package metadata for better project type inference
+      this.extractFrameworksFromDependencies(dependencies, techStack);
+      this.extractDatabasesFromDependencies(dependencies, techStack);
+      this.extractToolsFromDependencies(dependencies, techStack);
+
+      // Extract package metadata securely
       techStack.packageMetadata = {
-        hasMainField: !!packageJson.main,
-        hasExportsField: !!packageJson.exports,
-        hasTypesField: !!packageJson.types || !!packageJson.typings,
-        hasBinField: !!packageJson.bin,
-        isPrivate: !!packageJson.private,
+        hasMainField: Boolean(packageJson.main),
+        hasExportsField: Boolean(packageJson.exports),
+        hasTypesField: Boolean(packageJson.types || packageJson.typings),
+        hasBinField: Boolean(packageJson.bin),
+        isPrivate: Boolean(packageJson.private),
       };
 
-      // Analyze dependencies
-      const allDeps = {
-        ...packageJson.dependencies,
-        ...packageJson.devDependencies,
-      };
-
-      // Languages
+      // Detect TypeScript if present
       if (
-        allDeps.typescript ||
+        dependencies.typescript ||
+        dependencies['@types/node'] ||
         (await this.fileExists(path.join(this.rootPath, 'tsconfig.json')))
       ) {
-        techStack.languages.push('TypeScript');
+        if (!techStack.languages.includes('TypeScript')) {
+          techStack.languages.push('TypeScript');
+        }
       }
-      if (Object.keys(allDeps).length > 0) {
+
+      // Detect JavaScript (always present if package.json exists)
+      if (!techStack.languages.includes('JavaScript')) {
         techStack.languages.push('JavaScript');
       }
 
-      // Process all dependencies in a single iteration for better performance
-      Object.keys(allDeps).forEach((dep) => {
-        const framework =
-          DEPENDENCY_MAPPINGS.frameworks[dep as keyof typeof DEPENDENCY_MAPPINGS.frameworks];
-        const database =
-          DEPENDENCY_MAPPINGS.databases[dep as keyof typeof DEPENDENCY_MAPPINGS.databases];
-        const tool = DEPENDENCY_MAPPINGS.tools[dep as keyof typeof DEPENDENCY_MAPPINGS.tools];
-
-        if (framework) {
-          techStack.frameworks.push(framework);
-        }
-        if (database) {
-          techStack.databases.push(database);
-        }
-        if (tool) {
-          techStack.tools.push(tool);
-        }
-      });
+      // Detect Node.js runtime
+      if (dependencies['@types/node'] || packageJson.engines?.node) {
+        techStack.runtime = 'Node.js';
+      }
     } catch (error) {
-      // package.json doesn't exist or is invalid
+      // Enhanced error handling
       const errorMessage = `Failed to analyze package.json: ${error instanceof Error ? error.message : String(error)}`;
       if (this.logger) {
         this.logger.error(`[RepositoryAnalyzer] ${errorMessage}`, {
@@ -187,6 +202,40 @@ export class RepositoryAnalyzer {
       } else {
         // Skip logging when no logger is available to maintain consistency
       }
+    }
+  }
+
+  /**
+   * Safely parse package.json with comprehensive validation
+   */
+  private safeParsePackageJson(content: string): any {
+    try {
+      // Basic validation
+      if (!content || typeof content !== 'string') {
+        return null;
+      }
+
+      // Length validation (package.json should not be huge)
+      if (content.length > 1024 * 1024) {
+        // 1MB max
+        throw new Error('package.json file too large');
+      }
+
+      const parsed = JSON.parse(content);
+
+      // Validate it's an object with expected structure
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return null;
+      }
+
+      return parsed;
+    } catch (error) {
+      if (this.logger) {
+        this.logger.error('[RepositoryAnalyzer] Failed to parse package.json', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      return null;
     }
   }
 
@@ -208,13 +257,24 @@ export class RepositoryAnalyzer {
     }
   }
 
-  private async analyzeFileExtensions(techStack: TechStack, maxFiles = 1000): Promise<void> {
+  private async analyzeFileExtensions(techStack: TechStack): Promise<void> {
     try {
-      const files = await this.getFileList(this.rootPath);
+      const files = await this.getFileListSecurely();
       const extensions = new Set<string>();
+
+      // Use security config maxFiles instead of hardcoded limit
+      const maxFiles = this.securityConfig.maxFiles;
       const filesToAnalyze = files.slice(0, maxFiles);
 
-      filesToAnalyze.forEach((file) => {
+      // Warn if we're truncating analysis due to file limit
+      if (files.length > maxFiles) {
+        const warningMessage = `Repository analysis truncated: ${files.length} files found, analyzing only first ${maxFiles} files. Consider increasing maxFiles limit for complete analysis.`;
+        if (this.logger) {
+          this.logger.debug(`[RepositoryAnalyzer] ${warningMessage}`);
+        }
+      }
+
+      filesToAnalyze.forEach((file: string) => {
         const ext = path.extname(file).toLowerCase();
         if (ext) {
           extensions.add(ext);
@@ -230,16 +290,17 @@ export class RepositoryAnalyzer {
         }
       });
     } catch (error) {
-      // Error reading files
+      // Critical error - fail analysis rather than continue silently
       const errorMessage = `Failed to analyze file extensions: ${error instanceof Error ? error.message : String(error)}`;
       if (this.logger) {
         this.logger.error(`[RepositoryAnalyzer] ${errorMessage}`, {
           error: error instanceof Error ? error.toString() : String(error),
           rootPath: this.rootPath,
         });
-      } else {
-        // Skip logging when no logger is available to maintain consistency
       }
+
+      // Throw error to prevent incomplete analysis from being treated as complete
+      throw new Error(`Repository analysis failed during file extension analysis: ${errorMessage}`);
     }
   }
 
@@ -289,8 +350,8 @@ export class RepositoryAnalyzer {
 
   private async analyzeProjectInfo(): Promise<{ size: { files: number }; createdDate: string }> {
     try {
-      const files = await this.getFileList(this.rootPath);
-      const stats = await stat(this.rootPath);
+      const files = await this.getFileListSecurely();
+      const stats = await fs.promises.stat(this.rootPath);
 
       return {
         size: {
@@ -397,19 +458,34 @@ export class RepositoryAnalyzer {
     return 'complex'; // Enterprise/monolithic applications with extensive structure (10+ components)
   }
 
+  /**
+   * Securely get directory list with path validation
+   */
   private async getDirectories(dirPath: string): Promise<string[]> {
     try {
-      const entries = await readdir(dirPath);
+      // Validate directory path
+      const safeDirPath = validatePath(dirPath, this.rootPath);
+      const entries = await readdir(safeDirPath);
       const directories: string[] = [];
 
       for (const entry of entries) {
         if (entry.startsWith('.')) {
+          continue; // Skip hidden directories
+        }
+
+        try {
+          const entryPath = path.join(safeDirPath, entry);
+
+          // Additional security check - ensure we don't traverse outside root
+          validatePath(entryPath, this.rootPath);
+
+          const entryStat = await stat(entryPath);
+          if (entryStat.isDirectory()) {
+            directories.push(entry);
+          }
+        } catch (error) {
+          // Skip entries that cause errors (could be permission issues or invalid paths)
           continue;
-        } // Skip hidden directories
-        const entryPath = path.join(dirPath, entry);
-        const entryStat = await stat(entryPath);
-        if (entryStat.isDirectory()) {
-          directories.push(entry);
         }
       }
 
@@ -420,46 +496,177 @@ export class RepositoryAnalyzer {
   }
 
   /**
-   * Optimized iterative file traversal to avoid deep recursion for large directory structures.
-   * Uses a queue-based approach instead of recursive calls for better performance.
+   * Secure file list traversal with memory limits and path validation
    */
-  private async getFileList(dirPath: string): Promise<string[]> {
+  private async getFileListSecurely(): Promise<string[]> {
     const files: string[] = [];
-    const queue = [dirPath];
+    const queue = [this.rootPath];
+    const memoryMonitor = new MemoryMonitor(200); // 200MB limit for file listing
+    let fileCount = 0;
+    let criticalErrors = 0;
+    const maxCriticalErrors = 5; // Fail after 5 critical errors
+    const currentDepth = 0;
 
-    while (queue.length > 0) {
+    while (queue.length > 0 && fileCount < this.securityConfig.maxFiles) {
       const currentPath = queue.shift()!;
+
+      // Check memory usage periodically
+      if (fileCount % 100 === 0) {
+        memoryMonitor.checkMemoryUsage();
+      }
+
+      // Calculate current depth to prevent infinite recursion
+      const relativePath = path.relative(this.rootPath, currentPath);
+      const depth = relativePath ? relativePath.split(path.sep).length : 0;
+
+      if (depth > this.securityConfig.maxDirectoryDepth) {
+        continue; // Skip directories that are too deep
+      }
+
       try {
+        // Validate current path
+        validatePath(currentPath, this.rootPath);
+
         const entries = await readdir(currentPath);
 
         for (const entry of entries) {
           if (entry.startsWith('.')) {
             continue; // Skip hidden files/directories
           }
-          const entryPath = path.join(currentPath, entry);
-          const entryStat = await stat(entryPath);
 
-          if (entryStat.isDirectory()) {
-            queue.push(entryPath);
-          } else {
-            files.push(entryPath);
+          try {
+            const entryPath = path.join(currentPath, entry);
+
+            // Validate entry path and check if it should be ignored
+            validatePath(entryPath, this.rootPath);
+
+            const relativeEntryPath = path.relative(this.rootPath, entryPath);
+            if (this.resourceManager.shouldIgnorePath(relativeEntryPath, this.securityConfig)) {
+              continue;
+            }
+
+            const entryStat = await stat(entryPath);
+
+            if (entryStat.isDirectory()) {
+              queue.push(entryPath);
+            } else if (entryStat.isFile()) {
+              // Check file size before adding to list
+              if (entryStat.size <= this.securityConfig.maxFileSize) {
+                files.push(entryPath);
+                fileCount++;
+
+                // Check if we've hit the file limit
+                if (fileCount >= this.securityConfig.maxFiles) {
+                  if (this.logger) {
+                    this.logger.debug(
+                      `[RepositoryAnalyzer] Hit file limit (${this.securityConfig.maxFiles}), stopping traversal`,
+                    );
+                  }
+                  break;
+                }
+              }
+            }
+          } catch (entryError) {
+            // Skip problematic entries but continue processing
+            continue;
           }
         }
       } catch (error) {
-        // Continue processing other directories
+        criticalErrors++;
         const errorMessage = `Failed to read directory ${currentPath}: ${error instanceof Error ? error.message : String(error)}`;
+
         if (this.logger) {
           this.logger.error(`[RepositoryAnalyzer] ${errorMessage}`, {
             error: error instanceof Error ? error.toString() : String(error),
             currentPath,
             rootPath: this.rootPath,
+            criticalErrors,
           });
-        } else {
-          // Skip logging when no logger is available to maintain consistency
+        }
+
+        // Fail fast if too many critical errors occur
+        if (criticalErrors >= maxCriticalErrors) {
+          const failureMessage = `Repository analysis failed: ${criticalErrors} critical directory read errors encountered. This may indicate file system corruption, permission issues, or other serious problems.`;
+          if (this.logger) {
+            this.logger.error(`[RepositoryAnalyzer] ${failureMessage}`);
+          }
+          throw new Error(failureMessage);
         }
       }
     }
 
+    if (this.logger && fileCount >= this.securityConfig.maxFiles) {
+      this.logger.debug(
+        `[RepositoryAnalyzer] File traversal completed with limit: ${fileCount} files processed`,
+      );
+    }
+
+    // Report final statistics
+    if (this.logger && (criticalErrors > 0 || fileCount >= this.securityConfig.maxFiles)) {
+      this.logger.debug(
+        `[RepositoryAnalyzer] Traversal completed: ${fileCount} files found, ${criticalErrors} directory errors encountered`,
+      );
+    }
+
     return files;
+  }
+
+  /**
+   * Extract frameworks from dependencies with validation
+   */
+  private extractFrameworksFromDependencies(
+    dependencies: Record<string, any>,
+    techStack: TechStack,
+  ): void {
+    if (!dependencies || typeof dependencies !== 'object') {
+      return;
+    }
+
+    Object.keys(dependencies).forEach((dep) => {
+      const framework =
+        DEPENDENCY_MAPPINGS.frameworks[dep as keyof typeof DEPENDENCY_MAPPINGS.frameworks];
+      if (framework && !techStack.frameworks.includes(framework)) {
+        techStack.frameworks.push(framework);
+      }
+    });
+  }
+
+  /**
+   * Extract databases from dependencies with validation
+   */
+  private extractDatabasesFromDependencies(
+    dependencies: Record<string, any>,
+    techStack: TechStack,
+  ): void {
+    if (!dependencies || typeof dependencies !== 'object') {
+      return;
+    }
+
+    Object.keys(dependencies).forEach((dep) => {
+      const database =
+        DEPENDENCY_MAPPINGS.databases[dep as keyof typeof DEPENDENCY_MAPPINGS.databases];
+      if (database && !techStack.databases.includes(database)) {
+        techStack.databases.push(database);
+      }
+    });
+  }
+
+  /**
+   * Extract tools from dependencies with validation
+   */
+  private extractToolsFromDependencies(
+    dependencies: Record<string, any>,
+    techStack: TechStack,
+  ): void {
+    if (!dependencies || typeof dependencies !== 'object') {
+      return;
+    }
+
+    Object.keys(dependencies).forEach((dep) => {
+      const tool = DEPENDENCY_MAPPINGS.tools[dep as keyof typeof DEPENDENCY_MAPPINGS.tools];
+      if (tool && !techStack.tools.includes(tool)) {
+        techStack.tools.push(tool);
+      }
+    });
   }
 }
