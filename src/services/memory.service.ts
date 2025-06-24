@@ -61,21 +61,13 @@ export class MemoryService {
 
   /**
    * Get MemoryBankService instance
-   * Now returns Promise<MemoryBankService> for consistency with other service getters
+   * Returns Promise<MemoryBankService> for consistency with other service getters
    */
   public get memoryBank(): Promise<MemoryBankService> {
-    return Promise.resolve(this._getMemoryBankSync());
-  }
-
-  /**
-   * Internal synchronous method to get MemoryBankService instance
-   * Used internally when synchronous access is needed
-   */
-  private _getMemoryBankSync(): MemoryBankService {
     if (!this._memoryBank) {
       this._memoryBank = new MemoryBankService(this.serviceContainer);
     }
-    return this._memoryBank;
+    return Promise.resolve(this._memoryBank);
   }
 
   public get metadata(): Promise<IMetadataService> {
@@ -103,16 +95,29 @@ export class MemoryService {
   }
 
   private async initialize(initialMcpContext?: ToolHandlerContext): Promise<void> {
-    // Initialize the service container
-    this.serviceContainer = await ServiceContainer.getInstance();
-
     // Use logger if available, otherwise console for this early init log
     const logger = initialMcpContext?.logger || console;
-    logger.info(
-      'MemoryService: Initialized with ServiceContainer - eliminates circular dependencies',
-    );
 
-    logger.info('MemoryService: All services configured with clean dependency injection');
+    try {
+      // Initialize the service container
+      this.serviceContainer = await ServiceContainer.getInstance();
+
+      logger.info(
+        'MemoryService: Initialized with ServiceContainer - eliminates circular dependencies',
+      );
+
+      logger.info('MemoryService: All services configured with clean dependency injection');
+    } catch (error: any) {
+      const errorMessage = `Failed to initialize ServiceContainer: ${error?.message || error}`;
+      logger.error(`[MemoryService.initialize] ${errorMessage}`, error);
+
+      // Ensure MemoryService is left in a consistent state by clearing any partial state
+      this.serviceContainer = undefined as any;
+      this._memoryBank = undefined;
+
+      // Re-throw to prevent incomplete initialization
+      throw new Error(errorMessage);
+    }
   }
 
   /**
@@ -148,22 +153,32 @@ export class MemoryService {
 
     // Create and store initialization promise to prevent concurrent initialization
     MemoryService.initializationPromise = (async (): Promise<MemoryService> => {
-      // Double-check pattern: verify instance wasn't created while waiting
-      if (MemoryService.instance) {
-        return MemoryService.instance;
+      try {
+        // Double-check pattern: verify instance wasn't created while waiting
+        if (MemoryService.instance) {
+          return MemoryService.instance;
+        }
+
+        // Create and initialize the singleton instance
+        const instance = new MemoryService();
+        await instance.initialize(initialMcpContext);
+
+        // Atomically assign the instance
+        MemoryService.instance = instance;
+
+        // Clear the initialization promise as we're done
+        MemoryService.initializationPromise = null;
+
+        return instance;
+      } catch (error: any) {
+        // Clear the initialization promise on failure to allow retry
+        MemoryService.initializationPromise = null;
+
+        // Log the error and re-throw
+        const logger = initialMcpContext?.logger || console;
+        logger.error('[MemoryService.getInstance] Failed to create MemoryService instance:', error);
+        throw error;
       }
-
-      // Create and initialize the singleton instance
-      const instance = new MemoryService();
-      await instance.initialize(initialMcpContext);
-
-      // Atomically assign the instance
-      MemoryService.instance = instance;
-
-      // Clear the initialization promise as we're done
-      MemoryService.initializationPromise = null;
-
-      return instance;
     })();
 
     return MemoryService.initializationPromise;

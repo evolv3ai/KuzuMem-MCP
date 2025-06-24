@@ -64,12 +64,13 @@ program
     try {
       const clientProjectRoot = getEffectiveProjectRoot();
       const mockContext = createMockContext();
-      if (!memoryService.getServices) {
-        throw new Error('ServiceRegistry not initialized in MemoryService');
-      }
-      await (
-        await memoryService.getServices()
-      ).memoryBank.initMemoryBank(mockContext, clientProjectRoot, repositoryName, branch);
+      const services = await memoryService.getServices();
+      await services.memoryBank.initMemoryBank(
+        mockContext,
+        clientProjectRoot,
+        repositoryName,
+        branch,
+      );
       cliLogger.info(
         { repositoryName, branch, clientProjectRoot },
         `✅ Memory bank initialized for repository: ${repositoryName} (branch: ${branch})`,
@@ -110,12 +111,8 @@ program
     };
     try {
       const mockContext = createMockContext();
-      if (!memoryService.getServices) {
-        throw new Error('ServiceRegistry not initialized in MemoryService');
-      }
-      await (
-        await memoryService.getServices()
-      ).context.updateContext(mockContext, clientProjectRoot, contextParams);
+      const services = await memoryService.getServices();
+      await services.context.updateContext(mockContext, clientProjectRoot, contextParams);
       cliLogger.info(
         { repositoryName, branch, contextParams },
         `✅ Added to today's context for repository: ${repositoryName} (branch: ${branch})`,
@@ -154,12 +151,8 @@ program
     };
     try {
       const mockContext = createMockContext();
-      if (!memoryService.getServices) {
-        throw new Error('ServiceRegistry not initialized in MemoryService');
-      }
-      await (
-        await memoryService.getServices()
-      ).entity.upsertComponent(
+      const services = await memoryService.getServices();
+      await services.entity.upsertComponent(
         mockContext,
         clientProjectRoot,
         repositoryName,
@@ -203,12 +196,8 @@ program
     };
     try {
       const mockContext = createMockContext();
-      if (!memoryService.getServices) {
-        throw new Error('ServiceRegistry not initialized in MemoryService');
-      }
-      await (
-        await memoryService.getServices()
-      ).entity.upsertDecision(
+      const services = await memoryService.getServices();
+      await services.entity.upsertDecision(
         mockContext,
         clientProjectRoot,
         repositoryName,
@@ -258,12 +247,8 @@ program
     };
     try {
       const mockContext = createMockContext();
-      if (!memoryService.getServices) {
-        throw new Error('ServiceRegistry not initialized in MemoryService');
-      }
-      await (
-        await memoryService.getServices()
-      ).entity.upsertRule(
+      const services = await memoryService.getServices();
+      await services.entity.upsertRule(
         mockContext,
         clientProjectRoot,
         repositoryName,
