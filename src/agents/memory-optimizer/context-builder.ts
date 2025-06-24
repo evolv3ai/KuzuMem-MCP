@@ -100,10 +100,8 @@ export class MemoryContextBuilder {
     // Use existing countNodesByLabel method
     for (const entityType of entityTypes) {
       try {
-        if (!this.memoryService.services) {
-          throw new Error('ServiceRegistry not initialized in MemoryService');
-        }
-        const result = await this.memoryService.services.graphQuery.countNodesByLabel(
+        const services = await this.memoryService.getServices();
+        const result = await services.graphQuery.countNodesByLabel(
           mcpContext,
           clientProjectRoot,
           repository,

@@ -55,6 +55,8 @@ describe('Query Tool Tests', () => {
     } as any;
 
     mockMemoryService = {
+      context: mockContextService,
+      graphQuery: mockGraphQueryService,
       services: {
         context: mockContextService,
         graphQuery: mockGraphQueryService,

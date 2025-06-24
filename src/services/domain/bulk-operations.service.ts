@@ -1,7 +1,6 @@
 import { KuzuDBClient } from '../../db/kuzu';
-import { RepositoryProvider } from '../../db/repository-provider';
 import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
-import { SnapshotService } from '../snapshot.service';
+import { IServiceContainer } from '../core/service-container.interface';
 import { BaseEntityService } from './base-entity.service';
 
 /**
@@ -9,18 +8,8 @@ import { BaseEntityService } from './base-entity.service';
  * Handles complex operations that span multiple entities
  */
 export class BulkOperationsService extends BaseEntityService {
-  constructor(
-    repositoryProvider: RepositoryProvider,
-    getKuzuClient: (
-      mcpContext: ToolHandlerContext,
-      clientProjectRoot: string,
-    ) => Promise<KuzuDBClient>,
-    getSnapshotService: (
-      mcpContext: ToolHandlerContext,
-      clientProjectRoot: string,
-    ) => Promise<SnapshotService>,
-  ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService);
+  constructor(serviceContainer: IServiceContainer) {
+    super(serviceContainer);
   }
 
   /**

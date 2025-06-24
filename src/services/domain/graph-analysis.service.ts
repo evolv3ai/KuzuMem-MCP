@@ -1,25 +1,13 @@
 import { z } from 'zod';
-import { KuzuDBClient } from '../../db/kuzu';
-import { RepositoryProvider } from '../../db/repository-provider';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { CoreService } from '../core/core.service';
+import { IGraphAnalysisService, IServiceContainer } from '../core/service-container.interface';
 import * as graphOps from '../memory-operations/graph.ops';
-import { SnapshotService } from '../snapshot.service';
 
-export class GraphAnalysisService extends CoreService {
-  constructor(
-    repositoryProvider: RepositoryProvider,
-    getKuzuClient: (
-      mcpContext: ToolHandlerContext,
-      clientProjectRoot: string,
-    ) => Promise<KuzuDBClient>,
-    getSnapshotService: (
-      mcpContext: ToolHandlerContext,
-      clientProjectRoot: string,
-    ) => Promise<SnapshotService>,
-  ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService);
+export class GraphAnalysisService extends CoreService implements IGraphAnalysisService {
+  constructor(serviceContainer: IServiceContainer) {
+    super(serviceContainer);
   }
   async kCoreDecomposition(
     mcpContext: ToolHandlerContext,

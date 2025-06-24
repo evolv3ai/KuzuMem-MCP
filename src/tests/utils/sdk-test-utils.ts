@@ -1,4 +1,11 @@
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import type { ContextService } from '../../services/domain/context.service';
+import type { EntityService } from '../../services/domain/entity.service';
+import type { GraphAnalysisService } from '../../services/domain/graph-analysis.service';
+import type { GraphQueryService } from '../../services/domain/graph-query.service';
+import type { MemoryBankService } from '../../services/domain/memory-bank.service';
+import type { MetadataService } from '../../services/domain/metadata.service';
+import type { MemoryService } from '../../services/memory.service';
 
 // Interim type for the structure of tool_call containing tool_response
 interface ToolCallObjectWithResponse {
@@ -62,6 +69,35 @@ export interface ProgressNotification {
 
 // A union type for messages the onMessage handler might receive
 export type SDKMessage = JSONRPCResponse | ProgressNotification; // Add other expected notification types
+
+/**
+ * Reusable mock type for MemoryService that maintains type safety in tests.
+ * This type matches the actual structure used in tests and replaces the use of 'any' type.
+ */
+export interface MockMemoryService {
+  // Direct service properties (matching MemoryService structure)
+  memoryBank?: jest.Mocked<MemoryBankService>;
+  metadata?: jest.Mocked<MetadataService>;
+  entity?: jest.Mocked<EntityService>;
+  context?: jest.Mocked<ContextService>;
+  graphQuery?: jest.Mocked<GraphQueryService>;
+  graphAnalysis?: jest.Mocked<GraphAnalysisService>;
+
+  // Services getter property for backward compatibility
+  services?: {
+    memoryBank?: jest.Mocked<MemoryBankService>;
+    metadata?: jest.Mocked<MetadataService>;
+    entity?: jest.Mocked<EntityService>;
+    context?: jest.Mocked<ContextService>;
+    graphQuery?: jest.Mocked<GraphQueryService>;
+    graphAnalysis?: jest.Mocked<GraphAnalysisService>;
+  };
+
+  // Other MemoryService methods that might be called in tests
+  getKuzuClient?: jest.MockedFunction<MemoryService['getKuzuClient']>;
+  getSnapshotService?: jest.MockedFunction<MemoryService['getSnapshotService']>;
+  shutdown?: jest.MockedFunction<MemoryService['shutdown']>;
+}
 
 // Represents the structure of the 'result' field for a successful tool call
 // This structure is based on the user's description of CallToolResult and how to access its content.

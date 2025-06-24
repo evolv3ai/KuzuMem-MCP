@@ -1,26 +1,14 @@
 import { z } from 'zod';
-import { KuzuDBClient } from '../../db/kuzu';
-import { RepositoryProvider } from '../../db/repository-provider';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { Context } from '../../types';
 import { CoreService } from '../core/core.service';
+import { IContextService, IServiceContainer } from '../core/service-container.interface';
 import * as contextOps from '../memory-operations/context.ops';
-import { SnapshotService } from '../snapshot.service';
 
-export class ContextService extends CoreService {
-  constructor(
-    repositoryProvider: RepositoryProvider,
-    getKuzuClient: (
-      mcpContext: ToolHandlerContext,
-      clientProjectRoot: string,
-    ) => Promise<KuzuDBClient>,
-    getSnapshotService: (
-      mcpContext: ToolHandlerContext,
-      clientProjectRoot: string,
-    ) => Promise<SnapshotService>,
-  ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService);
+export class ContextService extends CoreService implements IContextService {
+  constructor(serviceContainer: IServiceContainer) {
+    super(serviceContainer);
   }
 
   /**

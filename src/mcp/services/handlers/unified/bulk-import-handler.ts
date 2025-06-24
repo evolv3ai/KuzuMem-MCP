@@ -1,67 +1,99 @@
-import { z } from 'zod';
-import {
-  BulkImportInputSchema,
-  BulkImportOutputSchema,
-} from '../../../schemas/unified-tool-schemas';
+import { Component, Decision, Rule } from '../../../../types';
 import { SdkToolHandler } from '../../../tool-handlers';
 import { handleToolError, logToolExecution, validateSession } from '../../../utils/error-utils';
 
+// TypeScript interfaces for bulk-import input parameters
+interface BulkImportParams {
+  type: 'components' | 'decisions' | 'rules';
+  clientProjectRoot?: string;
+  repository: string;
+  branch?: string;
+  overwrite?: boolean;
+  // Entity arrays
+  components?: Component[];
+  decisions?: Decision[];
+  rules?: Rule[];
+}
+
 /**
  * Bulk Import Handler
- * Handles bulk import of entities
+ * Handles bulk import operations for multiple entities
  */
 export const bulkImportHandler: SdkToolHandler = async (params, context, memoryService) => {
-  // 1. Parse and validate parameters
-  const validatedParams = BulkImportInputSchema.parse(params);
-  const { type, repository, branch = 'main', overwrite = false } = validatedParams;
+  // 1. Validate and extract parameters
+  const validatedParams = params as unknown as BulkImportParams;
+
+  // Basic validation
+  if (!validatedParams.type) {
+    throw new Error('type parameter is required');
+  }
+  if (!validatedParams.repository) {
+    throw new Error('repository parameter is required');
+  }
+
+  const {
+    type,
+    repository,
+    branch = 'main',
+    overwrite = false,
+    components,
+    decisions,
+    rules,
+  } = validatedParams;
 
   // 2. Validate session and get clientProjectRoot
   const clientProjectRoot = validateSession(context, 'bulk-import');
-  if (!memoryService.entity) {
-    throw new Error('EntityService not initialized in MemoryService');
+
+  // 3. Additional validation before try-catch to ensure errors are thrown
+  switch (type) {
+    case 'components':
+      if (!components || !Array.isArray(components) || components.length === 0) {
+        throw new Error('No components data provided for import');
+      }
+      break;
+    case 'decisions':
+      if (!decisions || !Array.isArray(decisions) || decisions.length === 0) {
+        throw new Error('No decisions data provided for import');
+      }
+      break;
+    case 'rules':
+      if (!rules || !Array.isArray(rules) || rules.length === 0) {
+        throw new Error('No rules data provided for import');
+      }
+      break;
+    default:
+      throw new Error(`Unknown bulk import type: ${type}`);
   }
 
-  // 3. Log the operation
-  logToolExecution(context, `bulk import: ${type}`, {
+  // 4. Log the operation
+  logToolExecution(context, `bulk-import operation: ${type}`, {
     repository,
     branch,
     clientProjectRoot,
+    type,
     overwrite,
   });
 
-  // 4. Validate type-specific data exists
-  const data = validatedParams[type];
-  if (!data || !Array.isArray(data) || data.length === 0) {
-    throw new Error(`No ${type} data provided for import`);
-  }
-
-  const errors: Array<{ id: string; error: string }> = [];
-  let imported = 0;
-  let skipped = 0;
-  let failed = 0;
-
   try {
-    await context.sendProgress({
-      status: 'in_progress',
-      message: `Starting bulk import of ${data.length} ${type}...`,
-      percent: 10,
-    });
-
     switch (type) {
       case 'components': {
-        const componentData = data as Array<{
-          id: string;
-          name: string;
-          kind?: string;
-          status?: 'active' | 'deprecated' | 'planned';
-          depends_on?: string[];
-        }>;
-        for (let i = 0; i < componentData.length; i++) {
-          const component = componentData[i];
+        await context.sendProgress({
+          status: 'in_progress',
+          message: `Starting bulk import of ${components!.length} components...`,
+          percent: 10,
+        });
+
+        let imported = 0;
+        let skipped = 0;
+        let failed = 0;
+        const errors: Array<{ id: string; error: string }> = [];
+        const entityService = await memoryService.entity;
+
+        for (const component of components!) {
           try {
-            // Check if exists
+            // Check if component already exists
             if (!overwrite) {
-              const existing = await memoryService.entity.getComponent(
+              const existing = await entityService.getComponent(
                 context,
                 clientProjectRoot,
                 repository,
@@ -74,53 +106,62 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
               }
             }
 
-            // Import component
-            await memoryService.entity.upsertComponent(
+            // Import the component
+            await entityService.upsertComponent(
               context,
               clientProjectRoot,
               repository,
               branch,
-              {
-                id: component.id,
-                name: component.name,
-                kind: component.kind,
-                status: component.status,
-                depends_on: component.depends_on,
-              },
+              component,
             );
             imported++;
           } catch (error) {
+            context.logger.warn(`Failed to import component ${component.id}:`, error);
             failed++;
             errors.push({
               id: component.id,
               error: error instanceof Error ? error.message : String(error),
             });
           }
-
-          // Update progress
-          const percent = Math.floor(10 + (i / data.length) * 80);
-          await context.sendProgress({
-            status: 'in_progress',
-            message: `Importing components: ${i + 1}/${data.length}`,
-            percent,
-          });
         }
-        break;
+
+        await context.sendProgress({
+          status: 'complete',
+          message: `Bulk import complete: ${imported} imported, ${skipped} skipped, ${failed} failed`,
+          percent: 100,
+          isFinal: true,
+        });
+
+        return {
+          type: 'components',
+          success: true,
+          imported,
+          skipped,
+          failed,
+          total: components!.length,
+          errors: errors.length > 0 ? errors : undefined,
+          message: `Successfully imported ${imported} components, skipped ${skipped}`,
+        };
       }
 
       case 'decisions': {
-        const decisionData = data as Array<{
-          id: string;
-          name: string;
-          date: string;
-          context?: string;
-        }>;
-        for (let i = 0; i < decisionData.length; i++) {
-          const decision = decisionData[i];
+        await context.sendProgress({
+          status: 'in_progress',
+          message: `Starting bulk import of ${decisions!.length} decisions...`,
+          percent: 10,
+        });
+
+        let imported = 0;
+        let skipped = 0;
+        let failed = 0;
+        const errors: Array<{ id: string; error: string }> = [];
+        const entityService = await memoryService.entity;
+
+        for (const decision of decisions!) {
           try {
-            // Check if exists
+            // Check if decision already exists
             if (!overwrite) {
-              const existing = await memoryService.entity.getDecision(
+              const existing = await entityService.getDecision(
                 context,
                 clientProjectRoot,
                 repository,
@@ -133,54 +174,66 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
               }
             }
 
-            // Import decision
-            await memoryService.entity.upsertDecision(
+            // Import the decision
+            await entityService.upsertDecision(
               context,
               clientProjectRoot,
               repository,
               branch,
-              {
-                id: decision.id,
-                name: decision.name,
-                date: decision.date,
-                context: decision.context,
-              },
+              decision,
             );
             imported++;
           } catch (error) {
+            context.logger.warn(`Failed to import decision ${decision.id}:`, error);
             failed++;
             errors.push({
               id: decision.id,
               error: error instanceof Error ? error.message : String(error),
             });
           }
-
-          // Update progress
-          const percent = Math.floor(10 + (i / data.length) * 80);
-          await context.sendProgress({
-            status: 'in_progress',
-            message: `Importing decisions: ${i + 1}/${data.length}`,
-            percent,
-          });
         }
-        break;
+
+        await context.sendProgress({
+          status: 'complete',
+          message: `Bulk import complete: ${imported} imported, ${skipped} skipped, ${failed} failed`,
+          percent: 100,
+          isFinal: true,
+        });
+
+        return {
+          type: 'decisions',
+          success: true,
+          imported,
+          skipped,
+          failed,
+          total: decisions!.length,
+          errors: errors.length > 0 ? errors : undefined,
+          message: `Successfully imported ${imported} decisions, skipped ${skipped}`,
+        };
       }
 
       case 'rules': {
-        const ruleData = data as Array<{
-          id: string;
-          name: string;
-          created: string;
-          content: string;
-          triggers?: string[];
-          status?: 'active' | 'deprecated';
-        }>;
-        for (let i = 0; i < ruleData.length; i++) {
-          const rule = ruleData[i];
+        if (!rules || !Array.isArray(rules) || rules.length === 0) {
+          throw new Error('rules array is required and must not be empty for rules import');
+        }
+
+        await context.sendProgress({
+          status: 'in_progress',
+          message: `Starting bulk import of ${rules.length} rules...`,
+          percent: 10,
+        });
+
+        let imported = 0;
+        let skipped = 0;
+        let failed = 0;
+        const errors: Array<{ id: string; error: string }> = [];
+        const entityService = await memoryService.entity;
+
+        for (const rule of rules) {
           try {
-            // Check if exists
+            // Check if rule already exists
             if (!overwrite) {
-              const existing = await memoryService.entity.getRule(
+              const existing = await entityService.getRule(
                 context,
                 clientProjectRoot,
                 repository,
@@ -193,65 +246,53 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
               }
             }
 
-            // Import rule (repository and branch are passed as separate parameters)
-            await memoryService.entity.upsertRule(
-              context,
-              clientProjectRoot,
-              repository,
-              {
-                id: rule.id,
-                repository: repository,
-                branch: branch,
-                name: rule.name,
-                created: rule.created,
-                content: rule.content,
-                triggers: rule.triggers,
-                status: rule.status || 'active',
-              },
-              branch,
-            );
+            // Import the rule
+            await entityService.upsertRule(context, clientProjectRoot, repository, rule, branch);
             imported++;
           } catch (error) {
+            context.logger.warn(`Failed to import rule ${rule.id}:`, error);
             failed++;
             errors.push({
               id: rule.id,
               error: error instanceof Error ? error.message : String(error),
             });
           }
-
-          // Update progress
-          const percent = Math.floor(10 + (i / data.length) * 80);
-          await context.sendProgress({
-            status: 'in_progress',
-            message: `Importing rules: ${i + 1}/${data.length}`,
-            percent,
-          });
         }
-        break;
+
+        await context.sendProgress({
+          status: 'complete',
+          message: `Bulk import complete: ${imported} imported, ${skipped} skipped, ${failed} failed`,
+          percent: 100,
+          isFinal: true,
+        });
+
+        return {
+          type: 'rules',
+          success: true,
+          imported,
+          skipped,
+          failed,
+          total: rules.length,
+          errors: errors.length > 0 ? errors : undefined,
+          message: `Successfully imported ${imported} rules, skipped ${skipped}`,
+        };
       }
 
       default:
-        throw new Error(`Unknown import type: ${type}`);
+        throw new Error(`Unknown bulk import type: ${type}`);
     }
+  } catch (error) {
+    await handleToolError(error, context, `bulk-import ${type}`, 'bulk-import');
 
-    await context.sendProgress({
-      status: 'complete',
-      message: `Bulk import complete: ${imported} imported, ${skipped} skipped, ${failed} failed`,
-      percent: 100,
-      isFinal: true,
-    });
-
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       type,
-      status: 'complete',
-      imported,
-      failed,
-      skipped,
-      errors: errors.length > 0 ? errors : undefined,
-      message: `Successfully imported ${imported} ${type}, skipped ${skipped}, failed ${failed}`,
-    } satisfies z.infer<typeof BulkImportOutputSchema>;
-  } catch (error) {
-    await handleToolError(error, context, `bulk import: ${type}`, type);
-    throw error;
+      success: false,
+      imported: 0,
+      skipped: 0,
+      failed: 0,
+      total: 0,
+      message: `Failed to execute bulk-import ${type}: ${errorMessage}`,
+    };
   }
 };

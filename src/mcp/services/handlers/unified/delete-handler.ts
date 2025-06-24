@@ -1,4 +1,3 @@
-import { MemoryService } from '../../../../services/memory.service';
 import { SdkToolHandler } from '../../../tool-handlers';
 import { handleToolError, logToolExecution, validateSession } from '../../../utils/error-utils';
 
@@ -11,50 +10,29 @@ interface DeleteParams {
     | 'bulk-by-branch'
     | 'bulk-by-repository'
     | 'bulk-by-filter';
+  clientProjectRoot?: string;
   repository: string;
   branch?: string;
-  clientProjectRoot?: string;
-
-  // Single entity deletion
-  entityType?: 'component' | 'decision' | 'rule' | 'file' | 'tag' | 'context';
-  id?: string;
-
-  // Bulk deletion parameters
-  targetType?: 'component' | 'decision' | 'rule' | 'file' | 'tag' | 'context' | 'all';
-  tagId?: string;
-  targetBranch?: string;
-
-  // Filter parameters
-  filters?: {
-    status?: string;
-    createdBefore?: string;
-    createdAfter?: string;
-    namePattern?: string;
-  };
-
-  // Safety parameters
   confirm?: boolean;
   dryRun?: boolean;
   force?: boolean;
-}
-
-interface DeleteResult {
-  success: boolean;
-  operation: string;
-  message: string;
-  deletedCount?: number;
-  deletedEntities?: Array<{
-    type: string;
-    id: string;
-    name?: string;
-  }>;
-  dryRun?: boolean;
-  warnings?: string[];
+  // Single operation
+  entityType?: 'component' | 'decision' | 'rule' | 'file' | 'tag' | 'context';
+  id?: string;
+  // Bulk operations
+  targetType?: 'component' | 'decision' | 'rule' | 'file' | 'tag' | 'context' | 'all';
+  tagId?: string;
+  targetBranch?: string;
+  // Filter operations
+  filterNamePattern?: string;
+  filterStatus?: string;
+  filterCreatedBefore?: string;
+  filterCreatedAfter?: string;
 }
 
 /**
  * Delete Handler
- * Unified handler for all deletion operations
+ * Handles deletion operations (single, bulk, filtered)
  */
 export const deleteHandler: SdkToolHandler = async (params, context, memoryService) => {
   // 1. Validate and extract parameters
@@ -68,443 +46,334 @@ export const deleteHandler: SdkToolHandler = async (params, context, memoryServi
     throw new Error('repository parameter is required');
   }
 
-  // Validate session and get client project root
-  const clientProjectRoot = validateSession(context, 'delete');
-  const repository = validatedParams.repository;
-  const branch = validatedParams.branch || context.session.branch || 'main';
+  const {
+    operation,
+    repository,
+    branch = 'main',
+    confirm = false,
+    dryRun = false,
+    force = false,
+    entityType,
+    id,
+    targetType,
+    tagId,
+    targetBranch,
+    filterNamePattern,
+    filterStatus,
+    filterCreatedBefore,
+    filterCreatedAfter,
+  } = validatedParams;
 
-  const logger = context.logger || console;
+  // 2. Validate session and get clientProjectRoot
+  const clientProjectRoot = validateSession(context, 'delete');
+
+  // 3. Log the operation
+  logToolExecution(context, `delete operation: ${operation}`, {
+    repository,
+    branch,
+    clientProjectRoot,
+    operation,
+    dryRun,
+  });
 
   try {
-    logToolExecution(context, 'delete', validatedParams);
-    if (!memoryService.entity) {
-      throw new Error('EntityService not initialized in MemoryService');
-    }
+    switch (operation) {
+      case 'single': {
+        if (!entityType || !id) {
+          throw new Error('entityType and id are required for single deletion');
+        }
 
-    let result: DeleteResult;
+        // Check if entity exists (skip for context entities as they use different access pattern)
+        let exists = true; // Default to true, will be caught during deletion if not found
+        const entityService = await memoryService.entity;
 
-    switch (validatedParams.operation) {
-      case 'single':
-        result = await handleSingleDeletion(
-          validatedParams,
+        if (entityType !== 'context') {
+          switch (entityType) {
+            case 'component':
+              exists = !!(await entityService.getComponent(
+                context,
+                clientProjectRoot,
+                repository,
+                branch,
+                id,
+              ));
+              break;
+            case 'decision':
+              exists = !!(await entityService.getDecision(
+                context,
+                clientProjectRoot,
+                repository,
+                branch,
+                id,
+              ));
+              break;
+            case 'rule':
+              exists = !!(await entityService.getRule(
+                context,
+                clientProjectRoot,
+                repository,
+                branch,
+                id,
+              ));
+              break;
+            case 'file':
+              exists = !!(await entityService.getFile(
+                context,
+                clientProjectRoot,
+                repository,
+                branch,
+                id,
+              ));
+              break;
+            case 'tag':
+              exists = !!(await entityService.getTag(
+                context,
+                clientProjectRoot,
+                repository,
+                branch,
+                id,
+              ));
+              break;
+            default:
+              throw new Error(`Unsupported entity type: ${entityType}`);
+          }
+
+          if (!exists) {
+            return {
+              success: false,
+              operation: 'single',
+              deletedCount: 0,
+              message: `${entityType} with ID ${id} not found`,
+            };
+          }
+        }
+
+        if (dryRun) {
+          return {
+            success: true,
+            operation: 'single',
+            dryRun: true,
+            deletedCount: 1,
+            message: `Would delete ${entityType} with ID ${id}`,
+          };
+        }
+
+        // Perform actual deletion
+        let deleted = false;
+        switch (entityType) {
+          case 'component':
+            deleted = await entityService.deleteComponent(
+              context,
+              clientProjectRoot,
+              repository,
+              branch,
+              id,
+            );
+            break;
+          case 'decision':
+            deleted = await entityService.deleteDecision(
+              context,
+              clientProjectRoot,
+              repository,
+              branch,
+              id,
+            );
+            break;
+          case 'rule':
+            deleted = await entityService.deleteRule(
+              context,
+              clientProjectRoot,
+              repository,
+              branch,
+              id,
+            );
+            break;
+          case 'file':
+            deleted = await entityService.deleteFile(
+              context,
+              clientProjectRoot,
+              repository,
+              branch,
+              id,
+            );
+            break;
+          case 'tag':
+            deleted = await entityService.deleteTag(
+              context,
+              clientProjectRoot,
+              repository,
+              branch,
+              id,
+            );
+            break;
+          case 'context':
+            deleted = await entityService.deleteContext(
+              context,
+              clientProjectRoot,
+              repository,
+              branch,
+              id,
+            );
+            break;
+        }
+
+        return {
+          success: deleted,
+          operation: 'single',
+          deletedCount: deleted ? 1 : 0,
+          message: deleted
+            ? `${entityType} ${id} deleted successfully`
+            : `Failed to delete ${entityType} ${id}`,
+        };
+      }
+
+      case 'bulk-by-type': {
+        if (!targetType) {
+          throw new Error('targetType is required for bulk-by-type deletion');
+        }
+
+        if (!confirm && !dryRun) {
+          throw new Error(
+            'confirm=true is required for bulk deletion operations (or use dryRun=true to preview)',
+          );
+        }
+
+        const entityService = await memoryService.entity;
+        const result = await entityService.bulkDeleteByType(
           context,
-          memoryService,
           clientProjectRoot,
           repository,
           branch,
+          targetType,
+          { dryRun, force },
         );
-        break;
 
-      case 'bulk-by-type':
-        result = await handleBulkByType(
-          validatedParams,
+        return {
+          success: true,
+          operation: 'bulk-by-type',
+          message: dryRun
+            ? `Would delete ${result.count || 0} ${targetType} entities`
+            : `Deleted ${result.count || 0} ${targetType} entities`,
+          deletedCount: result.count || 0,
+          deletedEntities: result.entities || [],
+          dryRun: dryRun || undefined,
+          warnings: result.warnings || [],
+        };
+      }
+
+      case 'bulk-by-tag': {
+        if (!tagId) {
+          throw new Error('tagId is required for bulk-by-tag deletion');
+        }
+
+        if (!confirm && !dryRun) {
+          throw new Error(
+            'confirm=true is required for bulk deletion operations (or use dryRun=true to preview)',
+          );
+        }
+
+        const entityService = await memoryService.entity;
+        const result = await entityService.bulkDeleteByTag(
           context,
-          memoryService,
           clientProjectRoot,
           repository,
           branch,
+          tagId,
+          { dryRun, force },
         );
-        break;
 
-      case 'bulk-by-tag':
-        result = await handleBulkByTag(
-          validatedParams,
+        return {
+          success: true,
+          operation: 'bulk-by-tag',
+          message: dryRun
+            ? `Would delete ${result.count || 0} entities tagged with ${tagId}`
+            : `Deleted ${result.count || 0} entities tagged with ${tagId}`,
+          deletedCount: result.count || 0,
+          deletedEntities: result.entities || [],
+          dryRun: dryRun || undefined,
+          warnings: result.warnings || [],
+        };
+      }
+
+      case 'bulk-by-branch': {
+        if (!targetBranch) {
+          throw new Error('targetBranch is required for bulk-by-branch deletion');
+        }
+
+        if (!confirm && !dryRun) {
+          throw new Error(
+            'confirm=true is required for bulk deletion operations (or use dryRun=true to preview)',
+          );
+        }
+
+        const entityService = await memoryService.entity;
+        const result = await entityService.bulkDeleteByBranch(
           context,
-          memoryService,
           clientProjectRoot,
           repository,
-          branch,
+          targetBranch,
+          { dryRun, force },
         );
-        break;
 
-      case 'bulk-by-branch':
-        result = await handleBulkByBranch(
-          validatedParams,
+        return {
+          success: true,
+          operation: 'bulk-by-branch',
+          message: dryRun
+            ? `Would delete ${result.count || 0} entities from branch ${targetBranch}`
+            : `Deleted ${result.count || 0} entities from branch ${targetBranch}`,
+          deletedCount: result.count || 0,
+          deletedEntities: result.entities || [],
+          dryRun: dryRun || undefined,
+          warnings: result.warnings || [],
+        };
+      }
+
+      case 'bulk-by-repository': {
+        if (!confirm && !dryRun) {
+          throw new Error(
+            'confirm=true is required for bulk deletion operations (or use dryRun=true to preview)',
+          );
+        }
+
+        const entityService = await memoryService.entity;
+        const result = await entityService.bulkDeleteByRepository(
           context,
-          memoryService,
           clientProjectRoot,
           repository,
+          { dryRun, force },
         );
-        break;
 
-      case 'bulk-by-repository':
-        result = await handleBulkByRepository(
-          validatedParams,
-          context,
-          memoryService,
-          clientProjectRoot,
-          repository,
-        );
-        break;
+        return {
+          success: true,
+          operation: 'bulk-by-repository',
+          message: dryRun
+            ? `Would delete ${result.count || 0} entities from repository ${repository} (all branches)`
+            : `Deleted ${result.count || 0} entities from repository ${repository} (all branches)`,
+          deletedCount: result.count || 0,
+          deletedEntities: result.entities || [],
+          dryRun: dryRun || undefined,
+          warnings: result.warnings || [],
+        };
+      }
 
-      case 'bulk-by-filter':
-        result = await handleBulkByFilter(
-          validatedParams,
-          context,
-          memoryService,
-          clientProjectRoot,
-          repository,
-          branch,
+      case 'bulk-by-filter': {
+        throw new Error(
+          'bulk-by-filter operation not yet implemented - will be added in future version',
         );
-        break;
+      }
 
       default:
-        throw new Error(`Unknown operation: ${validatedParams.operation}`);
+        throw new Error(`Unknown operation: ${operation}`);
     }
-
-    logger.info(`[deleteHandler] ${validatedParams.operation} completed successfully`);
-    return result;
-  } catch (error: any) {
-    await handleToolError(error, context, 'delete', validatedParams.operation);
+  } catch (error) {
+    await handleToolError(error, context, `delete ${operation}`, 'delete');
 
     const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       success: false,
-      operation: validatedParams.operation,
-      message: `Failed to execute ${validatedParams.operation}: ${errorMessage}`,
+      operation,
       deletedCount: 0,
+      message: `Failed to execute ${operation}: ${errorMessage}`,
     };
   }
 };
-
-// Helper function for single entity deletion
-async function handleSingleDeletion(
-  params: DeleteParams,
-  context: any,
-  memoryService: MemoryService,
-  clientProjectRoot: string,
-  repository: string,
-  branch: string,
-): Promise<DeleteResult> {
-  if (!memoryService.entity) {
-    throw new Error('EntityService not initialized in MemoryService');
-  }
-  if (!params.entityType || !params.id) {
-    throw new Error('entityType and id are required for single deletion');
-  }
-
-  const logger = context.logger || console;
-
-  if (params.dryRun) {
-    // For dry run, just check if entity exists
-    let exists = false;
-    try {
-      switch (params.entityType) {
-        case 'component':
-          exists = !!(await memoryService.entity.getComponent(
-            context,
-            clientProjectRoot,
-            repository,
-            branch,
-            params.id,
-          ));
-          break;
-        case 'decision':
-          exists = !!(await memoryService.entity.getDecision(
-            context,
-            clientProjectRoot,
-            repository,
-            branch,
-            params.id,
-          ));
-          break;
-        case 'rule':
-          exists = !!(await memoryService.entity.getRule(
-            context,
-            clientProjectRoot,
-            repository,
-            branch,
-            params.id,
-          ));
-          break;
-        case 'file':
-          exists = !!(await memoryService.entity.getFile(
-            context,
-            clientProjectRoot,
-            repository,
-            branch,
-            params.id,
-          ));
-          break;
-        case 'tag':
-          exists = !!(await memoryService.entity.getTag(
-            context,
-            clientProjectRoot,
-            repository,
-            branch,
-            params.id,
-          ));
-          break;
-        case 'context':
-          // Context entities don't have a direct get method, assume exists for now
-          exists = true;
-          break;
-      }
-    } catch (error) {
-      exists = false;
-    }
-
-    return {
-      success: true,
-      operation: 'single',
-      message: exists
-        ? `Would delete ${params.entityType} with ID ${params.id}`
-        : `${params.entityType} with ID ${params.id} not found`,
-      deletedCount: exists ? 1 : 0,
-      dryRun: true,
-    };
-  }
-
-  // Perform actual deletion
-  let deleted = false;
-
-  switch (params.entityType) {
-    case 'component':
-      deleted = await memoryService.entity.deleteComponent(
-        context,
-        clientProjectRoot,
-        repository,
-        branch,
-        params.id,
-      );
-      break;
-    case 'decision':
-      deleted = await memoryService.entity.deleteDecision(
-        context,
-        clientProjectRoot,
-        repository,
-        branch,
-        params.id,
-      );
-      break;
-    case 'rule':
-      deleted = await memoryService.entity.deleteRule(
-        context,
-        clientProjectRoot,
-        repository,
-        branch,
-        params.id,
-      );
-      break;
-    case 'file':
-      deleted = await memoryService.entity.deleteFile(
-        context,
-        clientProjectRoot,
-        repository,
-        branch,
-        params.id,
-      );
-      break;
-    case 'tag':
-      deleted = await memoryService.entity.deleteTag(
-        context,
-        clientProjectRoot,
-        repository,
-        branch,
-        params.id,
-      );
-      break;
-    case 'context':
-      deleted = await memoryService.entity.deleteContext(
-        context,
-        clientProjectRoot,
-        repository,
-        branch,
-        params.id,
-      );
-      break;
-  }
-
-  return {
-    success: deleted,
-    operation: 'single',
-    message: deleted
-      ? `${params.entityType} ${params.id} deleted successfully`
-      : `${params.entityType} with ID ${params.id} not found`,
-    deletedCount: deleted ? 1 : 0,
-  };
-}
-
-// Helper function to validate bulk operation requirements
-function validateBulkOperation(params: DeleteParams, requiredParam?: string): void {
-  if (requiredParam && !params[requiredParam as keyof DeleteParams]) {
-    throw new Error(`${requiredParam} is required for ${params.operation} deletion`);
-  }
-
-  if (!params.confirm && !params.dryRun) {
-    throw new Error(
-      'confirm=true is required for bulk deletion operations (or use dryRun=true to preview)',
-    );
-  }
-}
-
-// Helper function to format bulk operation results
-function formatBulkResult(
-  operation: string,
-  result: any,
-  dryRun?: boolean,
-  operationTarget?: string,
-): DeleteResult {
-  const target = operationTarget || 'entities';
-  return {
-    success: true,
-    operation,
-    message: dryRun
-      ? `Would delete ${result.count} ${target}`
-      : `Deleted ${result.count} ${target}`,
-    deletedCount: result.count,
-    deletedEntities: result.entities,
-    dryRun,
-    warnings: result.warnings,
-  };
-}
-
-// Helper function for bulk deletion by type
-async function handleBulkByType(
-  params: DeleteParams,
-  context: any,
-  memoryService: MemoryService,
-  clientProjectRoot: string,
-  repository: string,
-  branch: string,
-): Promise<DeleteResult> {
-  if (!memoryService.entity) {
-    throw new Error('EntityService not initialized in MemoryService');
-  }
-  validateBulkOperation(params, 'targetType');
-
-  if (!params.targetType) {
-    throw new Error('targetType is required for bulk-by-type deletion');
-  }
-
-  const result = await memoryService.entity.bulkDeleteByType(
-    context,
-    clientProjectRoot,
-    repository,
-    branch,
-    params.targetType,
-    {
-      dryRun: params.dryRun || false,
-      force: params.force || false,
-    },
-  );
-
-  return formatBulkResult('bulk-by-type', result, params.dryRun, `${params.targetType} entities`);
-}
-
-// Helper function for bulk deletion by tag
-async function handleBulkByTag(
-  params: DeleteParams,
-  context: any,
-  memoryService: MemoryService,
-  clientProjectRoot: string,
-  repository: string,
-  branch: string,
-): Promise<DeleteResult> {
-  if (!memoryService.entity) {
-    throw new Error('EntityService not initialized in MemoryService');
-  }
-  validateBulkOperation(params, 'tagId');
-
-  if (!params.tagId) {
-    throw new Error('tagId is required for bulk-by-tag deletion');
-  }
-
-  const result = await memoryService.entity.bulkDeleteByTag(
-    context,
-    clientProjectRoot,
-    repository,
-    branch,
-    params.tagId,
-    {
-      dryRun: params.dryRun || false,
-      force: params.force || false,
-    },
-  );
-
-  return formatBulkResult(
-    'bulk-by-tag',
-    result,
-    params.dryRun,
-    `entities tagged with ${params.tagId}`,
-  );
-}
-
-// Helper function for bulk deletion by branch
-async function handleBulkByBranch(
-  params: DeleteParams,
-  context: any,
-  memoryService: MemoryService,
-  clientProjectRoot: string,
-  repository: string,
-): Promise<DeleteResult> {
-  if (!memoryService.entity) {
-    throw new Error('EntityService not initialized in MemoryService');
-  }
-  validateBulkOperation(params, 'targetBranch');
-
-  if (!params.targetBranch) {
-    throw new Error('targetBranch is required for bulk-by-branch deletion');
-  }
-
-  const result = await memoryService.entity.bulkDeleteByBranch(
-    context,
-    clientProjectRoot,
-    repository,
-    params.targetBranch,
-    {
-      dryRun: params.dryRun || false,
-      force: params.force || false,
-    },
-  );
-
-  return formatBulkResult(
-    'bulk-by-branch',
-    result,
-    params.dryRun,
-    `entities from branch ${params.targetBranch}`,
-  );
-}
-
-// Helper function for bulk deletion by repository
-async function handleBulkByRepository(
-  params: DeleteParams,
-  context: any,
-  memoryService: MemoryService,
-  clientProjectRoot: string,
-  repository: string,
-): Promise<DeleteResult> {
-  if (!memoryService.entity) {
-    throw new Error('EntityService not initialized in MemoryService');
-  }
-  validateBulkOperation(params);
-
-  const result = await memoryService.entity.bulkDeleteByRepository(
-    context,
-    clientProjectRoot,
-    repository,
-    {
-      dryRun: params.dryRun || false,
-      force: params.force || false,
-    },
-  );
-
-  return formatBulkResult(
-    'bulk-by-repository',
-    result,
-    params.dryRun,
-    `entities from repository ${repository} (all branches)`,
-  );
-}
-
-// Helper function for bulk deletion by filter (placeholder for now)
-async function handleBulkByFilter(
-  params: DeleteParams,
-  context: any,
-  memoryService: MemoryService,
-  clientProjectRoot: string,
-  repository: string,
-  branch: string,
-): Promise<DeleteResult> {
-  throw new Error('bulk-by-filter operation not yet implemented - will be added in future version');
-}

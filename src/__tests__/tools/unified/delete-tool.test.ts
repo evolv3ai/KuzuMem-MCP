@@ -48,10 +48,11 @@ describe('delete tool handler', () => {
 
     // Create mock memory service
     mockMemoryService = {
+      entity: mockEntityService,
       services: {
         entity: mockEntityService,
       },
-    } as unknown as jest.Mocked<MemoryService>;
+    } as any;
   });
 
   describe('parameter validation', () => {
@@ -78,6 +79,12 @@ describe('delete tool handler', () => {
 
   describe('single deletion', () => {
     it('should delete a component successfully', async () => {
+      mockEntityService.getComponent.mockResolvedValueOnce({
+        id: 'comp-AuthService',
+        name: 'Auth Service',
+        repository: 'test-repo',
+        branch: 'main',
+      });
       mockEntityService.deleteComponent.mockResolvedValueOnce(true);
 
       const params = {

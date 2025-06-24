@@ -1,295 +1,220 @@
-import { KuzuDBClient } from '../db/kuzu';
-import { RepositoryProvider } from '../db/repository-provider';
 import { ToolHandlerContext } from '../mcp/types/sdk-custom';
-import { Mutex } from '../utils/mutex';
-import { ensureAbsolutePath } from '../utils/path.utils';
-import { SnapshotService } from './snapshot.service';
-
-// Import simplified domain services
+import { ServiceContainer } from './core/service-container';
+import {
+  IContextService,
+  IEntityService,
+  IGraphAnalysisService,
+  IGraphQueryService,
+  IMetadataService,
+  IServiceContainer,
+} from './core/service-container.interface';
 import { MemoryBankService } from './domain/memory-bank.service';
-import { MetadataService } from './domain/metadata.service';
-import { EntityService } from './domain/entity.service';
-import { ContextService } from './domain/context.service';
-import { GraphQueryService } from './domain/graph-query.service';
-import { GraphAnalysisService } from './domain/graph-analysis.service';
 
 // Import operation modules
 import { loggers } from '../utils/logger';
 
 /**
  * Service for memory bank operations
- * Implements the singleton pattern as per best practices
- *
- * Refactored to use RepositoryProvider for repository management
+ * Refactored to use ServiceContainer pattern for dependency injection
+ * Eliminates circular dependencies and provides clean initialization order
  */
 export class MemoryService {
   private logger = loggers.memoryService();
   private static instance: MemoryService;
-  private static lock = new Mutex();
+  private static initializationPromise: Promise<MemoryService> | null = null;
 
-  // Multi-root support
-  private kuzuClients: Map<string, KuzuDBClient> = new Map();
+  // Service container for dependency injection (optional until initialized)
+  private serviceContainer?: IServiceContainer;
 
-  // Repository provider for managing repository instances
-  private repositoryProvider!: RepositoryProvider;
+  // Services property removed to eliminate API confusion
+  // Use getServices() method instead for consistent async access to all services
 
-  // Direct service instances (initialized in initialize method)
-  public memoryBank!: MemoryBankService;
-  public metadata!: MetadataService;
-  public entity!: EntityService;
-  public context!: ContextService;
-  public graphQuery!: GraphQueryService;
-  public graphAnalysis!: GraphAnalysisService;
-
-  // Services property for backward compatibility
-  public get services() {
+  /**
+   * Get all services with consistent async interface
+   *
+   * This is the recommended way to access multiple services. All service instances
+   * are properly initialized and ready for use when returned.
+   *
+   * @returns Promise resolving to an object containing all service instances
+   * @example
+   * ```typescript
+   * const services = await memoryService.getServices();
+   * await services.entity.createComponent(data);
+   * await services.graphQuery.findComponents(filters);
+   * ```
+   */
+  public async getServices() {
     return {
-      memoryBank: this.memoryBank,
-      metadata: this.metadata,
-      entity: this.entity,
-      context: this.context,
-      graphQuery: this.graphQuery,
-      graphAnalysis: this.graphAnalysis,
+      memoryBank: await this.memoryBank,
+      metadata: await this.metadata,
+      entity: await this.entity,
+      context: await this.context,
+      graphQuery: await this.graphQuery,
+      graphAnalysis: await this.graphAnalysis,
     };
   }
 
-  // Snapshot services for each client project root
-  private snapshotServices: Map<string, SnapshotService> = new Map();
+  // Lazy-loaded service getters - ALL now return Promises for consistency
+
+  /**
+   * Get MemoryBankService instance
+   * Returns Promise<MemoryBankService> for consistency with other service getters
+   */
+  public get memoryBank(): Promise<MemoryBankService> {
+    if (!this.serviceContainer) {
+      throw new Error('MemoryService not initialized - call getInstance() first');
+    }
+    return this.serviceContainer.getMemoryBankService() as Promise<MemoryBankService>;
+  }
+
+  public get metadata(): Promise<IMetadataService> {
+    if (!this.serviceContainer) {
+      throw new Error('MemoryService not initialized - call getInstance() first');
+    }
+    return this.serviceContainer.getMetadataService();
+  }
+
+  public get entity(): Promise<IEntityService> {
+    if (!this.serviceContainer) {
+      throw new Error('MemoryService not initialized - call getInstance() first');
+    }
+    return this.serviceContainer.getEntityService();
+  }
+
+  public get context(): Promise<IContextService> {
+    if (!this.serviceContainer) {
+      throw new Error('MemoryService not initialized - call getInstance() first');
+    }
+    return this.serviceContainer.getContextService();
+  }
+
+  public get graphQuery(): Promise<IGraphQueryService> {
+    if (!this.serviceContainer) {
+      throw new Error('MemoryService not initialized - call getInstance() first');
+    }
+    return this.serviceContainer.getGraphQueryService();
+  }
+
+  public get graphAnalysis(): Promise<IGraphAnalysisService> {
+    if (!this.serviceContainer) {
+      throw new Error('MemoryService not initialized - call getInstance() first');
+    }
+    return this.serviceContainer.getGraphAnalysisService();
+  }
 
   private constructor() {
     // No initialization here - will be done in initialize()
   }
 
   private async initialize(initialMcpContext?: ToolHandlerContext): Promise<void> {
-    // Do not attempt any database initialization in the initial setup
-    // This will make the MemoryService lightweight during creation
-    // The real database work will be done on-demand when specific methods are called with valid clientProjectRoot
-    this.repositoryProvider = await RepositoryProvider.getInstance();
-
     // Use logger if available, otherwise console for this early init log
     const logger = initialMcpContext?.logger || console;
-    logger.info(
-      'MemoryService: Initialized with RepositoryProvider - database access deferred until needed',
-    );
 
-    // Initialize services with proper dependencies
-    this.memoryBank = new MemoryBankService(
-      this.repositoryProvider,
-      this.getKuzuClient.bind(this),
-      this.getSnapshotService.bind(this),
-    );
-    this.metadata = new MetadataService(
-      this.repositoryProvider,
-      this.getKuzuClient.bind(this),
-      this.getSnapshotService.bind(this),
-    );
-    this.entity = new EntityService(
-      this.repositoryProvider,
-      this.getKuzuClient.bind(this),
-      this.getSnapshotService.bind(this),
-    );
-    this.context = new ContextService(
-      this.repositoryProvider,
-      this.getKuzuClient.bind(this),
-      this.getSnapshotService.bind(this),
-    );
-    this.graphQuery = new GraphQueryService(
-      this.repositoryProvider,
-      this.getKuzuClient.bind(this),
-      this.getSnapshotService.bind(this),
-    );
-    this.graphAnalysis = new GraphAnalysisService(
-      this.repositoryProvider,
-      this.getKuzuClient.bind(this),
-      this.getSnapshotService.bind(this),
-    );
+    try {
+      // Initialize the service container
+      this.serviceContainer = await ServiceContainer.getInstance();
 
-    logger.info('MemoryService: All services initialized with dependencies');
+      logger.info(
+        'MemoryService: Initialized with ServiceContainer - eliminates circular dependencies',
+      );
+
+      logger.info('MemoryService: All services configured with clean dependency injection');
+    } catch (error: any) {
+      const errorMessage = `Failed to initialize ServiceContainer: ${error?.message || error}`;
+      logger.error(`[MemoryService.initialize] ${errorMessage}`, error);
+
+      // Ensure MemoryService is left in a consistent state by clearing any partial state
+      this.serviceContainer = undefined;
+
+      // Re-throw to prevent incomplete initialization
+      throw new Error(errorMessage);
+    }
   }
 
   /**
    * Get or create KuzuDB client for a project root
-   * Uses singleton pattern to prevent multiple connections to the same database
-   * @param mcpContext MCP context for progress notifications and logging
-   * @param clientProjectRoot Client project root directory for database isolation
-   * @returns Initialized KuzuDBClient instance
+   * Delegates to service container
    */
-  public async getKuzuClient(
-    mcpContext: ToolHandlerContext,
-    clientProjectRoot: string,
-  ): Promise<KuzuDBClient> {
-    const logger = mcpContext.logger || console; // Fallback for safety, though context should always have logger
-
-    // Write debug information using structured logging
-    logger.debug(
-      { clientProjectRoot },
-      'MemoryService.getKuzuClient ENTERED with clientProjectRoot',
-    );
-
-    // Validate clientProjectRoot - this is critical for correct operation
-    if (!clientProjectRoot) {
-      const error = new Error('clientProjectRoot is required but was undefined or empty');
-      logger.error(
-        '[MemoryService.getKuzuClient] CRITICAL ERROR: clientProjectRoot is missing',
-        error,
-      );
-      throw error;
+  public async getKuzuClient(mcpContext: ToolHandlerContext, clientProjectRoot: string) {
+    if (!this.serviceContainer) {
+      throw new Error('MemoryService not initialized - call getInstance() first');
     }
-
-    // Ensure path is absolute
-    clientProjectRoot = ensureAbsolutePath(clientProjectRoot);
-    logger.info(
-      `[MemoryService.getKuzuClient] Using absolute clientProjectRoot: ${clientProjectRoot}`,
-    );
-
-    // Repository provider should be initialized by now
-    // (removed null check since it's guaranteed to be initialized)
-
-    // Correct Caching Logic: Reuse existing client if available
-    if (this.kuzuClients.has(clientProjectRoot)) {
-      logger.info(
-        `[MemoryService.getKuzuClient] Reusing cached KuzuDBClient for: ${clientProjectRoot}`,
-      );
-      return this.kuzuClients.get(clientProjectRoot)!;
-    }
-
-    // Create new client only if it doesn't exist
-    logger.info(
-      `[MemoryService.getKuzuClient] No cached client found. Creating new KuzuDBClient for: ${clientProjectRoot}`,
-    );
-
-    try {
-      const newClient = new KuzuDBClient(clientProjectRoot);
-      await newClient.initialize(mcpContext);
-      this.kuzuClients.set(clientProjectRoot, newClient);
-
-      await this.repositoryProvider.initializeRepositories(clientProjectRoot, newClient);
-
-      // Initialize SnapshotService for this new client
-      if (!this.snapshotServices.has(clientProjectRoot)) {
-        const snapshotService = new SnapshotService(newClient);
-        this.snapshotServices.set(clientProjectRoot, snapshotService);
-        logger.info(
-          `[MemoryService.getKuzuClient] SnapshotService initialized for: ${clientProjectRoot}`,
-        );
-      }
-
-      logger.info(
-        `[MemoryService.getKuzuClient] KuzuDBClient and repositories initialized for: ${clientProjectRoot}`,
-      );
-      return newClient;
-    } catch (error) {
-      logger.error(
-        `[MemoryService.getKuzuClient] Failed to initialize KuzuDBClient for ${clientProjectRoot}:`,
-        error,
-      );
-      throw new Error(
-        `Failed to initialize database for project root ${clientProjectRoot}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
+    return this.serviceContainer.getKuzuClient(mcpContext, clientProjectRoot);
   }
 
   /**
    * Get SnapshotService for a project root
-   * @param mcpContext MCP context for progress notifications and logging
-   * @param clientProjectRoot Client project root directory
-   * @returns SnapshotService instance
+   * Delegates to service container
    */
-  public async getSnapshotService(
-    mcpContext: ToolHandlerContext,
-    clientProjectRoot: string,
-  ): Promise<SnapshotService> {
-    const logger = mcpContext.logger || console;
-
-    // Ensure absolute path
-    clientProjectRoot = ensureAbsolutePath(clientProjectRoot);
-
-    // Ensure KuzuDB client is initialized (this also initializes SnapshotService)
-    await this.getKuzuClient(mcpContext, clientProjectRoot);
-
-    // Get cached SnapshotService
-    const snapshotService = this.snapshotServices.get(clientProjectRoot);
-    if (!snapshotService) {
-      logger.error(
-        `[MemoryService.getSnapshotService] SnapshotService not found for project root: ${clientProjectRoot}`,
-      );
-      throw new Error(
-        `SnapshotService not available for project root: ${clientProjectRoot}. This may be due to initialization failure during KuzuDB client setup.`,
-      );
+  public async getSnapshotService(mcpContext: ToolHandlerContext, clientProjectRoot: string) {
+    if (!this.serviceContainer) {
+      throw new Error('MemoryService not initialized - call getInstance() first');
     }
-
-    logger.debug(
-      `[MemoryService.getSnapshotService] Retrieved SnapshotService for: ${clientProjectRoot}`,
-    );
-    return snapshotService;
+    return this.serviceContainer.getSnapshotService(mcpContext, clientProjectRoot);
   }
-
-  static async getInstance(initialMcpContext?: ToolHandlerContext): Promise<MemoryService> {
-    const release = await MemoryService.lock.acquire();
-    try {
-      if (!MemoryService.instance) {
-        MemoryService.instance = new MemoryService();
-        await MemoryService.instance.initialize(initialMcpContext);
-      }
-      return MemoryService.instance;
-    } finally {
-      release();
-    }
-  }
-
-  // This method has been moved to MemoryBankService
-
-  // This method has been moved to MemoryBankService.
-
-  // Metadata methods moved to MetadataService
-
-  // Context methods moved to ContextService
-
-  // Entity upsert methods moved to EntityService
-
-  // Entity get methods moved to EntityService
-
-  // Get methods moved to EntityService
-
-  // Graph Query methods moved to GraphQueryService
-
-  // ------------------------------------------------------------------------
-  // REFINED STUB METHODS FOR FILE AND TAGGING TOOLS - WITH LOGGING
-  // ------------------------------------------------------------------------
-
-  // All file and tag methods have been moved to EntityService
-
-  // Delete methods moved to EntityService
-
-  // Bulk delete methods moved to EntityService
-
-  // Entity update methods moved to EntityService
 
   /**
-   * Shutdown method to close all KuzuDB connections
+   * Get singleton instance of MemoryService
+   * Thread-safe implementation using promise-based locking to prevent race conditions
+   */
+  static async getInstance(initialMcpContext?: ToolHandlerContext): Promise<MemoryService> {
+    // Return existing instance if already created
+    if (MemoryService.instance) {
+      return MemoryService.instance;
+    }
+
+    // Return pending initialization promise if already in progress
+    if (MemoryService.initializationPromise) {
+      return MemoryService.initializationPromise;
+    }
+
+    // Create and store initialization promise to prevent concurrent initialization
+    MemoryService.initializationPromise = (async (): Promise<MemoryService> => {
+      try {
+        // Double-check pattern: verify instance wasn't created while waiting
+        if (MemoryService.instance) {
+          return MemoryService.instance;
+        }
+
+        // Create and initialize the singleton instance
+        const instance = new MemoryService();
+        await instance.initialize(initialMcpContext);
+
+        // Atomically assign the instance
+        MemoryService.instance = instance;
+
+        // Clear the initialization promise as we're done
+        MemoryService.initializationPromise = null;
+
+        return instance;
+      } catch (error: any) {
+        // Clear the initialization promise on failure to allow retry
+        MemoryService.initializationPromise = null;
+
+        // Log the error and re-throw
+        const logger = initialMcpContext?.logger || console;
+        logger.error('[MemoryService.getInstance] Failed to create MemoryService instance:', error);
+        throw error;
+      }
+    })();
+
+    return MemoryService.initializationPromise;
+  }
+
+  /**
+   * Shutdown method to close all connections and cleanup resources
    */
   async shutdown(): Promise<void> {
     const logger = console;
     logger.info('[MemoryService.shutdown] Starting shutdown process');
 
     try {
-      // Close all KuzuDB clients
-      for (const [clientProjectRoot, client] of this.kuzuClients.entries()) {
-        try {
-          await client.close();
-          logger.info(`[MemoryService.shutdown] Closed KuzuDB client for ${clientProjectRoot}`);
-        } catch (error: any) {
-          logger.error(
-            `[MemoryService.shutdown] Error closing KuzuDB client for ${clientProjectRoot}:`,
-            error,
-          );
-        }
+      // Delegate shutdown to service container
+      if (this.serviceContainer) {
+        await this.serviceContainer.shutdown();
       }
 
-      // Clear the clients map
-      this.kuzuClients.clear();
-
-      // Repository provider will be cleaned up by garbage collection
+      // Service instances are cleared by the service container
 
       logger.info('[MemoryService.shutdown] Shutdown completed successfully');
     } catch (error: any) {

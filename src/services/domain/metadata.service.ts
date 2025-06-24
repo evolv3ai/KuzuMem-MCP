@@ -1,12 +1,15 @@
 import { z } from 'zod';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
+import { safeJsonParse } from '../../utils/security.utils';
 import { CoreService } from '../core/core.service';
-import { RepositoryProvider } from '../../db/repository-provider';
-import { KuzuDBClient } from '../../db/kuzu';
-import { SnapshotService } from '../snapshot.service';
+import { IMetadataService, IServiceContainer } from '../core/service-container.interface';
 
-export class MetadataService extends CoreService {
+export class MetadataService extends CoreService implements IMetadataService {
+  constructor(serviceContainer: IServiceContainer) {
+    super(serviceContainer);
+  }
+
   async getMetadata(
     mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
@@ -21,7 +24,7 @@ export class MetadataService extends CoreService {
       const repository = await repositoryRepo.findByName(repositoryName, branch);
 
       if (!repository) {
-        logger.warn(
+        logger.error(
           `[MetadataService.getMetadata] Repository ${repositoryName}:${branch} not found`,
         );
         return null;
@@ -29,49 +32,57 @@ export class MetadataService extends CoreService {
 
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
 
-      // Query for metadata node
-      const metadataQuery = `
+      // Query for metadata with backward compatibility for schema migration
+      const query = `
         MATCH (r:Repository {id: $repositoryId})-[:HAS_METADATA]->(m:Metadata)
         RETURN m
-        LIMIT 1
       `;
 
-      const result = await kuzuClient.executeQuery(metadataQuery, {
-        repositoryId: repository.id,
-      });
+      const params = { repositoryId: repository.id };
+      const result = await kuzuClient.executeQuery(query, params);
 
       if (result && result.length > 0) {
         const metadata = result[0].m;
 
-        // Safely parse tech_stack JSON with error handling
-        let techStack = {};
-        if (metadata.tech_stack) {
-          try {
-            techStack = JSON.parse(metadata.tech_stack);
-          } catch (parseError) {
-            logger.warn(
-              `[MetadataService.getMetadata] Invalid JSON in tech_stack for ${repositoryName}:${branch}, using empty object`,
-              {
-                tech_stack: metadata.tech_stack,
-                parseError: parseError instanceof Error ? parseError.message : String(parseError),
-              },
-            );
-            techStack = {};
-          }
+        // Use safe JSON parsing with comprehensive validation
+        const parsedContent = safeJsonParse(
+          metadata.content,
+          {
+            // Default fallback structure matching expected metadata format
+            project: {
+              name: 'Unknown',
+              created: new Date().toISOString(),
+              description: undefined, // Include as optional property for TypeScript
+            },
+            tech_stack: {},
+            architecture: 'Unknown',
+            memory_spec_version: '3.0.0',
+          },
+          2 * 1024 * 1024, // 2MB max for metadata JSON
+        );
+
+        // Build project object with conditional description
+        const projectData: any = {
+          name: parsedContent.project?.name || repositoryName,
+          created:
+            parsedContent.project?.created ||
+            (metadata.created_at instanceof Date
+              ? metadata.created_at.toISOString()
+              : metadata.created_at) ||
+            new Date().toISOString(),
+        };
+
+        // Only include description if it exists and is not undefined
+        if (parsedContent.project?.description !== undefined) {
+          projectData.description = parsedContent.project.description;
         }
 
         return {
-          id: metadata.id || 'meta',
-          project: {
-            name: metadata.project_name || repositoryName,
-            created:
-              metadata.project_created ||
-              repository.created_at?.toISOString() ||
-              new Date().toISOString(),
-          },
-          tech_stack: techStack,
-          architecture: metadata.architecture || '',
-          memory_spec_version: metadata.memory_spec_version || '3.0.0',
+          id: metadata.id,
+          project: projectData,
+          tech_stack: this.normalizeTechStack(parsedContent.tech_stack || {}),
+          architecture: parsedContent.architecture || 'Unknown',
+          memory_spec_version: parsedContent.memory_spec_version || '3.0.0',
         };
       }
 
@@ -83,7 +94,7 @@ export class MetadataService extends CoreService {
           created: repository.created_at?.toISOString() || new Date().toISOString(),
         },
         tech_stack: {},
-        architecture: '',
+        architecture: 'Unknown',
         memory_spec_version: '3.0.0',
       };
     } catch (error: any) {
@@ -123,42 +134,48 @@ export class MetadataService extends CoreService {
       // Prepare metadata fields
       const now = new Date();
       const metadataId = `${repositoryName}-${branch}-metadata`;
+      const graphUniqueId = `${repositoryName}:${branch}:metadata:${metadataId}`;
 
-      // Use MERGE to create or update metadata
+      // Use MERGE to create or update metadata - must use graph_unique_id as primary key
       const updateQuery = `
         MATCH (r:Repository {id: $repositoryId})
-        MERGE (r)-[:HAS_METADATA]->(m:Metadata {id: $metadataId})
+        MERGE (r)-[:HAS_METADATA]->(m:Metadata {graph_unique_id: $graphUniqueId})
         ON CREATE SET
+          m.graph_unique_id = $graphUniqueId,
           m.id = $metadataId,
-          m.project_name = $projectName,
-          m.project_created = $projectCreated,
-          m.tech_stack = $techStack,
-          m.architecture = $architecture,
-          m.memory_spec_version = $memorySpecVersion,
+          m.branch = $branch,
+          m.name = $projectName,
+          m.content = $content,
           m.created_at = $now,
           m.updated_at = $now
         ON MATCH SET
-          m.project_name = COALESCE($projectName, m.project_name),
-          m.tech_stack = COALESCE($techStack, m.tech_stack),
-          m.architecture = COALESCE($architecture, m.architecture),
-          m.memory_spec_version = COALESCE($memorySpecVersion, m.memory_spec_version),
+          m.name = COALESCE($projectName, m.name),
+          m.content = COALESCE($content, m.content),
           m.updated_at = $now
         RETURN m
       `;
 
+      // Create content object with all metadata
+      const content = JSON.stringify({
+        project: {
+          name: metadataContentChanges.project?.name || repositoryName,
+          created:
+            metadataContentChanges.project?.created ||
+            repository.created_at?.toISOString() ||
+            new Date().toISOString(),
+        },
+        tech_stack: metadataContentChanges.tech_stack || {},
+        architecture: metadataContentChanges.architecture || '',
+        memory_spec_version: metadataContentChanges.memory_spec_version || '3.0.0',
+      });
+
       const params = {
         repositoryId: repository.id,
+        graphUniqueId,
         metadataId,
+        branch,
         projectName: metadataContentChanges.project?.name || repositoryName,
-        projectCreated:
-          metadataContentChanges.project?.created ||
-          repository.created_at?.toISOString() ||
-          new Date().toISOString(),
-        techStack: metadataContentChanges.tech_stack
-          ? JSON.stringify(metadataContentChanges.tech_stack)
-          : null,
-        architecture: metadataContentChanges.architecture || null,
-        memorySpecVersion: metadataContentChanges.memory_spec_version || '3.0.0',
+        content,
         now,
       };
 
@@ -190,5 +207,29 @@ export class MetadataService extends CoreService {
         message: `Error updating metadata: ${error.message}`,
       };
     }
+  }
+
+  /**
+   * Normalize tech stack to ensure consistent string format
+   */
+  private normalizeTechStack(techStack: any): Record<string, string> {
+    if (!techStack || typeof techStack !== 'object') {
+      return {};
+    }
+
+    const normalized: Record<string, string> = {};
+
+    // Handle array values by joining them
+    Object.entries(techStack).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        normalized[key] = value.join(', ');
+      } else if (typeof value === 'string') {
+        normalized[key] = value;
+      } else if (value !== null && value !== undefined) {
+        normalized[key] = String(value);
+      }
+    });
+
+    return normalized;
   }
 }

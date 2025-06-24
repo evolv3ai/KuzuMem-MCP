@@ -83,9 +83,6 @@ async function handleInit(
   context: ToolHandlerContext,
   memoryService: MemoryService,
 ): Promise<any> {
-  if (!memoryService.memoryBank) {
-    throw new Error('MemoryBankService not initialized in MemoryService');
-  }
   const { clientProjectRoot, repository, branch = 'main' } = params;
 
   // Store in session for subsequent calls
@@ -108,12 +105,12 @@ async function handleInit(
       percent: 40,
     });
 
-    const result = await memoryService.memoryBank!.initMemoryBank(
-      context,
-      clientProjectRoot,
-      repository,
-      branch,
-    );
+    // Note: All service getters now consistently return Promises for uniformity
+    // memoryBank getter now returns Promise<MemoryBankService> like other service getters
+    // This ensures consistent async patterns across all services
+    const result = await (
+      await memoryService.memoryBank
+    ).initMemoryBank(context, clientProjectRoot, repository, branch);
 
     // Send progress after database initialization is complete
     await context.sendProgress({
@@ -165,12 +162,10 @@ async function handleGetMetadata(
   memoryService: MemoryService,
   clientProjectRoot: string,
 ): Promise<any> {
-  if (!memoryService.metadata) {
-    throw new Error('MetadataService not initialized in MemoryService');
-  }
   const { repository, branch = 'main' } = params;
 
-  const metadataContent = await memoryService.metadata!.getMetadata(
+  const metadataService = await memoryService.metadata;
+  const metadataContent = await metadataService.getMetadata(
     context,
     clientProjectRoot,
     repository,
@@ -193,16 +188,14 @@ async function handleUpdateMetadata(
   memoryService: MemoryService,
   clientProjectRoot: string,
 ): Promise<any> {
-  if (!memoryService.metadata) {
-    throw new Error('MetadataService not initialized in MemoryService');
-  }
   const { repository, branch = 'main', metadata } = params;
 
   if (!metadata) {
     throw new Error('metadata field is required for update-metadata operation');
   }
 
-  const result = await memoryService.metadata!.updateMetadata(
+  const metadataService = await memoryService.metadata;
+  const result = await metadataService.updateMetadata(
     context,
     clientProjectRoot,
     repository,

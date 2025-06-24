@@ -30,6 +30,7 @@ describe('Associate Tool Tests', () => {
     } as any;
 
     mockMemoryService = {
+      entity: mockEntityService,
       services: {
         entity: mockEntityService,
       },
@@ -109,7 +110,7 @@ describe('Associate Tool Tests', () => {
           mockContext,
           mockMemoryService,
         ),
-      ).rejects.toThrow('Required fields missing for association type');
+      ).rejects.toThrow('fileId and componentId are required for file-component association');
     });
 
     it('should throw error if componentId is missing', async () => {
@@ -123,7 +124,88 @@ describe('Associate Tool Tests', () => {
           mockContext,
           mockMemoryService,
         ),
-      ).rejects.toThrow('Required fields missing for association type');
+      ).rejects.toThrow('fileId and componentId are required for file-component association');
+    });
+
+    it('should throw error for invalid fileId format', async () => {
+      await expect(
+        associateHandler(
+          {
+            type: 'file-component',
+            repository: 'test-repo',
+            fileId: 'invalid-id', // Missing 'file-' prefix
+            componentId: 'comp-AuthService',
+          },
+          mockContext,
+          mockMemoryService,
+        ),
+      ).rejects.toThrow("fileId must start with 'file-'");
+    });
+
+    it('should throw error for invalid componentId format', async () => {
+      await expect(
+        associateHandler(
+          {
+            type: 'file-component',
+            repository: 'test-repo',
+            fileId: 'file-auth-ts',
+            componentId: 'invalid-id', // Missing 'comp-' prefix
+          },
+          mockContext,
+          mockMemoryService,
+        ),
+      ).rejects.toThrow("componentId must start with 'comp-'");
+    });
+
+    it('should trim whitespace from parameters', async () => {
+      const mockResult = {
+        type: 'file-component' as const,
+        success: true,
+        message: 'File associated successfully',
+        association: {
+          from: 'file-auth-ts',
+          to: 'comp-AuthService',
+          relationship: 'IMPLEMENTS',
+        },
+      };
+      mockEntityService.associateFileWithComponent.mockResolvedValue(mockResult);
+
+      await associateHandler(
+        {
+          type: '  file-component  ', // Whitespace should be trimmed
+          repository: '  test-repo  ',
+          branch: '  main  ',
+          fileId: '  file-auth-ts  ',
+          componentId: '  comp-AuthService  ',
+        },
+        mockContext,
+        mockMemoryService,
+      );
+
+      // Verify trimmed values were used
+      expect(mockEntityService.associateFileWithComponent).toHaveBeenCalledWith(
+        mockContext,
+        '/test/project',
+        'test-repo',
+        'main',
+        'comp-AuthService',
+        'file-auth-ts',
+      );
+    });
+
+    it('should throw error for whitespace-only parameters', async () => {
+      await expect(
+        associateHandler(
+          {
+            type: '   ', // Whitespace-only
+            repository: 'test-repo',
+            fileId: 'file-auth-ts',
+            componentId: 'comp-AuthService',
+          },
+          mockContext,
+          mockMemoryService,
+        ),
+      ).rejects.toThrow('type parameter cannot be empty or whitespace-only');
     });
   });
 
@@ -215,6 +297,102 @@ describe('Associate Tool Tests', () => {
           mockMemoryService,
         ),
       ).rejects.toThrow(); // Zod validation error
+    });
+
+    it('should throw error for invalid tagId format', async () => {
+      await expect(
+        associateHandler(
+          {
+            type: 'tag-item',
+            repository: 'test-repo',
+            itemId: 'comp-AuthService',
+            tagId: 'invalid-tag', // Missing 'tag-' prefix
+            entityType: 'Component',
+          },
+          mockContext,
+          mockMemoryService,
+        ),
+      ).rejects.toThrow("tagId must start with 'tag-'");
+    });
+
+    it('should throw error for invalid entityType', async () => {
+      await expect(
+        associateHandler(
+          {
+            type: 'tag-item',
+            repository: 'test-repo',
+            itemId: 'comp-AuthService',
+            tagId: 'tag-security',
+            entityType: 'InvalidType', // Invalid entity type
+          },
+          mockContext,
+          mockMemoryService,
+        ),
+      ).rejects.toThrow('entityType must be one of: Component, Decision, Rule, File, Context');
+    });
+
+    it('should throw error when itemId prefix does not match entityType', async () => {
+      await expect(
+        associateHandler(
+          {
+            type: 'tag-item',
+            repository: 'test-repo',
+            itemId: 'comp-AuthService', // Component prefix
+            tagId: 'tag-security',
+            entityType: 'Decision', // But entityType is Decision
+          },
+          mockContext,
+          mockMemoryService,
+        ),
+      ).rejects.toThrow("itemId must start with 'dec-'");
+    });
+
+    it('should validate Rule entity type prefix correctly', async () => {
+      await expect(
+        associateHandler(
+          {
+            type: 'tag-item',
+            repository: 'test-repo',
+            itemId: 'comp-Service', // Component prefix but entityType is Rule
+            tagId: 'tag-test',
+            entityType: 'Rule',
+          },
+          mockContext,
+          mockMemoryService,
+        ),
+      ).rejects.toThrow("itemId must start with 'rule-'");
+    });
+
+    it('should validate File entity type prefix correctly', async () => {
+      await expect(
+        associateHandler(
+          {
+            type: 'tag-item',
+            repository: 'test-repo',
+            itemId: 'comp-Service', // Component prefix but entityType is File
+            tagId: 'tag-test',
+            entityType: 'File',
+          },
+          mockContext,
+          mockMemoryService,
+        ),
+      ).rejects.toThrow("itemId must start with 'file-'");
+    });
+
+    it('should validate Context entity type prefix correctly', async () => {
+      await expect(
+        associateHandler(
+          {
+            type: 'tag-item',
+            repository: 'test-repo',
+            itemId: 'comp-Service', // Component prefix but entityType is Context
+            tagId: 'tag-test',
+            entityType: 'Context',
+          },
+          mockContext,
+          mockMemoryService,
+        ),
+      ).rejects.toThrow("itemId must start with 'ctx-'");
     });
   });
 
