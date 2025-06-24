@@ -60,7 +60,8 @@ export class MetadataService extends CoreService {
           id: metadata.id,
           project: {
             name: parsedContent.project?.name || repositoryName,
-            created: parsedContent.project?.created || metadata.created || new Date().toISOString(),
+            created:
+              parsedContent.project?.created || metadata.created_at || new Date().toISOString(),
             description: parsedContent.project?.description,
           },
           tech_stack: this.normalizeTechStack(parsedContent.tech_stack || {}),

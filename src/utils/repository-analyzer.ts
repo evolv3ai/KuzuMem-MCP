@@ -485,7 +485,6 @@ export class RepositoryAnalyzer {
           }
         } catch (error) {
           // Skip entries that cause errors (could be permission issues or invalid paths)
-          continue;
         }
       }
 
@@ -568,7 +567,6 @@ export class RepositoryAnalyzer {
             }
           } catch (entryError) {
             // Skip problematic entries but continue processing
-            continue;
           }
         }
       } catch (error) {

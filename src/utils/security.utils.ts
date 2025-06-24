@@ -24,23 +24,79 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
 };
 
 /**
- * Validates and normalizes a file path to prevent path traversal attacks
- * @param targetPath - The path to validate
+ * Validates and normalizes a file path to prevent path traversal attacks.
+ * Handles Windows drive letters, UNC paths, and absolute path inputs robustly.
+ *
+ * @param targetPath - The path to validate (can be relative or absolute)
  * @param rootPath - The root directory that should contain the target
- * @returns Normalized safe path
- * @throws Error if path is invalid or traverses outside root
+ * @returns Normalized safe path within the root directory
+ * @throws Error if path is invalid, absolute (when not allowed), or traverses outside root
+ *
+ * @example
+ * ```typescript
+ * // Valid relative paths
+ * validatePath('src/file.ts', '/project/root') // → '/project/root/src/file.ts'
+ * validatePath('./src/file.ts', '/project/root') // → '/project/root/src/file.ts'
+ *
+ * // Invalid traversal attempts
+ * validatePath('../../../etc/passwd', '/project/root') // → throws Error
+ * validatePath('/etc/passwd', '/project/root') // → throws Error (absolute path)
+ *
+ * // Windows paths
+ * validatePath('src\\file.ts', 'C:\\project') // → 'C:\\project\\src\\file.ts'
+ * ```
  */
 export function validatePath(targetPath: string, rootPath: string): string {
-  // Resolve absolute paths to prevent traversal
+  // Input validation
+  if (!targetPath || typeof targetPath !== 'string') {
+    throw new Error('Target path must be a non-empty string');
+  }
+  if (!rootPath || typeof rootPath !== 'string') {
+    throw new Error('Root path must be a non-empty string');
+  }
+
+  // Normalize root path to absolute form
   const normalizedRoot = path.resolve(rootPath);
+
+  // Check if targetPath is absolute and handle appropriately
+  if (path.isAbsolute(targetPath)) {
+    // For all platforms, reject absolute paths to prevent bypassing containment
+    throw new Error(`Absolute path not allowed: ${targetPath}`);
+  }
+
+  // Check for Windows-style paths regardless of platform for security
+  // Handle Windows drive letters (C:, D:, etc.)
+  if (/^[A-Za-z]:/.test(targetPath)) {
+    throw new Error(`Absolute drive path not allowed: ${targetPath}`);
+  }
+  // Handle UNC paths (\\server\share)
+  if (targetPath.startsWith('\\\\')) {
+    throw new Error(`UNC path not allowed: ${targetPath}`);
+  }
+
+  // Resolve the target path relative to root (handles .. and . properly)
   const normalizedTarget = path.resolve(normalizedRoot, targetPath);
 
-  // Ensure the target path is within the root directory
-  if (
-    !normalizedTarget.startsWith(normalizedRoot + path.sep) &&
-    normalizedTarget !== normalizedRoot
-  ) {
-    throw new Error(`Path traversal attempt detected: ${targetPath}`);
+  // Use path.relative to robustly check containment
+  const relativePath = path.relative(normalizedRoot, normalizedTarget);
+
+  // Check for path traversal attempts
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    throw new Error(
+      `Path traversal attempt detected: ${targetPath} (resolves outside root: ${relativePath})`,
+    );
+  }
+
+  // Additional Windows-specific validation
+  if (process.platform === 'win32') {
+    // Ensure no drive letter changes occurred during resolution
+    const rootDrive = path.parse(normalizedRoot).root;
+    const targetDrive = path.parse(normalizedTarget).root;
+    if (rootDrive.toLowerCase() !== targetDrive.toLowerCase()) {
+      throw new Error(
+        `Cross-drive path traversal detected: ${targetPath} (${rootDrive} → ${targetDrive})`,
+      );
+    }
   }
 
   return normalizedTarget;
@@ -121,7 +177,7 @@ export class ResourceManager {
       // Check file size before reading
       const stats = await fs.promises.stat(filePath);
       if (stats.size > maxSize) {
-        throw new Error(`File too large: ${stats.size} bytes (max: ${maxSize})`);
+        throw new Error(`File too large: ${filePath} is ${stats.size} bytes (max: ${maxSize})`);
       }
 
       // Open file handle
@@ -272,6 +328,16 @@ export class ProcessSpawnSecurityError extends Error {
 }
 
 /**
+ * Type-safe helper to check if a string is in a readonly string array
+ * @param value - String to check
+ * @param allowedValues - Readonly array of allowed strings
+ * @returns true if value is in the allowed values
+ */
+function isStringInReadonlyArray(value: string, allowedValues: readonly string[]): boolean {
+  return (allowedValues as string[]).includes(value);
+}
+
+/**
  * Securely validate and spawn processes for test environments
  * @param command - Command to execute
  * @param args - Arguments for the command
@@ -296,7 +362,7 @@ export function validateSecureSpawn(
   };
 } {
   // Validate command is in allowlist
-  if (!config.allowedCommands.includes(command as any)) {
+  if (!isStringInReadonlyArray(command, config.allowedCommands)) {
     throw new ProcessSpawnSecurityError(
       `Command '${command}' not in allowlist`,
       'DISALLOWED_COMMAND',
@@ -326,7 +392,7 @@ export function validateSecureSpawn(
   // Validate all args are in allowlist or are safe paths
   const unsafeArgs = args.filter((arg) => {
     // Allow known safe arguments
-    if (config.allowedArgs.includes(arg as any)) {
+    if (isStringInReadonlyArray(arg, config.allowedArgs)) {
       return false;
     }
     // Allow server paths
