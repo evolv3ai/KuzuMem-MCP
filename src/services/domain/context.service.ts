@@ -6,7 +6,6 @@ import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { Context } from '../../types';
 import { CoreService } from '../core/core.service';
 import * as contextOps from '../memory-operations/context.ops';
-import { MemoryService } from '../memory.service';
 import { SnapshotService } from '../snapshot.service';
 
 export class ContextService extends CoreService {
@@ -20,9 +19,8 @@ export class ContextService extends CoreService {
       mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<SnapshotService>,
-    memoryService?: MemoryService,
   ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService, memoryService);
+    super(repositoryProvider, getKuzuClient, getSnapshotService);
   }
 
   /**

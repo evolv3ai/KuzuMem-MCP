@@ -8,10 +8,23 @@ import { ensureAbsolutePath } from '../../utils/path.utils';
 import { RepositoryAnalyzer } from '../../utils/repository-analyzer';
 import { CoreService } from '../core/core.service';
 import * as repositoryOps from '../memory-operations/repository.ops';
-import { MemoryService } from '../memory.service';
 import { SnapshotService } from '../snapshot.service';
 
+// Interface to avoid circular dependency
+interface IMetadataService {
+  updateMetadata(
+    mcpContext: ToolHandlerContext,
+    clientProjectRoot: string,
+    repositoryName: string,
+    metadataContent: any,
+    branch?: string,
+  ): Promise<{ success: boolean; message?: string } | null>;
+}
+
 export class MemoryBankService extends CoreService {
+  // Store metadata service reference separately to avoid circular dependency
+  private metadataServiceRef?: IMetadataService;
+
   constructor(
     repositoryProvider: RepositoryProvider,
     getKuzuClient: (
@@ -22,9 +35,15 @@ export class MemoryBankService extends CoreService {
       mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<SnapshotService>,
-    memoryService?: MemoryService,
   ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService, memoryService);
+    super(repositoryProvider, getKuzuClient, getSnapshotService);
+  }
+
+  /**
+   * Set metadata service reference after initialization to avoid circular dependency
+   */
+  setMetadataService(metadataService: IMetadataService): void {
+    this.metadataServiceRef = metadataService;
   }
 
   async initMemoryBank(
@@ -96,11 +115,40 @@ export class MemoryBankService extends CoreService {
         branch,
       );
 
+      // CRITICAL FIX: Make metadata seeding failures more visible and configurable
       if (!seedResult.success) {
-        logger.warn(
-          `[MemoryBankService.initMemoryBank] Failed to seed metadata: ${seedResult.message}`,
+        const errorMessage = `Failed to seed metadata: ${seedResult.message}`;
+        logger.error(`[MemoryBankService.initMemoryBank] ${errorMessage}`, {
+          repositoryName,
+          branch,
+          clientProjectRoot,
+          seedResult,
+        });
+
+        // Check if this is a critical metadata failure that should fail initialization
+        const isCriticalMetadataFailure = this.isCriticalMetadataFailure(seedResult.message);
+
+        if (isCriticalMetadataFailure) {
+          logger.error(
+            `[MemoryBankService.initMemoryBank] Critical metadata failure detected, failing initialization`,
+            { errorMessage, repositoryName, branch },
+          );
+          return {
+            success: false,
+            message: `Memory bank initialization failed due to critical metadata error: ${seedResult.message}`,
+            path: clientProjectRoot,
+          };
+        } else {
+          // Non-critical failure - log as error but continue
+          logger.warn(
+            `[MemoryBankService.initMemoryBank] Non-critical metadata seeding failure, continuing with initialization`,
+            { errorMessage, repositoryName, branch },
+          );
+        }
+      } else {
+        logger.info(
+          `[MemoryBankService.initMemoryBank] Metadata seeding completed successfully for ${repositoryName}:${branch}`,
         );
-        // Continue despite metadata seeding failure
       }
 
       await mcpContext.sendProgress({
@@ -115,7 +163,7 @@ export class MemoryBankService extends CoreService {
 
       return {
         success: true,
-        message: `Memory bank initialized for ${repositoryName} (branch: ${branch})`,
+        message: `Memory bank initialized for ${repositoryName} (branch: ${branch})${!seedResult.success ? ' (with metadata seeding warnings)' : ''}`,
         path: clientProjectRoot,
       };
     } catch (error: any) {
@@ -129,6 +177,29 @@ export class MemoryBankService extends CoreService {
         path: clientProjectRoot,
       };
     }
+  }
+
+  /**
+   * Determine if a metadata failure is critical enough to fail the entire initialization
+   * Critical failures include database connection issues, schema problems, etc.
+   * Non-critical failures include analysis errors, missing files, etc.
+   */
+  private isCriticalMetadataFailure(errorMessage: string): boolean {
+    const criticalPatterns = [
+      'database connection',
+      'schema error',
+      'MetadataService not available',
+      'MetadataService not initialized',
+      'transaction failed',
+      'connection timeout',
+      'access denied',
+      'permission denied',
+      'disk full',
+      'out of memory',
+    ];
+
+    const normalizedError = errorMessage.toLowerCase();
+    return criticalPatterns.some((pattern) => normalizedError.includes(pattern));
   }
 
   /**
@@ -147,7 +218,7 @@ export class MemoryBankService extends CoreService {
 
     try {
       // Analyze the repository structure and characteristics
-      const analyzer = new RepositoryAnalyzer(clientProjectRoot);
+      const analyzer = new RepositoryAnalyzer(clientProjectRoot, logger);
       const analysisResult = await analyzer.analyzeRepository();
 
       logger.info(
@@ -159,9 +230,15 @@ export class MemoryBankService extends CoreService {
         },
       );
 
-      // Get the MetadataService and update metadata with analyzed data
-      if (!this.memoryService || !this.memoryService.metadata) {
-        throw new Error('MetadataService not initialized in MemoryService');
+      // Check if metadata service is available
+      if (!this.metadataServiceRef) {
+        logger.warn(
+          `[MemoryBankService.seedIntelligentMetadata] MetadataService not available - skipping metadata seeding`,
+        );
+        return {
+          success: false,
+          message: 'MetadataService not available for seeding metadata',
+        };
       }
 
       const metadataContent = {
@@ -190,7 +267,7 @@ export class MemoryBankService extends CoreService {
         analysis_date: new Date().toISOString(),
       };
 
-      const updateResult = await this.memoryService.metadata.updateMetadata(
+      const updateResult = await this.metadataServiceRef.updateMetadata(
         mcpContext,
         clientProjectRoot,
         repositoryName,

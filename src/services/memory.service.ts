@@ -72,43 +72,40 @@ export class MemoryService {
       'MemoryService: Initialized with RepositoryProvider - database access deferred until needed',
     );
 
-    // Initialize services with proper dependencies
+    // Initialize services with proper dependencies (without circular reference)
     this.memoryBank = new MemoryBankService(
       this.repositoryProvider,
       this.getKuzuClient.bind(this),
       this.getSnapshotService.bind(this),
-      this,
     );
     this.metadata = new MetadataService(
       this.repositoryProvider,
       this.getKuzuClient.bind(this),
       this.getSnapshotService.bind(this),
-      this,
     );
     this.entity = new EntityService(
       this.repositoryProvider,
       this.getKuzuClient.bind(this),
       this.getSnapshotService.bind(this),
-      this,
     );
     this.context = new ContextService(
       this.repositoryProvider,
       this.getKuzuClient.bind(this),
       this.getSnapshotService.bind(this),
-      this,
     );
     this.graphQuery = new GraphQueryService(
       this.repositoryProvider,
       this.getKuzuClient.bind(this),
       this.getSnapshotService.bind(this),
-      this,
     );
     this.graphAnalysis = new GraphAnalysisService(
       this.repositoryProvider,
       this.getKuzuClient.bind(this),
       this.getSnapshotService.bind(this),
-      this,
     );
+
+    // Set up metadata service reference in memory bank to avoid circular dependency
+    this.memoryBank.setMetadataService(this.metadata);
 
     logger.info('MemoryService: All services initialized with dependencies');
   }

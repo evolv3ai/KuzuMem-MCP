@@ -18,7 +18,6 @@ import * as decisionOps from '../memory-operations/decision.ops';
 import * as fileOps from '../memory-operations/file.ops';
 import * as ruleOps from '../memory-operations/rule.ops';
 import * as tagOps from '../memory-operations/tag.ops';
-import { MemoryService } from '../memory.service';
 import { SnapshotService } from '../snapshot.service';
 
 /**
@@ -35,9 +34,8 @@ export class EntityService extends CoreService {
       mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<SnapshotService>,
-    memoryService?: MemoryService,
   ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService, memoryService);
+    super(repositoryProvider, getKuzuClient, getSnapshotService);
   }
   // Component operations
   async upsertComponent(

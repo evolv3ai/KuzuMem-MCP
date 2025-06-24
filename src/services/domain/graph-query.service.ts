@@ -8,7 +8,6 @@ import { CoreService } from '../core/core.service';
 import * as componentOps from '../memory-operations/component.ops';
 import * as graphOps from '../memory-operations/graph.ops';
 import * as tagOps from '../memory-operations/tag.ops';
-import { MemoryService } from '../memory.service';
 import { SnapshotService } from '../snapshot.service';
 
 export class GraphQueryService extends CoreService {
@@ -33,9 +32,8 @@ export class GraphQueryService extends CoreService {
       mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<SnapshotService>,
-    memoryService?: MemoryService,
   ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService, memoryService);
+    super(repositoryProvider, getKuzuClient, getSnapshotService);
   }
 
   /**

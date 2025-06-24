@@ -140,6 +140,9 @@ export class MetadataRepository {
     const graph_unique_id_val = `${repoNameForGid}:${branchForGid}:${metadata.id}`;
     logger.debug(`[MetadataRepository] Constructed graph_unique_id: ${graph_unique_id_val}`);
 
+    // CRITICAL FIX: Handle migration from old 'id' field to 'graph_unique_id' field
+    await this.migrateLegacyMetadataKeys(mcpContext, repoNameForGid, branchForGid, metadata.id);
+
     const flatParams = {
       gid: graph_unique_id_val,
       id_val: metadata.id,
@@ -227,6 +230,90 @@ export class MetadataRepository {
         created_at: new Date(),
         updated_at: new Date(),
       } as Metadata;
+    }
+  }
+
+  /**
+   * CRITICAL FIX: Migrate legacy metadata entries that use old 'id' field to new 'graph_unique_id' field
+   * This prevents duplicate entries during the schema transition
+   */
+  private async migrateLegacyMetadataKeys(
+    mcpContext: ToolHandlerContext,
+    repositoryName: string,
+    branch: string,
+    metadataId: string,
+  ): Promise<void> {
+    const logger = mcpContext.logger || console;
+    const graph_unique_id_val = `${repositoryName}:${branch}:${metadataId}`;
+
+    try {
+      // Check if there are any legacy metadata entries that need migration
+      const legacyCheckQuery = `
+        MATCH (m:Metadata)
+        WHERE m.id = $metadataId 
+        AND (m.graph_unique_id IS NULL OR m.graph_unique_id = '')
+        AND (m.name = $repositoryName OR m.repository = $repositoryName)
+        AND (m.branch = $branch)
+        RETURN m
+      `;
+
+      const legacyEntries = await this.kuzuClient.executeQuery(legacyCheckQuery, {
+        metadataId,
+        repositoryName,
+        branch,
+      });
+
+      if (legacyEntries && legacyEntries.length > 0) {
+        logger.info(
+          `[MetadataRepository] Found ${legacyEntries.length} legacy metadata entries for ${repositoryName}:${branch}, migrating to new key format`,
+        );
+
+        // Migrate each legacy entry
+        for (const entry of legacyEntries) {
+          const legacyMetadata = entry.m;
+
+          // Check if a metadata entry with the new graph_unique_id already exists
+          const existingNewEntry = await this.kuzuClient.executeQuery(
+            'MATCH (m:Metadata {graph_unique_id: $gid}) RETURN m',
+            { gid: graph_unique_id_val },
+          );
+
+          if (existingNewEntry && existingNewEntry.length > 0) {
+            // New format entry already exists, delete the legacy entry
+            logger.info(
+              `[MetadataRepository] New format entry already exists for ${graph_unique_id_val}, removing legacy entry`,
+            );
+            await this.kuzuClient.executeQuery(
+              'MATCH (m:Metadata) WHERE id(m) = $nodeId DELETE m',
+              { nodeId: legacyMetadata._id || legacyMetadata.id },
+            );
+          } else {
+            // Migrate the legacy entry to new format
+            logger.info(
+              `[MetadataRepository] Migrating legacy metadata entry to new format: ${graph_unique_id_val}`,
+            );
+            await this.kuzuClient.executeQuery(
+              `MATCH (m:Metadata) WHERE id(m) = $nodeId 
+               SET m.graph_unique_id = $gid, m.updated_at = $now`,
+              {
+                nodeId: legacyMetadata._id || legacyMetadata.id,
+                gid: graph_unique_id_val,
+                now: new Date().toISOString(),
+              },
+            );
+          }
+        }
+
+        logger.info(
+          `[MetadataRepository] Successfully migrated legacy metadata entries for ${repositoryName}:${branch}`,
+        );
+      }
+    } catch (error: any) {
+      logger.error(
+        `[MetadataRepository] Error during legacy metadata key migration for ${repositoryName}:${branch}: ${error.message}`,
+        { error: error.toString() },
+      );
+      // Don't throw - migration failure shouldn't break the main operation, but log it as error
     }
   }
 }

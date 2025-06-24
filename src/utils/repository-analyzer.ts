@@ -176,7 +176,8 @@ export class RepositoryAnalyzer {
       if (this.logger) {
         this.logger.debug(errorMessage);
       } else {
-        console.error(errorMessage);
+        // Use structured logging format even when logger is not available
+        console.error(`[RepositoryAnalyzer] ${errorMessage}`);
       }
     }
   }
@@ -226,7 +227,8 @@ export class RepositoryAnalyzer {
       if (this.logger) {
         this.logger.debug(errorMessage);
       } else {
-        console.error(errorMessage);
+        // Use structured logging format even when logger is not available
+        console.error(`[RepositoryAnalyzer] ${errorMessage}`);
       }
     }
   }
@@ -439,7 +441,8 @@ export class RepositoryAnalyzer {
         if (this.logger) {
           this.logger.debug(errorMessage);
         } else {
-          console.error(errorMessage);
+          // Use structured logging format even when logger is not available
+          console.error(`[RepositoryAnalyzer] ${errorMessage}`);
         }
       }
     }

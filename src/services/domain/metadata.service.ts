@@ -4,7 +4,6 @@ import { RepositoryProvider } from '../../db/repository-provider';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { CoreService } from '../core/core.service';
-import { MemoryService } from '../memory.service';
 import { SnapshotService } from '../snapshot.service';
 
 export class MetadataService extends CoreService {
@@ -18,9 +17,8 @@ export class MetadataService extends CoreService {
       mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<SnapshotService>,
-    memoryService?: MemoryService,
   ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService, memoryService);
+    super(repositoryProvider, getKuzuClient, getSnapshotService);
   }
 
   async getMetadata(
@@ -37,7 +35,7 @@ export class MetadataService extends CoreService {
       const repository = await repositoryRepo.findByName(repositoryName, branch);
 
       if (!repository) {
-        logger.warn(
+        logger.error(
           `[MetadataService.getMetadata] Repository ${repositoryName}:${branch} not found`,
         );
         return null;
@@ -45,34 +43,86 @@ export class MetadataService extends CoreService {
 
       const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
 
-      // Query for metadata node
-      const metadataQuery = `
+      // Query for metadata with backward compatibility for schema migration
+      const query = `
         MATCH (r:Repository {id: $repositoryId})-[:HAS_METADATA]->(m:Metadata)
         RETURN m
-        LIMIT 1
       `;
 
-      const result = await kuzuClient.executeQuery(metadataQuery, {
-        repositoryId: repository.id,
-      });
+      const params = { repositoryId: repository.id };
+      const result = await kuzuClient.executeQuery(query, params);
 
       if (result && result.length > 0) {
         const metadata = result[0].m;
 
-        // Parse the content JSON field
+        // Parse the content JSON field with backward compatibility
         let parsedContent: any = {};
         if (metadata.content) {
           try {
             parsedContent = JSON.parse(metadata.content);
           } catch (parseError) {
             logger.warn(
-              `[MetadataService.getMetadata] Invalid JSON in content for ${repositoryName}:${branch}, using empty object`,
+              `[MetadataService.getMetadata] Invalid JSON in content for ${repositoryName}:${branch}, checking for legacy fields`,
               {
                 content: metadata.content,
                 parseError: parseError instanceof Error ? parseError.message : String(parseError),
               },
             );
-            parsedContent = {};
+
+            // BACKWARD COMPATIBILITY: Check for legacy separate fields
+            if (metadata.tech_stack || metadata.architecture || metadata.project_name) {
+              logger.info(
+                `[MetadataService.getMetadata] Found legacy metadata fields for ${repositoryName}:${branch}, migrating to new format`,
+              );
+
+              // Migrate legacy fields to new JSON content format
+              parsedContent = {
+                project: {
+                  name: metadata.project_name || repositoryName,
+                  created: repository.created_at?.toISOString() || new Date().toISOString(),
+                },
+                tech_stack: metadata.tech_stack ? JSON.parse(metadata.tech_stack) : {},
+                architecture: metadata.architecture || '',
+                memory_spec_version: metadata.memory_spec_version || '3.0.0',
+              };
+
+              // Update the metadata record with the new format
+              await this.migrateLegacyMetadata(
+                mcpContext,
+                clientProjectRoot,
+                repositoryName,
+                branch,
+                parsedContent,
+              );
+            } else {
+              parsedContent = {};
+            }
+          }
+        } else {
+          // BACKWARD COMPATIBILITY: Check for legacy separate fields when no content field exists
+          if (metadata.tech_stack || metadata.architecture || metadata.project_name) {
+            logger.info(
+              `[MetadataService.getMetadata] Found legacy metadata fields for ${repositoryName}:${branch}, migrating to new format`,
+            );
+
+            parsedContent = {
+              project: {
+                name: metadata.project_name || repositoryName,
+                created: repository.created_at?.toISOString() || new Date().toISOString(),
+              },
+              tech_stack: metadata.tech_stack ? JSON.parse(metadata.tech_stack) : {},
+              architecture: metadata.architecture || '',
+              memory_spec_version: metadata.memory_spec_version || '3.0.0',
+            };
+
+            // Update the metadata record with the new format
+            await this.migrateLegacyMetadata(
+              mcpContext,
+              clientProjectRoot,
+              repositoryName,
+              branch,
+              parsedContent,
+            );
           }
         }
 
@@ -107,6 +157,72 @@ export class MetadataService extends CoreService {
         error: error.toString(),
       });
       throw error;
+    }
+  }
+
+  /**
+   * Migrate legacy metadata fields to new JSON content format
+   * This ensures backward compatibility during schema transition
+   */
+  private async migrateLegacyMetadata(
+    mcpContext: ToolHandlerContext,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    parsedContent: any,
+  ): Promise<void> {
+    const logger = mcpContext.logger || console;
+
+    try {
+      logger.info(
+        `[MetadataService.migrateLegacyMetadata] Migrating legacy metadata for ${repositoryName}:${branch}`,
+      );
+
+      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
+      const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
+      const repository = await repositoryRepo.findByName(repositoryName, branch);
+
+      if (!repository) {
+        logger.error(
+          `[MetadataService.migrateLegacyMetadata] Repository not found: ${repositoryName}:${branch}`,
+        );
+        return;
+      }
+
+      const now = new Date();
+      const metadataId = `${repositoryName}-${branch}-metadata`;
+      const graphUniqueId = `${repositoryName}:${branch}:metadata:${metadataId}`;
+
+      // Update the metadata with new JSON content format and clear legacy fields
+      const migrationQuery = `
+        MATCH (r:Repository {id: $repositoryId})-[:HAS_METADATA]->(m:Metadata)
+        SET
+          m.content = $content,
+          m.updated_at = $now,
+          m.tech_stack = NULL,
+          m.architecture = NULL,
+          m.project_name = NULL
+        RETURN m
+      `;
+
+      const content = JSON.stringify(parsedContent);
+      const params = {
+        repositoryId: repository.id,
+        content,
+        now,
+      };
+
+      await kuzuClient.executeQuery(migrationQuery, params);
+
+      logger.info(
+        `[MetadataService.migrateLegacyMetadata] Successfully migrated metadata for ${repositoryName}:${branch}`,
+      );
+    } catch (error: any) {
+      logger.error(
+        `[MetadataService.migrateLegacyMetadata] Error migrating metadata for ${repositoryName}:${branch}: ${error.message}`,
+        { error: error.toString() },
+      );
+      // Don't throw - migration failure shouldn't break the main operation
     }
   }
 
