@@ -1,7 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import { promisify } from 'util';
-
 import {
   COMPLEXITY_THRESHOLDS,
   CONFIG_FILE_MAPPINGS,
@@ -10,10 +8,7 @@ import {
   LAYER_MAPPINGS,
 } from './repository-analyzer-config';
 
-const readFile = promisify(fs.readFile);
-const readdir = promisify(fs.readdir);
-const stat = promisify(fs.stat);
-const access = fs.promises.access;
+const { readFile, readdir, stat, access } = fs.promises;
 
 export interface TechStack {
   languages: string[];
@@ -22,6 +17,13 @@ export interface TechStack {
   tools: string[];
   packageManager?: string;
   runtime?: string;
+  packageMetadata?: {
+    hasMainField?: boolean;
+    hasExportsField?: boolean;
+    hasTypesField?: boolean;
+    hasBinField?: boolean;
+    isPrivate?: boolean;
+  };
 }
 
 export interface ArchitectureInfo {
@@ -118,6 +120,15 @@ export class RepositoryAnalyzer {
         techStack.runtime = `Node.js ${packageJson.engines.node}`;
       }
 
+      // Capture package metadata for better project type inference
+      techStack.packageMetadata = {
+        hasMainField: !!packageJson.main,
+        hasExportsField: !!packageJson.exports,
+        hasTypesField: !!packageJson.types || !!packageJson.typings,
+        hasBinField: !!packageJson.bin,
+        isPrivate: !!packageJson.private,
+      };
+
       // Analyze dependencies
       const allDeps = {
         ...packageJson.dependencies,
@@ -135,30 +146,22 @@ export class RepositoryAnalyzer {
         techStack.languages.push('JavaScript');
       }
 
-      // Frameworks and libraries
+      // Process all dependencies in a single iteration for better performance
       Object.keys(allDeps).forEach((dep) => {
-        if (DEPENDENCY_MAPPINGS.frameworks[dep as keyof typeof DEPENDENCY_MAPPINGS.frameworks]) {
-          techStack.frameworks.push(
-            DEPENDENCY_MAPPINGS.frameworks[dep as keyof typeof DEPENDENCY_MAPPINGS.frameworks],
-          );
-        }
-      });
+        const framework =
+          DEPENDENCY_MAPPINGS.frameworks[dep as keyof typeof DEPENDENCY_MAPPINGS.frameworks];
+        const database =
+          DEPENDENCY_MAPPINGS.databases[dep as keyof typeof DEPENDENCY_MAPPINGS.databases];
+        const tool = DEPENDENCY_MAPPINGS.tools[dep as keyof typeof DEPENDENCY_MAPPINGS.tools];
 
-      // Databases
-      Object.keys(allDeps).forEach((dep) => {
-        if (DEPENDENCY_MAPPINGS.databases[dep as keyof typeof DEPENDENCY_MAPPINGS.databases]) {
-          techStack.databases.push(
-            DEPENDENCY_MAPPINGS.databases[dep as keyof typeof DEPENDENCY_MAPPINGS.databases],
-          );
+        if (framework) {
+          techStack.frameworks.push(framework);
         }
-      });
-
-      // Tools
-      Object.keys(allDeps).forEach((dep) => {
-        if (DEPENDENCY_MAPPINGS.tools[dep as keyof typeof DEPENDENCY_MAPPINGS.tools]) {
-          techStack.tools.push(
-            DEPENDENCY_MAPPINGS.tools[dep as keyof typeof DEPENDENCY_MAPPINGS.tools],
-          );
+        if (database) {
+          techStack.databases.push(database);
+        }
+        if (tool) {
+          techStack.tools.push(tool);
         }
       });
     } catch (error) {
@@ -288,6 +291,12 @@ export class RepositoryAnalyzer {
     if (architecture.patterns.includes('CLI Application')) {
       return 'CLI Tool';
     }
+
+    // Check for CLI tool indicators
+    if (techStack.packageMetadata?.hasBinField) {
+      return 'CLI Tool';
+    }
+
     if (
       techStack.frameworks.some(
         (f) => f.includes('React') || f.includes('Vue') || f.includes('Angular'),
@@ -298,9 +307,20 @@ export class RepositoryAnalyzer {
     if (techStack.frameworks.some((f) => f.includes('Express') || f.includes('Fastify'))) {
       return 'Web Server';
     }
-    if (techStack.tools.includes('Jest') || techStack.tools.includes('Vitest')) {
+
+    // Refined library/framework detection with additional criteria
+    const hasTestingTools = techStack.tools.includes('Jest') || techStack.tools.includes('Vitest');
+    const hasLibraryIndicators =
+      techStack.packageMetadata?.hasMainField ||
+      techStack.packageMetadata?.hasExportsField ||
+      techStack.packageMetadata?.hasTypesField;
+    const isNotPrivate = !techStack.packageMetadata?.isPrivate;
+
+    // More sophisticated library detection: testing tools + library indicators + not private
+    if (hasTestingTools && hasLibraryIndicators && isNotPrivate) {
       return 'Library/Framework';
     }
+
     return 'Application';
   }
 
