@@ -17,6 +17,7 @@ export interface IServiceContainer {
   ): Promise<SnapshotService>;
 
   // Domain service access methods (lazy-loaded)
+  getMemoryBankService(): Promise<IMemoryBankService>;
   getMetadataService(): Promise<IMetadataService>;
   getEntityService(): Promise<IEntityService>;
   getContextService(): Promise<IContextService>;
@@ -39,6 +40,22 @@ export interface IServiceContainer {
 /**
  * Service interfaces to break circular dependencies
  */
+export interface IMemoryBankService {
+  initMemoryBank(
+    mcpContext: ToolHandlerContext,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch?: string,
+  ): Promise<{ success: boolean; message?: string }>;
+
+  getOrCreateRepository(
+    mcpContext: ToolHandlerContext,
+    clientProjectRoot: string,
+    name: string,
+    branch?: string,
+  ): Promise<any>;
+}
+
 export interface IMetadataService {
   updateMetadata(
     mcpContext: ToolHandlerContext,

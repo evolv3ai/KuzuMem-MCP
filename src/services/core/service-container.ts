@@ -9,6 +9,7 @@ import {
   IEntityService,
   IGraphAnalysisService,
   IGraphQueryService,
+  IMemoryBankService,
   IMetadataService,
   IServiceContainer,
 } from './service-container.interface';
@@ -153,6 +154,16 @@ export class ServiceContainer implements IServiceContainer {
       this.servicePromises.delete(serviceKey);
       throw error;
     }
+  }
+
+  /**
+   * Get MemoryBankService instance (lazy-loaded)
+   */
+  async getMemoryBankService(): Promise<IMemoryBankService> {
+    return this.getServiceInstance('memoryBank', async () => {
+      const { MemoryBankService } = await import('../domain/memory-bank.service');
+      return new MemoryBankService(this) as IMemoryBankService;
+    });
   }
 
   /**

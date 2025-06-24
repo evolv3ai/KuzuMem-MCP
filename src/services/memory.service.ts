@@ -23,11 +23,8 @@ export class MemoryService {
   private static instance: MemoryService;
   private static initializationPromise: Promise<MemoryService> | null = null;
 
-  // Service container for dependency injection
-  private serviceContainer!: IServiceContainer;
-
-  // Direct service instances (lazy-loaded through service container)
-  private _memoryBank?: MemoryBankService;
+  // Service container for dependency injection (optional until initialized)
+  private serviceContainer?: IServiceContainer;
 
   // Services property for backward compatibility
   // Note: All service getters now return Promises for consistency
@@ -64,29 +61,44 @@ export class MemoryService {
    * Returns Promise<MemoryBankService> for consistency with other service getters
    */
   public get memoryBank(): Promise<MemoryBankService> {
-    if (!this._memoryBank) {
-      this._memoryBank = new MemoryBankService(this.serviceContainer);
+    if (!this.serviceContainer) {
+      throw new Error('MemoryService not initialized - call getInstance() first');
     }
-    return Promise.resolve(this._memoryBank);
+    return this.serviceContainer.getMemoryBankService() as Promise<MemoryBankService>;
   }
 
   public get metadata(): Promise<IMetadataService> {
+    if (!this.serviceContainer) {
+      throw new Error('MemoryService not initialized - call getInstance() first');
+    }
     return this.serviceContainer.getMetadataService();
   }
 
   public get entity(): Promise<IEntityService> {
+    if (!this.serviceContainer) {
+      throw new Error('MemoryService not initialized - call getInstance() first');
+    }
     return this.serviceContainer.getEntityService();
   }
 
   public get context(): Promise<IContextService> {
+    if (!this.serviceContainer) {
+      throw new Error('MemoryService not initialized - call getInstance() first');
+    }
     return this.serviceContainer.getContextService();
   }
 
   public get graphQuery(): Promise<IGraphQueryService> {
+    if (!this.serviceContainer) {
+      throw new Error('MemoryService not initialized - call getInstance() first');
+    }
     return this.serviceContainer.getGraphQueryService();
   }
 
   public get graphAnalysis(): Promise<IGraphAnalysisService> {
+    if (!this.serviceContainer) {
+      throw new Error('MemoryService not initialized - call getInstance() first');
+    }
     return this.serviceContainer.getGraphAnalysisService();
   }
 
@@ -112,8 +124,7 @@ export class MemoryService {
       logger.error(`[MemoryService.initialize] ${errorMessage}`, error);
 
       // Ensure MemoryService is left in a consistent state by clearing any partial state
-      this.serviceContainer = undefined as any;
-      this._memoryBank = undefined;
+      this.serviceContainer = undefined;
 
       // Re-throw to prevent incomplete initialization
       throw new Error(errorMessage);
@@ -125,6 +136,9 @@ export class MemoryService {
    * Delegates to service container
    */
   public async getKuzuClient(mcpContext: ToolHandlerContext, clientProjectRoot: string) {
+    if (!this.serviceContainer) {
+      throw new Error('MemoryService not initialized - call getInstance() first');
+    }
     return this.serviceContainer.getKuzuClient(mcpContext, clientProjectRoot);
   }
 
@@ -133,6 +147,9 @@ export class MemoryService {
    * Delegates to service container
    */
   public async getSnapshotService(mcpContext: ToolHandlerContext, clientProjectRoot: string) {
+    if (!this.serviceContainer) {
+      throw new Error('MemoryService not initialized - call getInstance() first');
+    }
     return this.serviceContainer.getSnapshotService(mcpContext, clientProjectRoot);
   }
 
@@ -197,8 +214,7 @@ export class MemoryService {
         await this.serviceContainer.shutdown();
       }
 
-      // Clear service instances
-      this._memoryBank = undefined;
+      // Service instances are cleared by the service container
 
       logger.info('[MemoryService.shutdown] Shutdown completed successfully');
     } catch (error: any) {
