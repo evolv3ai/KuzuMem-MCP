@@ -185,8 +185,7 @@ export class RepositoryAnalyzer {
           rootPath: this.rootPath,
         });
       } else {
-        // Use structured logging format even when logger is not available
-        console.error(`[RepositoryAnalyzer] ${errorMessage}`);
+        // Skip logging when no logger is available to maintain consistency
       }
     }
   }
@@ -239,8 +238,7 @@ export class RepositoryAnalyzer {
           rootPath: this.rootPath,
         });
       } else {
-        // Use structured logging format even when logger is not available
-        console.error(`[RepositoryAnalyzer] ${errorMessage}`);
+        // Skip logging when no logger is available to maintain consistency
       }
     }
   }
@@ -457,8 +455,7 @@ export class RepositoryAnalyzer {
             rootPath: this.rootPath,
           });
         } else {
-          // Use structured logging format even when logger is not available
-          console.error(`[RepositoryAnalyzer] ${errorMessage}`);
+          // Skip logging when no logger is available to maintain consistency
         }
       }
     }

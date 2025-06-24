@@ -1,7 +1,5 @@
 import * as fs from 'fs';
 import { z } from 'zod';
-import { KuzuDBClient } from '../../db/kuzu';
-import { RepositoryProvider } from '../../db/repository-provider';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { Repository } from '../../types';
@@ -9,7 +7,6 @@ import { ensureAbsolutePath } from '../../utils/path.utils';
 import { RepositoryAnalyzer } from '../../utils/repository-analyzer';
 import { CoreService } from '../core/core.service';
 import * as repositoryOps from '../memory-operations/repository.ops';
-import { SnapshotService } from '../snapshot.service';
 
 // Interface to avoid circular dependency
 interface IMetadataService {
@@ -25,20 +22,6 @@ interface IMetadataService {
 export class MemoryBankService extends CoreService {
   // Store metadata service reference separately to avoid circular dependency
   private metadataServiceRef?: IMetadataService;
-
-  constructor(
-    repositoryProvider: RepositoryProvider,
-    getKuzuClient: (
-      mcpContext: ToolHandlerContext,
-      clientProjectRoot: string,
-    ) => Promise<KuzuDBClient>,
-    getSnapshotService: (
-      mcpContext: ToolHandlerContext,
-      clientProjectRoot: string,
-    ) => Promise<SnapshotService>,
-  ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService);
-  }
 
   /**
    * Set metadata service reference after initialization to avoid circular dependency
@@ -188,28 +171,8 @@ export class MemoryBankService extends CoreService {
    */
   private async validateClientProjectRoot(clientProjectRoot: string, logger: any): Promise<void> {
     try {
-      // Check if path exists
-      const pathExists = await fs.promises
-        .access(clientProjectRoot, fs.constants.F_OK)
-        .then(() => true)
-        .catch(() => false);
-
-      if (!pathExists) {
-        const errorMessage = `Client project root path does not exist: ${clientProjectRoot}`;
-        logger.error(`[MemoryBankService.validateClientProjectRoot] ${errorMessage}`);
-        throw new Error(errorMessage);
-      }
-
-      // Check if path is readable
-      try {
-        await fs.promises.access(clientProjectRoot, fs.constants.R_OK);
-      } catch (readError) {
-        const errorMessage = `Client project root path is not readable: ${clientProjectRoot}`;
-        logger.error(`[MemoryBankService.validateClientProjectRoot] ${errorMessage}`, {
-          readError: readError instanceof Error ? readError.message : String(readError),
-        });
-        throw new Error(errorMessage);
-      }
+      // Check if path exists and is readable in one operation
+      await fs.promises.access(clientProjectRoot, fs.constants.F_OK | fs.constants.R_OK);
 
       // Check if path is a directory
       const stats = await fs.promises.stat(clientProjectRoot);
