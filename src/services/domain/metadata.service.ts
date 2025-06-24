@@ -70,60 +70,25 @@ export class MetadataService extends CoreService {
             );
 
             // BACKWARD COMPATIBILITY: Check for legacy separate fields
-            if (metadata.tech_stack || metadata.architecture || metadata.project_name) {
-              logger.info(
-                `[MetadataService.getMetadata] Found legacy metadata fields for ${repositoryName}:${branch}, migrating to new format`,
-              );
-
-              // Migrate legacy fields to new JSON content format
-              parsedContent = {
-                project: {
-                  name: metadata.project_name || repositoryName,
-                  created: repository.created_at?.toISOString() || new Date().toISOString(),
-                },
-                tech_stack: metadata.tech_stack ? JSON.parse(metadata.tech_stack) : {},
-                architecture: metadata.architecture || '',
-                memory_spec_version: metadata.memory_spec_version || '3.0.0',
-              };
-
-              // Update the metadata record with the new format
-              await this.migrateLegacyMetadata(
-                mcpContext,
-                clientProjectRoot,
-                repositoryName,
-                branch,
-                parsedContent,
-              );
-            } else {
-              parsedContent = {};
-            }
-          }
-        } else {
-          // BACKWARD COMPATIBILITY: Check for legacy separate fields when no content field exists
-          if (metadata.tech_stack || metadata.architecture || metadata.project_name) {
-            logger.info(
-              `[MetadataService.getMetadata] Found legacy metadata fields for ${repositoryName}:${branch}, migrating to new format`,
-            );
-
-            parsedContent = {
-              project: {
-                name: metadata.project_name || repositoryName,
-                created: repository.created_at?.toISOString() || new Date().toISOString(),
-              },
-              tech_stack: metadata.tech_stack ? JSON.parse(metadata.tech_stack) : {},
-              architecture: metadata.architecture || '',
-              memory_spec_version: metadata.memory_spec_version || '3.0.0',
-            };
-
-            // Update the metadata record with the new format
-            await this.migrateLegacyMetadata(
+            parsedContent = await this.handleLegacyMetadata(
               mcpContext,
               clientProjectRoot,
               repositoryName,
               branch,
-              parsedContent,
+              metadata,
+              repository,
             );
           }
+        } else {
+          // BACKWARD COMPATIBILITY: Check for legacy separate fields when no content field exists
+          parsedContent = await this.handleLegacyMetadata(
+            mcpContext,
+            clientProjectRoot,
+            repositoryName,
+            branch,
+            metadata,
+            repository,
+          );
         }
 
         return {
@@ -158,6 +123,74 @@ export class MetadataService extends CoreService {
       });
       throw error;
     }
+  }
+
+  /**
+   * Handle legacy metadata fields and migrate them to new format
+   * This method checks for legacy fields, logs migration info, builds parsedContent,
+   * and calls migration if necessary
+   */
+  private async handleLegacyMetadata(
+    mcpContext: ToolHandlerContext,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    metadata: any,
+    repository: any,
+  ): Promise<any> {
+    const logger = mcpContext.logger || console;
+
+    // Check if legacy fields exist
+    if (metadata.tech_stack || metadata.architecture || metadata.project_name) {
+      logger.info(
+        `[MetadataService.getMetadata] Found legacy metadata fields for ${repositoryName}:${branch}, migrating to new format`,
+      );
+
+      // Handle tech_stack JSON parsing with error handling
+      let techStack = {};
+      if (metadata.tech_stack) {
+        try {
+          techStack = JSON.parse(metadata.tech_stack);
+        } catch (techStackParseError) {
+          logger.warn(
+            `[MetadataService.getMetadata] Invalid JSON in tech_stack for ${repositoryName}:${branch}, using default`,
+            {
+              tech_stack: metadata.tech_stack,
+              parseError:
+                techStackParseError instanceof Error
+                  ? techStackParseError.message
+                  : String(techStackParseError),
+            },
+          );
+          techStack = {};
+        }
+      }
+
+      // Build parsed content from legacy fields
+      const parsedContent = {
+        project: {
+          name: metadata.project_name || repositoryName,
+          created: repository.created_at?.toISOString() || new Date().toISOString(),
+        },
+        tech_stack: techStack,
+        architecture: metadata.architecture || '',
+        memory_spec_version: metadata.memory_spec_version || '3.0.0',
+      };
+
+      // Update the metadata record with the new format
+      await this.migrateLegacyMetadata(
+        mcpContext,
+        clientProjectRoot,
+        repositoryName,
+        branch,
+        parsedContent,
+      );
+
+      return parsedContent;
+    }
+
+    // Return empty object if no legacy fields found
+    return {};
   }
 
   /**

@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import { z } from 'zod';
 import { KuzuDBClient } from '../../db/kuzu';
 import { RepositoryProvider } from '../../db/repository-provider';
@@ -180,6 +181,63 @@ export class MemoryBankService extends CoreService {
   }
 
   /**
+   * Validates that the clientProjectRoot path exists and is accessible
+   * @param clientProjectRoot - The path to validate
+   * @param logger - Logger instance for error reporting
+   * @throws Error if path is invalid or inaccessible
+   */
+  private async validateClientProjectRoot(clientProjectRoot: string, logger: any): Promise<void> {
+    try {
+      // Check if path exists
+      const pathExists = await fs.promises
+        .access(clientProjectRoot, fs.constants.F_OK)
+        .then(() => true)
+        .catch(() => false);
+
+      if (!pathExists) {
+        const errorMessage = `Client project root path does not exist: ${clientProjectRoot}`;
+        logger.error(`[MemoryBankService.validateClientProjectRoot] ${errorMessage}`);
+        throw new Error(errorMessage);
+      }
+
+      // Check if path is readable
+      try {
+        await fs.promises.access(clientProjectRoot, fs.constants.R_OK);
+      } catch (readError) {
+        const errorMessage = `Client project root path is not readable: ${clientProjectRoot}`;
+        logger.error(`[MemoryBankService.validateClientProjectRoot] ${errorMessage}`, {
+          readError: readError instanceof Error ? readError.message : String(readError),
+        });
+        throw new Error(errorMessage);
+      }
+
+      // Check if path is a directory
+      const stats = await fs.promises.stat(clientProjectRoot);
+      if (!stats.isDirectory()) {
+        const errorMessage = `Client project root path is not a directory: ${clientProjectRoot}`;
+        logger.error(`[MemoryBankService.validateClientProjectRoot] ${errorMessage}`);
+        throw new Error(errorMessage);
+      }
+
+      logger.info(
+        `[MemoryBankService.validateClientProjectRoot] Path validation successful: ${clientProjectRoot}`,
+      );
+    } catch (error: any) {
+      // Re-throw validation errors
+      if (error.message.includes('Client project root path')) {
+        throw error;
+      }
+      // Handle unexpected filesystem errors
+      const errorMessage = `Failed to validate client project root path: ${error.message}`;
+      logger.error(`[MemoryBankService.validateClientProjectRoot] ${errorMessage}`, {
+        clientProjectRoot,
+        error: error.toString(),
+      });
+      throw new Error(errorMessage);
+    }
+  }
+
+  /**
    * Determine if a metadata failure is critical enough to fail the entire initialization
    * Critical failures include database connection issues, schema problems, etc.
    * Non-critical failures include analysis errors, missing files, etc.
@@ -217,6 +275,9 @@ export class MemoryBankService extends CoreService {
     );
 
     try {
+      // Validate that clientProjectRoot exists and is accessible before analysis
+      await this.validateClientProjectRoot(clientProjectRoot, logger);
+
       // Analyze the repository structure and characteristics
       const analyzer = new RepositoryAnalyzer(clientProjectRoot, logger);
       const analysisResult = await analyzer.analyzeRepository();

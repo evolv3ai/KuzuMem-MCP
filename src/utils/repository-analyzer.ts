@@ -46,9 +46,15 @@ export interface RepositoryMetadata {
 
 export class RepositoryAnalyzer {
   private rootPath: string;
-  private logger?: { debug: (message: string) => void };
+  private logger?: {
+    debug: (message: string) => void;
+    error: (message: string, context?: any) => void;
+  };
 
-  constructor(rootPath: string, logger?: { debug: (message: string) => void }) {
+  constructor(
+    rootPath: string,
+    logger?: { debug: (message: string) => void; error: (message: string, context?: any) => void },
+  ) {
     if (!rootPath || typeof rootPath !== 'string') {
       throw new Error('rootPath must be a non-empty string');
     }
@@ -174,7 +180,10 @@ export class RepositoryAnalyzer {
       // package.json doesn't exist or is invalid
       const errorMessage = `Failed to analyze package.json: ${error instanceof Error ? error.message : String(error)}`;
       if (this.logger) {
-        this.logger.debug(errorMessage);
+        this.logger.error(`[RepositoryAnalyzer] ${errorMessage}`, {
+          error: error instanceof Error ? error.toString() : String(error),
+          rootPath: this.rootPath,
+        });
       } else {
         // Use structured logging format even when logger is not available
         console.error(`[RepositoryAnalyzer] ${errorMessage}`);
@@ -225,7 +234,10 @@ export class RepositoryAnalyzer {
       // Error reading files
       const errorMessage = `Failed to analyze file extensions: ${error instanceof Error ? error.message : String(error)}`;
       if (this.logger) {
-        this.logger.debug(errorMessage);
+        this.logger.error(`[RepositoryAnalyzer] ${errorMessage}`, {
+          error: error instanceof Error ? error.toString() : String(error),
+          rootPath: this.rootPath,
+        });
       } else {
         // Use structured logging format even when logger is not available
         console.error(`[RepositoryAnalyzer] ${errorMessage}`);
@@ -439,7 +451,11 @@ export class RepositoryAnalyzer {
         // Continue processing other directories
         const errorMessage = `Failed to read directory ${currentPath}: ${error instanceof Error ? error.message : String(error)}`;
         if (this.logger) {
-          this.logger.debug(errorMessage);
+          this.logger.error(`[RepositoryAnalyzer] ${errorMessage}`, {
+            error: error instanceof Error ? error.toString() : String(error),
+            currentPath,
+            rootPath: this.rootPath,
+          });
         } else {
           // Use structured logging format even when logger is not available
           console.error(`[RepositoryAnalyzer] ${errorMessage}`);
