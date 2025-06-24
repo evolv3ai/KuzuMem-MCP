@@ -2,10 +2,11 @@ import { introspectHandler } from '../../../mcp/services/handlers/unified/intros
 import { ToolHandlerContext } from '../../../mcp/types/sdk-custom';
 import { GraphQueryService } from '../../../services/domain/graph-query.service';
 import { MemoryService } from '../../../services/memory.service';
+import { MockMemoryService } from '../../../tests/utils/sdk-test-utils';
 
 describe('introspect tool handler', () => {
   let mockContext: ToolHandlerContext;
-  let mockMemoryService: jest.Mocked<MemoryService>;
+  let mockMemoryService: MockMemoryService;
   let mockGraphQueryService: jest.Mocked<GraphQueryService>;
 
   beforeEach(() => {
@@ -41,7 +42,7 @@ describe('introspect tool handler', () => {
       services: {
         graphQuery: mockGraphQueryService,
       },
-    } as any;
+    } as MockMemoryService;
   });
 
   describe('labels query', () => {
@@ -59,7 +60,11 @@ describe('introspect tool handler', () => {
         branch: 'main',
       };
 
-      const result = await introspectHandler(params, mockContext, mockMemoryService);
+      const result = await introspectHandler(
+        params,
+        mockContext,
+        mockMemoryService as unknown as MemoryService,
+      );
 
       expect(mockGraphQueryService.listAllNodeLabels).toHaveBeenCalledWith(
         mockContext,
@@ -98,7 +103,11 @@ describe('introspect tool handler', () => {
         target: 'Component',
       };
 
-      const result = await introspectHandler(params, mockContext, mockMemoryService);
+      const result = await introspectHandler(
+        params,
+        mockContext,
+        mockMemoryService as unknown as MemoryService,
+      );
 
       expect(mockGraphQueryService.countNodesByLabel).toHaveBeenCalledWith(
         mockContext,
@@ -122,9 +131,9 @@ describe('introspect tool handler', () => {
         // target missing
       };
 
-      await expect(introspectHandler(params, mockContext, mockMemoryService)).rejects.toThrow(
-        'Target label is required for count query',
-      );
+      await expect(
+        introspectHandler(params, mockContext, mockMemoryService as unknown as MemoryService),
+      ).rejects.toThrow('Target label is required for count query');
     });
   });
 
@@ -149,7 +158,11 @@ describe('introspect tool handler', () => {
         target: 'Component',
       };
 
-      const result = await introspectHandler(params, mockContext, mockMemoryService);
+      const result = await introspectHandler(
+        params,
+        mockContext,
+        mockMemoryService as unknown as MemoryService,
+      );
 
       expect(mockGraphQueryService.getNodeProperties).toHaveBeenCalledWith(
         mockContext,
@@ -170,7 +183,9 @@ describe('introspect tool handler', () => {
         // target missing
       };
 
-      await expect(introspectHandler(params, mockContext, mockMemoryService)).rejects.toThrow(); // Zod validation error
+      await expect(
+        introspectHandler(params, mockContext, mockMemoryService as unknown as MemoryService),
+      ).rejects.toThrow(); // Zod validation error
     });
   });
 
@@ -202,7 +217,11 @@ describe('introspect tool handler', () => {
         branch: 'main',
       };
 
-      const result = await introspectHandler(params, mockContext, mockMemoryService);
+      const result = await introspectHandler(
+        params,
+        mockContext,
+        mockMemoryService as unknown as MemoryService,
+      );
 
       expect(mockGraphQueryService.listAllIndexes).toHaveBeenCalledWith(
         mockContext,
@@ -252,7 +271,11 @@ describe('introspect tool handler', () => {
         branch: 'main',
       };
 
-      const result = await introspectHandler(params, mockContext, mockMemoryService);
+      const result = await introspectHandler(
+        params,
+        mockContext,
+        mockMemoryService as unknown as MemoryService,
+      );
 
       expect(result).toEqual({
         indexes: [
@@ -278,9 +301,9 @@ describe('introspect tool handler', () => {
         branch: 'main',
       };
 
-      await expect(introspectHandler(params, mockContext, mockMemoryService)).rejects.toThrow(
-        'No active session for introspect tool',
-      );
+      await expect(
+        introspectHandler(params, mockContext, mockMemoryService as unknown as MemoryService),
+      ).rejects.toThrow('No active session for introspect tool');
     });
 
     it('should handle service errors gracefully', async () => {
@@ -292,7 +315,11 @@ describe('introspect tool handler', () => {
         branch: 'main',
       };
 
-      const result = await introspectHandler(params, mockContext, mockMemoryService);
+      const result = await introspectHandler(
+        params,
+        mockContext,
+        mockMemoryService as unknown as MemoryService,
+      );
 
       expect(result).toEqual({
         labels: [],
@@ -315,7 +342,11 @@ describe('introspect tool handler', () => {
         branch: 'main',
       };
 
-      const result = await introspectHandler(params, mockContext, mockMemoryService);
+      const result = await introspectHandler(
+        params,
+        mockContext,
+        mockMemoryService as unknown as MemoryService,
+      );
 
       // Unknown query types fall through to default case and return empty indexes
       expect(result).toEqual({
@@ -338,7 +369,7 @@ describe('introspect tool handler', () => {
         target: 'Component',
       };
 
-      await introspectHandler(params, mockContext, mockMemoryService);
+      await introspectHandler(params, mockContext, mockMemoryService as unknown as MemoryService);
 
       expect(mockContext.sendProgress).toHaveBeenCalledWith({
         status: 'in_progress',

@@ -2,9 +2,18 @@ import fs from 'fs';
 import path from 'path';
 import { promisify } from 'util';
 
+import {
+  COMPLEXITY_THRESHOLDS,
+  CONFIG_FILE_MAPPINGS,
+  DEPENDENCY_MAPPINGS,
+  EXTENSION_LANGUAGE_MAPPINGS,
+  LAYER_MAPPINGS,
+} from './repository-analyzer-config';
+
 const readFile = promisify(fs.readFile);
 const readdir = promisify(fs.readdir);
 const stat = promisify(fs.stat);
+const access = fs.promises.access;
 
 export interface TechStack {
   languages: string[];
@@ -35,9 +44,23 @@ export interface RepositoryMetadata {
 
 export class RepositoryAnalyzer {
   private rootPath: string;
+  private logger?: { debug: (message: string) => void };
 
-  constructor(rootPath: string) {
+  constructor(rootPath: string, logger?: { debug: (message: string) => void }) {
     this.rootPath = rootPath;
+    this.logger = logger;
+  }
+
+  /**
+   * Asynchronously check if a file exists using fs.promises.access
+   */
+  private async fileExists(filePath: string): Promise<boolean> {
+    try {
+      await access(filePath, fs.constants.F_OK);
+      return true;
+    } catch (error) {
+      return false;
+    }
   }
 
   async analyzeRepository(): Promise<RepositoryMetadata> {
@@ -82,11 +105,11 @@ export class RepositoryAnalyzer {
       const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
 
       // Detect package manager
-      if (fs.existsSync(path.join(this.rootPath, 'pnpm-lock.yaml'))) {
+      if (await this.fileExists(path.join(this.rootPath, 'pnpm-lock.yaml'))) {
         techStack.packageManager = 'pnpm';
-      } else if (fs.existsSync(path.join(this.rootPath, 'yarn.lock'))) {
+      } else if (await this.fileExists(path.join(this.rootPath, 'yarn.lock'))) {
         techStack.packageManager = 'yarn';
-      } else if (fs.existsSync(path.join(this.rootPath, 'package-lock.json'))) {
+      } else if (await this.fileExists(path.join(this.rootPath, 'package-lock.json'))) {
         techStack.packageManager = 'npm';
       }
 
@@ -102,7 +125,10 @@ export class RepositoryAnalyzer {
       };
 
       // Languages
-      if (allDeps.typescript || fs.existsSync(path.join(this.rootPath, 'tsconfig.json'))) {
+      if (
+        allDeps.typescript ||
+        (await this.fileExists(path.join(this.rootPath, 'tsconfig.json')))
+      ) {
         techStack.languages.push('TypeScript');
       }
       if (Object.keys(allDeps).length > 0) {
@@ -110,77 +136,45 @@ export class RepositoryAnalyzer {
       }
 
       // Frameworks and libraries
-      const frameworkMap: Record<string, string> = {
-        express: 'Express.js',
-        fastify: 'Fastify',
-        koa: 'Koa',
-        react: 'React',
-        vue: 'Vue.js',
-        angular: 'Angular',
-        'next.js': 'Next.js',
-        nuxt: 'Nuxt.js',
-        jest: 'Jest',
-        vitest: 'Vitest',
-        mocha: 'Mocha',
-        cypress: 'Cypress',
-        playwright: 'Playwright',
-        '@modelcontextprotocol/sdk': 'MCP SDK',
-      };
-
       Object.keys(allDeps).forEach((dep) => {
-        if (frameworkMap[dep]) {
-          techStack.frameworks.push(frameworkMap[dep]);
+        if (DEPENDENCY_MAPPINGS.frameworks[dep as keyof typeof DEPENDENCY_MAPPINGS.frameworks]) {
+          techStack.frameworks.push(
+            DEPENDENCY_MAPPINGS.frameworks[dep as keyof typeof DEPENDENCY_MAPPINGS.frameworks],
+          );
         }
       });
 
       // Databases
-      const dbMap: Record<string, string> = {
-        mongoose: 'MongoDB',
-        pg: 'PostgreSQL',
-        mysql2: 'MySQL',
-        sqlite3: 'SQLite',
-        redis: 'Redis',
-        kuzu: 'KuzuDB',
-      };
-
       Object.keys(allDeps).forEach((dep) => {
-        if (dbMap[dep]) {
-          techStack.databases.push(dbMap[dep]);
+        if (DEPENDENCY_MAPPINGS.databases[dep as keyof typeof DEPENDENCY_MAPPINGS.databases]) {
+          techStack.databases.push(
+            DEPENDENCY_MAPPINGS.databases[dep as keyof typeof DEPENDENCY_MAPPINGS.databases],
+          );
         }
       });
 
       // Tools
-      const toolMap: Record<string, string> = {
-        eslint: 'ESLint',
-        prettier: 'Prettier',
-        webpack: 'Webpack',
-        vite: 'Vite',
-        rollup: 'Rollup',
-        commander: 'Commander.js',
-      };
-
       Object.keys(allDeps).forEach((dep) => {
-        if (toolMap[dep]) {
-          techStack.tools.push(toolMap[dep]);
+        if (DEPENDENCY_MAPPINGS.tools[dep as keyof typeof DEPENDENCY_MAPPINGS.tools]) {
+          techStack.tools.push(
+            DEPENDENCY_MAPPINGS.tools[dep as keyof typeof DEPENDENCY_MAPPINGS.tools],
+          );
         }
       });
     } catch (error) {
       // package.json doesn't exist or is invalid
+      const errorMessage = `Failed to analyze package.json: ${error instanceof Error ? error.message : String(error)}`;
+      if (this.logger) {
+        this.logger.debug(errorMessage);
+      } else {
+        console.error(errorMessage);
+      }
     }
   }
 
   private async analyzeConfigFiles(techStack: TechStack): Promise<void> {
-    const configFiles = [
-      { file: 'tsconfig.json', indicates: 'TypeScript' },
-      { file: 'Cargo.toml', indicates: 'Rust' },
-      { file: 'requirements.txt', indicates: 'Python' },
-      { file: 'pyproject.toml', indicates: 'Python' },
-      { file: 'Dockerfile', indicates: 'Docker' },
-      { file: 'docker-compose.yml', indicates: 'Docker Compose' },
-    ];
-
-    for (const config of configFiles) {
-      if (fs.existsSync(path.join(this.rootPath, config.file))) {
+    for (const config of CONFIG_FILE_MAPPINGS) {
+      if (await this.fileExists(path.join(this.rootPath, config.file))) {
         if (config.file === 'tsconfig.json' && !techStack.languages.includes('TypeScript')) {
           techStack.languages.push('TypeScript');
         } else if (config.file.startsWith('Cargo') && !techStack.languages.includes('Rust')) {
@@ -208,30 +202,22 @@ export class RepositoryAnalyzer {
         }
       });
 
-      // Map extensions to languages
-      const extMap: Record<string, string> = {
-        '.ts': 'TypeScript',
-        '.js': 'JavaScript',
-        '.jsx': 'JavaScript',
-        '.tsx': 'TypeScript',
-        '.py': 'Python',
-        '.rs': 'Rust',
-        '.go': 'Go',
-        '.java': 'Java',
-        '.cpp': 'C++',
-        '.c': 'C',
-        '.cs': 'C#',
-        '.php': 'PHP',
-        '.rb': 'Ruby',
-      };
-
+      // Map extensions to languages using externalized mappings
       extensions.forEach((ext) => {
-        if (extMap[ext] && !techStack.languages.includes(extMap[ext])) {
-          techStack.languages.push(extMap[ext]);
+        const language =
+          EXTENSION_LANGUAGE_MAPPINGS[ext as keyof typeof EXTENSION_LANGUAGE_MAPPINGS];
+        if (language && !techStack.languages.includes(language)) {
+          techStack.languages.push(language);
         }
       });
     } catch (error) {
       // Error reading files
+      const errorMessage = `Failed to analyze file extensions: ${error instanceof Error ? error.message : String(error)}`;
+      if (this.logger) {
+        this.logger.debug(errorMessage);
+      } else {
+        console.error(errorMessage);
+      }
     }
   }
 
@@ -240,25 +226,11 @@ export class RepositoryAnalyzer {
     const layers: string[] = [];
     const patterns: string[] = [];
 
-    // Common architectural patterns
-    const layerMap: Record<string, string> = {
-      src: 'Source',
-      lib: 'Library',
-      services: 'Service Layer',
-      controllers: 'Controller Layer',
-      repositories: 'Repository Layer',
-      models: 'Model Layer',
-      utils: 'Utility Layer',
-      components: 'Component Layer',
-      handlers: 'Handler Layer',
-      middleware: 'Middleware Layer',
-      db: 'Database Layer',
-      api: 'API Layer',
-    };
-
+    // Common architectural patterns using externalized mappings
     directories.forEach((dir) => {
-      if (layerMap[dir.toLowerCase()]) {
-        layers.push(layerMap[dir.toLowerCase()]);
+      const layer = LAYER_MAPPINGS[dir.toLowerCase() as keyof typeof LAYER_MAPPINGS];
+      if (layer) {
+        layers.push(layer);
       }
     });
 
@@ -348,18 +320,24 @@ export class RepositoryAnalyzer {
     return 'Modular Architecture';
   }
 
+  /**
+   * Assess project complexity based on directory structure and architectural layers.
+   * Uses externalized thresholds with documented rationale.
+   */
   private assessComplexity(
     directories: string[],
     layers: string[],
   ): 'simple' | 'moderate' | 'complex' {
+    // Complexity scoring: sum of top-level directories and identified architectural layers
     const complexityScore = directories.length + layers.length;
-    if (complexityScore < 5) {
-      return 'simple';
+
+    if (complexityScore <= COMPLEXITY_THRESHOLDS.simple.max) {
+      return 'simple'; // Small projects with minimal structure (< 5 components)
     }
-    if (complexityScore < 10) {
-      return 'moderate';
+    if (complexityScore <= COMPLEXITY_THRESHOLDS.moderate.max) {
+      return 'moderate'; // Typical applications with clear structure (5-9 components)
     }
-    return 'complex';
+    return 'complex'; // Enterprise/monolithic applications with extensive structure (10+ components)
   }
 
   private async getDirectories(dirPath: string): Promise<string[]> {
@@ -384,27 +362,43 @@ export class RepositoryAnalyzer {
     }
   }
 
-  private async getFileList(dirPath: string, files: string[] = []): Promise<string[]> {
-    try {
-      const entries = await readdir(dirPath);
+  /**
+   * Optimized iterative file traversal to avoid deep recursion for large directory structures.
+   * Uses a queue-based approach instead of recursive calls for better performance.
+   */
+  private async getFileList(dirPath: string): Promise<string[]> {
+    const files: string[] = [];
+    const queue = [dirPath];
 
-      for (const entry of entries) {
-        if (entry.startsWith('.')) {
-          continue;
-        } // Skip hidden files/directories
-        const entryPath = path.join(dirPath, entry);
-        const entryStat = await stat(entryPath);
+    while (queue.length > 0) {
+      const currentPath = queue.shift()!;
+      try {
+        const entries = await readdir(currentPath);
 
-        if (entryStat.isDirectory()) {
-          await this.getFileList(entryPath, files);
+        for (const entry of entries) {
+          if (entry.startsWith('.')) {
+            continue; // Skip hidden files/directories
+          }
+          const entryPath = path.join(currentPath, entry);
+          const entryStat = await stat(entryPath);
+
+          if (entryStat.isDirectory()) {
+            queue.push(entryPath);
+          } else {
+            files.push(entryPath);
+          }
+        }
+      } catch (error) {
+        // Continue processing other directories
+        const errorMessage = `Failed to read directory ${currentPath}: ${error instanceof Error ? error.message : String(error)}`;
+        if (this.logger) {
+          this.logger.debug(errorMessage);
         } else {
-          files.push(entryPath);
+          console.error(errorMessage);
         }
       }
-
-      return files;
-    } catch (error) {
-      return files;
     }
+
+    return files;
   }
 }

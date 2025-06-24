@@ -179,7 +179,7 @@ export class MemoryBankService extends CoreService {
         branch,
       );
 
-      if (updateResult && updateResult.success) {
+      if (updateResult?.success) {
         logger.info(
           `[MemoryBankService.seedIntelligentMetadata] Successfully seeded metadata for ${repositoryName}:${branch}`,
         );
