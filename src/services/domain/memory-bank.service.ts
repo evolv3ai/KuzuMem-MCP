@@ -1,13 +1,11 @@
 import { z } from 'zod';
-import { KuzuDBClient } from '../../db/kuzu';
-import { RepositoryProvider } from '../../db/repository-provider';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
-import { Metadata, Repository } from '../../types';
+import { Repository } from '../../types';
 import { ensureAbsolutePath } from '../../utils/path.utils';
+import { RepositoryAnalyzer } from '../../utils/repository-analyzer';
 import { CoreService } from '../core/core.service';
 import * as repositoryOps from '../memory-operations/repository.ops';
-import { SnapshotService } from '../snapshot.service';
 
 export class MemoryBankService extends CoreService {
   async initMemoryBank(
@@ -33,7 +31,7 @@ export class MemoryBankService extends CoreService {
       await mcpContext.sendProgress({
         status: 'in_progress',
         message: `Validating database path for ${repositoryName}:${branch}...`,
-        percent: 25,
+        percent: 20,
       });
 
       // Initialize KuzuDB client and repositories
@@ -43,7 +41,7 @@ export class MemoryBankService extends CoreService {
       await mcpContext.sendProgress({
         status: 'in_progress',
         message: `Creating repository ${repositoryName}:${branch}...`,
-        percent: 50,
+        percent: 40,
       });
 
       // Create or get the repository
@@ -63,6 +61,27 @@ export class MemoryBankService extends CoreService {
           message: `Failed to create repository ${repositoryName}:${branch}`,
           path: clientProjectRoot,
         };
+      }
+
+      await mcpContext.sendProgress({
+        status: 'in_progress',
+        message: `Analyzing repository structure and generating metadata...`,
+        percent: 70,
+      });
+
+      // Automatically seed intelligent metadata after repository creation
+      const seedResult = await this.seedIntelligentMetadata(
+        mcpContext,
+        clientProjectRoot,
+        repositoryName,
+        branch,
+      );
+
+      if (!seedResult.success) {
+        logger.warn(
+          `[MemoryBankService.initMemoryBank] Failed to seed metadata: ${seedResult.message}`,
+        );
+        // Continue despite metadata seeding failure
       }
 
       await mcpContext.sendProgress({
@@ -89,6 +108,103 @@ export class MemoryBankService extends CoreService {
         success: false,
         message: `Failed to initialize memory bank: ${error.message}`,
         path: clientProjectRoot,
+      };
+    }
+  }
+
+  /**
+   * Seeds intelligent metadata by analyzing the actual repository structure and characteristics
+   */
+  async seedIntelligentMetadata(
+    mcpContext: ToolHandlerContext,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string = 'main',
+  ): Promise<{ success: boolean; message: string }> {
+    const logger = mcpContext.logger || console;
+    logger.info(
+      `[MemoryBankService.seedIntelligentMetadata] Analyzing repository ${repositoryName}:${branch}`,
+    );
+
+    try {
+      // Analyze the repository structure and characteristics
+      const analyzer = new RepositoryAnalyzer(clientProjectRoot);
+      const analysisResult = await analyzer.analyzeRepository();
+
+      logger.info(
+        `[MemoryBankService.seedIntelligentMetadata] Analysis complete for ${repositoryName}:${branch}`,
+        {
+          projectType: analysisResult.projectType,
+          languages: analysisResult.techStack.languages,
+          architecture: analysisResult.architecture.pattern,
+        },
+      );
+
+      // Get the MetadataService and update metadata with analyzed data
+      if (!this.memoryService || !this.memoryService.metadata) {
+        throw new Error('MetadataService not initialized in MemoryService');
+      }
+
+      const metadataContent = {
+        id: `${repositoryName}-${branch}-metadata`,
+        project: {
+          name: repositoryName,
+          created: analysisResult.createdDate,
+          type: analysisResult.projectType,
+          size: analysisResult.size,
+        },
+        tech_stack: {
+          languages: analysisResult.techStack.languages,
+          frameworks: analysisResult.techStack.frameworks,
+          databases: analysisResult.techStack.databases,
+          tools: analysisResult.techStack.tools,
+          package_manager: analysisResult.techStack.packageManager,
+          runtime: analysisResult.techStack.runtime,
+        },
+        architecture: analysisResult.architecture.pattern,
+        architecture_details: {
+          layers: analysisResult.architecture.layers,
+          patterns: analysisResult.architecture.patterns,
+          complexity: analysisResult.architecture.complexity,
+        },
+        memory_spec_version: '3.0.0',
+        analysis_date: new Date().toISOString(),
+      };
+
+      const updateResult = await this.memoryService.metadata.updateMetadata(
+        mcpContext,
+        clientProjectRoot,
+        repositoryName,
+        metadataContent,
+        branch,
+      );
+
+      if (updateResult && updateResult.success) {
+        logger.info(
+          `[MemoryBankService.seedIntelligentMetadata] Successfully seeded metadata for ${repositoryName}:${branch}`,
+        );
+        return {
+          success: true,
+          message: `Intelligent metadata seeded for ${repositoryName}:${branch}`,
+        };
+      } else {
+        const errorMessage = updateResult?.message || 'Unknown error during metadata update';
+        logger.error(
+          `[MemoryBankService.seedIntelligentMetadata] Failed to update metadata: ${errorMessage}`,
+        );
+        return {
+          success: false,
+          message: `Failed to seed metadata: ${errorMessage}`,
+        };
+      }
+    } catch (error: any) {
+      logger.error(
+        `[MemoryBankService.seedIntelligentMetadata] Error seeding metadata for ${repositoryName}:${branch}: ${error.message}`,
+        { error: error.toString() },
+      );
+      return {
+        success: false,
+        message: `Failed to analyze and seed metadata: ${error.message}`,
       };
     }
   }

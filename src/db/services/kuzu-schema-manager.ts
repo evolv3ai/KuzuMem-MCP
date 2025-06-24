@@ -239,6 +239,7 @@ export class KuzuSchemaManager extends BaseKuzuClient {
       'CREATE REL TABLE IF NOT EXISTS AFFECTS (FROM Decision TO Component);',
       'CREATE REL TABLE IF NOT EXISTS CONTEXT_OF (FROM Context TO Component, FROM Context TO Decision, FROM Context TO Rule);',
       'CREATE REL TABLE IF NOT EXISTS PART_OF (FROM Component TO Repository, FROM Decision TO Repository, FROM Rule TO Repository, FROM File TO Repository, FROM Tag TO Repository, FROM Context TO Repository);',
+      'CREATE REL TABLE IF NOT EXISTS HAS_METADATA (FROM Repository TO Metadata);',
     ];
 
     await this.queryExecutor.executeBatch(relationshipTableQueries);

@@ -2,9 +2,6 @@ import { z } from 'zod';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { CoreService } from '../core/core.service';
-import { RepositoryProvider } from '../../db/repository-provider';
-import { KuzuDBClient } from '../../db/kuzu';
-import { SnapshotService } from '../snapshot.service';
 
 export class MetadataService extends CoreService {
   async getMetadata(
@@ -43,35 +40,35 @@ export class MetadataService extends CoreService {
       if (result && result.length > 0) {
         const metadata = result[0].m;
 
-        // Safely parse tech_stack JSON with error handling
-        let techStack = {};
-        if (metadata.tech_stack) {
+        // Parse the content JSON field
+        let parsedContent: any = {};
+        if (metadata.content) {
           try {
-            techStack = JSON.parse(metadata.tech_stack);
+            parsedContent = JSON.parse(metadata.content);
           } catch (parseError) {
             logger.warn(
-              `[MetadataService.getMetadata] Invalid JSON in tech_stack for ${repositoryName}:${branch}, using empty object`,
+              `[MetadataService.getMetadata] Invalid JSON in content for ${repositoryName}:${branch}, using empty object`,
               {
-                tech_stack: metadata.tech_stack,
+                content: metadata.content,
                 parseError: parseError instanceof Error ? parseError.message : String(parseError),
               },
             );
-            techStack = {};
+            parsedContent = {};
           }
         }
 
         return {
           id: metadata.id || 'meta',
           project: {
-            name: metadata.project_name || repositoryName,
+            name: parsedContent.project?.name || metadata.name || repositoryName,
             created:
-              metadata.project_created ||
+              parsedContent.project?.created ||
               repository.created_at?.toISOString() ||
               new Date().toISOString(),
           },
-          tech_stack: techStack,
-          architecture: metadata.architecture || '',
-          memory_spec_version: metadata.memory_spec_version || '3.0.0',
+          tech_stack: parsedContent.tech_stack || {},
+          architecture: parsedContent.architecture || '',
+          memory_spec_version: parsedContent.memory_spec_version || '3.0.0',
         };
       }
 
@@ -123,42 +120,48 @@ export class MetadataService extends CoreService {
       // Prepare metadata fields
       const now = new Date();
       const metadataId = `${repositoryName}-${branch}-metadata`;
+      const graphUniqueId = `${repositoryName}:${branch}:metadata:${metadataId}`;
 
-      // Use MERGE to create or update metadata
+      // Use MERGE to create or update metadata - must use graph_unique_id as primary key
       const updateQuery = `
         MATCH (r:Repository {id: $repositoryId})
-        MERGE (r)-[:HAS_METADATA]->(m:Metadata {id: $metadataId})
+        MERGE (r)-[:HAS_METADATA]->(m:Metadata {graph_unique_id: $graphUniqueId})
         ON CREATE SET
+          m.graph_unique_id = $graphUniqueId,
           m.id = $metadataId,
-          m.project_name = $projectName,
-          m.project_created = $projectCreated,
-          m.tech_stack = $techStack,
-          m.architecture = $architecture,
-          m.memory_spec_version = $memorySpecVersion,
+          m.branch = $branch,
+          m.name = $projectName,
+          m.content = $content,
           m.created_at = $now,
           m.updated_at = $now
         ON MATCH SET
-          m.project_name = COALESCE($projectName, m.project_name),
-          m.tech_stack = COALESCE($techStack, m.tech_stack),
-          m.architecture = COALESCE($architecture, m.architecture),
-          m.memory_spec_version = COALESCE($memorySpecVersion, m.memory_spec_version),
+          m.name = COALESCE($projectName, m.name),
+          m.content = COALESCE($content, m.content),
           m.updated_at = $now
         RETURN m
       `;
 
+      // Create content object with all metadata
+      const content = JSON.stringify({
+        project: {
+          name: metadataContentChanges.project?.name || repositoryName,
+          created:
+            metadataContentChanges.project?.created ||
+            repository.created_at?.toISOString() ||
+            new Date().toISOString(),
+        },
+        tech_stack: metadataContentChanges.tech_stack || {},
+        architecture: metadataContentChanges.architecture || '',
+        memory_spec_version: metadataContentChanges.memory_spec_version || '3.0.0',
+      });
+
       const params = {
         repositoryId: repository.id,
+        graphUniqueId,
         metadataId,
+        branch,
         projectName: metadataContentChanges.project?.name || repositoryName,
-        projectCreated:
-          metadataContentChanges.project?.created ||
-          repository.created_at?.toISOString() ||
-          new Date().toISOString(),
-        techStack: metadataContentChanges.tech_stack
-          ? JSON.stringify(metadataContentChanges.tech_stack)
-          : null,
-        architecture: metadataContentChanges.architecture || null,
-        memorySpecVersion: metadataContentChanges.memory_spec_version || '3.0.0',
+        content,
         now,
       };
 

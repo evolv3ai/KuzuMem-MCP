@@ -6,12 +6,12 @@ import { ensureAbsolutePath } from '../utils/path.utils';
 import { SnapshotService } from './snapshot.service';
 
 // Import simplified domain services
+import { ContextService } from './domain/context.service';
+import { EntityService } from './domain/entity.service';
+import { GraphAnalysisService } from './domain/graph-analysis.service';
+import { GraphQueryService } from './domain/graph-query.service';
 import { MemoryBankService } from './domain/memory-bank.service';
 import { MetadataService } from './domain/metadata.service';
-import { EntityService } from './domain/entity.service';
-import { ContextService } from './domain/context.service';
-import { GraphQueryService } from './domain/graph-query.service';
-import { GraphAnalysisService } from './domain/graph-analysis.service';
 
 // Import operation modules
 import { loggers } from '../utils/logger';
@@ -77,6 +77,7 @@ export class MemoryService {
       this.repositoryProvider,
       this.getKuzuClient.bind(this),
       this.getSnapshotService.bind(this),
+      this,
     );
     this.metadata = new MetadataService(
       this.repositoryProvider,
