@@ -274,7 +274,7 @@ export class RepositoryAnalyzer {
         size: {
           files: files.length,
         },
-        createdDate: stats.birthtime.toISOString(),
+        createdDate: (stats.birthtime || stats.ctime).toISOString(),
       };
     } catch (error) {
       return {
