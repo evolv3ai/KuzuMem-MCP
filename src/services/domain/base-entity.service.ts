@@ -1,9 +1,7 @@
-import { KuzuDBClient } from '../../db/kuzu';
-import { RepositoryProvider } from '../../db/repository-provider';
 import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { CoreService } from '../core/core.service';
+import { IServiceContainer } from '../core/service-container.interface';
 import { ValidationService } from '../core/validation.service';
-import { SnapshotService } from '../snapshot.service';
 
 /**
  * Base service class for entity operations
@@ -12,19 +10,9 @@ import { SnapshotService } from '../snapshot.service';
 export abstract class BaseEntityService extends CoreService {
   protected validationService: ValidationService;
 
-  constructor(
-    repositoryProvider: RepositoryProvider,
-    getKuzuClient: (
-      mcpContext: ToolHandlerContext,
-      clientProjectRoot: string,
-    ) => Promise<KuzuDBClient>,
-    getSnapshotService: (
-      mcpContext: ToolHandlerContext,
-      clientProjectRoot: string,
-    ) => Promise<SnapshotService>,
-  ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService);
-    this.validationService = new ValidationService(repositoryProvider);
+  constructor(serviceContainer: IServiceContainer) {
+    super(serviceContainer);
+    this.validationService = new ValidationService(serviceContainer.getRepositoryProvider());
   }
 
   /**

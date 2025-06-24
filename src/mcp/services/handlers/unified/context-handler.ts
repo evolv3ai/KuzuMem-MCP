@@ -1,91 +1,109 @@
-import { ContextInputSchema } from '../../../schemas/unified-tool-schemas';
 import { SdkToolHandler } from '../../../tool-handlers';
-import { handleToolError, logToolExecution, validateSession } from '../../../utils/error-utils';
+import { handleToolError, logToolExecution } from '../../../utils/error-utils';
 
-// TypeScript interfaces for context parameters
+// TypeScript interfaces for context input parameters
 interface ContextParams {
   operation: 'update';
-  repository: string;
-  branch?: string;
-  agent: string;
-  summary: string;
+  agent?: string;
+  summary?: string;
   observation?: string;
-}
-
-interface ContextData {
-  id: string;
-  iso_date: string;
-  agent: string;
-  summary: string;
-  observation: string | null;
-  repository: string;
-  branch: string;
-  created_at: string | null;
-  updated_at: string | null;
-}
-
-interface ContextUpdateOutput {
-  success: boolean;
-  message?: string;
-  context?: ContextData;
+  repository?: string;
+  branch?: string;
+  clientProjectRoot?: string;
 }
 
 /**
  * Context Handler
- * Handles context updates for session tracking
+ * Handles context update operations
  */
 export const contextHandler: SdkToolHandler = async (params, context, memoryService) => {
   try {
-    // 1. Parse and validate parameters
-    const validatedParams = ContextInputSchema.parse(params);
-    const { operation, repository } = validatedParams;
+    // 1. Validate and extract parameters
+    const validatedParams = params as unknown as ContextParams;
+
+    // Basic validation
+    if (!validatedParams.operation) {
+      return {
+        success: false,
+        message: 'operation parameter is required',
+      };
+    }
+
+    // For context operations, we require repository to be passed in params for explicit targeting
+    if (!validatedParams.repository) {
+      return {
+        success: false,
+        message: 'repository parameter is required for context operations',
+      };
+    }
+
+    // Validate required fields for update operation
+    if (validatedParams.operation === 'update' && !validatedParams.summary) {
+      return {
+        success: false,
+        message: 'Required fields missing: summary is required for update operation',
+      };
+    }
+
+    const { operation, agent, summary, observation, repository, branch = 'main' } = validatedParams;
 
     // 2. Validate session and get clientProjectRoot
-    const clientProjectRoot = validateSession(context, 'context');
-    if (!memoryService.context) {
-      throw new Error('ContextService not initialized in MemoryService');
+    if (!context.session?.clientProjectRoot) {
+      return {
+        success: false,
+        message:
+          'No active session for context tool. Use memory-bank tool with operation "init" first.',
+      };
     }
+
+    const clientProjectRoot = context.session.clientProjectRoot;
+    const contextService = await memoryService.context;
 
     // 3. Log the operation
     logToolExecution(context, `context operation: ${operation}`, {
       repository,
-      branch: validatedParams.branch ?? 'main',
+      branch,
       clientProjectRoot,
+      agent,
     });
 
-    // 4. Execute the operation
     switch (operation) {
       case 'update': {
-        // Send progress notification
         await context.sendProgress({
           status: 'in_progress',
           message: 'Updating context...',
           percent: 50,
         });
 
-        // Call memory service to update context
-        const result = await memoryService.context.updateContext(
+        // Build the parameters object that matches ContextInputSchema
+        const contextParams = {
+          operation: 'update' as const,
+          repository,
+          branch,
+          agent: agent || 'cursor-agent',
+          summary: summary || '',
+          observation,
+        };
+
+        const result = await contextService.updateContext(
           context,
           clientProjectRoot,
-          validatedParams,
+          contextParams,
         );
 
-        // Check if result is null and handle appropriately
-        if (result === null) {
-          await context.sendProgress({
-            status: 'error',
-            message: 'Failed to update context: unexpected response format',
-            percent: 100,
-            isFinal: true,
-          });
-
+        // Handle different response formats
+        if (!result) {
           return {
             success: false,
             message: 'Failed to update context: unexpected response format',
           };
         }
 
-        // Send completion notification
+        // Check if the service returned an error response
+        if ('success' in result && !result.success) {
+          return result; // Return the error response as-is
+        }
+
         await context.sendProgress({
           status: 'complete',
           message: 'Context updated successfully',
@@ -93,13 +111,30 @@ export const contextHandler: SdkToolHandler = async (params, context, memoryServ
           isFinal: true,
         });
 
-        return result;
+        // Handle successful response with context data
+        if ('context' in result) {
+          return {
+            success: true,
+            message: 'Context updated successfully',
+            context: result.context,
+          };
+        }
+
+        // Handle successful response without context data
+        return {
+          success: true,
+          message: 'Context updated successfully',
+        };
       }
 
-      // Note: default case is unreachable since Zod schema only allows 'update'
+      default:
+        return {
+          success: false,
+          message: `Unknown operation: ${operation}`,
+        };
     }
   } catch (error) {
-    await handleToolError(error, context, 'context update', 'context');
+    await handleToolError(error, context, `context update`, 'context');
 
     const errorMessage = error instanceof Error ? error.message : String(error);
     return {

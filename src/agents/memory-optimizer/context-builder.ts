@@ -103,13 +103,9 @@ export class MemoryContextBuilder {
         if (!this.memoryService.services) {
           throw new Error('ServiceRegistry not initialized in MemoryService');
         }
-        const result = await this.memoryService.services.graphQuery.countNodesByLabel(
-          mcpContext,
-          clientProjectRoot,
-          repository,
-          branch,
-          entityType,
-        );
+        const result = await (
+          await this.memoryService.services.graphQuery
+        ).countNodesByLabel(mcpContext, clientProjectRoot, repository, branch, entityType);
 
         const key = (entityType.toLowerCase() + 's') as keyof typeof counts;
         counts[key] = result.count;

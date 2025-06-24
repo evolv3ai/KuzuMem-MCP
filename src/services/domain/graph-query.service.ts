@@ -1,14 +1,12 @@
 import { z } from 'zod';
-import { KuzuDBClient } from '../../db/kuzu';
-import { RepositoryProvider } from '../../db/repository-provider';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { Component } from '../../types';
 import { CoreService } from '../core/core.service';
+import { IServiceContainer } from '../core/service-container.interface';
 import * as componentOps from '../memory-operations/component.ops';
 import * as graphOps from '../memory-operations/graph.ops';
 import * as tagOps from '../memory-operations/tag.ops';
-import { SnapshotService } from '../snapshot.service';
 
 export class GraphQueryService extends CoreService {
   // Whitelist of allowed node labels to prevent injection attacks
@@ -22,18 +20,8 @@ export class GraphQueryService extends CoreService {
     'Repository',
   ]);
 
-  constructor(
-    repositoryProvider: RepositoryProvider,
-    getKuzuClient: (
-      mcpContext: ToolHandlerContext,
-      clientProjectRoot: string,
-    ) => Promise<KuzuDBClient>,
-    getSnapshotService: (
-      mcpContext: ToolHandlerContext,
-      clientProjectRoot: string,
-    ) => Promise<SnapshotService>,
-  ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService);
+  constructor(serviceContainer: IServiceContainer) {
+    super(serviceContainer);
   }
 
   /**

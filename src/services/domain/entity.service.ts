@@ -1,5 +1,3 @@
-import { KuzuDBClient } from '../../db/kuzu';
-import { RepositoryProvider } from '../../db/repository-provider';
 import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import {
   Component,
@@ -13,29 +11,19 @@ import {
   TagInput,
 } from '../../types';
 import { CoreService } from '../core/core.service';
+import { IServiceContainer } from '../core/service-container.interface';
 import * as componentOps from '../memory-operations/component.ops';
 import * as decisionOps from '../memory-operations/decision.ops';
 import * as fileOps from '../memory-operations/file.ops';
 import * as ruleOps from '../memory-operations/rule.ops';
 import * as tagOps from '../memory-operations/tag.ops';
-import { SnapshotService } from '../snapshot.service';
 
 /**
  * Entity Service with full database functionality restored
  */
 export class EntityService extends CoreService {
-  constructor(
-    repositoryProvider: RepositoryProvider,
-    getKuzuClient: (
-      mcpContext: ToolHandlerContext,
-      clientProjectRoot: string,
-    ) => Promise<KuzuDBClient>,
-    getSnapshotService: (
-      mcpContext: ToolHandlerContext,
-      clientProjectRoot: string,
-    ) => Promise<SnapshotService>,
-  ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService);
+  constructor(serviceContainer: IServiceContainer) {
+    super(serviceContainer);
   }
   // Component operations
   async upsertComponent(

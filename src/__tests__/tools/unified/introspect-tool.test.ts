@@ -228,7 +228,6 @@ describe('introspect tool handler', () => {
         '/test/project',
         'test-repo',
         'main',
-        undefined,
       );
 
       expect(result).toEqual({

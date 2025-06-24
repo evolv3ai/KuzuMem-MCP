@@ -8,27 +8,8 @@ import { RepositoryAnalyzer } from '../../utils/repository-analyzer';
 import { CoreService } from '../core/core.service';
 import * as repositoryOps from '../memory-operations/repository.ops';
 
-// Interface to avoid circular dependency
-interface IMetadataService {
-  updateMetadata(
-    mcpContext: ToolHandlerContext,
-    clientProjectRoot: string,
-    repositoryName: string,
-    metadataContent: any,
-    branch?: string,
-  ): Promise<{ success: boolean; message?: string } | null>;
-}
-
 export class MemoryBankService extends CoreService {
-  // Store metadata service reference separately to avoid circular dependency
-  private metadataServiceRef?: IMetadataService;
-
-  /**
-   * Set metadata service reference after initialization to avoid circular dependency
-   */
-  setMetadataService(metadataService: IMetadataService): void {
-    this.metadataServiceRef = metadataService;
-  }
+  // No need for setter method - use service container instead
 
   async initMemoryBank(
     mcpContext: ToolHandlerContext,
@@ -254,16 +235,8 @@ export class MemoryBankService extends CoreService {
         },
       );
 
-      // Check if metadata service is available
-      if (!this.metadataServiceRef) {
-        logger.warn(
-          `[MemoryBankService.seedIntelligentMetadata] MetadataService not available - skipping metadata seeding`,
-        );
-        return {
-          success: false,
-          message: 'MetadataService not available for seeding metadata',
-        };
-      }
+      // Get metadata service from service container
+      const metadataService = await this.serviceContainer.getMetadataService();
 
       const metadataContent = {
         id: `${repositoryName}-${branch}-metadata`,
@@ -291,7 +264,7 @@ export class MemoryBankService extends CoreService {
         analysis_date: new Date().toISOString(),
       };
 
-      const updateResult = await this.metadataServiceRef.updateMetadata(
+      const updateResult = await metadataService.updateMetadata(
         mcpContext,
         clientProjectRoot,
         repositoryName,

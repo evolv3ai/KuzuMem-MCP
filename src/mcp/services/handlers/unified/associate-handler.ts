@@ -1,48 +1,65 @@
-import { AssociateInputSchema } from '../../../schemas/unified-tool-schemas';
 import { SdkToolHandler } from '../../../tool-handlers';
 import { handleToolError, logToolExecution, validateSession } from '../../../utils/error-utils';
 
-// TypeScript interfaces for associate parameters
+// TypeScript interfaces for associate input parameters
 interface AssociateParams {
   type: 'file-component' | 'tag-item';
+  clientProjectRoot?: string;
   repository: string;
   branch?: string;
+  // For file-component association
   fileId?: string;
   componentId?: string;
-  itemId?: string;
+  // For tag-item association
   tagId?: string;
+  itemId?: string;
   entityType?: 'Component' | 'Decision' | 'Rule' | 'File' | 'Context';
 }
 
 /**
  * Associate Handler
- * Handles relationship creation between entities
+ * Handles associations between entities (file-component, tag-item)
  */
 export const associateHandler: SdkToolHandler = async (params, context, memoryService) => {
-  // 1. Validate and extract parameters using Zod schema
-  const validatedParams = AssociateInputSchema.parse(params) as AssociateParams;
+  // 1. Validate and extract parameters
+  const validatedParams = params as unknown as AssociateParams;
 
-  const { type, repository, branch = 'main' } = validatedParams;
+  // Basic validation
+  if (!validatedParams.type) {
+    throw new Error('type parameter is required');
+  }
+  if (!validatedParams.repository) {
+    throw new Error('repository parameter is required');
+  }
+
+  const {
+    type,
+    repository,
+    branch = 'main',
+    fileId,
+    componentId,
+    tagId,
+    itemId,
+    entityType,
+  } = validatedParams;
 
   // 2. Validate session and get clientProjectRoot
   const clientProjectRoot = validateSession(context, 'associate');
-  if (!memoryService.entity) {
-    throw new Error('EntityService not initialized in MemoryService');
-  }
 
   // 3. Log the operation
-  logToolExecution(context, `association: ${type}`, {
+  logToolExecution(context, `associate operation: ${type}`, {
     repository,
     branch,
     clientProjectRoot,
+    type,
   });
-
-  // 4. Type-specific validation is now handled by the Zod schema
 
   try {
     switch (type) {
       case 'file-component': {
-        const { fileId, componentId } = validatedParams;
+        if (!fileId || !componentId) {
+          throw new Error('Required fields missing for association type');
+        }
 
         await context.sendProgress({
           status: 'in_progress',
@@ -50,37 +67,41 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
           percent: 50,
         });
 
-        // Call the service method
-        const result = await memoryService.entity.associateFileWithComponent(
+        const entityService = await memoryService.entity;
+        const result = await entityService.associateFileWithComponent(
           context,
           clientProjectRoot,
           repository,
           branch,
-          componentId!,
-          fileId!,
+          componentId,
+          fileId,
         );
 
         await context.sendProgress({
           status: 'complete',
-          message: 'File-component association created successfully',
+          message: `File-component association created successfully`,
           percent: 100,
           isFinal: true,
         });
 
         return {
-          type: 'file-component' as const,
           success: true,
-          message: `Successfully associated file ${fileId} with component ${componentId}`,
+          type: 'file-component',
+          fileId,
+          componentId,
+          message: `File ${fileId} associated with component ${componentId} successfully`,
           association: {
-            from: fileId!,
-            to: componentId!,
+            from: fileId,
+            to: componentId,
             relationship: 'IMPLEMENTS',
           },
         };
       }
 
       case 'tag-item': {
-        const { itemId, tagId, entityType } = validatedParams;
+        if (!tagId || !itemId || !entityType) {
+          throw new Error('Required fields missing for association type');
+        }
 
         await context.sendProgress({
           status: 'in_progress',
@@ -88,31 +109,34 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
           percent: 50,
         });
 
-        // Call the service method
-        const result = await memoryService.entity.tagItem(
+        const entityService = await memoryService.entity;
+        const result = await entityService.tagItem(
           context,
           clientProjectRoot,
           repository,
           branch,
-          itemId!,
-          entityType!,
-          tagId!,
+          itemId,
+          entityType,
+          tagId,
         );
 
         await context.sendProgress({
           status: 'complete',
-          message: 'Tag-item association created successfully',
+          message: `Tag-item association created successfully`,
           percent: 100,
           isFinal: true,
         });
 
         return {
-          type: 'tag-item' as const,
           success: true,
-          message: `Successfully tagged ${entityType} ${itemId} with tag ${tagId}`,
+          type: 'tag-item',
+          tagId,
+          itemId,
+          entityType,
+          message: `${entityType} ${itemId} tagged with ${tagId} successfully`,
           association: {
-            from: itemId!,
-            to: tagId!,
+            from: itemId,
+            to: tagId,
             relationship: 'TAGGED_WITH',
           },
         };
@@ -122,7 +146,7 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
         throw new Error(`Unknown association type: ${type}`);
     }
   } catch (error) {
-    await handleToolError(error, context, `${type} association`, type);
-    throw error;
+    await handleToolError(error, context, `${type} association`, 'associate');
+    throw error; // Re-throw the error instead of returning error object
   }
 };

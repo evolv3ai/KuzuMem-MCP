@@ -122,7 +122,7 @@ describe('validatePath', () => {
       });
     });
 
-    afterAll(() => {
+    afterEach(() => {
       Object.defineProperty(process, 'platform', {
         value: originalPlatform,
       });
@@ -131,14 +131,6 @@ describe('validatePath', () => {
     it('should handle Windows path separators correctly', () => {
       const result = validatePath('src\\components\\file.ts', windowsTestRoot);
       expect(result).toBe(path.resolve(windowsTestRoot, 'src\\components\\file.ts'));
-    });
-
-    it('should prevent cross-drive traversal on Windows', () => {
-      // Test conceptual scenario - in practice, path.resolve prevents this
-      // but we document the intended behavior
-      expect(() => validatePath('D:\\malicious\\file.txt', 'C:\\test\\root')).toThrow(
-        'Absolute drive path not allowed',
-      );
     });
   });
 

@@ -116,11 +116,9 @@ program
       if (!memoryService.services) {
         throw new Error('ServiceRegistry not initialized in MemoryService');
       }
-      await memoryService.services.context.updateContext(
-        mockContext,
-        clientProjectRoot,
-        contextParams,
-      );
+      await (
+        await memoryService.services.context
+      ).updateContext(mockContext, clientProjectRoot, contextParams);
       cliLogger.info(
         { repositoryName, branch, contextParams },
         `✅ Added to today's context for repository: ${repositoryName} (branch: ${branch})`,
@@ -162,7 +160,9 @@ program
       if (!memoryService.services) {
         throw new Error('ServiceRegistry not initialized in MemoryService');
       }
-      await memoryService.services.entity.upsertComponent(
+      await (
+        await memoryService.services.entity
+      ).upsertComponent(
         mockContext,
         clientProjectRoot,
         repositoryName,
@@ -209,7 +209,9 @@ program
       if (!memoryService.services) {
         throw new Error('ServiceRegistry not initialized in MemoryService');
       }
-      await memoryService.services.entity.upsertDecision(
+      await (
+        await memoryService.services.entity
+      ).upsertDecision(
         mockContext,
         clientProjectRoot,
         repositoryName,
@@ -262,13 +264,9 @@ program
       if (!memoryService.services) {
         throw new Error('ServiceRegistry not initialized in MemoryService');
       }
-      await memoryService.services.entity.upsertRule(
-        mockContext,
-        clientProjectRoot,
-        repositoryName,
-        ruleDataForService,
-        branch,
-      );
+      await (
+        await memoryService.services.entity
+      ).upsertRule(mockContext, clientProjectRoot, repositoryName, ruleDataForService, branch);
       cliLogger.info(
         { repositoryName, branch, ruleId: id, ruleData: ruleDataForService },
         `✅ Rule ${id} added to repository: ${repositoryName} (branch: ${branch})`,

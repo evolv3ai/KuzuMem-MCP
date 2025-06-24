@@ -1,310 +1,274 @@
-import { QueryInputSchema } from '../../../schemas/unified-tool-schemas';
 import { SdkToolHandler } from '../../../tool-handlers';
 import { handleToolError, logToolExecution, validateSession } from '../../../utils/error-utils';
 
-// TypeScript interfaces for query parameters
-interface QueryParams {
-  type:
-    | 'context'
-    | 'entities'
-    | 'relationships'
-    | 'dependencies'
-    | 'governance'
-    | 'history'
-    | 'tags';
+// TypeScript interfaces for query input parameters
+interface BaseQueryParams {
+  type: string;
   repository: string;
   branch?: string;
+}
+
+interface ContextQueryParams extends BaseQueryParams {
+  type: 'context';
+  latest?: boolean;
+  limit?: number;
+}
+
+interface EntitiesQueryParams extends BaseQueryParams {
+  type: 'entities';
+  label?: string;
   limit?: number;
   offset?: number;
-  label?: string;
+}
+
+interface RelationshipsQueryParams extends BaseQueryParams {
+  type: 'relationships';
   startItemId?: string;
   depth?: number;
   relationshipFilter?: string;
   targetNodeTypeFilter?: string;
+}
+
+interface DependenciesQueryParams extends BaseQueryParams {
+  type: 'dependencies';
   componentId?: string;
   direction?: 'dependencies' | 'dependents';
+}
+
+interface GovernanceQueryParams extends BaseQueryParams {
+  type: 'governance';
+  componentId?: string;
+}
+
+interface HistoryQueryParams extends BaseQueryParams {
+  type: 'history';
   itemId?: string;
   itemType?: string;
+}
+
+interface TagsQueryParams extends BaseQueryParams {
+  type: 'tags';
   tagId?: string;
   entityType?: string;
 }
 
+type QueryParams =
+  | ContextQueryParams
+  | EntitiesQueryParams
+  | RelationshipsQueryParams
+  | DependenciesQueryParams
+  | GovernanceQueryParams
+  | HistoryQueryParams
+  | TagsQueryParams;
+
 /**
- * Query Handler
- * Handles all search and query operations across 7 different query types
+ * Unified query handler for all query types
+ * Handles all types of graph and data queries
  */
 export const queryHandler: SdkToolHandler = async (params, context, memoryService) => {
-  // 1. Parse and validate parameters using Zod (includes all type-specific validation)
-  const validatedParams = QueryInputSchema.parse(params);
+  // 1. Validate and extract parameters
+  const validatedParams = params as unknown as QueryParams;
+
+  // Basic validation
+  if (!validatedParams.type) {
+    throw new Error('type parameter is required');
+  }
+  if (!validatedParams.repository) {
+    throw new Error('repository parameter is required');
+  }
 
   const { type, repository, branch = 'main' } = validatedParams;
 
   // 2. Validate session and get clientProjectRoot
   const clientProjectRoot = validateSession(context, 'query');
-  if (!memoryService.context || !memoryService.graphQuery) {
-    throw new Error('ContextService and GraphQueryService not initialized in MemoryService');
-  }
 
   // 3. Log the operation
-  logToolExecution(context, `query type: ${type}`, {
+  logToolExecution(context, `query operation: ${type}`, {
     repository,
     branch,
     clientProjectRoot,
+    type,
   });
 
   try {
     switch (type) {
       case 'context': {
-        await context.sendProgress({
-          status: 'in_progress',
-          message: 'Retrieving contexts...',
-          percent: 50,
-        });
-
-        const result = await memoryService.context.getLatestContexts(
+        const { latest = false, limit } = validatedParams as ContextQueryParams;
+        const contextService = await memoryService.context;
+        const contexts = await contextService.getLatestContexts(
           context,
           clientProjectRoot,
           repository,
           branch,
-          validatedParams.limit,
+          limit,
         );
-
-        await context.sendProgress({
-          status: 'complete',
-          message: `Retrieved ${result.length} contexts`,
-          percent: 100,
-          isFinal: true,
-        });
-
-        return {
-          type: 'context' as const,
-          contexts: result.map((ctx: any) => ({
-            id: ctx.id,
-            iso_date: ctx.iso_date,
-            agent: ctx.agent || null,
-            summary: ctx.summary || null,
-            observation: ctx.observation || null,
-            repository: ctx.repository,
-            branch: ctx.branch,
-            created_at: ctx.created_at || null,
-            updated_at: ctx.updated_at || null,
-          })),
-        };
+        return { type: 'context', contexts };
       }
 
       case 'entities': {
-        await context.sendProgress({
-          status: 'in_progress',
-          message: `Listing entities with label: ${validatedParams.label}`,
-          percent: 50,
-        });
-
-        const result = await memoryService.graphQuery.listNodesByLabel(
+        const { label, limit, offset } = validatedParams as EntitiesQueryParams;
+        if (!label) {
+          throw new Error('Required fields missing for the specified query type');
+        }
+        const graphQueryService = await memoryService.graphQuery;
+        const result = await graphQueryService.listNodesByLabel(
           context,
           clientProjectRoot,
           repository,
           branch,
-          validatedParams.label!,
-          validatedParams.limit || 100,
-          validatedParams.offset || 0,
+          label as string,
+          limit || 50,
+          offset || 0,
         );
-
-        await context.sendProgress({
-          status: 'complete',
-          message: `Found ${result.entities.length} entities`,
-          percent: 100,
-          isFinal: true,
-        });
-
         return {
-          type: 'entities' as const,
-          label: result.label,
-          entities: result.entities,
-          limit: result.limit,
-          offset: result.offset,
-          totalCount: result.totalCount,
+          type: 'entities',
+          label,
+          entities: result.entities || [],
+          limit: limit || 50,
+          offset: offset || 0,
+          totalCount: result.entities?.length || 0,
         };
       }
 
       case 'relationships': {
-        await context.sendProgress({
-          status: 'in_progress',
-          message: `Finding related items for: ${validatedParams.startItemId}`,
-          percent: 50,
-        });
-
-        const result = await memoryService.graphQuery.getRelatedItems(
+        const { startItemId, depth, relationshipFilter, targetNodeTypeFilter } =
+          validatedParams as RelationshipsQueryParams;
+        if (!startItemId) {
+          throw new Error('Required fields missing for the specified query type');
+        }
+        const graphQueryService = await memoryService.graphQuery;
+        const result = await graphQueryService.getRelatedItems(
           context,
           clientProjectRoot,
           repository,
           branch,
-          validatedParams.startItemId!,
+          startItemId,
           {
-            depth: validatedParams.depth,
-            relationshipFilter: validatedParams.relationshipFilter,
-            targetNodeTypeFilter: validatedParams.targetNodeTypeFilter,
+            depth: depth || 2,
+            relationshipFilter: relationshipFilter || '',
+            targetNodeTypeFilter: targetNodeTypeFilter,
           },
         );
-
-        await context.sendProgress({
-          status: 'complete',
-          message: `Found ${result.relatedItems.length} related items`,
-          percent: 100,
-          isFinal: true,
-        });
-
         return {
-          type: 'relationships' as const,
-          startItemId: validatedParams.startItemId!,
-          relatedItems: result.relatedItems,
-          relationshipFilter: validatedParams.relationshipFilter,
-          depth: validatedParams.depth,
+          type: 'relationships',
+          startItemId,
+          relatedItems: result.relatedItems || [],
+          relationshipFilter,
+          depth: depth || 2,
         };
       }
 
       case 'dependencies': {
-        const direction = validatedParams.direction!;
-        await context.sendProgress({
-          status: 'in_progress',
-          message: `Getting ${direction} for component: ${validatedParams.componentId}`,
-          percent: 50,
-        });
+        const { componentId, direction } = validatedParams as DependenciesQueryParams;
+        if (!componentId || !direction) {
+          throw new Error('Required fields missing for the specified query type');
+        }
 
-        const result =
-          direction === 'dependencies'
-            ? await memoryService.graphQuery.getComponentDependencies(
-                context,
-                clientProjectRoot,
-                repository,
-                branch,
-                validatedParams.componentId!,
-              )
-            : await memoryService.graphQuery.getComponentDependents(
-                context,
-                clientProjectRoot,
-                repository,
-                branch,
-                validatedParams.componentId!,
-              );
-
-        const components =
-          direction === 'dependencies' ? (result as any).dependencies : (result as any).dependents;
-
-        await context.sendProgress({
-          status: 'complete',
-          message: `Found ${components.length} ${direction}`,
-          percent: 100,
-          isFinal: true,
-        });
-
-        return {
-          type: 'dependencies' as const,
-          componentId: validatedParams.componentId!,
-          direction,
-          components,
-        };
+        const graphQueryService = await memoryService.graphQuery;
+        if (direction === 'dependencies') {
+          const result = await graphQueryService.getComponentDependencies(
+            context,
+            clientProjectRoot,
+            repository,
+            branch,
+            componentId,
+          );
+          return {
+            type: 'dependencies',
+            componentId,
+            direction,
+            components: result.dependencies || [],
+          };
+        } else {
+          const result = await graphQueryService.getComponentDependents(
+            context,
+            clientProjectRoot,
+            repository,
+            branch,
+            componentId,
+          );
+          return {
+            type: 'dependencies',
+            componentId,
+            direction,
+            components: result.dependents || [],
+          };
+        }
       }
 
       case 'governance': {
-        await context.sendProgress({
-          status: 'in_progress',
-          message: `Getting governing items for component: ${validatedParams.componentId}`,
-          percent: 50,
-        });
-
-        const result = await memoryService.graphQuery.getGoverningItemsForComponent(
+        const { componentId } = validatedParams as GovernanceQueryParams;
+        if (!componentId) {
+          throw new Error('Required fields missing for the specified query type');
+        }
+        const graphQueryService = await memoryService.graphQuery;
+        const result = await graphQueryService.getGoverningItemsForComponent(
           context,
           clientProjectRoot,
           repository,
           branch,
-          validatedParams.componentId!,
+          componentId,
         );
-
-        await context.sendProgress({
-          status: 'complete',
-          message: `Found ${result.decisions.length} decisions and ${result.rules.length} rules`,
-          percent: 100,
-          isFinal: true,
-        });
-
         return {
-          type: 'governance' as const,
-          componentId: validatedParams.componentId!,
-          decisions: result.decisions,
-          rules: result.rules,
+          type: 'governance',
+          componentId,
+          decisions: result.decisions || [],
+          rules: result.rules || [],
         };
       }
 
       case 'history': {
-        await context.sendProgress({
-          status: 'in_progress',
-          message: `Getting contextual history for ${validatedParams.itemType}: ${validatedParams.itemId}`,
-          percent: 50,
-        });
-
-        const result = await memoryService.graphQuery.getItemContextualHistory(
+        const { itemId, itemType } = validatedParams as HistoryQueryParams;
+        if (!itemId || !itemType) {
+          throw new Error('Required fields missing for the specified query type');
+        }
+        const graphQueryService = await memoryService.graphQuery;
+        const result = await graphQueryService.getItemContextualHistory(
           context,
           clientProjectRoot,
           repository,
           branch,
-          validatedParams.itemId!,
-          validatedParams.itemType! as 'Component' | 'Decision' | 'Rule',
+          itemId,
+          itemType as 'Component' | 'Decision' | 'Rule',
         );
-
-        await context.sendProgress({
-          status: 'complete',
-          message: `Found ${result.contextHistory.length} historical contexts`,
-          percent: 100,
-          isFinal: true,
-        });
-
         return {
-          type: 'history' as const,
-          itemId: validatedParams.itemId!,
-          itemType: validatedParams.itemType!,
-          contextHistory: result.contextHistory,
+          type: 'history',
+          itemId,
+          itemType,
+          contextHistory: result.contextHistory || [],
         };
       }
 
       case 'tags': {
-        await context.sendProgress({
-          status: 'in_progress',
-          message: `Finding items tagged with: ${validatedParams.tagId}`,
-          percent: 50,
-        });
-
-        const result = await memoryService.graphQuery.findItemsByTag(
+        const { tagId, entityType } = validatedParams as TagsQueryParams;
+        if (!tagId) {
+          throw new Error('Required fields missing for the specified query type');
+        }
+        const graphQueryService = await memoryService.graphQuery;
+        const result = await graphQueryService.findItemsByTag(
           context,
           clientProjectRoot,
           repository,
           branch,
-          validatedParams.tagId!,
-          validatedParams.entityType,
+          tagId,
+          entityType,
         );
-
-        await context.sendProgress({
-          status: 'complete',
-          message: `Found ${result.items.length} tagged items`,
-          percent: 100,
-          isFinal: true,
-        });
-
         return {
-          type: 'tags' as const,
-          tagId: result.tagId,
-          items: result.items.map((item: any) => ({
-            id: item.id,
-            type: item.type || 'Unknown',
-            ...item,
-          })),
+          type: 'tags',
+          tagId,
+          items: result.items || [],
         };
       }
 
       default:
-        throw new Error(`Unknown query type: ${type}`);
+        throw new Error(
+          "Invalid enum value. Expected 'context' | 'entities' | 'relationships' | 'dependencies' | 'governance' | 'history' | 'tags', received '" +
+            type +
+            "'",
+        );
     }
   } catch (error) {
-    await handleToolError(error, context, `${type} query`, type);
-    throw error;
+    await handleToolError(error, context, `${type} query`, 'query');
+    throw error; // Re-throw the error instead of returning an error object
   }
 };

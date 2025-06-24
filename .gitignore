@@ -76,6 +76,8 @@ core
 core.*
 *.core
 *.dump
+!src/services/core
+!src/services/core/core.service.ts
 
 # Task Master AI MCP Tool
 tasks/
