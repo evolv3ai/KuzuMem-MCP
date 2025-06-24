@@ -37,10 +37,11 @@ describe('introspect tool handler', () => {
 
     // Create mock memory service
     mockMemoryService = {
+      graphQuery: mockGraphQueryService,
       services: {
         graphQuery: mockGraphQueryService,
       },
-    } as unknown as jest.Mocked<MemoryService>;
+    } as any;
   });
 
   describe('labels query', () => {

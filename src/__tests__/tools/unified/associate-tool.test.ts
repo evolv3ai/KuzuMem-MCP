@@ -30,6 +30,7 @@ describe('Associate Tool Tests', () => {
     } as any;
 
     mockMemoryService = {
+      entity: mockEntityService,
       services: {
         entity: mockEntityService,
       },

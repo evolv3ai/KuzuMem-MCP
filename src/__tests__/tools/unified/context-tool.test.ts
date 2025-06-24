@@ -60,6 +60,7 @@ describe('context tool handler', () => {
 
     // Create mock memory service
     mockMemoryService = {
+      context: mockContextService,
       services: {
         context: mockContextService,
       },

@@ -53,6 +53,7 @@ describe('entity tool handler', () => {
 
     // Create mock memory service
     mockMemoryService = {
+      entity: mockEntityService,
       services: {
         entity: mockEntityService,
       },

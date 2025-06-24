@@ -49,6 +49,7 @@ describe('Analyze Tool Tests', () => {
     } as any;
 
     mockMemoryService = {
+      graphAnalysis: mockGraphAnalysisService,
       services: {
         graphAnalysis: mockGraphAnalysisService,
       },

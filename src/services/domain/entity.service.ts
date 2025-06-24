@@ -1,7 +1,5 @@
-import { z } from 'zod';
 import { KuzuDBClient } from '../../db/kuzu';
 import { RepositoryProvider } from '../../db/repository-provider';
-import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import {
   Component,
@@ -17,9 +15,10 @@ import {
 import { CoreService } from '../core/core.service';
 import * as componentOps from '../memory-operations/component.ops';
 import * as decisionOps from '../memory-operations/decision.ops';
-import * as ruleOps from '../memory-operations/rule.ops';
 import * as fileOps from '../memory-operations/file.ops';
+import * as ruleOps from '../memory-operations/rule.ops';
 import * as tagOps from '../memory-operations/tag.ops';
+import { MemoryService } from '../memory.service';
 import { SnapshotService } from '../snapshot.service';
 
 /**
@@ -36,8 +35,9 @@ export class EntityService extends CoreService {
       mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<SnapshotService>,
+    memoryService?: MemoryService,
   ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService);
+    super(repositoryProvider, getKuzuClient, getSnapshotService, memoryService);
   }
   // Component operations
   async upsertComponent(

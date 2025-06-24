@@ -83,26 +83,31 @@ export class MemoryService {
       this.repositoryProvider,
       this.getKuzuClient.bind(this),
       this.getSnapshotService.bind(this),
+      this,
     );
     this.entity = new EntityService(
       this.repositoryProvider,
       this.getKuzuClient.bind(this),
       this.getSnapshotService.bind(this),
+      this,
     );
     this.context = new ContextService(
       this.repositoryProvider,
       this.getKuzuClient.bind(this),
       this.getSnapshotService.bind(this),
+      this,
     );
     this.graphQuery = new GraphQueryService(
       this.repositoryProvider,
       this.getKuzuClient.bind(this),
       this.getSnapshotService.bind(this),
+      this,
     );
     this.graphAnalysis = new GraphAnalysisService(
       this.repositoryProvider,
       this.getKuzuClient.bind(this),
       this.getSnapshotService.bind(this),
+      this,
     );
 
     logger.info('MemoryService: All services initialized with dependencies');

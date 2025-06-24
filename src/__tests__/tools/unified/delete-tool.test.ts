@@ -48,10 +48,11 @@ describe('delete tool handler', () => {
 
     // Create mock memory service
     mockMemoryService = {
+      entity: mockEntityService,
       services: {
         entity: mockEntityService,
       },
-    } as unknown as jest.Mocked<MemoryService>;
+    } as any;
   });
 
   describe('parameter validation', () => {

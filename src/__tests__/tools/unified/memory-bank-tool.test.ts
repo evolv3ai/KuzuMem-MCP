@@ -23,6 +23,8 @@ describe('Unified Memory Bank Tool', () => {
     } as any;
 
     mockMemoryService = {
+      memoryBank: mockMemoryBankService,
+      metadata: mockMetadataService,
       services: {
         memoryBank: mockMemoryBankService,
         metadata: mockMetadataService,

@@ -43,6 +43,7 @@ describe('Bulk Import Tool Tests', () => {
     } as any;
 
     mockMemoryService = {
+      entity: mockEntityService,
       services: {
         entity: mockEntityService,
       },

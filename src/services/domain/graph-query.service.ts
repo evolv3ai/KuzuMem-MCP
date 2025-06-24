@@ -3,13 +3,12 @@ import { KuzuDBClient } from '../../db/kuzu';
 import { RepositoryProvider } from '../../db/repository-provider';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
-import { Component, Decision, Rule } from '../../types';
+import { Component } from '../../types';
 import { CoreService } from '../core/core.service';
 import * as componentOps from '../memory-operations/component.ops';
-import * as decisionOps from '../memory-operations/decision.ops';
 import * as graphOps from '../memory-operations/graph.ops';
-import * as ruleOps from '../memory-operations/rule.ops';
 import * as tagOps from '../memory-operations/tag.ops';
+import { MemoryService } from '../memory.service';
 import { SnapshotService } from '../snapshot.service';
 
 export class GraphQueryService extends CoreService {
@@ -34,8 +33,9 @@ export class GraphQueryService extends CoreService {
       mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<SnapshotService>,
+    memoryService?: MemoryService,
   ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService);
+    super(repositoryProvider, getKuzuClient, getSnapshotService, memoryService);
   }
 
   /**

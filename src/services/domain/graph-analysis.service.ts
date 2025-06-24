@@ -5,6 +5,7 @@ import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { CoreService } from '../core/core.service';
 import * as graphOps from '../memory-operations/graph.ops';
+import { MemoryService } from '../memory.service';
 import { SnapshotService } from '../snapshot.service';
 
 export class GraphAnalysisService extends CoreService {
@@ -18,8 +19,9 @@ export class GraphAnalysisService extends CoreService {
       mcpContext: ToolHandlerContext,
       clientProjectRoot: string,
     ) => Promise<SnapshotService>,
+    memoryService?: MemoryService,
   ) {
-    super(repositoryProvider, getKuzuClient, getSnapshotService);
+    super(repositoryProvider, getKuzuClient, getSnapshotService, memoryService);
   }
   async kCoreDecomposition(
     mcpContext: ToolHandlerContext,
