@@ -116,7 +116,7 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
             );
             imported++;
           } catch (error) {
-            console.warn(`Failed to import component ${component.id}:`, error);
+            context.logger.warn(`Failed to import component ${component.id}:`, error);
             failed++;
             errors.push({
               id: component.id,
@@ -184,7 +184,7 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
             );
             imported++;
           } catch (error) {
-            console.warn(`Failed to import decision ${decision.id}:`, error);
+            context.logger.warn(`Failed to import decision ${decision.id}:`, error);
             failed++;
             errors.push({
               id: decision.id,
@@ -250,7 +250,7 @@ export const bulkImportHandler: SdkToolHandler = async (params, context, memoryS
             await entityService.upsertRule(context, clientProjectRoot, repository, rule, branch);
             imported++;
           } catch (error) {
-            console.warn(`Failed to import rule ${rule.id}:`, error);
+            context.logger.warn(`Failed to import rule ${rule.id}:`, error);
             failed++;
             errors.push({
               id: rule.id,

@@ -23,6 +23,15 @@ export interface IServiceContainer {
   getGraphQueryService(): Promise<IGraphQueryService>;
   getGraphAnalysisService(): Promise<IGraphAnalysisService>;
 
+  // Specialized entity service access methods (optional - for clients that need specific functionality)
+  getComponentService?(): Promise<IComponentService>;
+  getDecisionService?(): Promise<IDecisionService>;
+  getRuleService?(): Promise<IRuleService>;
+  getFileService?(): Promise<IFileService>;
+  getTagService?(): Promise<ITagService>;
+  getAssociationService?(): Promise<IAssociationService>;
+  getBulkOperationsService?(): Promise<IBulkOperationsService>;
+
   // Lifecycle management
   shutdown(): Promise<void>;
 }
@@ -47,8 +56,8 @@ export interface IMetadataService {
   ): Promise<any>;
 }
 
-export interface IEntityService {
-  // Component operations
+// Component service interface - handles component-specific operations
+export interface IComponentService {
   upsertComponent(
     mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
@@ -78,8 +87,10 @@ export interface IEntityService {
     branch: string,
     componentId: string,
   ): Promise<boolean>;
+}
 
-  // Decision operations
+// Decision service interface - handles decision-specific operations
+export interface IDecisionService {
   upsertDecision(
     mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
@@ -109,8 +120,10 @@ export interface IEntityService {
     branch: string,
     decisionId: string,
   ): Promise<boolean>;
+}
 
-  // Rule operations
+// Rule service interface - handles rule-specific operations
+export interface IRuleService {
   upsertRule(
     mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
@@ -140,8 +153,10 @@ export interface IEntityService {
     branch: string,
     ruleId: string,
   ): Promise<boolean>;
+}
 
-  // File operations
+// File service interface - handles file-specific operations
+export interface IFileService {
   addFile(
     mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
@@ -163,8 +178,10 @@ export interface IEntityService {
     branch: string,
     fileId: string,
   ): Promise<boolean>;
+}
 
-  // Tag operations
+// Tag service interface - handles tag-specific operations
+export interface ITagService {
   addTag(
     mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
@@ -186,15 +203,10 @@ export interface IEntityService {
     branch: string,
     tagId: string,
   ): Promise<boolean>;
+}
 
-  // Additional operations
-  deleteContext(
-    mcpContext: ToolHandlerContext,
-    clientProjectRoot: string,
-    repositoryName: string,
-    branch: string,
-    contextId: string,
-  ): Promise<boolean>;
+// Association service interface - handles relationships between entities
+export interface IAssociationService {
   associateFileWithComponent(
     mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
@@ -212,8 +224,10 @@ export interface IEntityService {
     itemType: string,
     tagId: string,
   ): Promise<any>;
+}
 
-  // Bulk operations
+// Bulk operations service interface - handles batch operations
+export interface IBulkOperationsService {
   bulkDeleteByType(
     mcpContext: ToolHandlerContext,
     clientProjectRoot: string,
@@ -243,6 +257,25 @@ export interface IEntityService {
     repositoryName: string,
     options?: any,
   ): Promise<any>;
+}
+
+// Unified entity service interface - composes all entity services
+export interface IEntityService
+  extends IComponentService,
+    IDecisionService,
+    IRuleService,
+    IFileService,
+    ITagService,
+    IAssociationService,
+    IBulkOperationsService {
+  // Additional operations that don't fit into specific entity categories
+  deleteContext(
+    mcpContext: ToolHandlerContext,
+    clientProjectRoot: string,
+    repositoryName: string,
+    branch: string,
+    contextId: string,
+  ): Promise<boolean>;
 }
 
 export interface IContextService {

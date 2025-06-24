@@ -68,7 +68,7 @@ export const introspectHandler: SdkToolHandler = async (params, context, memoryS
 
   // 3. Validate target parameter for queries that need it
   if ((query === 'count' || query === 'properties') && !target) {
-    throw new Error('Target label is required for count query');
+    throw new Error('Target label is required for count and properties queries');
   }
 
   // 4. Log the operation

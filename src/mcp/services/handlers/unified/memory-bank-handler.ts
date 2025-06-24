@@ -105,12 +105,12 @@ async function handleInit(
       percent: 40,
     });
 
-    const result = await memoryService.memoryBank.initMemoryBank(
-      context,
-      clientProjectRoot,
-      repository,
-      branch,
-    );
+    // Note: All service getters now consistently return Promises for uniformity
+    // memoryBank getter now returns Promise<MemoryBankService> like other service getters
+    // This ensures consistent async patterns across all services
+    const result = await (
+      await memoryService.memoryBank
+    ).initMemoryBank(context, clientProjectRoot, repository, branch);
 
     // Send progress after database initialization is complete
     await context.sendProgress({

@@ -5,12 +5,12 @@ import { Mutex } from '../../utils/mutex';
 import { ensureAbsolutePath } from '../../utils/path.utils';
 import { SnapshotService } from '../snapshot.service';
 import {
-    IContextService,
-    IEntityService,
-    IGraphAnalysisService,
-    IGraphQueryService,
-    IMetadataService,
-    IServiceContainer,
+  IContextService,
+  IEntityService,
+  IGraphAnalysisService,
+  IGraphQueryService,
+  IMetadataService,
+  IServiceContainer,
 } from './service-container.interface';
 
 /**

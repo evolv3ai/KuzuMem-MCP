@@ -17,31 +17,98 @@ interface AssociateParams {
 }
 
 /**
+ * Enhanced validation helper functions
+ */
+function validateAndTrimString(
+  value: unknown,
+  fieldName: string,
+  required: boolean = true,
+): string | undefined {
+  if (value === null || value === undefined) {
+    if (required) {
+      throw new Error(`${fieldName} parameter is required`);
+    }
+    return undefined;
+  }
+
+  if (typeof value !== 'string') {
+    throw new Error(`${fieldName} parameter must be a string, received ${typeof value}`);
+  }
+
+  const trimmed = value.trim();
+  if (required && trimmed.length === 0) {
+    throw new Error(`${fieldName} parameter cannot be empty or whitespace-only`);
+  }
+
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function validateEntityId(id: string, expectedPrefix: string, fieldName: string): void {
+  if (!id.startsWith(expectedPrefix)) {
+    throw new Error(`${fieldName} must start with '${expectedPrefix}', received: ${id}`);
+  }
+
+  // Check for valid characters (alphanumeric, hyphens, underscores)
+  if (!/^[a-zA-Z0-9-_]+$/.test(id)) {
+    throw new Error(
+      `${fieldName} contains invalid characters. Only alphanumeric, hyphens, and underscores are allowed: ${id}`,
+    );
+  }
+
+  // Check minimum length (prefix + at least 1 character)
+  if (id.length <= expectedPrefix.length) {
+    throw new Error(`${fieldName} must have content after the prefix '${expectedPrefix}': ${id}`);
+  }
+}
+
+function validateEntityType(entityType: string): void {
+  const validTypes = ['Component', 'Decision', 'Rule', 'File', 'Context'];
+  if (!validTypes.includes(entityType)) {
+    throw new Error(`entityType must be one of: ${validTypes.join(', ')}. Received: ${entityType}`);
+  }
+}
+
+function validateAssociationType(type: string): void {
+  const validTypes = ['file-component', 'tag-item'];
+  if (!validTypes.includes(type)) {
+    throw new Error(`type must be one of: ${validTypes.join(', ')}. Received: ${type}`);
+  }
+}
+
+/**
  * Associate Handler
  * Handles associations between entities (file-component, tag-item)
  */
 export const associateHandler: SdkToolHandler = async (params, context, memoryService) => {
-  // 1. Validate and extract parameters
+  // 1. Enhanced parameter validation and extraction
   const validatedParams = params as unknown as AssociateParams;
 
-  // Basic validation
-  if (!validatedParams.type) {
-    throw new Error('type parameter is required');
-  }
-  if (!validatedParams.repository) {
-    throw new Error('repository parameter is required');
+  // Enhanced validation with trimming and type checking
+  const type = validateAndTrimString(validatedParams.type, 'type', true)!;
+  const repository = validateAndTrimString(validatedParams.repository, 'repository', true)!;
+  const branch = validateAndTrimString(validatedParams.branch, 'branch', false) || 'main';
+
+  // Validate association type format
+  validateAssociationType(type);
+
+  // Validate repository name format (basic alphanumeric check)
+  if (!/^[a-zA-Z0-9-_]+$/.test(repository)) {
+    throw new Error(
+      `repository name contains invalid characters. Only alphanumeric, hyphens, and underscores are allowed: ${repository}`,
+    );
   }
 
-  const {
-    type,
-    repository,
-    branch = 'main',
-    fileId,
-    componentId,
-    tagId,
-    itemId,
-    entityType,
-  } = validatedParams;
+  // Validate branch name format (basic git branch name check)
+  if (!/^[a-zA-Z0-9-_/.]+$/.test(branch)) {
+    throw new Error(`branch name contains invalid characters: ${branch}`);
+  }
+
+  // Extract and validate type-specific parameters
+  const fileId = validateAndTrimString(validatedParams.fileId, 'fileId', false);
+  const componentId = validateAndTrimString(validatedParams.componentId, 'componentId', false);
+  const tagId = validateAndTrimString(validatedParams.tagId, 'tagId', false);
+  const itemId = validateAndTrimString(validatedParams.itemId, 'itemId', false);
+  const entityType = validateAndTrimString(validatedParams.entityType, 'entityType', false);
 
   // 2. Validate session and get clientProjectRoot
   const clientProjectRoot = validateSession(context, 'associate');
@@ -58,8 +125,12 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
     switch (type) {
       case 'file-component': {
         if (!fileId || !componentId) {
-          throw new Error('Required fields missing for association type');
+          throw new Error('fileId and componentId are required for file-component association');
         }
+
+        // Enhanced validation for file-component association
+        validateEntityId(fileId, 'file-', 'fileId');
+        validateEntityId(componentId, 'comp-', 'componentId');
 
         await context.sendProgress({
           status: 'in_progress',
@@ -100,8 +171,24 @@ export const associateHandler: SdkToolHandler = async (params, context, memorySe
 
       case 'tag-item': {
         if (!tagId || !itemId || !entityType) {
-          throw new Error('Required fields missing for association type');
+          throw new Error('tagId, itemId, and entityType are required for tag-item association');
         }
+
+        // Enhanced validation for tag-item association
+        validateEntityId(tagId, 'tag-', 'tagId');
+        validateEntityType(entityType);
+
+        // Validate itemId based on entityType
+        const entityPrefixes: Record<string, string> = {
+          Component: 'comp-',
+          Decision: 'dec-',
+          Rule: 'rule-',
+          File: 'file-',
+          Context: 'ctx-',
+        };
+
+        const expectedPrefix = entityPrefixes[entityType];
+        validateEntityId(itemId, expectedPrefix, 'itemId');
 
         await context.sendProgress({
           status: 'in_progress',

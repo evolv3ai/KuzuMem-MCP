@@ -18,12 +18,9 @@ describe('MemoryService end-to-end write/read flow', () => {
     clientProjectRoot = fs.mkdtempSync(path.join(__dirname, 'kuzu-test-'));
     memoryService = await MemoryService.getInstance(mcpContext);
 
-    const initResult = await memoryService.memoryBank.initMemoryBank(
-      mcpContext,
-      clientProjectRoot,
-      repository,
-      branch,
-    );
+    const initResult = await (
+      await memoryService.memoryBank
+    ).initMemoryBank(mcpContext, clientProjectRoot, repository, branch);
     expect(initResult.success).toBe(true);
   }, 30000);
 

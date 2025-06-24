@@ -21,6 +21,7 @@ import { loggers } from '../utils/logger';
 export class MemoryService {
   private logger = loggers.memoryService();
   private static instance: MemoryService;
+  private static initializationPromise: Promise<MemoryService> | null = null;
 
   // Service container for dependency injection
   private serviceContainer!: IServiceContainer;
@@ -29,6 +30,7 @@ export class MemoryService {
   private _memoryBank?: MemoryBankService;
 
   // Services property for backward compatibility
+  // Note: All service getters now return Promises for consistency
   public get services() {
     return {
       memoryBank: this.memoryBank,
@@ -40,8 +42,36 @@ export class MemoryService {
     };
   }
 
-  // Lazy-loaded service getters
-  public get memoryBank(): MemoryBankService {
+  /**
+   * Async services accessor for Promise-based access to all services
+   * Provides consistent async interface for all services
+   */
+  public async getServices() {
+    return {
+      memoryBank: await this.memoryBank,
+      metadata: await this.metadata,
+      entity: await this.entity,
+      context: await this.context,
+      graphQuery: await this.graphQuery,
+      graphAnalysis: await this.graphAnalysis,
+    };
+  }
+
+  // Lazy-loaded service getters - ALL now return Promises for consistency
+
+  /**
+   * Get MemoryBankService instance
+   * Now returns Promise<MemoryBankService> for consistency with other service getters
+   */
+  public get memoryBank(): Promise<MemoryBankService> {
+    return Promise.resolve(this._getMemoryBankSync());
+  }
+
+  /**
+   * Internal synchronous method to get MemoryBankService instance
+   * Used internally when synchronous access is needed
+   */
+  private _getMemoryBankSync(): MemoryBankService {
     if (!this._memoryBank) {
       this._memoryBank = new MemoryBankService(this.serviceContainer);
     }
@@ -103,13 +133,40 @@ export class MemoryService {
 
   /**
    * Get singleton instance of MemoryService
+   * Thread-safe implementation using promise-based locking to prevent race conditions
    */
   static async getInstance(initialMcpContext?: ToolHandlerContext): Promise<MemoryService> {
-    if (!MemoryService.instance) {
-      MemoryService.instance = new MemoryService();
-      await MemoryService.instance.initialize(initialMcpContext);
+    // Return existing instance if already created
+    if (MemoryService.instance) {
+      return MemoryService.instance;
     }
-    return MemoryService.instance;
+
+    // Return pending initialization promise if already in progress
+    if (MemoryService.initializationPromise) {
+      return MemoryService.initializationPromise;
+    }
+
+    // Create and store initialization promise to prevent concurrent initialization
+    MemoryService.initializationPromise = (async (): Promise<MemoryService> => {
+      // Double-check pattern: verify instance wasn't created while waiting
+      if (MemoryService.instance) {
+        return MemoryService.instance;
+      }
+
+      // Create and initialize the singleton instance
+      const instance = new MemoryService();
+      await instance.initialize(initialMcpContext);
+
+      // Atomically assign the instance
+      MemoryService.instance = instance;
+
+      // Clear the initialization promise as we're done
+      MemoryService.initializationPromise = null;
+
+      return instance;
+    })();
+
+    return MemoryService.initializationPromise;
   }
 
   /**

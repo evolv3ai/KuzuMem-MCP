@@ -211,22 +211,43 @@ export const analyzeHandler: SdkToolHandler = async (params, context, memoryServ
           isFinal: true,
         });
 
+        /**
+         * Determine if a path was found between the nodes.
+         * Priority: explicit pathFound result > inferred from path array length
+         */
+        let pathFound: boolean;
+        if (result.pathFound !== undefined) {
+          // Use explicit pathFound from service result
+          pathFound = result.pathFound;
+        } else {
+          // Infer from path array: found if path exists and has elements
+          pathFound = result.path !== undefined && result.path.length > 0;
+        }
+
+        /**
+         * Determine the length of the shortest path.
+         * Priority: explicit pathLength > path array length > default to 0
+         */
+        let pathLength: number;
+        if (result.pathLength !== undefined) {
+          // Use explicit path length from service result
+          pathLength = result.pathLength;
+        } else if (result.path !== undefined) {
+          // Calculate from path array length
+          pathLength = result.path.length;
+        } else {
+          // Default to 0 when no path information is available
+          pathLength = 0;
+        }
+
         return {
           type: 'shortest-path',
           status: 'complete',
           startNodeId,
           endNodeId,
-          pathFound:
-            result.pathFound !== undefined
-              ? result.pathFound
-              : result.path && result.path.length > 0,
+          pathFound,
           path: result.path || [],
-          pathLength:
-            result.pathLength !== undefined
-              ? result.pathLength
-              : result.path
-                ? result.path.length
-                : 0,
+          pathLength,
           message: `Shortest path analysis completed successfully`,
         };
       }

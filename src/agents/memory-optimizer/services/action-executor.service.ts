@@ -77,74 +77,18 @@ export class ActionExecutorService extends BaseMemoryAgent {
           break;
 
         case 'delete-component':
-          await (
-            await this.memoryService.entity
-          ).deleteComponent(
-            action.mcpContext,
-            action.clientProjectRoot,
-            action.repository,
-            action.branch,
-            action.entityId,
-          );
-          break;
-
         case 'delete-decision':
-          await (
-            await this.memoryService.entity
-          ).deleteDecision(
-            action.mcpContext,
-            action.clientProjectRoot,
-            action.repository,
-            action.branch,
-            action.entityId,
-          );
-          break;
-
         case 'delete-rule':
-          await (
-            await this.memoryService.entity
-          ).deleteRule(
-            action.mcpContext,
-            action.clientProjectRoot,
-            action.repository,
-            action.branch,
-            action.entityId,
-          );
-          break;
-
         case 'delete-file':
-          await (
-            await this.memoryService.entity
-          ).deleteFile(
-            action.mcpContext,
-            action.clientProjectRoot,
-            action.repository,
-            action.branch,
-            action.entityId,
-          );
-          break;
-
         case 'delete-context':
-          await (
-            await this.memoryService.entity
-          ).deleteContext(
-            action.mcpContext,
-            action.clientProjectRoot,
-            action.repository,
-            action.branch,
-            action.entityId,
-          );
-          break;
-
         case 'delete-tag':
-          await (
-            await this.memoryService.entity
-          ).deleteTag(
-            action.mcpContext,
-            action.clientProjectRoot,
-            action.repository,
-            action.branch,
-            action.entityId,
+          await this.executeDeleteAction(
+            mcpContext,
+            clientProjectRoot,
+            repository,
+            branch,
+            action,
+            actionLogger,
           );
           break;
 
@@ -172,7 +116,7 @@ export class ActionExecutorService extends BaseMemoryAgent {
   ): Promise<void> {
     // Extract entity information
     const entityId = action.entityId;
-    const entityType = this.determineEntityType(entityId, action);
+    const entityType = this.determineEntityTypeFromAction(action.type, entityId, action);
 
     logger.info(`Deleting ${entityType} entity: ${entityId}`, {
       entityId,
@@ -435,5 +379,33 @@ export class ActionExecutorService extends BaseMemoryAgent {
     });
 
     logger.info(`Successfully moved entity ${entityId} to depend on ${targetEntityId}`);
+  }
+
+  /**
+   * Determine entity type from action type or entity ID
+   */
+  private determineEntityTypeFromAction(
+    actionType: string,
+    entityId: string,
+    action?: any,
+  ): string {
+    // Handle specific delete action types
+    switch (actionType) {
+      case 'delete-component':
+        return 'component';
+      case 'delete-decision':
+        return 'decision';
+      case 'delete-rule':
+        return 'rule';
+      case 'delete-file':
+        return 'file';
+      case 'delete-context':
+        return 'context';
+      case 'delete-tag':
+        return 'tag';
+      default:
+        // Fall back to the base class method for generic 'delete' actions
+        return this.determineEntityType(entityId, action);
+    }
   }
 }

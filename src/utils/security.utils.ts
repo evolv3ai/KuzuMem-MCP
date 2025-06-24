@@ -24,8 +24,17 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
 };
 
 /**
+ * Security constants for path validation
+ */
+const MAX_PATH_LENGTH = 4096; // Unix PATH_MAX limit for security
+const MAX_COMPONENT_LENGTH = 255; // Maximum filename component length
+const MAX_DEPTH = 100; // Maximum directory nesting depth
+
+/**
  * Validates and normalizes a file path to prevent path traversal attacks.
  * Handles Windows drive letters, UNC paths, and absolute path inputs robustly.
+ * Includes security validation for path length limits to prevent buffer overflow
+ * and denial of service attacks.
  *
  * @param targetPath - The path to validate (can be relative or absolute)
  * @param rootPath - The root directory that should contain the target
@@ -53,6 +62,41 @@ export function validatePath(targetPath: string, rootPath: string): string {
   }
   if (!rootPath || typeof rootPath !== 'string') {
     throw new Error('Root path must be a non-empty string');
+  }
+
+  // Security validation: Check input path length to prevent DoS
+  if (targetPath.length > MAX_PATH_LENGTH) {
+    throw new Error(
+      `Path too long: ${targetPath.length} characters (maximum allowed: ${MAX_PATH_LENGTH})`,
+    );
+  }
+
+  // Security validation: Check individual path components
+  const pathComponents = targetPath.split(/[\/\\]+/);
+  let depth = 0;
+  for (const component of pathComponents) {
+    if (component === '' || component === '.') {
+      continue; // Skip empty components and current directory references
+    }
+    if (component === '..') {
+      depth--;
+      continue; // Parent directory references will be caught by traversal detection
+    }
+
+    depth++;
+
+    // Check component length to prevent buffer overflow
+    if (component.length > MAX_COMPONENT_LENGTH) {
+      throw new Error(
+        `Path component too long: "${component.substring(0, 50)}..." ` +
+          `(${component.length} characters, maximum allowed: ${MAX_COMPONENT_LENGTH})`,
+      );
+    }
+  }
+
+  // Security validation: Check directory depth to prevent stack overflow
+  if (depth > MAX_DEPTH) {
+    throw new Error(`Path too deep: ${depth} levels (maximum allowed: ${MAX_DEPTH})`);
   }
 
   // Normalize root path to absolute form
@@ -100,6 +144,13 @@ export function validatePath(targetPath: string, rootPath: string): string {
         `Cross-drive path traversal detected: ${targetPath} (${rootDrive} → ${targetDrive})`,
       );
     }
+  }
+
+  // Final security validation: Check resolved path length
+  if (normalizedTarget.length > MAX_PATH_LENGTH) {
+    throw new Error(
+      `Resolved path too long: ${normalizedTarget.length} characters (maximum allowed: ${MAX_PATH_LENGTH})`,
+    );
   }
 
   return normalizedTarget;

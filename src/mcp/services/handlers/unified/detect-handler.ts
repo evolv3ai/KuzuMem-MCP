@@ -16,6 +16,27 @@ interface DetectParams {
 }
 
 /**
+ * Interface for graph component structure used in detection algorithms
+ */
+interface GraphComponent {
+  componentId: number;
+  nodes: string[];
+}
+
+/**
+ * Type guard to check if an object is a valid GraphComponent
+ */
+function isValidGraphComponent(obj: unknown): obj is GraphComponent {
+  return (
+    typeof obj === 'object' &&
+    obj !== null &&
+    typeof (obj as any).componentId === 'number' &&
+    Array.isArray((obj as any).nodes) &&
+    (obj as any).nodes.every((node: unknown) => typeof node === 'string')
+  );
+}
+
+/**
  * Detect Handler
  * Handles pattern detection in graphs (cycles, islands, paths, connectivity)
  */
@@ -207,8 +228,15 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
         );
 
         // Filter for cycles (strongly connected components with more than 1 node)
+        // Enhanced with runtime type validation for extra safety
         const cycles = (result.components || []).filter(
-          (component: any) => component.nodes && component.nodes.length > 1,
+          (component: unknown): component is GraphComponent => {
+            if (!isValidGraphComponent(component)) {
+              console.warn(`Invalid component structure detected in cycles detection:`, component);
+              return false;
+            }
+            return component.nodes.length > 1;
+          },
         );
 
         await context.sendProgress({
@@ -248,8 +276,15 @@ export const detectHandler: SdkToolHandler = async (params, context, memoryServi
         );
 
         // Islands are weakly connected components with only 1 node
+        // Enhanced with runtime type validation for extra safety
         const islands = (result.components || []).filter(
-          (component: any) => component.nodes && component.nodes.length === 1,
+          (component: unknown): component is GraphComponent => {
+            if (!isValidGraphComponent(component)) {
+              console.warn(`Invalid component structure detected in islands detection:`, component);
+              return false;
+            }
+            return component.nodes.length === 1;
+          },
         );
 
         await context.sendProgress({
