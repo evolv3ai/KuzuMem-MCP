@@ -55,40 +55,21 @@ export class MetadataService extends CoreService {
       if (result && result.length > 0) {
         const metadata = result[0].m;
 
-        // Parse the content JSON field with backward compatibility
+        // Parse the content JSON field
         let parsedContent: any = {};
         if (metadata.content) {
           try {
             parsedContent = JSON.parse(metadata.content);
           } catch (parseError) {
             logger.warn(
-              `[MetadataService.getMetadata] Invalid JSON in content for ${repositoryName}:${branch}, checking for legacy fields`,
+              `[MetadataService.getMetadata] Invalid JSON in content for ${repositoryName}:${branch}, using default values`,
               {
                 content: metadata.content,
                 parseError: parseError instanceof Error ? parseError.message : String(parseError),
               },
             );
-
-            // BACKWARD COMPATIBILITY: Check for legacy separate fields
-            parsedContent = await this.handleLegacyMetadata(
-              mcpContext,
-              clientProjectRoot,
-              repositoryName,
-              branch,
-              metadata,
-              repository,
-            );
+            parsedContent = {};
           }
-        } else {
-          // BACKWARD COMPATIBILITY: Check for legacy separate fields when no content field exists
-          parsedContent = await this.handleLegacyMetadata(
-            mcpContext,
-            clientProjectRoot,
-            repositoryName,
-            branch,
-            metadata,
-            repository,
-          );
         }
 
         return {
@@ -122,140 +103,6 @@ export class MetadataService extends CoreService {
         error: error.toString(),
       });
       throw error;
-    }
-  }
-
-  /**
-   * Handle legacy metadata fields and migrate them to new format
-   * This method checks for legacy fields, logs migration info, builds parsedContent,
-   * and calls migration if necessary
-   */
-  private async handleLegacyMetadata(
-    mcpContext: ToolHandlerContext,
-    clientProjectRoot: string,
-    repositoryName: string,
-    branch: string,
-    metadata: any,
-    repository: any,
-  ): Promise<any> {
-    const logger = mcpContext.logger || console;
-
-    // Check if legacy fields exist
-    if (metadata.tech_stack || metadata.architecture || metadata.project_name) {
-      logger.info(
-        `[MetadataService.getMetadata] Found legacy metadata fields for ${repositoryName}:${branch}, migrating to new format`,
-      );
-
-      // Handle tech_stack JSON parsing with error handling
-      let techStack = {};
-      if (metadata.tech_stack) {
-        try {
-          techStack = JSON.parse(metadata.tech_stack);
-        } catch (techStackParseError) {
-          logger.warn(
-            `[MetadataService.getMetadata] Invalid JSON in tech_stack for ${repositoryName}:${branch}, using default`,
-            {
-              tech_stack: metadata.tech_stack,
-              parseError:
-                techStackParseError instanceof Error
-                  ? techStackParseError.message
-                  : String(techStackParseError),
-            },
-          );
-          techStack = {};
-        }
-      }
-
-      // Build parsed content from legacy fields
-      const parsedContent = {
-        project: {
-          name: metadata.project_name || repositoryName,
-          created: repository.created_at?.toISOString() || new Date().toISOString(),
-        },
-        tech_stack: techStack,
-        architecture: metadata.architecture || '',
-        memory_spec_version: metadata.memory_spec_version || '3.0.0',
-      };
-
-      // Update the metadata record with the new format
-      await this.migrateLegacyMetadata(
-        mcpContext,
-        clientProjectRoot,
-        repositoryName,
-        branch,
-        parsedContent,
-      );
-
-      return parsedContent;
-    }
-
-    // Return empty object if no legacy fields found
-    return {};
-  }
-
-  /**
-   * Migrate legacy metadata fields to new JSON content format
-   * This ensures backward compatibility during schema transition
-   */
-  private async migrateLegacyMetadata(
-    mcpContext: ToolHandlerContext,
-    clientProjectRoot: string,
-    repositoryName: string,
-    branch: string,
-    parsedContent: any,
-  ): Promise<void> {
-    const logger = mcpContext.logger || console;
-
-    try {
-      logger.info(
-        `[MetadataService.migrateLegacyMetadata] Migrating legacy metadata for ${repositoryName}:${branch}`,
-      );
-
-      const kuzuClient = await this.getKuzuClient(mcpContext, clientProjectRoot);
-      const repositoryRepo = this.repositoryProvider.getRepositoryRepository(clientProjectRoot);
-      const repository = await repositoryRepo.findByName(repositoryName, branch);
-
-      if (!repository) {
-        logger.error(
-          `[MetadataService.migrateLegacyMetadata] Repository not found: ${repositoryName}:${branch}`,
-        );
-        return;
-      }
-
-      const now = new Date();
-      const metadataId = `${repositoryName}-${branch}-metadata`;
-      const graphUniqueId = `${repositoryName}:${branch}:metadata:${metadataId}`;
-
-      // Update the metadata with new JSON content format and clear legacy fields
-      const migrationQuery = `
-        MATCH (r:Repository {id: $repositoryId})-[:HAS_METADATA]->(m:Metadata)
-        SET
-          m.content = $content,
-          m.updated_at = $now,
-          m.tech_stack = NULL,
-          m.architecture = NULL,
-          m.project_name = NULL
-        RETURN m
-      `;
-
-      const content = JSON.stringify(parsedContent);
-      const params = {
-        repositoryId: repository.id,
-        content,
-        now,
-      };
-
-      await kuzuClient.executeQuery(migrationQuery, params);
-
-      logger.info(
-        `[MetadataService.migrateLegacyMetadata] Successfully migrated metadata for ${repositoryName}:${branch}`,
-      );
-    } catch (error: any) {
-      logger.error(
-        `[MetadataService.migrateLegacyMetadata] Error migrating metadata for ${repositoryName}:${branch}: ${error.message}`,
-        { error: error.toString() },
-      );
-      // Don't throw - migration failure shouldn't break the main operation
     }
   }
 
