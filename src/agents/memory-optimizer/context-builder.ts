@@ -100,9 +100,14 @@ export class MemoryContextBuilder {
     // Use existing countNodesByLabel method
     for (const entityType of entityTypes) {
       try {
-        const result = await (
-          await this.memoryService.services.graphQuery
-        ).countNodesByLabel(mcpContext, clientProjectRoot, repository, branch, entityType);
+        const services = await this.memoryService.getServices();
+        const result = await services.graphQuery.countNodesByLabel(
+          mcpContext,
+          clientProjectRoot,
+          repository,
+          branch,
+          entityType,
+        );
 
         const key = (entityType.toLowerCase() + 's') as keyof typeof counts;
         counts[key] = result.count;

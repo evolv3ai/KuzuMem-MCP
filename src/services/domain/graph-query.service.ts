@@ -3,12 +3,12 @@ import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { Component } from '../../types';
 import { CoreService } from '../core/core.service';
-import { IServiceContainer } from '../core/service-container.interface';
+import { IGraphQueryService, IServiceContainer } from '../core/service-container.interface';
 import * as componentOps from '../memory-operations/component.ops';
 import * as graphOps from '../memory-operations/graph.ops';
 import * as tagOps from '../memory-operations/tag.ops';
 
-export class GraphQueryService extends CoreService {
+export class GraphQueryService extends CoreService implements IGraphQueryService {
   // Whitelist of allowed node labels to prevent injection attacks
   private static readonly ALLOWED_LABELS = new Set([
     'Component',

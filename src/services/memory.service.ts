@@ -26,22 +26,22 @@ export class MemoryService {
   // Service container for dependency injection (optional until initialized)
   private serviceContainer?: IServiceContainer;
 
-  // Services property for backward compatibility
-  // Note: All service getters now return Promises for consistency
-  public get services() {
-    return {
-      memoryBank: this.memoryBank,
-      metadata: this.metadata,
-      entity: this.entity,
-      context: this.context,
-      graphQuery: this.graphQuery,
-      graphAnalysis: this.graphAnalysis,
-    };
-  }
+  // Services property removed to eliminate API confusion
+  // Use getServices() method instead for consistent async access to all services
 
   /**
-   * Async services accessor for Promise-based access to all services
-   * Provides consistent async interface for all services
+   * Get all services with consistent async interface
+   *
+   * This is the recommended way to access multiple services. All service instances
+   * are properly initialized and ready for use when returned.
+   *
+   * @returns Promise resolving to an object containing all service instances
+   * @example
+   * ```typescript
+   * const services = await memoryService.getServices();
+   * await services.entity.createComponent(data);
+   * await services.graphQuery.findComponents(filters);
+   * ```
    */
   public async getServices() {
     return {

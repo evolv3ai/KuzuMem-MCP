@@ -11,7 +11,7 @@ import {
   TagInput,
 } from '../../types';
 import { CoreService } from '../core/core.service';
-import { IServiceContainer } from '../core/service-container.interface';
+import { IEntityService, IServiceContainer } from '../core/service-container.interface';
 import * as componentOps from '../memory-operations/component.ops';
 import * as decisionOps from '../memory-operations/decision.ops';
 import * as fileOps from '../memory-operations/file.ops';
@@ -21,7 +21,7 @@ import * as tagOps from '../memory-operations/tag.ops';
 /**
  * Entity Service with full database functionality restored
  */
-export class EntityService extends CoreService {
+export class EntityService extends CoreService implements IEntityService {
   constructor(serviceContainer: IServiceContainer) {
     super(serviceContainer);
   }

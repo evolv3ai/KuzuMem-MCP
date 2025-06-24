@@ -3,9 +3,9 @@ import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { safeJsonParse } from '../../utils/security.utils';
 import { CoreService } from '../core/core.service';
-import { IServiceContainer } from '../core/service-container.interface';
+import { IMetadataService, IServiceContainer } from '../core/service-container.interface';
 
-export class MetadataService extends CoreService {
+export class MetadataService extends CoreService implements IMetadataService {
   constructor(serviceContainer: IServiceContainer) {
     super(serviceContainer);
   }

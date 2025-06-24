@@ -2,10 +2,10 @@ import { z } from 'zod';
 import * as toolSchemas from '../../mcp/schemas/unified-tool-schemas';
 import { ToolHandlerContext } from '../../mcp/types/sdk-custom';
 import { CoreService } from '../core/core.service';
-import { IServiceContainer } from '../core/service-container.interface';
+import { IGraphAnalysisService, IServiceContainer } from '../core/service-container.interface';
 import * as graphOps from '../memory-operations/graph.ops';
 
-export class GraphAnalysisService extends CoreService {
+export class GraphAnalysisService extends CoreService implements IGraphAnalysisService {
   constructor(serviceContainer: IServiceContainer) {
     super(serviceContainer);
   }

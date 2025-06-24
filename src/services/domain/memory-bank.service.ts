@@ -6,9 +6,10 @@ import { Repository } from '../../types';
 import { ensureAbsolutePath } from '../../utils/path.utils';
 import { RepositoryAnalyzer } from '../../utils/repository-analyzer';
 import { CoreService } from '../core/core.service';
+import { IMemoryBankService } from '../core/service-container.interface';
 import * as repositoryOps from '../memory-operations/repository.ops';
 
-export class MemoryBankService extends CoreService {
+export class MemoryBankService extends CoreService implements IMemoryBankService {
   // No need for setter method - use service container instead
 
   async initMemoryBank(

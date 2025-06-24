@@ -162,7 +162,7 @@ export class ServiceContainer implements IServiceContainer {
   async getMemoryBankService(): Promise<IMemoryBankService> {
     return this.getServiceInstance('memoryBank', async () => {
       const { MemoryBankService } = await import('../domain/memory-bank.service');
-      return new MemoryBankService(this) as IMemoryBankService;
+      return new MemoryBankService(this);
     });
   }
 
@@ -172,7 +172,7 @@ export class ServiceContainer implements IServiceContainer {
   async getMetadataService(): Promise<IMetadataService> {
     return this.getServiceInstance('metadata', async () => {
       const { MetadataService } = await import('../domain/metadata.service');
-      return new MetadataService(this) as IMetadataService;
+      return new MetadataService(this);
     });
   }
 
@@ -182,7 +182,7 @@ export class ServiceContainer implements IServiceContainer {
   async getEntityService(): Promise<IEntityService> {
     return this.getServiceInstance('entity', async () => {
       const { EntityService } = await import('../domain/entity.service');
-      return new EntityService(this) as IEntityService;
+      return new EntityService(this);
     });
   }
 
@@ -192,7 +192,7 @@ export class ServiceContainer implements IServiceContainer {
   async getContextService(): Promise<IContextService> {
     return this.getServiceInstance('context', async () => {
       const { ContextService } = await import('../domain/context.service');
-      return new ContextService(this) as unknown as IContextService;
+      return new ContextService(this);
     });
   }
 
@@ -202,7 +202,7 @@ export class ServiceContainer implements IServiceContainer {
   async getGraphQueryService(): Promise<IGraphQueryService> {
     return this.getServiceInstance('graphQuery', async () => {
       const { GraphQueryService } = await import('../domain/graph-query.service');
-      return new GraphQueryService(this) as unknown as IGraphQueryService;
+      return new GraphQueryService(this);
     });
   }
 
@@ -212,7 +212,7 @@ export class ServiceContainer implements IServiceContainer {
   async getGraphAnalysisService(): Promise<IGraphAnalysisService> {
     return this.getServiceInstance('graphAnalysis', async () => {
       const { GraphAnalysisService } = await import('../domain/graph-analysis.service');
-      return new GraphAnalysisService(this) as IGraphAnalysisService;
+      return new GraphAnalysisService(this);
     });
   }
 
