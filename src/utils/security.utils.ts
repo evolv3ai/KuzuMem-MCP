@@ -58,10 +58,14 @@ export function validatePath(targetPath: string, rootPath: string): string {
   // Normalize root path to absolute form
   const normalizedRoot = path.resolve(rootPath);
 
-  // Check if targetPath is absolute and handle appropriately
+  // Handle absolute paths - allow if they resolve within the root directory
+  let normalizedTarget: string;
   if (path.isAbsolute(targetPath)) {
-    // For all platforms, reject absolute paths to prevent bypassing containment
-    throw new Error(`Absolute path not allowed: ${targetPath}`);
+    // For absolute paths, use them directly but still validate containment
+    normalizedTarget = path.resolve(targetPath);
+  } else {
+    // For relative paths, resolve them relative to root
+    normalizedTarget = path.resolve(normalizedRoot, targetPath);
   }
 
   // Check for Windows-style paths regardless of platform for security
@@ -74,8 +78,7 @@ export function validatePath(targetPath: string, rootPath: string): string {
     throw new Error(`UNC path not allowed: ${targetPath}`);
   }
 
-  // Resolve the target path relative to root (handles .. and . properly)
-  const normalizedTarget = path.resolve(normalizedRoot, targetPath);
+  // Note: normalizedTarget is already set above based on path type
 
   // Use path.relative to robustly check containment
   const relativePath = path.relative(normalizedRoot, normalizedTarget);

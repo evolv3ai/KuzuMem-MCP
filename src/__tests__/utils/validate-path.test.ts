@@ -76,13 +76,24 @@ describe('validatePath', () => {
   });
 
   describe('Absolute path handling', () => {
-    it('should reject Unix absolute paths', () => {
+    it('should accept absolute paths within root directory', () => {
+      const absolutePathInRoot = path.resolve(testRoot, 'src/file.ts');
+      const result = validatePath(absolutePathInRoot, testRoot);
+      expect(result).toBe(absolutePathInRoot);
+    });
+
+    it('should accept root directory itself as absolute path', () => {
+      const result = validatePath(testRoot, testRoot);
+      expect(result).toBe(testRoot);
+    });
+
+    it('should reject absolute paths outside root directory', () => {
       expect(() => validatePath('/etc/passwd', testRoot)).toThrow(
-        'Absolute path not allowed: /etc/passwd',
+        /Path traversal attempt detected/,
       );
     });
 
-    it('should reject Windows absolute paths with drive letters', () => {
+    it('should reject Windows absolute paths with drive letters (malicious)', () => {
       expect(() => validatePath('C:\\Windows\\System32', testRoot)).toThrow(
         'Absolute drive path not allowed: C:\\Windows\\System32',
       );
@@ -122,28 +133,12 @@ describe('validatePath', () => {
       expect(result).toBe(path.resolve(windowsTestRoot, 'src\\components\\file.ts'));
     });
 
-    it('should prevent cross-drive traversal', () => {
-      // This test simulates a scenario where path resolution might change drives
-      // In practice, this is hard to trigger, but we test the validation logic
-      const mockPath = {
-        ...path,
-        resolve: jest.fn(),
-        relative: jest.fn(),
-        isAbsolute: jest.fn().mockReturnValue(false),
-        parse: jest.fn(),
-      };
-
-      mockPath.resolve
-        .mockReturnValueOnce('C:\\test\\root') // normalizedRoot
-        .mockReturnValueOnce('D:\\malicious\\file.txt'); // normalizedTarget
-
-      mockPath.relative.mockReturnValue('..\\..\\..\\D:\\malicious\\file.txt');
-      mockPath.parse
-        .mockReturnValueOnce({ root: 'C:\\' }) // rootDrive
-        .mockReturnValueOnce({ root: 'D:\\' }); // targetDrive
-
-      // We can't easily mock the path module imports, so this test is more conceptual
-      // The actual logic would catch this in the cross-drive check
+    it('should prevent cross-drive traversal on Windows', () => {
+      // Test conceptual scenario - in practice, path.resolve prevents this
+      // but we document the intended behavior
+      expect(() => validatePath('D:\\malicious\\file.txt', 'C:\\test\\root')).toThrow(
+        'Absolute drive path not allowed',
+      );
     });
   });
 

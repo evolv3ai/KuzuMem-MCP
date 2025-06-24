@@ -47,7 +47,7 @@ export class MetadataService extends CoreService {
             project: {
               name: 'Unknown',
               created: new Date().toISOString(),
-              description: undefined,
+              description: undefined, // Include as optional property for TypeScript
             },
             tech_stack: {},
             architecture: 'Unknown',
@@ -56,14 +56,25 @@ export class MetadataService extends CoreService {
           2 * 1024 * 1024, // 2MB max for metadata JSON
         );
 
+        // Build project object with conditional description
+        const projectData: any = {
+          name: parsedContent.project?.name || repositoryName,
+          created:
+            parsedContent.project?.created ||
+            (metadata.created_at instanceof Date
+              ? metadata.created_at.toISOString()
+              : metadata.created_at) ||
+            new Date().toISOString(),
+        };
+
+        // Only include description if it exists and is not undefined
+        if (parsedContent.project?.description !== undefined) {
+          projectData.description = parsedContent.project.description;
+        }
+
         return {
           id: metadata.id,
-          project: {
-            name: parsedContent.project?.name || repositoryName,
-            created:
-              parsedContent.project?.created || metadata.created_at || new Date().toISOString(),
-            description: parsedContent.project?.description,
-          },
+          project: projectData,
           tech_stack: this.normalizeTechStack(parsedContent.tech_stack || {}),
           architecture: parsedContent.architecture || 'Unknown',
           memory_spec_version: parsedContent.memory_spec_version || '3.0.0',
